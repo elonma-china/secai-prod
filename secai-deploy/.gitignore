@@ -1,0 +1,14 @@
+# Secrets — never commit the real .env
+.env
+.env.*
+!.env.example
+
+# The ~8G data bundle pulled by fetch-data.sh and the DB state restore.sh builds
+data/
+_state/
+
+# Packed artifacts / local DBs (in case anything is staged here)
+*.tar.zst
+*.db
+*-wal
+*-shm

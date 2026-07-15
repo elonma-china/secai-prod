@@ -9,7 +9,15 @@ The LLM backend is selected by `LLM_PROVIDER` (`deepseek` → DeepSeek `deepseek
 or `vllm` → local Qwen). Chat and exploit research are the only agentic profiles;
 translate/report/statistical profiles never receive tools.
 
-## Run
+## Deploying to another machine
+
+This repo root is the **source** (for development / building the image). To stand up the full
+backend on another machine — pull the prebuilt image + the ~8G Qdrant/Neo4j/BM25/PoC data and
+wire up the whole stack — use the **[`secai-deploy/`](secai-deploy/)** subfolder and follow its
+[README](secai-deploy/README.md). Cloning this repo and running the root `docker-compose.yml`
+alone is NOT enough: it builds the gateway only, with no databases and no data.
+
+## Run (development, from source)
 
 ```bash
 # 1. install (editable). Standard:
