@@ -1,0 +1,34 @@
+# Declarative profile registry — the single source of truth for per-endpoint behaviour.
+#   prompt     : markdown file in this folder holding the profile's system prompt
+#   tools      : tool names the agent may call in this profile (enforced per session)
+#   base       : prepend the shared base_system.md? false = pure text-transform, no tools/RAG
+#   max_turns  : agent loop cap for this profile
+chat:
+  prompt: chat.md
+  tools: [qdrant_search, neo4j_search, poc_search]
+  base: true
+  max_turns: 10
+
+exploit_research:
+  prompt: exploit.md
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch]
+  base: true
+  max_turns: 12
+
+translate:
+  prompt: translate.md
+  tools: []
+  base: false
+  max_turns: 2
+
+report:
+  prompt: report.md
+  tools: [qdrant_search, neo4j_search]
+  base: false
+  max_turns: 6
+
+statistical_report:
+  prompt: statistical.md
+  tools: [qdrant_search, neo4j_search]
+  base: false
+  max_turns: 6

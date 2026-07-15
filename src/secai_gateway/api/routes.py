@@ -1,0 +1,189 @@
+from __future__ import annotations
+
+import hashlib
+from collections.abc import AsyncIterator
+from typing import Annotated, Any
+
+import httpx
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.responses import StreamingResponse
+
+from linch.events import ResultEvent, SystemEvent
+
+from ..agent import registry_for
+from ..security import require_public_input, sanitize_output_language
+from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
+from .schemas import LegacyRequest
+from .sse import event_to_sse, sse_frame
+
+
+def _chat_session_id(body: LegacyRequest) -> str:
+    # Stable per-user session id → linch loads/compacts the prior conversation from its
+    # (Redis) session store. Only the new message is sent; history is NOT re-stuffed.
+    user_id = str(body.user_id or "anonymous")
+    return f"chat:{hashlib.sha256(user_id.encode()).hexdigest()}"
+
+
+def register_routes(app: FastAPI, state: Any) -> None:
+    """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
+
+    async def complete(profile: str, body: LegacyRequest, *, chat: bool = False, prompt_override: str | None = None) -> tuple[str, dict[str, Any]]:
+        session_id = None
+        if prompt_override is not None:
+            # Endpoint already built the task-specific user message (translate/report/…).
+            prompt = prompt_override
+        else:
+            prompt = require_public_input(body.supplied_text())
+            if chat:
+                session_id = _chat_session_id(body)
+        text, metadata = await state.runner.complete(profile, prompt, session_id)
+        return sanitize_output_language(text), metadata
+
+    def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
+        return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
+
+    def stream(profile: str, prompt: str, session_id: str | None, build_final) -> StreamingResponse:
+        """Shared SSE runner for every agentic/text endpoint: streams tool_call /
+        tool_result / token events as they happen, then one final event built by the
+        endpoint's ``build_final(final_text, run_id)`` (which may also persist state)."""
+
+        async def gen() -> AsyncIterator[bytes]:
+            final = ""
+            run_id = None
+            failed = False
+            try:
+                async for event in state.runner.stream(profile, prompt, session_id):
+                    if isinstance(event, SystemEvent):
+                        run_id = getattr(event, "run_id", None) or run_id
+                    if isinstance(event, ResultEvent):
+                        final = sanitize_output_language(event.final_text or "")
+                    frame = event_to_sse(event)
+                    if frame:
+                        yield frame
+            except Exception as exc:  # surface runtime failures as an SSE error, not a broken stream
+                failed = True
+                yield sse_frame("error", {"error": str(exc)})
+            if not failed:
+                yield sse_frame("final", await build_final(final, run_id))
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.post("/chat_no_stream")
+    @app.post("/ai/chat")
+    async def chat(body: LegacyRequest) -> dict[str, Any]:
+        text, metadata = await complete("chat", body, chat=True)
+        return {"response": text, "answer": text, "message": text, "metadata": metadata}
+
+    @app.post("/ai/chat/stream")
+    async def chat_stream(body: LegacyRequest) -> StreamingResponse:
+        text = require_public_input(body.supplied_text())
+        session_id = _chat_session_id(body)
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            # linch persists the turn to its session store during the run — nothing to do here.
+            return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
+
+        return stream("chat", text, session_id, build_final)
+
+    @app.post("/ai/translate")
+    async def translate(body: LegacyRequest) -> dict[str, Any]:
+        text, metadata = await complete("translate", body, prompt_override=translate_prompt(body))
+        return {"translated_text": text, "translation": text, "metadata": metadata}
+
+    @app.post("/ai/translate/stream")
+    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
+        return stream("translate", translate_prompt(body), None, build_final)
+
+    @app.post("/ai/generate-report")
+    async def report(body: LegacyRequest) -> dict[str, Any]:
+        text, metadata = await complete("report", body, prompt_override=report_prompt(body))
+        return {"report": text, "metadata": metadata}
+
+    @app.post("/ai/generate-report/stream")
+    async def report_stream(body: LegacyRequest) -> StreamingResponse:
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            return {"content": final, "report": final, "metadata": base_meta("report", run_id)}
+        return stream("report", report_prompt(body), None, build_final)
+
+    @app.post("/ai/generate-statistical-report")
+    async def statistical_report(body: LegacyRequest) -> dict[str, Any]:
+        text, metadata = await complete("statistical_report", body, prompt_override=statistical_prompt(body))
+        # Legacy gemini shape: report_title / report_summary / report_detail (parsed from JSON).
+        return {**parse_statistical(text), "report": text, "statistical_report": text, "metadata": metadata}
+
+    @app.post("/ai/generate-statistical-report/stream")
+    async def statistical_stream(body: LegacyRequest) -> StreamingResponse:
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            return {**parse_statistical(final), "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
+        return stream("statistical_report", statistical_prompt(body), None, build_final)
+
+    def exploit_final_meta(run_id: str | None) -> dict[str, Any]:
+        meta = base_meta("exploit_research", run_id)
+        ledger = getattr(state.runner, "ledger", None)
+        if ledger is not None and run_id:
+            meta.update(ledger.exploit_metadata(run_id))
+        meta.setdefault("evidence_ids", []); meta.setdefault("edb_ids", [])
+        meta.setdefault("provenance", []); meta.setdefault("candidate_status", "not_generated")
+        return meta
+
+    @app.post("/ai/exploit")
+    async def exploit(body: LegacyRequest) -> dict[str, Any]:
+        text, metadata = await complete("exploit_research", body)
+        no_poc = "No verified public PoC was found in the supplied evidence."
+        metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
+        metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
+        return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
+
+    @app.post("/ai/exploit/stream")
+    async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
+        text = require_public_input(body.supplied_text())
+        no_poc = "No verified public PoC was found in the supplied evidence."
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            return {"content": final or no_poc, "exploit_guide": final or no_poc, "description": final or no_poc, "metadata": exploit_final_meta(run_id)}
+
+        return stream("exploit_research", text, None, build_final)
+
+    @app.get("/health")
+    async def health() -> dict[str, Any]:
+        s = state.settings
+        provider_kind = s.llm_provider.lower()
+        if provider_kind == "deepseek":
+            llm_base = s.deepseek_base_url.rstrip("/")
+            llm_key = s.deepseek_api_key
+        else:
+            llm_base = s.qwen_base_url.rstrip("/")
+            llm_key = s.qwen_api_key
+        llm_headers = {"Authorization": f"Bearer {llm_key}"} if llm_key else {}
+        qwen_ok = False
+        try:
+            async with httpx.AsyncClient(timeout=2.5) as client:
+                response = await client.get(llm_base + "/models", headers=llm_headers)
+                qwen_ok = response.is_success
+        except httpx.HTTPError:
+            pass
+        # PoC backend health — in-process searchsploit/Exploit-DB.
+        searchsploit_ok = False
+        commit = None
+        poc = getattr(state.runner, "poc", None)
+        if poc is not None and hasattr(poc, "health"):
+            try:
+                searchsploit_ok, commit = await poc.health()
+            except Exception:
+                pass
+        store = getattr(state.runner, "session_store", None)
+        if store is not None and hasattr(store, "ping"):
+            redis_status = "connected" if await store.ping() else "unreachable"
+        else:
+            redis_status = "memory-dev"
+        return {"status": "ok" if qwen_ok else "degraded", "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit}
+
+    @app.post("/admin/refresh-models")
+    async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:
+        expected = state.settings.admin_api_key
+        if not expected or x_api_key != expected:
+            raise HTTPException(401, "Invalid admin API key")
+        return {"status": "ok", "refreshed": True}
