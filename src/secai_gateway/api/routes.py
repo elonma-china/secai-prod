@@ -36,7 +36,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = require_public_input(body.supplied_text())
             if chat:
                 session_id = _chat_session_id(body)
-        text, metadata = await state.runner.complete(profile, prompt, session_id)
+        try:
+            text, metadata = await state.runner.complete(profile, prompt, session_id)
+        except HTTPException:
+            raise
+        except Exception as exc:  # provider/runtime failure → clean 503, not an opaque 500
+            # Mirrors the streaming path (see stream()), which already surfaces failures
+            # as an SSE error event instead of tearing down the response.
+            raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
         return sanitize_output_language(text), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
