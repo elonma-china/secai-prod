@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
+from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI, Header, HTTPException
@@ -16,11 +18,24 @@ from .messages import parse_statistical, report_prompt, statistical_prompt, tran
 from .schemas import LegacyRequest
 from .sse import event_to_sse, sse_frame
 
+logger = logging.getLogger(__name__)
+
+# Shown to the user when a run fails. Delivered on the *visible* channels (token +
+# final), not only as an `event: error` frame — some UIs render assistant text but
+# ignore the error event, and a silent empty bubble is worse than a plain apology.
+STREAM_ERROR_MESSAGE = (
+    "Xin lỗi, trợ lý đang gặp sự cố tạm thời nên chưa thể trả lời. Vui lòng thử lại sau giây lát."
+)
+
 
 def _chat_session_id(body: LegacyRequest) -> str:
     # Stable per-user session id → linch loads/compacts the prior conversation from its
     # (Redis) session store. Only the new message is sent; history is NOT re-stuffed.
-    user_id = str(body.user_id or "anonymous")
+    user_id = str(body.user_id or "").strip()
+    if not user_id or user_id == "anonymous":
+        # No stable identity → a fresh id per request, so anonymous callers never
+        # share (and read back) one another's conversation history.
+        return f"chat:anon:{uuid4().hex}"
     return f"chat:{hashlib.sha256(user_id.encode()).hexdigest()}"
 
 
@@ -67,9 +82,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     frame = event_to_sse(event)
                     if frame:
                         yield frame
-            except Exception as exc:  # surface runtime failures as an SSE error, not a broken stream
+            except Exception:  # surface runtime failures as a visible message, not a broken/blank stream
                 failed = True
-                yield sse_frame("error", {"error": str(exc)})
+                # Log the real cause server-side (the client only gets a friendly message).
+                logger.exception("stream failed for profile=%s", profile)
+                # error frame for UIs that handle it, PLUS token+final so token-only
+                # UIs still show the failure instead of an empty assistant bubble.
+                yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
+                yield sse_frame("token", {"delta": STREAM_ERROR_MESSAGE})
+                yield sse_frame("final", await build_final(STREAM_ERROR_MESSAGE, run_id))
             if not failed:
                 yield sse_frame("final", await build_final(final, run_id))
             yield b"data: [DONE]\n\n"

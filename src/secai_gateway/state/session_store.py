@@ -90,6 +90,18 @@ class RedisSessionStore:
         raw = await self._redis.get(_rec_key(id))
         return _rec_from_json(raw) if raw is not None else None
 
+    async def _ensure_record(self, id: str) -> SessionRecord:
+        """Get-or-create the session record for a write.
+
+        The chat endpoint keys sessions by a stable per-user id (``chat:<hash>``)
+        and streams straight into a run. If the record does not yet exist, the
+        first turn's write must *create* it rather than raise — otherwise the
+        whole reply is lost as ``session not found`` and the user sees an empty
+        bubble. Idempotent with ``create()``; a normal turn (record already made
+        by ``Agent.session``) still just loads it."""
+        rec = await self.load(id)
+        return rec if rec is not None else await self.create(id=id)
+
     async def load_messages(self, id: str) -> list[StoredMessage]:
         rows = await self._redis.lrange(_msgs_key(id), 0, -1)
         out: list[StoredMessage] = []
@@ -99,9 +111,7 @@ class RedisSessionStore:
         return out
 
     async def append_messages(self, id: str, messages: list[Message]) -> list[StoredMessage]:
-        rec = await self.load(id)
-        if rec is None:
-            raise KeyError(f"session not found: {id}")
+        rec = await self._ensure_record(id)
         ts = _now_iso()
         base = await self._redis.llen(_msgs_key(id))
         stored: list[StoredMessage] = []
@@ -125,18 +135,14 @@ class RedisSessionStore:
         return snapshot_from_dict(json.loads(raw)) if raw is not None else None
 
     async def update_meta(self, id: str, meta: dict[str, object]) -> SessionRecord:
-        rec = await self.load(id)
-        if rec is None:
-            raise KeyError(f"session not found: {id}")
+        rec = await self._ensure_record(id)
         rec.meta.update(meta)
         rec.updated_at = _now_iso()
         await self._save_record(rec)
         return rec
 
     async def set_invoked_skills(self, id: str, skills: list[dict[str, object]]) -> None:
-        rec = await self.load(id)
-        if rec is None:
-            raise KeyError(f"session not found: {id}")
+        rec = await self._ensure_record(id)
         rec.invoked_skills = list(skills)
         rec.updated_at = _now_iso()
         await self._save_record(rec)

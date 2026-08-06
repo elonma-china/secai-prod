@@ -11,7 +11,7 @@ from linch.loop_guard import LoopGuard
 from ..config import get_settings
 from ..poc.backend import _MAX_FETCH_PER_RUN
 from .hooks import ToolCallBudgetHook
-from .profiles import BASE_SYSTEM
+from .profiles import compose_system_prompt
 
 
 def make_gateway_agent(
@@ -34,7 +34,7 @@ def make_gateway_agent(
         model=model,
         provider=provider,
         tools=tools,
-        system_prompt=BASE_SYSTEM,
+        system_prompt=compose_system_prompt(),
         session_store=session_store,
         run_store=run_store,
         permissions={"mode": "skip-dangerous"},

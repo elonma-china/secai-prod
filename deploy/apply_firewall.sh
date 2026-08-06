@@ -3,20 +3,18 @@
 # binds (see secai-gateway.service ExecStartPre) so the port is never briefly wide open
 # on restart. Safe to re-run: -C check before insert, -F flush-then-rebuild the sub-chain.
 #
-# Allowed sources (from gateway.log traffic analysis, 2026-07-15):
-#   35.221.221.96   - the real GCP frontend client (bc.googleusercontent.com), full IAS
-#                     product traffic (/ai/chat, /ai/exploit, /ai/translate, /ai/generate-*)
-#   58.187.40.253   - developer's own manual testing box (confirmed by user)
-#   127.0.0.1       - local health checks
-#   192.168.1.0/24  - LAN
-# Everything else on :8131 is dropped. Recon/scan traffic observed from Viettel dynamic-IP
-# ranges hitting only /, /docs, /favicon.ico is exactly what this blocks.
+# 2026-07-27: opened to ALL sources (0.0.0.0/0) at user's explicit request, done knowingly —
+# /ai/exploit has no auth (200 with no token) so this was the only access control on that
+# endpoint; user was told this before confirming. Previous allowlist (FE GCP egress IPs +
+# dev box + LAN), kept here so it's a one-line revert if this needs to be locked back down:
+#   ALLOW_IPS=(35.236.157.253 35.236.183.207 34.81.181.92 35.221.221.96 58.187.40.253 127.0.0.1)
+#   ALLOW_CIDRS=(192.168.1.0/24)
 set -euo pipefail
 
 CHAIN=SECAI_8131
 PORT=8131
-ALLOW_IPS=(35.221.221.96 58.187.40.253 127.0.0.1)
-ALLOW_CIDRS=(192.168.1.0/24)
+ALLOW_IPS=()
+ALLOW_CIDRS=(0.0.0.0/0)
 
 iptables -N "$CHAIN" 2>/dev/null || iptables -F "$CHAIN"
 

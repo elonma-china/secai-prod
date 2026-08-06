@@ -12,6 +12,8 @@ from linch.events import (
     ToolCallStartEvent,
 )
 
+from ..security import remove_chinese_content
+
 
 def sse_frame(event_name: str, payload: dict[str, Any]) -> bytes:
     """One named SSE event. UIs switch on the event name to render tool activity
@@ -23,9 +25,13 @@ def event_to_sse(event: Any) -> bytes | None:
     """Map a linch run event to an SSE frame, or None to drop it from the stream."""
     if isinstance(event, PartialAssistantEvent):
         # linch delta is {"kind":"text","text":"…"}; forward only text tokens.
+        # Strip CJK before yield — model sometimes emits Chinese mid-stream.
         delta = event.delta if isinstance(event.delta, dict) else {}
         if delta.get("kind") == "text" and delta.get("text"):
-            return sse_frame("token", {"delta": delta["text"]})
+            cleaned = remove_chinese_content(delta["text"])
+            if not cleaned:
+                return None
+            return sse_frame("token", {"delta": cleaned})
         return None
     if isinstance(event, ToolCallStartEvent):
         return sse_frame("tool_call", {

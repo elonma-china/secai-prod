@@ -27,6 +27,17 @@ class Profile:
     base: bool = True  # prepend the shared BASE_SYSTEM? False for pure text-transform profiles.
 
 
+def compose_system_prompt(profile: Profile | None = None) -> str:
+    """Build one well-formed XML-like system document for Qwen's chat template."""
+    if profile is None:
+        body = BASE_SYSTEM
+    elif profile.base:
+        body = f"{BASE_SYSTEM}\n\n{profile.system}"
+    else:
+        body = profile.system
+    return f"<system_prompt>\n{body}\n</system_prompt>"
+
+
 def _load_profiles() -> dict[str, Profile]:
     spec = yaml.safe_load(_PROMPTS.joinpath("profiles.yaml").read_text(encoding="utf-8"))
     return {
