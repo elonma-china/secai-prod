@@ -17,13 +17,16 @@ class Settings(BaseSettings):
 
     # ── Qdrant + hybrid retrieval ──────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
+    # Dense+sparse hybrid collection (legacy dense-only: cve_kb).
+    qdrant_collection: str = "cve_kb_hybrid"
+    qdrant_bm25_vector: str = "bm25"
+    bm25_model: str = "Qdrant/bm25"
     embedding_api_url: str = ""
     reranker_api_url: str = ""
     embedding_model: str = "BAAI/bge-m3"
     reranker_model: str = "Qwen/Qwen3-Reranker-0.6B"
     embedding_api_key: str = ""
     reranker_api_key: str = ""
-    bm25_dir: str = ""
 
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

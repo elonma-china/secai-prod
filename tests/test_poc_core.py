@@ -55,30 +55,46 @@ def test_fetch_returns_source_for_redistributable(tmp_path: Path) -> None:
     assert fetched["code_truncated"] is False
 
 
-def test_fetch_withholds_source_for_non_redistributable(tmp_path: Path) -> None:
-    # A source with redistributable=False (e.g. raw GitHub PoC, unresolved upstream license)
-    # must still return the static_indicators evidence, but source_code stays null — never
-    # fabricated as a substitute.
+def test_fetch_returns_source_for_sandbox_fetched_github(tmp_path: Path) -> None:
+    # Sandbox-fetched GitHub PoC artifacts are returned as grounded source_code so the
+    # SecAI LLM can generate from real PoC files (private lab). Never fabricated.
     from secai_gateway.poc.models import NormalizedPoc
 
     root = tmp_path / "poc_github"
     (root / "aa").mkdir(parents=True)
-    (root / "aa" / "deadbeef").write_text("import socket\n# unresolved-license body\n", encoding="utf-8")
+    body = "import socket\n# unresolved-license body\n"
+    (root / "aa" / "deadbeef").write_text(body, encoding="utf-8")
     cat = PocCatalog(tmp_path / "cat2.db")
     cat.upsert(NormalizedPoc(
-        source="poc_github", source_ref="octocat/demo", kind="exploit", title="Demo CVE PoC",
-        cve_ids=["CVE-2021-44228"], url="https://github.com/octocat/demo", license="varies",
-        redistributable=False, artifact_sha256="deadbeef", artifact_path="aa/deadbeef",
-        language="py"))
+        source="poc_github", source_ref="octocat/demo/poc.py", kind="exploit", title="Demo CVE PoC",
+        cve_ids=["CVE-2021-44228"], url="https://github.com/octocat/demo/blob/main/poc.py",
+        license="varies", redistributable=False, artifact_sha256="deadbeef",
+        artifact_path="aa/deadbeef", language="py", verified=True))
     cat.commit()
     be = LocalPocBackend(catalog=cat, source_roots={"poc_github": root})
     ref = asyncio.run(be.search("CVE-2021-44228", 10, "run1"))["hits"][0]["ref"]
     fetched = asyncio.run(be.fetch(ref, "run1"))
-    assert fetched["source_code"] is None
-    assert "unresolved-license body" not in json.dumps(fetched)
+    assert fetched["source_code"] == body
+    assert fetched["code_truncated"] is False
     si = fetched["static_indicators"]
-    assert si["network"]["socket_or_http"] >= 1  # evidence still present, just no raw code
+    assert si["network"]["socket_or_http"] >= 1
 
+
+def test_fetch_metadata_only_when_no_artifact(tmp_path: Path) -> None:
+    # Link-only GitHub rows (not yet fetched) stay metadata-only — no invented code.
+    from secai_gateway.poc.models import NormalizedPoc
+
+    cat = PocCatalog(tmp_path / "cat3.db")
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="octocat/demo", kind="exploit", title="Demo link only",
+        cve_ids=["CVE-2021-44228"], url="https://github.com/octocat/demo", license="varies",
+        redistributable=False, artifact_sha256=None, artifact_path=None))
+    cat.commit()
+    be = LocalPocBackend(catalog=cat, source_roots={"poc_github": tmp_path / "empty"})
+    ref = asyncio.run(be.search("CVE-2021-44228", 10, "run1"))["hits"][0]["ref"]
+    fetched = asyncio.run(be.fetch(ref, "run1"))
+    assert fetched["source_code"] is None
+    assert fetched["candidate_status"] == "metadata_only"
 
 def test_fetch_budget_capped_in_code(tmp_path: Path) -> None:
     # Enforced in the backend, NOT the prompt — a model told "fetch max 2" via system prompt

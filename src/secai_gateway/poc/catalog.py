@@ -36,6 +36,16 @@ CREATE TABLE IF NOT EXISTS artifact (
   sha256 TEXT PRIMARY KEY, size INTEGER, language TEXT, license TEXT,
   stored INTEGER DEFAULT 0, storage_path TEXT, first_source TEXT
 );
+-- Multi-file PoCs (repo-style sources): the bounded file set attached to a poc row,
+-- one row per file, repo-relative `rel_path` preserving the directory hierarchy.
+-- `ordinal` keeps entry-first order; single-file PoCs have no rows here (artifact_path
+-- alone carries them). Repopulated wholesale by the sandbox fetcher (set_files).
+CREATE TABLE IF NOT EXISTS poc_file (
+  poc_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, rel_path TEXT NOT NULL,
+  sha256 TEXT NOT NULL, storage_path TEXT NOT NULL, language TEXT, size INTEGER, role TEXT,
+  PRIMARY KEY(poc_id, rel_path)
+);
+CREATE INDEX IF NOT EXISTS idx_poc_file_poc ON poc_file(poc_id);
 CREATE TABLE IF NOT EXISTS collector_run (
   id INTEGER PRIMARY KEY, source TEXT, started TEXT, finished TEXT,
   added INTEGER, updated INTEGER, errors INTEGER, note TEXT
@@ -161,11 +171,51 @@ class PocCatalog:
             return None
         return self._rows_to_dicts([r])[0]
 
+    # ── multi-file PoC set (repo-style sources) ─────────────────────────────
+    def get_files(self, poc_id: int) -> list[dict[str, Any]]:
+        """The attached file set for a poc, entry-first. Empty list = single-file PoC."""
+        rows = self._db.execute(
+            "SELECT rel_path, sha256, storage_path, language, size, role FROM poc_file "
+            "WHERE poc_id=? ORDER BY ordinal", (poc_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+    def set_files(self, poc_id: int, files: list[dict[str, Any]]) -> None:
+        """Replace a poc's file set wholesale (idempotent re-fetch). Each `file`:
+        {rel_path, sha256, storage_path, language?, size?, role?}. Also registers each
+        blob in `artifact` so the content store stays the source of truth."""
+        self._db.execute("DELETE FROM poc_file WHERE poc_id=?", (poc_id,))
+        for i, f in enumerate(files):
+            self._db.execute(
+                "INSERT OR REPLACE INTO poc_file"
+                "(poc_id,ordinal,rel_path,sha256,storage_path,language,size,role) "
+                "VALUES(?,?,?,?,?,?,?,?)",
+                (poc_id, i, f["rel_path"], f["sha256"], f["storage_path"],
+                 f.get("language"), f.get("size"), f.get("role")))
+            self._db.execute(
+                "INSERT OR IGNORE INTO artifact(sha256,size,storage_path,stored,language,first_source) "
+                "VALUES(?,?,?,1,?,'poc_github')",
+                (f["sha256"], f.get("size"), f["storage_path"], f.get("language")))
+        self._db.commit()
+
     # ── sandbox fetcher support (link-only sources) ─────────────────────────
-    def pending_github(self, limit: int, min_stars: int = 0) -> list[sqlite3.Row]:
-        """poc_github rows not yet fetched, highest-star first. Fork-family duplicates
-        (marked by dedup_fork_families before fetch) are skipped so we don't spend the
-        fetch budget re-downloading the same PoC under a different owner."""
+    def pending_github(self, limit: int, min_stars: int = 0, refetch: bool = False) -> list[sqlite3.Row]:
+        """poc_github rows to fetch, highest-star first. Fork-family duplicates (marked by
+        dedup_fork_families) are skipped so we don't spend the budget re-downloading the same
+        PoC under a different owner.
+
+        Default: rows not yet fetched (``artifact_path IS NULL``). ``refetch=True``: the
+        *backfill* set — rows already fetched single-file that don't yet have a multi-file
+        set and haven't been checked for one (``fileset_checked`` provenance flag, set by the
+        fetcher once processed) — so a pre-multi-file catalog can be upgraded in place."""
+        if refetch:
+            return self._db.execute(
+                "SELECT id, source_ref, url, provenance FROM poc "
+                "WHERE source='poc_github' AND duplicate_of IS NULL AND artifact_path IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM poc_file f WHERE f.poc_id = poc.id) "
+                "AND COALESCE(CAST(json_extract(provenance,'$.fileset_checked') AS INTEGER), 0) = 0 "
+                "AND CAST(json_extract(provenance,'$.stars') AS INTEGER) >= ? "
+                "ORDER BY CAST(json_extract(provenance,'$.stars') AS INTEGER) DESC LIMIT ?",
+                (min_stars, limit)).fetchall()
         return self._db.execute(
             "SELECT id, source_ref, url, provenance FROM poc "
             "WHERE source='poc_github' AND artifact_path IS NULL AND duplicate_of IS NULL "
@@ -174,18 +224,47 @@ class PocCatalog:
             (min_stars, limit)).fetchall()
 
     def set_artifact(self, poc_id: int, sha256: str, rel_path: str,
-                     license: str | None = None, language: str | None = None) -> None:
+                     license: str | None = None, language: str | None = None,
+                     source_ref: str | None = None, url: str | None = None,
+                     provenance: dict[str, Any] | None = None,
+                     verified: bool | None = None) -> None:
         """Attach a fetched, content-addressed artifact to a poc row (make it fetchable offline).
-        `language` = the picked file's extension, so fetch reports it (store name is hash-only)."""
-        sets = ["artifact_sha256=?", "artifact_path=?", "redistributable=0"]
+
+        When ``source_ref``/``url`` are provided they should point at the **picked code file**
+        (e.g. ``owner/repo/path/poc.py``), not the repository root — so search/fetch ground
+        the LLM on real PoC source rather than a bare repo link.
+        """
+        sets = ["artifact_sha256=?", "artifact_path=?"]
         vals: list[Any] = [sha256, rel_path]
         if license:
             sets.append("license=?"); vals.append(license)
         if language:
             sets.append("language=?"); vals.append(language)
+        if source_ref:
+            # Avoid UNIQUE(source, source_ref) collisions when retargeting to a file path.
+            clash = self._db.execute(
+                "SELECT id FROM poc WHERE source=(SELECT source FROM poc WHERE id=?) "
+                "AND source_ref=? AND id<>?",
+                (poc_id, source_ref, poc_id)).fetchone()
+            if clash is None:
+                sets.append("source_ref=?"); vals.append(source_ref)
+        if url:
+            sets.append("url=?"); vals.append(url)
+        if provenance is not None:
+            sets.append("provenance=?"); vals.append(json.dumps(provenance))
+        if verified is not None:
+            sets.append("verified=?"); vals.append(int(verified))
         vals.append(poc_id)
         self._db.execute(f"UPDATE poc SET {', '.join(sets)} WHERE id=?", vals)
         self._db.execute(
             "INSERT OR IGNORE INTO artifact(sha256,storage_path,stored,language,first_source) "
             "VALUES(?,?,1,?,'poc_github')", (sha256, rel_path, language))
+        # Keep FTS title useful when we retarget to a file path.
+        if source_ref:
+            row = self._db.execute("SELECT title, description FROM poc WHERE id=?", (poc_id,)).fetchone()
+            if row:
+                self._db.execute("DELETE FROM poc_fts WHERE rowid=?", (poc_id,))
+                self._db.execute(
+                    "INSERT INTO poc_fts(rowid,title,description) VALUES(?,?,?)",
+                    (poc_id, row[0] or source_ref, row[1] or ""))
         self._db.commit()

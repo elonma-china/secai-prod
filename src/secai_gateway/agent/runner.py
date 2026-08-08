@@ -47,7 +47,7 @@ class LinchRunner:
         self.agent = make_gateway_agent(
             model=model, provider=provider,
             tools=empty_tools(*self.tools.values()), session_store=self.session_store,
-            run_store=self.run_store,
+            run_store=self.run_store, ledger=self.ledger,
         )
 
     def _apply_profile(self, session: Any, profile_name: str) -> None:

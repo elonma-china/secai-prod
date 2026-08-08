@@ -1,72 +1,97 @@
 """BM25 lexical half of hybrid retrieval + Reciprocal Rank Fusion.
 
-bm25s artifacts are cloned from production; ``doc_ids.json`` is a list of Qdrant point
-UUIDs — the join key between bm25 rows and Qdrant points. RRF fuses the dense and BM25
-rankings with the same k as the production hybrid sidecar.
+Qdrant sparse vector ``bm25`` (FastEmbed ``Qdrant/bm25`` + collection IDF modifier).
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import threading
 from collections import defaultdict
 from typing import Any
 
+import httpx
+
 from ..config import get_settings
 
-BM25_DIR = get_settings().bm25_dir
+_settings = get_settings()
+QDRANT_URL = _settings.qdrant_url.rstrip("/")
+COLLECTION = _settings.qdrant_collection
+BM25_VECTOR = _settings.qdrant_bm25_vector
+BM25_MODEL = _settings.bm25_model
 RRF_K = 60
 BM25_FANOUT = 50
 
+# Qdrant/bm25 is just stopword lists (no real ONNX weights); when huggingface.co is
+# unreachable (e.g. IP-level rate limit) point fastembed at a local copy instead of
+# retrying a doomed download on every single query.
+_LOCAL_BM25_MODEL_DIR = "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model"
+
 _bm25_lock = threading.Lock()
-_bm25_state: dict[str, Any] = {"loaded": False, "retriever": None, "doc_ids": None}
+_bm25_state: dict[str, Any] = {"sparse_model": None}
 
 
-def _load_bm25() -> tuple[Any, list[str] | None]:
-    """Lazy-load the bm25s index + doc_ids once per process. Returns (None, None)
-    when BM25_DIR is unset or the artifacts are missing (dense-only fallback)."""
-    if _bm25_state["loaded"]:
-        return _bm25_state["retriever"], _bm25_state["doc_ids"]
+def _load_sparse_model() -> Any:
+    if _bm25_state.get("sparse_model") is not None:
+        return _bm25_state["sparse_model"]
     with _bm25_lock:
-        if _bm25_state["loaded"]:
-            return _bm25_state["retriever"], _bm25_state["doc_ids"]
-        retriever = doc_ids = None
-        try:
-            if BM25_DIR and os.path.isdir(BM25_DIR):
-                import bm25s
+        if _bm25_state.get("sparse_model") is not None:
+            return _bm25_state["sparse_model"]
+        from fastembed import SparseTextEmbedding
 
-                retriever = bm25s.BM25.load(BM25_DIR, load_corpus=False)
-                with open(os.path.join(BM25_DIR, "doc_ids.json"), encoding="utf-8") as fh:
-                    doc_ids = json.load(fh)
-        except Exception:
-            retriever = doc_ids = None
-        _bm25_state.update(loaded=True, retriever=retriever, doc_ids=doc_ids)
-        return retriever, doc_ids
+        kwargs: dict[str, Any] = {}
+        if os.path.isdir(_LOCAL_BM25_MODEL_DIR):
+            kwargs["specific_model_path"] = _LOCAL_BM25_MODEL_DIR
+        model = SparseTextEmbedding(model_name=BM25_MODEL, **kwargs)
+        _bm25_state["sparse_model"] = model
+        return model
+
+
+def _encode_query(query: str) -> dict[str, list] | None:
+    text = (query or "").strip()
+    if not text:
+        return None
+    model = _load_sparse_model()
+    emb = next(iter(model.embed([text])))
+    indices = [int(i) for i in emb.indices]
+    values = [float(v) for v in emb.values]
+    if not indices:
+        return None
+    return {"indices": indices, "values": values}
+
+
+def _qdrant_sparse_search_sync(query: str, top_k: int) -> list[tuple[str, float]]:
+    sparse = _encode_query(query)
+    if not sparse or not BM25_VECTOR:
+        return []
+    body = {
+        "vector": {"name": BM25_VECTOR, "vector": sparse},
+        "limit": top_k,
+        "with_payload": False,
+    }
+    with httpx.Client(timeout=20.0) as client:
+        resp = client.post(
+            f"{QDRANT_URL}/collections/{COLLECTION}/points/search",
+            json=body,
+        )
+        resp.raise_for_status()
+        return [
+            (str(r["id"]), float(r["score"]))
+            for r in resp.json().get("result", [])
+            if r.get("score", 0) > 0
+        ]
 
 
 def _bm25_search_sync(query: str, top_k: int) -> list[tuple[str, float]]:
-    retriever, doc_ids = _load_bm25()
-    if retriever is None or not doc_ids:
+    if not BM25_VECTOR:
         return []
     try:
-        import bm25s
-
-        tokenized = bm25s.tokenize([query], stopwords="en", show_progress=False)
-        k = min(top_k, len(doc_ids))
-        results, scores = retriever.retrieve(tokenized, k=k, show_progress=False)
-        hits: list[tuple[str, float]] = []
-        for idx, score in zip(results[0], scores[0]):
-            idx, score = int(idx), float(score)
-            if 0 <= idx < len(doc_ids) and score > 0:
-                hits.append((doc_ids[idx], score))
-        return hits
+        return _qdrant_sparse_search_sync(query, top_k)
     except Exception:
         return []
 
 
 async def bm25_search(query: str, top_k: int) -> list[tuple[str, float]]:
-    # bm25s retrieve is sync CPU work — off-load so it doesn't block the event loop.
     return await asyncio.to_thread(_bm25_search_sync, query, top_k)
 
 

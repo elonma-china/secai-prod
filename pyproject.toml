@@ -15,7 +15,7 @@ dependencies = [
   "pydantic>=2.6",
   "pydantic-settings>=2.2",
   "pyyaml>=6",
-  "bm25s>=0.3",
+  "fastembed>=0.4",
 ]
 
 [project.optional-dependencies]

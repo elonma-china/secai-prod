@@ -10,12 +10,13 @@ from linch.tools.base import ToolContext, ToolResult
 from linch.tools.function import tool
 
 from ..config import get_settings
-from .bm25 import BM25_DIR, BM25_FANOUT, bm25_search, rrf_merge
+from .bm25 import BM25_FANOUT, BM25_VECTOR, bm25_search, rrf_merge
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
 from .filters import ENTITY_ID_RES, boost, build_filter, passes_filter, upper_list
 
-QDRANT_URL = get_settings().qdrant_url
-COLLECTION = "cve_kb"
+_settings = get_settings()
+QDRANT_URL = _settings.qdrant_url
+COLLECTION = _settings.qdrant_collection
 CANDIDATE_LIMIT = 20
 MAX_TEXT_CHARS = 800
 DEFAULT_TOP_K = 5
@@ -198,7 +199,7 @@ async def _qdrant_search(
             ][:BM25_FANOUT]
 
         if not dense_hits and not bm25_hits:
-            note = "" if (EMBEDDING_URL or BM25_DIR) else " (no EMBEDDING_API_URL and no BM25_DIR configured)"
+            note = "" if (EMBEDDING_URL or BM25_VECTOR) else " (no embedding / BM25 configured)"
             return ToolResult(content=f"Không tìm thấy kết quả trong knowledge base.{note}", summary=f"qdrant_search({query}) 0 hits")
 
         # 3. RRF fusion of the two rankings.
