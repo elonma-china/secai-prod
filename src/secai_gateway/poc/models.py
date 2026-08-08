@@ -67,6 +67,20 @@ class FetchResult:
     candidate_status: str = "draft_not_executed"
     source_code: str | None = None
     code_truncated: bool = False
+    # Multi-file PoCs — the bounded, hierarchy-preserving file set. Each entry: {path,
+    # code, sha256, language, truncated, role}. ``None`` for single-file PoCs, where
+    # ``source_code`` alone carries the artifact. The entry (main) file is first;
+    # ``source_code`` mirrors it for back-compat.
+    source_files: list[dict[str, Any]] | None = None
+    # True when `source_files` is an entry file + a companion doc bolted on at fetch time
+    # (metasploit's documentation/*.md, vulhub's README.md — see backend.py's
+    # `_companion_doc_path`) — both files are two specific, disparate paths plucked from
+    # ONE HUGE shared external repo (rapid7/metasploit-framework, vulhub/vulhub), not a
+    # small repo dedicated to this PoC. False for poc_github's `_pick_set`-built sets,
+    # which genuinely are one small repo for this PoC. Controls whether poc/inject.py's
+    # render_files shows a "Cấu trúc PoC (dạng repo)" tree — doing so for the companion
+    # case would misleadingly imply that's the PoC's whole project structure.
+    companion_doc_only: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

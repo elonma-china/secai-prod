@@ -14,7 +14,7 @@ from ..poc import LocalPocBackend, build_poc_tools
 from ..retrieval import neo4j_search, qdrant_search
 from ..state import RedisSessionStore, SqliteLedger
 from .factory import make_gateway_agent
-from .profiles import BASE_SYSTEM, PROFILES
+from .profiles import PROFILES, compose_system_prompt
 from .providers import build_llm_provider
 
 
@@ -47,7 +47,7 @@ class LinchRunner:
         self.agent = make_gateway_agent(
             model=model, provider=provider,
             tools=empty_tools(*self.tools.values()), session_store=self.session_store,
-            run_store=self.run_store,
+            run_store=self.run_store, ledger=self.ledger,
         )
 
     def _apply_profile(self, session: Any, profile_name: str) -> None:
@@ -55,8 +55,7 @@ class LinchRunner:
         # are absent from chat, rather than merely hidden from model instructions.
         profile = PROFILES[profile_name]
         session.tools_override = empty_tools(*(self.tools[name] for name in profile.tool_names))
-        system_text = f"{BASE_SYSTEM}\n\n{profile.system}" if profile.base else profile.system
-        session.system_blocks_override = [SystemBlock(text=system_text)]
+        session.system_blocks_override = [SystemBlock(text=compose_system_prompt(profile))]
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         profile = PROFILES[profile_name]

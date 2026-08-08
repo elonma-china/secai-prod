@@ -55,14 +55,64 @@ def cjk_ratio(text: str) -> float:
     return sum(len(m) for m in _CJK_RUN.findall(text)) / len(text)
 
 
-def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
-    """Strip stray CJK character runs from assistant output. Below `max_ratio` this is a
-    clean cosmetic fix (a few contaminated tokens in otherwise VI/EN text); above it the
-    response is likely broken in a deeper way, so it's left untouched rather than mangled
-    into nonsense — the caller can detect this via ``cjk_ratio`` if it wants to log/alert."""
+def remove_chinese_content(text: str) -> str:
+    """Remove CJK ideographs from text (always, no ratio gate).
+
+    Used on SSE token deltas where each chunk is too short for a reliable ratio check,
+    and as the final strip for completed assistant output.
+    """
     if not text:
         return text
-    ratio = cjk_ratio(text)
-    if ratio == 0 or ratio > max_ratio:
-        return text
     return _CJK_RUN.sub("", text)
+
+
+# ── Reasoning / meta-commentary leak guard ───────────────────────────────────
+# Even with thinking disabled, the small model occasionally streams its planning prose
+# (self-deliberation, internal rule/tool names, self-directed formatting instructions)
+# ahead of the real answer, ending on a "final answer" pivot line. That shape is never
+# intended for the user. When we can see both the leak markers and the pivot, keep only
+# the text after the last pivot; otherwise strip <think> blocks defensively and leave the
+# content untouched (so a normal answer is never mangled).
+_THINK_BLOCK = re.compile(r"(?is)<think>.*?</think>")
+_THINK_TAG = re.compile(r"(?is)</?think>")
+_REASONING_LEAK_MARKERS = re.compile(
+    r"(tool_discipline|qdrant_search|neo4j_search|poc_search"
+    r"|Ngữ cảnh\s*:|Người dùng (?:hỏi|đang hỏi|muốn)"
+    r"|tôi (?:đã có|cần|nên|sẽ) (?:gọi|tra cứu|trả lời)"
+    r"|Kết thúc bằng câu hỏi hỗ trợ"
+    r"|Trả lời ngắn gọn, không thêm lời dẫn"
+    r"|Cần tuân thủ ngôn ngữ)",
+    re.I,
+)
+_ANSWER_PIVOT = re.compile(
+    r"(?im)^[\s>*_#-]*(?:vậy\s+)?(?:thì\s+)?"
+    r"(?:tôi\s+sẽ\s+trả\s+lời"
+    r"|câu\s+trả\s+lời(?:\s+của\s+tôi)?\s*(?:là)?"
+    r"|trả\s+lời\s+của\s+tôi(?:\s+là)?"
+    r"|dưới\s+đây\s+là\s+câu\s+trả\s+lời)"
+    r"\s*:?\s*$",
+)
+
+
+def strip_reasoning_leak(text: str) -> str:
+    """Drop leaked chain-of-thought / meta planning that precedes the real answer."""
+    if not text:
+        return text
+    cleaned = _THINK_TAG.sub("", _THINK_BLOCK.sub("", text))
+    if _REASONING_LEAK_MARKERS.search(cleaned):
+        pivots = list(_ANSWER_PIVOT.finditer(cleaned))
+        if pivots:
+            tail = cleaned[pivots[-1].end():].strip()
+            if tail:  # never blank out the whole message
+                cleaned = tail
+    return cleaned.strip() or text.strip()
+
+
+def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
+    """Clean assistant output before it reaches the user: drop leaked reasoning/meta
+    planning, then strip CJK ideographs so responses stay VI/EN-only.
+
+    Always strips. ``max_ratio`` is unused (kept for call-site compatibility);
+    use ``cjk_ratio`` separately if you need contamination metrics.
+    """
+    return remove_chinese_content(strip_reasoning_leak(text))

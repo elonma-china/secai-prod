@@ -3,12 +3,15 @@
 Runtime has NO internet, so link-only poc_github rows are pre-fetched HERE (fetch time) into
 the store. We download the repo **tarball over HTTPS** (codeload.github.com — no git, no API
 token) and read it **entirely in memory**: nothing untrusted is written to disk and no code is
-ever executed, so no sandbox is needed. `_pick()` then selects the single authoritative PoC
-file. Caps on total tarball size / per-file size / download time. Resumable (pending_github
-skips rows already fetched, and dedup-marked fork duplicates).
+ever executed, so no sandbox is needed. `_pick()` selects the authoritative entry PoC file and
+`_pick_set()` gathers the bounded file set around it (entry's package subtree + root manifests,
+hierarchy preserved) for multi-file PoCs. Caps on total tarball size / per-file size / set size /
+download time. Resumable (pending_github skips rows already fetched, and dedup-marked forks).
 
     cd /home/ict/AIEngines/secai-agent-gateway
     ./.venv/bin/python -m secai_gateway.poc.fetch_github --limit 200 --min-stars 5
+    # backfill multi-file sets onto a catalog fetched before multi-file existed:
+    ./.venv/bin/python -m secai_gateway.poc.fetch_github --refetch --limit 500 --min-stars 5
 
 Also callable as `run(...)` from build_catalog.py so a single `build_catalog --fetch-limit N`
 runs collect → prune → dedup → fetch end-to-end. A tarball that 404s (renamed/removed default
@@ -20,6 +23,7 @@ import argparse
 import hashlib
 import io
 import json
+import re
 import tarfile
 from collections.abc import Iterable, Iterator
 from pathlib import Path, PurePosixPath
@@ -34,9 +38,11 @@ _MAX_FILE = 200_000        # per-file byte cap
 _MAX_TARBALL = 50_000_000  # whole-tarball download cap (guards decompression bombs / huge repos)
 _REPO_TIMEOUT = 60         # seconds per tarball download
 
-# dirs that hold deps/vendored/build/test/docs — NOT the authoritative PoC
+# dirs that hold deps/vendored/build/test/docs — NOT the authoritative PoC.
+# NOTE: do NOT include bare "example" — it false-positives on Java/Android packages
+# like com.example.* which are common in real mobile PoCs.
 _SKIP_DIRS = {"node_modules", "vendor", "third_party", "3rdparty", "deps", "dist", "build",
-              "target", ".git", "test", "tests", "spec", "docs", "doc", "examples", "example",
+              "target", ".git", "test", "tests", "spec", "docs", "doc", "examples",
               "sample", "samples", "assets", "static", "img", "images", "fixtures", "__pycache__",
               "site-packages", "venv", ".venv"}
 _NAME_HINTS = ("exploit", "poc", "cve", "payload", "rce", "attack", "vuln")
@@ -127,6 +133,11 @@ def _pick(files: Iterable[tuple[str, bytes]], cve: str) -> tuple[bytes, str] | N
         low = data[:20000].decode("utf-8", "replace").lower()
         name = rel.name.lower()
         depth = len(rel.parts) - 1
+        # Never treat docs/licenses as the authoritative PoC file — LLM needs code.
+        if name.startswith(("readme", "license", "changelog", "makefile", "contributing", "code_of_conduct")):
+            continue
+        if rel.suffix.lower() in {".md", ".txt", ".rst"} and not any(h in name for h in _NAME_HINTS):
+            continue
         score = 0.0
         if cve_l in name:
             score += 1000
@@ -135,7 +146,9 @@ def _pick(files: Iterable[tuple[str, bytes]], cve: str) -> tuple[bytes, str] | N
         score += 200 if cve_l in low else 0       # CVE referenced in the file body
         score -= 40 * depth                        # prefer root-level
         score += min(sz, 8000) / 1000.0            # mild size pref, capped (no lib-grabbing)
-        score -= 50 if name.startswith(("readme", "license", "changelog", "setup", "makefile")) else 0
+        # Prefer real code extensions over docs when scores tie-ish
+        if rel.suffix.lower() in {".py", ".rb", ".c", ".cpp", ".go", ".rs", ".java", ".js", ".sh", ".ps1", ".php", ".pl"}:
+            score += 80
         if best is None or score > best[0]:
             best = (score, data, rel_str)
     if best is None:
@@ -143,47 +156,176 @@ def _pick(files: Iterable[tuple[str, bytes]], cve: str) -> tuple[bytes, str] | N
     return best[1], best[2]
 
 
-def _fetch_one(urls: list[str], cve: str, timeout: int) -> tuple[bytes, str] | None:
-    """Try each candidate tarball URL until one downloads and yields a picked PoC file."""
+_MANIFEST_NAMES = {"requirements.txt", "setup.py", "pyproject.toml", "package.json",
+                   "go.mod", "cargo.toml", "gemfile", "composer.json"}
+# How-to-run docs — real usage instructions, not exploit mechanics; unlike LICENSE/
+# CHANGELOG these are worth keeping in the file set (see prompts/exploit.md: the model may
+# translate real doc run-steps into the report's overview, grounded in this exact text —
+# never invent run-steps otherwise). Extension-based, not a fixed name list: authors name
+# these README.md, report.md, usage.md, writeup.md, walkthrough.md, NOTES.md — .md/.rst is
+# a strong enough signal on its own (these extensions are essentially never used for
+# functional PoC code, unlike .txt which is ambiguous — requirements.txt is a manifest,
+# not prose). LICENSE/CHANGELOG/CONTRIBUTING/CODE_OF_CONDUCT are excluded earlier in
+# _pick_set regardless of extension, so this only needs to catch what's left.
+_DOC_EXT = {".md", ".rst"}
+_DOC_EXACT_NAMES = {"readme", "readme.txt"}  # extensionless or .txt README — .txt alone is too broad
+
+
+def _is_doc_file(name: str) -> bool:
+    n = name.lower()
+    return n in _DOC_EXACT_NAMES or PurePosixPath(n).suffix in _DOC_EXT
+_SET_MAX_FILES = 12
+_SET_MAX_BYTES = 400_000  # total bytes stored across the set (backend re-caps at read time)
+
+
+def _pick_set(files: list[tuple[str, bytes]], entry_rel: str) -> list[tuple[str, bytes]]:
+    """Given all repo files and the chosen entry file, return the bounded set belonging to
+    the same PoC: the entry file first, then other code/manifest files in the entry's
+    package subtree (its top-level dir, or the repo root when the entry is at root), plus
+    repo-root dependency manifests. Repo-relative paths preserved (hierarchy). Skips
+    vendor/deps/test/doc dirs. Bounded by file count and total bytes so a big repo can't
+    blow the store or the model's context."""
+    entry = PurePosixPath(entry_rel)
+    pkg = entry.parts[0] if len(entry.parts) > 1 else None  # top package dir, None = repo root
+    picked: list[tuple[str, bytes]] = []
+    seen: set[str] = set()
+    total = 0
+
+    def add(rel: str, data: bytes) -> None:
+        nonlocal total
+        if rel in seen or len(picked) >= _SET_MAX_FILES or total + len(data) > _SET_MAX_BYTES:
+            return
+        seen.add(rel); picked.append((rel, data)); total += len(data)
+
+    for rel, data in files:  # entry always first
+        if rel == entry_rel:
+            add(rel, data)
+            break
+    for rel_str, data in files:
+        if rel_str in seen:
+            continue
+        rel = PurePosixPath(rel_str)
+        if any(part.lower() in _SKIP_DIRS for part in rel.parts[:-1]):
+            continue
+        name = rel.name.lower()
+        if name.startswith(("license", "changelog", "contributing", "code_of_conduct")):
+            continue
+        in_pkg = (rel.parts[0] == pkg) if pkg else (len(rel.parts) == 1)
+        is_root_manifest = len(rel.parts) == 1 and (name in _MANIFEST_NAMES or _is_doc_file(name))
+        if in_pkg or is_root_manifest:
+            add(rel_str, data)
+    return picked
+
+
+def _fetch_one(urls: list[str], cve: str, timeout: int) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+    """Try each candidate tarball URL until one downloads and yields a picked PoC. Returns
+    (entry_bytes, entry_rel, file_set) — file_set is [(rel_path, bytes)], entry first."""
     for url in urls:
         data = _download(url, timeout, _MAX_TARBALL)
         if not data:
             continue
-        picked = _pick(_iter_tar(data), cve)
+        all_files = list(_iter_tar(data))
+        picked = _pick(all_files, cve)
         if picked:
-            return picked
+            entry_bytes, entry_rel = picked
+            return entry_bytes, entry_rel, _pick_set(all_files, entry_rel)
     return None
 
 
-def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT) -> None:
+_GH_URL = re.compile(
+    r"(?:https?://)?(?:www\.)?github\.com/([^/\s]+)/([^/\s?#]+)", re.I)
+
+
+def _owner_repo(source_ref: str, url: str = "") -> tuple[str, str] | None:
+    """Normalize ``owner/repo``, ``owner/repo/path.py``, or full GitHub URL → (owner, repo)."""
+    for raw in (source_ref or "", url or ""):
+        s = str(raw).strip().rstrip("/")
+        m = _GH_URL.search(s)
+        if m:
+            return m.group(1), m.group(2).removesuffix(".git")
+        # owner/repo or owner/repo/deeper/path
+        parts = [p for p in s.split("/") if p and p not in (".", "..")]
+        if len(parts) >= 2 and ":" not in parts[0]:
+            return parts[0], parts[1]
+    return None
+
+
+def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT, refetch: bool = False) -> None:
     be = LocalPocBackend()
     store = be.roots["poc_github"]
     store.mkdir(parents=True, exist_ok=True)
-    rows = be.catalog.pending_github(limit, min_stars)
-    print(f"pending github PoCs to fetch: {len(rows)} (min_stars={min_stars})", flush=True)
+    rows = be.catalog.pending_github(limit, min_stars, refetch=refetch)
+    mode = "re-fetch (multi-file backfill)" if refetch else "fetch"
+    print(f"pending github PoCs to {mode}: {len(rows)} (min_stars={min_stars})", flush=True)
     ok = skip = 0
     for i, r in enumerate(rows, 1):
         poc_id, full, url = r["id"], r["source_ref"], r["url"]
-        owner, _, repo = str(full).partition("/")
-        branch = (json.loads(r["provenance"] or "{}").get("default_branch") or "master")
-        # repo name doubles as the pick hint (a pending row maps to a repo, not one CVE)
-        picked = _fetch_one(_tarball_urls(owner, repo, branch), full.split("/")[-1], per_timeout)
+        parsed = _owner_repo(str(full), str(url or ""))
+        if not parsed:
+            skip += 1
+            continue
+        owner, repo = parsed
+        prov = json.loads(r["provenance"] or "{}")
+        branch = prov.get("default_branch") or "master"
+        pick_hint = repo
+        poc_meta = be.catalog.get(poc_id)
+        if poc_meta and poc_meta.get("cve_ids"):
+            pick_hint = poc_meta["cve_ids"][0]
+        picked = _fetch_one(_tarball_urls(owner, repo, branch), pick_hint, per_timeout)
         if not picked:
             skip += 1
             continue
-        blob, rel_in_repo = picked
+        blob, rel_in_repo, file_set = picked
         lang = Path(rel_in_repo).suffix.lstrip(".") or None  # store name is hash-only
         sha = hashlib.sha256(blob).hexdigest()
         dst = store / sha[:2] / sha
         dst.parent.mkdir(parents=True, exist_ok=True)
         if not dst.exists():
             dst.write_bytes(blob)
-        be.catalog.set_artifact(poc_id, sha, f"{sha[:2]}/{sha}",
-                                license="upstream repo license; static analysis only",
-                                language=lang)
+        # Point catalog at the CODE FILE (not repo root) so LLM retrieval is grounded.
+        file_ref = f"{owner}/{repo}/{rel_in_repo}"
+        blob_url = f"https://github.com/{owner}/{repo}/blob/{branch}/{rel_in_repo}"
+        prov.update({
+            "repo": f"{owner}/{repo}",
+            "canonical_poc_path": rel_in_repo,
+            "points_to_code_file": True,
+            "fetched_bytes": len(blob),
+            "fileset_checked": 1,  # processed for a multi-file set (single-file repos too) → backfill skips next time
+        })
+        be.catalog.set_artifact(
+            poc_id, sha, f"{sha[:2]}/{sha}",
+            license="upstream repo license; static analysis / lab grounding only",
+            language=lang,
+            source_ref=file_ref,
+            url=blob_url,
+            provenance=prov,
+            verified=True,
+        )
+        # Multi-file PoC: store the whole bounded set (hierarchy preserved) so fetch can
+        # return a real repo layout, not just the entry file. Single-file repos skip this.
+        if len(file_set) > 1:
+            file_rows = []
+            for frel, fdata in file_set:
+                fsha = hashlib.sha256(fdata).hexdigest()
+                fdst = store / fsha[:2] / fsha
+                fdst.parent.mkdir(parents=True, exist_ok=True)
+                if not fdst.exists():
+                    fdst.write_bytes(fdata)
+                if frel == rel_in_repo:
+                    role = "entry"
+                elif _is_doc_file(Path(frel).name):
+                    role = "readme"
+                else:
+                    role = "support"
+                file_rows.append({
+                    "rel_path": frel, "sha256": fsha, "storage_path": f"{fsha[:2]}/{fsha}",
+                    "language": Path(frel).suffix.lstrip(".") or None, "size": len(fdata),
+                    "role": role,
+                })
+            be.catalog.set_files(poc_id, file_rows)
         ok += 1
         if i % 20 == 0 or ok <= 5:
-            print(f"  [{i}/{len(rows)}] fetched {full} ({rel_in_repo}) sha={sha[:12]}", flush=True)
+            print(f"  [{i}/{len(rows)}] fetched {file_ref} sha={sha[:12]}", flush=True)
     print(f"DONE fetched={ok} skipped={skip} · store={store}", flush=True)
 
 
@@ -192,8 +334,11 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--min-stars", type=int, default=5)
     ap.add_argument("--timeout", type=int, default=_REPO_TIMEOUT)
+    ap.add_argument("--refetch", action="store_true",
+                    help="Backfill mode: re-download already-fetched repos that lack a "
+                         "multi-file set and populate it (upgrade a pre-multi-file catalog).")
     a = ap.parse_args()
-    run(a.limit, a.min_stars, a.timeout)
+    run(a.limit, a.min_stars, a.timeout, refetch=a.refetch)
 
 
 if __name__ == "__main__":

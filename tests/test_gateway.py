@@ -94,3 +94,45 @@ async def test_secrets_are_rejected_before_runner() -> None:
         response = await client.post("/ai/chat", json={"message": "password=super-secret-token-value"})
     assert response.status_code == 422
     assert not fake.calls
+
+
+class FailingRunner:
+    """A runner whose stream dies mid-run — models the live 'session not found' case."""
+
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+        raise RuntimeError("boom: session not found: chat:deadbeef")
+
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+        raise RuntimeError("boom: session not found: chat:deadbeef")
+        yield  # pragma: no cover — makes this an async generator
+
+
+@pytest.mark.asyncio
+async def test_stream_failure_is_visible_not_silent() -> None:
+    """Bug #2: a failed run must reach the user on the *visible* channels (token +
+    final), not only as an `event: error` frame that token-only UIs ignore. It must
+    also never leak the internal exception text."""
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(FailingRunner())), base_url="http://test") as client:
+        resp = await client.post("/ai/chat/stream", json={"user_id": "u1", "message": "hello"})
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: error" in body        # machine-readable channel
+    assert "event: token" in body        # visible channel for token-only UIs
+    assert "event: final" in body        # final answer carries the message too
+    assert "data: [DONE]" in body
+    assert "Xin lỗi" in body             # friendly, user-facing message
+    assert "session not found" not in body  # internal detail must not leak to the client
+
+
+def test_chat_session_id_scoping() -> None:
+    from secai_gateway.api.routes import _chat_session_id
+    from secai_gateway.api.schemas import LegacyRequest
+
+    # Same real user → same stable session (conversation memory persists).
+    a = _chat_session_id(LegacyRequest(user_id="u1", message="hi"))
+    b = _chat_session_id(LegacyRequest(user_id="u1", message="again"))
+    assert a == b and a.startswith("chat:")
+    # Anonymous callers must NOT share a session id (no cross-user history leak).
+    x = _chat_session_id(LegacyRequest(message="hi"))
+    y = _chat_session_id(LegacyRequest(message="hi"))
+    assert x != y and x.startswith("chat:anon:")

@@ -13,6 +13,23 @@ from .backend import LocalPocBackend, PocError
 _DRAFT = "Unverified lab draft: validate only in an authorized, isolated environment."
 
 
+def record_fetch_evidence(ledger: SqliteLedger, run_id: str, idempotency_key: str,
+                          result: dict[str, Any]) -> None:
+    """Persist a successful `poc.fetch()` result: the real evidence (source_code, sha256,
+    provenance) plus a draft_not_executed marker. Shared by the agentic `poc_fetch` tool
+    AND `poc/prefetch.py`'s deterministic pre-fetch — both must produce IDENTICAL ledger
+    rows so `ledger.evidence_for_run()` and `exploit_metadata()` see one consistent shape
+    regardless of which path gathered the evidence. Keyed per (run, artifact) — see
+    poc/inject.py's module docstring for why a content-only key silently drops writes."""
+    ev_id = f"evidence:{run_id}:{result['sha256'][:24]}"
+    ledger.save_evidence(ev_id, run_id, {
+        "edb_id": result["source_ref"], "sha256": result["sha256"],
+        "canonical_url": result["url"], **result})
+    ledger.draft_once(idempotency_key, run_id, _DRAFT, {
+        "candidate_status": "draft_not_executed",
+        "edb_id": result["source_ref"], "sha256": result["sha256"]})
+
+
 def build_poc_tools(poc: LocalPocBackend, ledger: SqliteLedger) -> dict[str, Any]:
     """The 2-tool PoC surface: search → fetch(ref). `poc_analyze`/`poc_generate_draft`
     are folded into `fetch` (fewer turns for small models, fewer fabrication points)."""
@@ -45,14 +62,7 @@ def build_poc_tools(poc: LocalPocBackend, ledger: SqliteLedger) -> dict[str, Any
             result = await poc.fetch(ref, ctx.run_id)
         except PocError as exc:
             return ToolResult(content=f"poc_fetch failed: {exc}", summary="poc_fetch", is_error=True)
-        # Preserve exploit_metadata(): record evidence + a draft_not_executed marker.
-        ev_id = f"evidence:{result['sha256'][:24]}"
-        ledger.save_evidence(ev_id, ctx.run_id, {
-            "edb_id": result["source_ref"], "sha256": result["sha256"],
-            "canonical_url": result["url"], **result})
-        ledger.draft_once(ctx.idempotency_key, ctx.run_id, _DRAFT, {
-            "candidate_status": "draft_not_executed",
-            "edb_id": result["source_ref"], "sha256": result["sha256"]})
+        record_fetch_evidence(ledger, ctx.run_id, ctx.idempotency_key, result)
         return ToolResult(content=json.dumps(result),
                           summary=f"poc_fetch({result['source']}:{result['source_ref']})")
 

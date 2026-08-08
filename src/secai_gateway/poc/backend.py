@@ -22,11 +22,25 @@ from .catalog import PocCatalog
 from .models import FetchResult, SearchHit
 
 _MAX_REFS = 20000  # cap the run-scoped ref map (evict oldest)
-_MAX_CODE_CHARS = 8000  # ~2k tokens; files are already condensed to one picked PoC file
+# Code budget shared by the model-facing quote AND the deterministic reference-code
+# injection (which reads source_code back from the ledger — see poc/inject.py). Raised
+# from 2k→6k tokens so a typical single-file PoC comes back COMPLETE, not cut mid-exploit:
+# the old 8k-char cap lost >half of an 18 KB PoC, which is what made output "lúc đủ lúc
+# thiếu". Big artifacts still cap here to bound context/latency on the public endpoint.
+_MAX_CODE_CHARS = 24000   # ~6k tokens; single-file PoC / entry file
+# Multi-file PoCs (repo-style sources): the SAME total budget shared across the file set,
+# entry file first, so a repo can't blow the window; per-file cap stops one giant file from
+# eating the whole pool.
+_MAX_SET_FILES = 12
+_MAX_SET_CHARS = _MAX_CODE_CHARS
+_MAX_SET_FILE_CHARS = 12000
 # Hard cap on poc_fetch calls per run — enforced HERE, not left to the system prompt. A
 # small model asked to "fetch 1-2 PoCs" will happily fetch every hit for a well-covered CVE
 # (Log4Shell alone has 64) if nothing stops it; prompt wording is advisory, this is not.
-_MAX_FETCH_PER_RUN = 3
+# Matches exploit.md's "tối đa hai kết quả tốt nhất" — every extra fetch adds a full
+# sequential LLM round-trip plus another _MAX_CODE_CHARS of quoted source in the context,
+# both of which extend wall-clock latency on the public exploit endpoint.
+_MAX_FETCH_PER_RUN = 2
 
 
 class PocError(ValueError):
@@ -98,6 +112,56 @@ class LocalPocBackend:
             raise PocError("This ref belongs to a different session — call poc_search in this session")
         return poc_id
 
+    def _read_file_set(self, source: str, files: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
+        """Read a poc's attached file set from the content store into the source_files
+        contract, entry-first, under the shared total budget. Path-escape guarded. Returns
+        None when nothing readable (falls back to single-file source_code)."""
+        root = self.roots.get(source) or self.roots.get("poc_github")
+        if root is None:
+            return None
+        out: list[dict[str, Any]] = []
+        total = 0
+        for f in files[:_MAX_SET_FILES]:
+            if total >= _MAX_SET_CHARS:
+                break
+            candidate = (root / f["storage_path"]).resolve()
+            try:
+                candidate.relative_to(root)          # path-escape guard
+            except ValueError:
+                continue
+            if not candidate.is_file():
+                continue
+            text = candidate.read_bytes().decode("utf-8", errors="replace")
+            cap = min(_MAX_SET_FILE_CHARS, _MAX_SET_CHARS - total)
+            truncated = len(text) > cap
+            code = text[:cap]
+            total += len(code)
+            out.append({
+                "path": f["rel_path"], "code": code, "sha256": f["sha256"],
+                "language": f.get("language"), "truncated": truncated,
+                "role": f.get("role"),
+            })
+        return out or None
+
+    def _companion_doc_path(self, source: str, artifact_path: str) -> str | None:
+        """Repo-relative path to a real "how to run" doc alongside the main artifact, per
+        source convention — or None if that source has no such convention. Existence is
+        checked by the caller; this is pure path derivation, no I/O.
+
+        - metasploit: modules/exploits/X/Y/name.rb -> documentation/modules/exploit/X/Y/name.md
+          (~43% of modules have one — Verification Steps with real `use`/`run` commands and
+          option values, richer than anything in the .rb source itself).
+        - vulhub: README.md next to the docker-compose.yml — the real step-by-step HTTP
+          exploit walkthrough; the collector currently reads it only for a title string and
+          discards the body, so this is the only place that content reaches the model."""
+        if source == "metasploit" and artifact_path.startswith("modules/exploits/"):
+            rest = artifact_path[len("modules/exploits/"):]
+            if rest.endswith(".rb"):
+                return f"documentation/modules/exploit/{rest[:-3]}.md"
+        if source == "vulhub":
+            return str(Path(artifact_path).parent / "README.md")
+        return None
+
     def _artifact_path(self, poc: dict[str, Any]) -> Path:
         root = self.roots.get(poc["source"])
         if root is None or not poc.get("artifact_path"):
@@ -156,21 +220,55 @@ class LocalPocBackend:
         blob = await asyncio.to_thread(path.read_bytes)
         indicators = await asyncio.to_thread(_static_indicators, poc.get("language") or "", path)
         code, truncated = None, False
-        if poc.get("redistributable"):
-            # Confirmed-redistributable license (exploitdb/metasploit/nuclei/ghsa) → return the
-            # REAL fetched artifact text, grounded and sha256-attributable. Unresolved-license
-            # sources (raw GitHub PoCs, vulhub) fall through with code=None — static_indicators
-            # only, same as before. Never model-generated either way.
+        # Ground LLM generation on real fetched PoC bytes when available:
+        # - redistributable sources (exploitdb/metasploit/nuclei/…) always
+        # - sandbox-fetched GitHub/vulhub artifacts (private SecAI lab) when verified
+        #   or when an artifact was explicitly stored for offline retrieval
+        allow_code = bool(poc.get("redistributable")) or (
+            poc.get("source") in {"poc_github", "vulhub"} and bool(poc.get("artifact_path"))
+            and (bool(poc.get("verified")) or bool(poc.get("artifact_sha256")))
+        )
+        source_files = None
+        companion_doc_only = False
+        if allow_code:
             text = blob.decode("utf-8", errors="replace")
             truncated = len(text) > _MAX_CODE_CHARS
             code = text[:_MAX_CODE_CHARS]
+            # Repo-style PoC with an attached file set → return the whole bounded set
+            # (hierarchy preserved) instead of just the picked entry file.
+            file_rows = await asyncio.to_thread(self.catalog.get_files, poc_id)
+            if file_rows:
+                source_files = await asyncio.to_thread(self._read_file_set, poc["source"], file_rows)
+            else:
+                # Single-artifact sources (metasploit/vulhub) may still have a real
+                # companion "how to run" doc on disk — attach it dynamically (no catalog
+                # row needed) rather than leaving the model with only the raw module/compose
+                # file, which rarely states how to actually invoke the PoC.
+                doc_rel = self._companion_doc_path(poc["source"], poc["artifact_path"])
+                doc_path = (root / doc_rel).resolve() if doc_rel else None
+                if doc_path is not None and doc_path.is_file():
+                    try:
+                        doc_path.relative_to(root)  # path-escape guard, mirrors _artifact_path
+                        doc_bytes = await asyncio.to_thread(doc_path.read_bytes)
+                        doc_text = doc_bytes[:_MAX_SET_FILE_CHARS].decode("utf-8", errors="replace")
+                        source_files = [
+                            {"path": poc["artifact_path"], "code": code,
+                             "sha256": hashlib.sha256(blob).hexdigest(),
+                             "language": poc.get("language"), "truncated": truncated, "role": "entry"},
+                            {"path": doc_rel, "code": doc_text, "sha256": hashlib.sha256(doc_bytes).hexdigest(),
+                             "language": "md", "truncated": len(doc_bytes) > _MAX_SET_FILE_CHARS, "role": "readme"},
+                        ]
+                        companion_doc_only = True
+                    except ValueError:
+                        pass  # escaped root — ignore, main artifact still returned via source_code
         return FetchResult(
             source_ref=poc["source_ref"], source=poc["source"],
             sha256=hashlib.sha256(blob).hexdigest(), url=poc["url"] or "",
             license=poc["license"] or "", **meta, static_indicators=indicators,
             prerequisites=["target access", "matching vulnerable version", "authorized lab"],
             side_effects=["Artifact was not executed; static inspection only"],
-            source_code=code, code_truncated=truncated,
+            source_code=code, code_truncated=truncated, source_files=source_files,
+            companion_doc_only=companion_doc_only,
         ).to_dict()
 
     async def health(self) -> tuple[bool, str | None]:

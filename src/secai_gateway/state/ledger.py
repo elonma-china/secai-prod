@@ -55,6 +55,19 @@ class SqliteLedger:
             row = conn.execute("select draft, metadata from poc_drafts where idempotency_key = ?", (key,)).fetchone()
         return {"draft": row[0], "metadata": json.loads(row[1])}
 
+    def evidence_for_run(self, run_id: str | None) -> list[dict[str, Any]]:
+        """Full evidence rows for a run, oldest first — includes the real `source_code`
+        (and `source_files` when multi-file) captured at `poc_fetch` time. Used by the
+        deterministic reference-code injector; `exploit_metadata` deliberately strips code."""
+        if not run_id:
+            return []
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "select metadata from evidence_ledger where run_id = ? order by created_at asc",
+                (run_id,),
+            ).fetchall()
+        return [json.loads(row[0]) for row in rows]
+
     def exploit_metadata(self, run_id: str | None) -> dict[str, Any]:
         if not run_id:
             return {"evidence_ids": [], "edb_ids": [], "provenance": [], "candidate_status": "not_generated"}
