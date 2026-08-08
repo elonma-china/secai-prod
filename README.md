@@ -67,10 +67,22 @@ store (dev/test).
 
 ## PoC / Exploit-DB
 
-Runs **in-process** as a plain tool — no separate service. The Exploit-DB clone must be
-read-only; it never executes artifacts, targets, mirrors, updates, or runs Nmap, and never
-returns artifact source. `/ai/exploit` can return an unexecuted `draft_not_executed`
-candidate only.
+Runs **in-process** as a plain tool — no separate service. The Exploit-DB clone is
+read-only; it never executes artifacts, targets, mirrors, updates, or runs Nmap. `/ai/exploit`
+can return an unexecuted `draft_not_executed` candidate only.
+
+**Section 1 (the fetched PoC) is placed deterministically and shown in full.** During its
+agentic turn the model sees each fetched artifact capped to a context budget
+(`_MAX_CODE_CHARS`/`_MAX_SET_CHARS` in `poc/backend.py`), so long chats stay under the window.
+But the PoC rendered into the response's Section 1 — the `description`/`exploit_guide` text the
+UI displays — is **re-read from the content store at injection time (after the model runs) and
+shown untruncated, as the whole repo**: a repo tree plus one path-headed block per file, entry
+first, including sibling files the fetch budget skipped. This keeps the model context bounded
+while the displayed PoC is complete — no extra endpoint, no second round-trip
+(`_fullen_evidence_for_display` in `api/routes.py`, budget `_MAX_DISPLAY_CHARS`). Full source is
+only ever the real fetched artifact bytes for license-cleared sources (never model-invented),
+gated by the same license + path-escape rules as `poc_fetch`; the gateway is private-network
+only, so serve it accordingly.
 
 ## Layout
 

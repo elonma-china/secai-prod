@@ -171,6 +171,22 @@ class PocCatalog:
             return None
         return self._rows_to_dicts([r])[0]
 
+    # ── content-hash lookup (full-artifact serving) ─────────────────────────
+    # Address a stored file by its sha256 so the /poc/file endpoint can serve the full,
+    # untruncated bytes without ever going through a run-scoped `ref`. Two homes for a hash:
+    # a multi-file set member (poc_file) or a single-file poc's own artifact.
+    def file_by_sha256(self, sha256: str) -> dict[str, Any] | None:
+        r = self._db.execute(
+            "SELECT poc_id, rel_path, storage_path, language, size FROM poc_file "
+            "WHERE sha256=? LIMIT 1", (sha256,)).fetchone()
+        return dict(r) if r else None
+
+    def poc_by_artifact_sha256(self, sha256: str) -> dict[str, Any] | None:
+        r = self._db.execute(
+            "SELECT * FROM poc WHERE artifact_sha256=? AND artifact_path IS NOT NULL "
+            "AND duplicate_of IS NULL LIMIT 1", (sha256,)).fetchone()
+        return self._rows_to_dicts([r])[0] if r else None
+
     # ── multi-file PoC set (repo-style sources) ─────────────────────────────
     def get_files(self, poc_id: int) -> list[dict[str, Any]]:
         """The attached file set for a poc, entry-first. Empty list = single-file PoC."""

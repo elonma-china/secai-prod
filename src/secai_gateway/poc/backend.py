@@ -41,14 +41,33 @@ _MAX_SET_FILE_CHARS = 12000
 # sequential LLM round-trip plus another _MAX_CODE_CHARS of quoted source in the context,
 # both of which extend wall-clock latency on the public exploit endpoint.
 _MAX_FETCH_PER_RUN = 2
+# Full-artifact serving (/poc/file) is DELIBERATELY not bound by the LLM-context budgets
+# above — its whole purpose is to return the complete file the model only saw a slice of.
+# This ceiling is a pathological-size backstop only (PoC files are KB-range); it is not the
+# "download limit" that truncates Section 1.
+_MAX_FULL_CHARS = 20_000_000
 
 
 class PocError(ValueError):
     pass
 
 
+# Typed variants so the HTTP layer can map to the right status without string-sniffing.
+class PocBadRequest(PocError):
+    pass
+
+
+class PocForbidden(PocError):
+    pass
+
+
+class PocNotFound(PocError):
+    pass
+
+
 import re as _re
 
+_SHA256 = _re.compile(r"[0-9a-f]{64}")
 _URL = _re.compile(r"https?://[^\s\"'<>)\]]+")
 _IP = _re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 _PORT = _re.compile(r"(?:port|LPORT|RPORT|PORT)\s*[=:]\s*(\d{1,5})")
@@ -175,6 +194,95 @@ class LocalPocBackend:
             raise PocError("Artifact not found on disk")
         return candidate
 
+    def _allow_code(self, poc: dict[str, Any]) -> bool:
+        """The SINGLE license/verification gate deciding whether real PoC source may leave
+        the box — shared by ``fetch`` (LLM grounding) and the ``/poc/file`` full-artifact
+        endpoint so both honor identical rules:
+        - redistributable sources (exploitdb/metasploit/nuclei/ghsa) always
+        - sandbox-fetched GitHub/vulhub artifacts (private SecAI lab) only when verified or
+          when an artifact was explicitly stored for offline retrieval."""
+        return bool(poc.get("redistributable")) or (
+            poc.get("source") in {"poc_github", "vulhub"} and bool(poc.get("artifact_path"))
+            and (bool(poc.get("verified")) or bool(poc.get("artifact_sha256")))
+        )
+
+    async def read_artifact(self, sha256: str) -> dict[str, Any]:
+        """Full, UNTRUNCATED bytes of one stored PoC file, addressed by content hash. Used to
+        embed the complete script into the /ai/exploit response (server-side, AFTER the model
+        runs) so it NEVER enters the model context (no 24k budget), yet is gated by the SAME
+        ``_allow_code`` rule and path-escape guard as poc_fetch."""
+        sha = (sha256 or "").strip().lower()
+        if not _SHA256.fullmatch(sha):
+            raise PocBadRequest("Invalid sha256")
+        # A hash lives either in a multi-file set (poc_file) or as a poc's own artifact.
+        frow = await asyncio.to_thread(self.catalog.file_by_sha256, sha)
+        if frow:
+            poc = await asyncio.to_thread(self.catalog.get, frow["poc_id"])
+            if poc is None:
+                raise PocNotFound("Artifact owner not found")
+            root = self.roots.get(poc["source"]) or self.roots.get("poc_github")
+            rel_display, storage, language = frow["rel_path"], frow["storage_path"], frow.get("language")
+        else:
+            poc = await asyncio.to_thread(self.catalog.poc_by_artifact_sha256, sha)
+            if poc is None:
+                raise PocNotFound("Artifact not found")
+            root = self.roots.get(poc["source"])
+            rel_display = poc.get("source_ref") or poc["artifact_path"]
+            storage, language = poc["artifact_path"], poc.get("language")
+        if root is None:
+            raise PocNotFound("No local root for source")
+        if not self._allow_code(poc):
+            raise PocForbidden("Artifact source is not cleared for full retrieval")
+        candidate = (root / storage).resolve()
+        try:
+            candidate.relative_to(root)          # path-escape guard (mirrors _artifact_path)
+        except ValueError as exc:
+            raise PocNotFound("Artifact path escapes source root") from exc
+        if not candidate.is_file():
+            raise PocNotFound("Artifact not found on disk")
+        blob = await asyncio.to_thread(candidate.read_bytes)
+        text = blob.decode("utf-8", errors="replace")
+        return {
+            "sha256": sha, "path": rel_display, "language": language, "size": len(blob),
+            "content": text[:_MAX_FULL_CHARS], "truncated": len(text) > _MAX_FULL_CHARS,
+            "source": poc["source"], "poc_id": poc["id"], "cve_ids": poc.get("cve_ids") or [],
+        }
+
+    async def read_full_fileset(self, sha256: str) -> list[dict[str, Any]] | None:
+        """The COMPLETE file set — ALL files of the PoC that owns the file with this content
+        hash, each with full untruncated bytes, entry-first — for rendering the whole repo in
+        Section 1 rather than the budget-limited subset the model fetched. Returns the
+        source_files contract ({path, code, sha256, language, role, truncated}); None when
+        ``sha256`` is not a stored multi-file member. Same license gate + path-escape guard as
+        read_artifact."""
+        sha = (sha256 or "").strip().lower()
+        if not _SHA256.fullmatch(sha):
+            return None
+        frow = await asyncio.to_thread(self.catalog.file_by_sha256, sha)
+        if not frow:
+            return None
+        poc = await asyncio.to_thread(self.catalog.get, frow["poc_id"])
+        if poc is None or not self._allow_code(poc):
+            return None
+        root = self.roots.get(poc["source"]) or self.roots.get("poc_github")
+        if root is None:
+            return None
+        rows = await asyncio.to_thread(self.catalog.get_files, frow["poc_id"])
+        out: list[dict[str, Any]] = []
+        for f in rows:
+            candidate = (root / f["storage_path"]).resolve()
+            try:
+                candidate.relative_to(root)          # path-escape guard
+            except ValueError:
+                continue
+            if not candidate.is_file():
+                continue
+            blob = await asyncio.to_thread(candidate.read_bytes)
+            out.append({"path": f["rel_path"], "code": blob.decode("utf-8", errors="replace"),
+                        "sha256": f["sha256"], "language": f.get("language"),
+                        "role": f.get("role"), "truncated": False})
+        return out or None
+
     # ── tool ops ────────────────────────────────────────────────────────────
     async def search(self, query: str, max_results: int, run_id: str) -> dict[str, Any]:
         rows = await asyncio.to_thread(self.catalog.search, query, max_results)
@@ -220,14 +328,7 @@ class LocalPocBackend:
         blob = await asyncio.to_thread(path.read_bytes)
         indicators = await asyncio.to_thread(_static_indicators, poc.get("language") or "", path)
         code, truncated = None, False
-        # Ground LLM generation on real fetched PoC bytes when available:
-        # - redistributable sources (exploitdb/metasploit/nuclei/…) always
-        # - sandbox-fetched GitHub/vulhub artifacts (private SecAI lab) when verified
-        #   or when an artifact was explicitly stored for offline retrieval
-        allow_code = bool(poc.get("redistributable")) or (
-            poc.get("source") in {"poc_github", "vulhub"} and bool(poc.get("artifact_path"))
-            and (bool(poc.get("verified")) or bool(poc.get("artifact_sha256")))
-        )
+        allow_code = self._allow_code(poc)
         source_files = None
         companion_doc_only = False
         if allow_code:

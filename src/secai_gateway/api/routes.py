@@ -47,6 +47,68 @@ def _chat_session_id(body: LegacyRequest) -> str:
     return f"chat:{hashlib.sha256(user_id.encode()).hexdigest()}"
 
 
+# Total chars of FULL PoC source rendered into ONE exploit Section 1. The model fetches
+# ≤ _MAX_FETCH_PER_RUN PoCs/run so the real set is small; this only backstops a pathological
+# repo. Fullening happens AFTER the model runs → it never enters the model context.
+_MAX_DISPLAY_CHARS = 2_000_000
+
+
+async def _fullen_evidence_for_display(evidence: list[dict[str, Any]], poc: Any,
+                                       budget: int = _MAX_DISPLAY_CHARS) -> list[dict[str, Any]]:
+    """Swap each evidence file's context-truncated code for its FULL, untruncated bytes,
+    read back from the content store via the PoC backend (same license gate + path-escape
+    guard as poc_fetch). This runs at Section-1 injection time — AFTER the model produced its
+    answer — so the DISPLAYED PoC (in `description`/`exploit_guide`, which the FE renders) is
+    complete, while the model's own context stays bounded by the fetch-time caps. Bounded by
+    `budget`; fail-open per file (a file that can't be re-read keeps its truncated block)."""
+    if poc is None:
+        return evidence
+    total = 0
+    for ev in evidence or []:
+        files = ev.get("source_files")
+        if files:
+            # First try to render the WHOLE repo, not just the files the fetch budget let in:
+            # resolve the owning PoC from any file's hash and pull its complete set, full.
+            entry_sha = next((f.get("sha256") for f in files if f.get("sha256")), None)
+            full_set = None
+            if entry_sha:
+                try:
+                    full_set = await poc.read_full_fileset(entry_sha)
+                except Exception:
+                    full_set = None
+            if full_set:
+                set_chars = sum(len(f.get("code") or "") for f in full_set)
+                if total + set_chars <= budget:
+                    ev["source_files"] = full_set          # ALL files, full content
+                    total += set_chars
+                    continue
+            # Fallback (no stored set, or over budget): fullen each present file's content.
+            for f in files:
+                sha = f.get("sha256")
+                if not sha:
+                    continue
+                try:
+                    full = await poc.read_artifact(sha)
+                except Exception:
+                    continue
+                content = full.get("content") or ""
+                if not content or total + len(content) > budget:
+                    continue
+                f["code"], f["truncated"] = content, bool(full.get("truncated"))
+                total += len(content)
+        elif ev.get("source_code") and ev.get("sha256"):
+            try:
+                full = await poc.read_artifact(ev["sha256"])
+            except Exception:
+                continue
+            content = full.get("content") or ""
+            if not content or total + len(content) > budget:
+                continue
+            ev["source_code"], ev["code_truncated"] = content, bool(full.get("truncated"))
+            total += len(content)
+    return evidence
+
+
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
@@ -175,8 +237,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             logger.exception("deterministic PoC prefetch failed")
             return []
 
-    def inject_reference_code(text: str, run_id: str | None,
-                              pre_evidence: list[dict[str, Any]] | None = None) -> tuple[str, dict[str, Any]]:
+    async def inject_reference_code(text: str, run_id: str | None,
+                                    pre_evidence: list[dict[str, Any]] | None = None) -> tuple[str, dict[str, Any]]:
         """Deterministic Section-1 placement: the model never writes Section 1 (see
         prompts/exploit.md) — this places it from the merged evidence (deterministic
         prefetch + whatever the model's own agentic run gathered, deduplicated by
@@ -185,12 +247,18 @@ def register_routes(app: FastAPI, state: Any) -> None:
         illustrated code. Also strips any line where the model narrates the Section-1
         auto-insertion mechanism back to the user (observed live — a leak of the system
         prompt's own instruction wording into the visible answer). Fail-open — on any
-        error the model's own text is returned so this never breaks the response."""
+        error the model's own text is returned so this never breaks the response.
+
+        Before rendering, each evidence file's context-truncated code is swapped for its FULL
+        store bytes (`_fullen_evidence_for_display`) — the model already ran on the bounded
+        slice, so the DISPLAYED Section 1 (which the FE renders) shows the complete PoC while
+        the model context stays capped. No new endpoint, no FE change needed."""
         ledger = getattr(state.runner, "ledger", None)
         try:
             text = strip_system_narration(text)
             run_evidence = ledger.evidence_for_run(run_id) if (ledger is not None and run_id) else []
             evidence = merge_evidence(pre_evidence or [], run_evidence)
+            evidence = await _fullen_evidence_for_display(evidence, getattr(state.runner, "poc", None))
             text, report = enforce_reference_code(text, evidence)
             if not report.get("reference_code_injected"):
                 text, fallback = force_no_poc_notice(text, evidence)
@@ -215,7 +283,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         prefetch_task = asyncio.create_task(exploit_prefetch(prompt_text))
         text, metadata = await complete("exploit_research", body)
         pre_evidence = await prefetch_task
-        text, injected = inject_reference_code(text, metadata.get("run_id"), pre_evidence)
+        text, injected = await inject_reference_code(text, metadata.get("run_id"), pre_evidence)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
@@ -230,7 +298,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             pre_evidence = await prefetch_task
-            final, injected = inject_reference_code(final, run_id, pre_evidence)
+            final, injected = await inject_reference_code(final, run_id, pre_evidence)
             meta = exploit_final_meta(run_id)
             meta.update(injected)
             return {"content": final or no_poc, "exploit_guide": final or no_poc, "description": final or no_poc, "metadata": meta}
