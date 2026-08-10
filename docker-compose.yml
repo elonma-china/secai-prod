@@ -1,0 +1,29 @@
+# One-shot convenience wrapper: `docker compose up --build -d`.
+# Your real secrets/config stay in .env (never baked into the image).
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: secai-agent-gateway:0.2.0
+    container_name: secai-gateway
+    # Your config + secrets. `environment:` below re-pins the two path settings to
+    # in-container locations so host-oriented values in .env can't break the container.
+    env_file:
+      - .env
+    environment:
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      SEARCHSPLOIT_BIN: /app/bin/searchsploit
+    ports:
+      - "8131:8131"
+    volumes:
+      # Persist gateway.db (sessions/ledger) across restarts.
+      - gateway-data:/app/data
+      # OPTIONAL — enables searchsploit / Exploit-DB-grounded /ai/exploit.
+      # Comment out if you don't need PoC lookups.
+      - /home/ict/AIEngines/secai-data/exploitdb:/srv/exploitdb:ro
+    restart: unless-stopped
+
+volumes:
+  gateway-data:

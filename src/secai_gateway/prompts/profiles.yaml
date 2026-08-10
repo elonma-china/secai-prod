@@ -1,0 +1,62 @@
+# Declarative profile registry — the single source of truth for per-endpoint behaviour.
+#   prompt     : markdown file in this folder holding the profile's system prompt
+#   tools      : tool names the agent may call in this profile (enforced per session)
+#   base       : prepend the shared base_system.md? false = pure text-transform, no tools/RAG
+#   max_turns  : agent loop cap for this profile
+chat:
+  prompt: chat.md
+  tools: [qdrant_search, neo4j_search, poc_search]
+  base: true
+  max_turns: 10
+
+exploit_research:
+  prompt: exploit.md
+  # poc_verify/poc_scan chỉ tồn tại khi VERIFY_ENABLED=true; poc_exec chỉ khi EXEC_ENABLED=true
+  # poc_kt_exploit chỉ khi POC_EXPLOIT_ENABLED=true + POC_EXPLOIT_API_URL (runner bỏ qua tên chưa tạo)
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, poc_verify, poc_scan, poc_exec, poc_kt_exploit]
+  base: true
+  max_turns: 16
+
+# BugHunter agent.py ReAct on Linch. Outer phases: AgentHunt → Validate.
+# Tools mirror ToolDispatcher; max_turns ≈ agent.py max_steps.
+bughunt:
+  prompt: bughunt.md
+  tools:
+    - bh_http_probe
+    - run_recon
+    - run_vuln_scan
+    - run_js_analysis
+    - run_secret_hunt
+    - run_param_discovery
+    - run_post_param_discovery
+    - run_api_fuzz
+    - run_cors_check
+    - run_cms_exploit
+    - run_rce_scan
+    - run_sqlmap_targeted
+    - run_sqlmap_on_file
+    - run_jwt_audit
+    - read_recon_summary
+    - read_findings_summary
+    - update_working_memory
+    - finish
+  base: true
+  max_turns: 20
+
+translate:
+  prompt: translate.md
+  tools: []
+  base: false
+  max_turns: 2
+
+report:
+  prompt: report.md
+  tools: [qdrant_search, neo4j_search]
+  base: false
+  max_turns: 6
+
+statistical_report:
+  prompt: statistical.md
+  tools: [qdrant_search, neo4j_search]
+  base: false
+  max_turns: 6
