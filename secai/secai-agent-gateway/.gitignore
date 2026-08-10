@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+data/
+.env
+.env.bak*
+.venv/
+gateway.log
+# vendored third-party repo (its own git history/remote) — not part of this project
+secai-serving-vast/

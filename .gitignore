@@ -1,0 +1,20 @@
+# AIEngines root
+.env
+.env.*
+*.pyc
+__pycache__/
+.venv/
+node_modules/
+.DS_Store
+
+# Huge / external / backup trees — not part of the working gateway commit
+secai/secai-data/
+secai-BK/
+/secai-agent-gateway/
+finetune_dataset/
+openclaw-v4-pro/
+.nodeterm/
+POC_API_Guide.docx
+
+# Nested git backup (do not commit)
+**/.git.bak-nested/
