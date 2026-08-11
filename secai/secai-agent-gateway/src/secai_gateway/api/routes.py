@@ -4,6 +4,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
+import unicodedata
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 from uuid import uuid4
@@ -17,9 +19,11 @@ from linch.events import ResultEvent, SystemEvent
 from ..agent import registry_for
 from ..poc import (
     canonical_block,
-    enforce_reference_code,
-    force_no_poc_notice,
+    enforce_section1,
+    sanitize_airgap_runguide,
+    extract_cve_id,
     merge_evidence,
+    normalize_cve_ids,
     prefetch_evidence,
     strip_system_narration,
 )
@@ -28,6 +32,7 @@ from ..poc.kt_client import KtClientError
 from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
+from ..retrieval import gather_web_hints
 from ..security import require_public_input, sanitize_output_language
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
@@ -48,6 +53,51 @@ logger = logging.getLogger(__name__)
 STREAM_ERROR_MESSAGE = (
     "Xin lỗi, trợ lý đang gặp sự cố tạm thời nên chưa thể trả lời. Vui lòng thử lại sau giây lát."
 )
+
+# The exploit endpoint expects a CVE id. When the caller instead sends a bare greeting /
+# smalltalk (no CVE, no keyword), the normal pipeline still forces a "## 1. Mã Khai thác …
+# Chưa có thông tin PoC" report header onto a "xin chào" — awkward. Detect that ONE narrow
+# case and answer with a short prompt for a CVE instead, skipping the Section-1 scaffolding.
+EXPLOIT_CVE_GUIDE = (
+    "Vui lòng nhập mã CVE cần phân tích khai thác, ví dụ: CVE-2026-42533. "
+    "Bạn cũng có thể kèm từ khoá sản phẩm hoặc loại lỗ hổng để tìm PoC công khai."
+)
+_CVE_ANY = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
+# Whole-message greeting / smalltalk / meta only (anchored ^…$), matched against a
+# diacritic-folded copy so "xin chào", "xin chao" and typos all land. Anything with real
+# content past the greeting (e.g. "chào, tìm poc struts") fails the anchor → normal flow,
+# so legit keyword-only PoC searches are never short-circuited.
+_CHITCHAT_RE = re.compile(
+    r"^(?:"
+    r"xin\s*chao|chao(?:\s*ban)?|hello+|helo|hi+|hey+|yo|"
+    r"cam\s*on|thanks?|thank\s*you|"
+    r"ban\s*(?:la\s*ai|ten\s*(?:gi|la)|khoe|lam\s*(?:duoc\s*)?gi)|who\s*are\s*you|"
+    r"gioi\s*thieu(?:\s*ban)?|"
+    r"help|giup(?:\s*(?:toi|minh|em|voi))?|huong\s*dan|hd|"
+    r"test(?:ing)?|/?start|menu|oke?y?|ok"
+    r")[\s.,!?…]*$",
+    re.I,
+)
+
+
+def _fold_diacritics(text: str) -> str:
+    """Lowercase + strip Vietnamese tone/diacritic marks so greetings match with or without
+    them (đ→d isn't decomposed by NFD, so map it explicitly)."""
+    decomposed = unicodedata.normalize("NFD", text or "")
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return stripped.replace("đ", "d").replace("Đ", "d").lower().strip()
+
+
+def _is_exploit_chitchat(text: str) -> bool:
+    """True when `text` is empty or a bare greeting/smalltalk with no CVE — i.e. the exploit
+    endpoint has nothing to research and should ask for a CVE instead of emitting an empty
+    "no PoC" report. A (possibly malformed) CVE anywhere in the text is never chitchat."""
+    folded = _fold_diacritics(text)
+    if not folded:
+        return True
+    if _CVE_ANY.search(normalize_cve_ids(text or "")):
+        return False
+    return bool(_CHITCHAT_RE.match(folded))
 
 
 def _chat_session_id(body: LegacyRequest) -> str:
@@ -108,6 +158,109 @@ def _kt_prompt_appendix(result: dict[str, Any]) -> str:
     return ("\n\n[Hệ thống đã chạy deterministic poc_kt_exploit — CHỈ tóm tắt JSON sau, "
             "không bịa, không gọi lại trừ khi user yêu cầu chạy lại:\n"
             + json.dumps(slim, ensure_ascii=False) + "\n]")
+
+
+# Chars of fetched-PoC preview handed to the model to ground Mục 2 (how-to-run) and Mục 3
+# (overview). The FULL PoC still goes to Section 1 deterministically; this is only the
+# grounding slice for the model's own prose, kept small so it doesn't bloat the context.
+_PREFETCH_APPENDIX_BUDGET = 3000
+
+
+def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
+    """Truncated, path-labelled dump of the fetched PoC bytes (README/entry first) — enough
+    for the model to write Mục 2/3, not the whole repo (that is Section 1's job)."""
+    out: list[str] = []
+    used = 0
+    for ev in evidence:
+        if used >= budget:
+            break
+        files = ev.get("source_files")
+        if files:
+            ordered = sorted(files, key=lambda f: (f.get("role") != "readme", f.get("role") != "entry"))
+            for f in ordered:
+                code = f.get("code") or ""
+                if not code or used >= budget:
+                    continue
+                take = code[: budget - used]
+                out.append(f"# {f.get('path', 'poc')}\n{take}")
+                used += len(take)
+        else:
+            # source_code (real PoC bytes) or, for a web reference page, its markdown text.
+            code = ev.get("source_code") or ev.get("description") or ""
+            if code:
+                take = code[: budget - used]
+                ref = ev.get("source_ref") or ev.get("url") or ev.get("edb_id") or "poc"
+                out.append(f"# {ref}\n{take}")
+                used += len(take)
+    return "\n\n".join(out)
+
+
+def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
+    """Feed deterministically-fetched PoC evidence into the model prompt so Mục 2/3 are
+    grounded on it REGARDLESS of whether the model calls its own tools. A successful prefetch
+    (coverage="enough") stands the search hooks down, which non-deterministically lets the
+    model finalize from parametric memory and write "không có thông tin" right under a Section
+    1 the prefetch populated with a real PoC. Mirrors _kt_prompt_appendix. Empty evidence →
+    no appendix, so the honest not-found path is unchanged."""
+    evidence = prefetch_result.get("evidence") or []
+    if not evidence:
+        return ""
+    preview = _evidence_preview(evidence, _PREFETCH_APPENDIX_BUDGET)
+    if not preview.strip():
+        return ""
+    sources = [f"{ev.get('source') or '?'}: {ev.get('url') or ev.get('source_ref') or ''}"
+               for ev in evidence]
+    return (
+        "\n\n[Hệ thống đã tìm thấy PoC công khai đã xác thực cho lỗ hổng này qua tra cứu nội bộ "
+        "(deterministic). Mục 1 (mã PoC/Payload) sẽ do hệ thống tự chèn — bạn KHÔNG viết Mục 1. "
+        "Hãy dùng bằng chứng thật dưới đây làm căn cứ để viết Mục 2 (Cách chạy PoC) và Mục 3 "
+        "(Tổng quan Lỗ hổng); TUYỆT ĐỐI không trả lời 'không có thông tin' khi bằng chứng này "
+        "tồn tại. Chỉ dùng thông tin có trong bằng chứng, không bịa.\n"
+        "Nguồn: " + " ; ".join(sources) + "\n"
+        "Nội dung PoC (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+    )
+
+
+def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
+    """Case 3 (CVE real, no catalog PoC — the T3 tier): feed deterministically-gathered PUBLIC
+    WEB reference pages (advisories/write-ups, via SearXNG + fetch_reference) into the prompt
+    so the model can build a REFERENCE PoC and write Mục 2/3 from real hints — while making it
+    unmistakable this is unverified material (the T3 SYNTHESIZED banner still applies). Empty
+    evidence → no appendix. Distinct framing from _prefetch_prompt_appendix, which announces a
+    *verified fetched* PoC; here nothing is verified.
+
+    Includes an explicit instruction to write ANALYSIS instead of fake-looking code when the
+    evidence lacks concrete implementation detail (function/param/endpoint names) — a 10-CVE
+    quality review found code grounded in specifics (an exact function/file/param from the
+    evidence) scored ~2x closer to a working PoC than code synthesized from a bare one-line
+    NVD summary, which still LOOKED like working code (compiles, has a plausible-sounding
+    payload) while contributing almost nothing toward an actual exploit — worse than admitting
+    the gap, since a confident-looking placeholder is easy to mistake for a grounded one."""
+    if not evidence:
+        return ""
+    preview = _evidence_preview(evidence, _PREFETCH_APPENDIX_BUDGET)
+    if not preview.strip():
+        return ""
+    sources = [f"{ev.get('title') or ev.get('source') or '?'}: {ev.get('url') or ''}"
+               for ev in evidence]
+    return (
+        "\n\n[KHÔNG có PoC đã xác thực trong dữ liệu nội bộ, nhưng CVE này có thật và hệ thống "
+        "đã thu thập THÔNG TIN THAM KHẢO CÔNG KHAI từ web (advisory/write-up — CHƯA phải PoC đã "
+        "kiểm chứng). Hãy dùng làm gợi ý để dựng MÃ PoC THAM KHẢO cho Mục 1 và viết Mục 2 (Cách "
+        "chạy) + Mục 3 (Tổng quan). Mọi mã dựng ra là bản nháp CHƯA được thực thi/xác thực — nêu "
+        "rõ điều đó. Chỉ dùng thông tin trong bằng chứng dưới đây, không bịa số liệu.\n"
+        "Trước khi viết Mục 1, tự đánh giá bằng chứng dưới đây có chi tiết TRIỂN KHAI CỤ THỂ hay "
+        "không (tên hàm, đường dẫn file, tham số HTTP/endpoint, cấu trúc gói tin, offset...). "
+        "NẾU CÓ: bám sát đúng các chi tiết đó, không tự đổi tên hàm/tham số. NẾU KHÔNG — bằng "
+        "chứng chỉ có mô tả chung chung, hay gặp ở lỗ hổng kernel/firmware/giao thức nội bộ mà "
+        "advisory công khai không đủ chi tiết — KHÔNG viết code giả trông như chạy được. Thay "
+        "vào đó viết PHÂN TÍCH KỸ THUẬT (cơ chế lỗi, điều kiện kích hoạt) và liệt kê rõ cần thêm "
+        "thông tin gì (cấu trúc gói tin thật, offset chính xác, source code sản phẩm...) để xây "
+        "được PoC thật. Một đoạn phân tích trung thực còn hữu ích hơn một đoạn code trông giống "
+        "thật nhưng không dựa trên gì cả.\n"
+        "Nguồn tham khảo:\n- " + "\n- ".join(sources) + "\n"
+        "Nội dung trang tham khảo (đã cắt bớt):\n" + preview + "\n]"
+    )
 
 
 async def _run_kt_if_applicable(settings: Any, body: LegacyRequest, text: str,
@@ -314,44 +467,66 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {**parse_statistical(final), "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
         return stream("statistical_report", statistical_prompt(body), None, build_final)
 
-    async def exploit_prefetch(prompt: str, session_id: str | None = None) -> list[dict[str, Any]]:
+    async def exploit_prefetch(prompt: str, session_id: str | None = None) -> dict[str, Any]:
         """Deterministic evidence gathering (see poc/prefetch.py) — runs independently of,
         and concurrently with, the model's own agentic turn; its own scratch run_id keeps
         it fully separate from whatever run_id the model's session ends up using, so it
         can never collide with or be starved by the agentic path. Records prefetch
         ``coverage`` on ``session_id`` so RequireSearchBeforeAnswerHook can skip
         force_continue when coverage is already ``enough``|``empty``. Fail-open: any
-        error → coverage ``failed`` + empty evidence (hook + force_no_poc_notice backstop)."""
-        from ..poc.prefetch import set_session_coverage
+        error → coverage ``failed`` + empty evidence (hook + enforce_section1 backstop).
+
+        Also runs the CVE-KB existence check (``cve_exists_in_kb``) concurrently with the
+        catalog prefetch — same fail-open contract — so the T2/T3 synthesize-from-CVE tier
+        in ``enforce_section1`` knows whether the CVE is real even when the catalog has
+        nothing for it. Also records it on ``session_id`` (``set_session_cve_known``) so
+        RequireSection1SynthesisHook can force a retry when the model skipped Section 1
+        despite the CVE being confirmed real. Returns ``{"evidence", "cve_id", "cve_known"}``."""
+        from ..poc.prefetch import set_session_coverage, set_session_cve_known
+        from ..retrieval.neo4j import cve_exists_in_kb
+        cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
         ledger = getattr(state.runner, "ledger", None)
         if poc is None or ledger is None:
             set_session_coverage(session_id, "failed")
-            return []
+            cve_known = await cve_exists_in_kb(cve_id) if cve_id else False
+            set_session_cve_known(session_id, cve_known)
+            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known}
         run_id = f"prefetch:{uuid4().hex}"
         try:
-            report = await prefetch_evidence(poc, ledger, prompt, run_id)
+            if cve_id:
+                report, cve_known = await asyncio.gather(
+                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id))
+            else:
+                report, cve_known = await prefetch_evidence(poc, ledger, prompt, run_id), False
             cov = report.get("coverage") or "failed"
             if cov not in ("enough", "empty", "partial", "failed"):
                 cov = "failed"
             set_session_coverage(session_id, cov)
-            return ledger.evidence_for_run(run_id)
+            set_session_cve_known(session_id, cve_known)
+            return {"evidence": ledger.evidence_for_run(run_id), "cve_id": cve_id, "cve_known": cve_known}
         except Exception:
             logger.exception("deterministic PoC prefetch failed")
             set_session_coverage(session_id, "failed")
-            return []
+            set_session_cve_known(session_id, False)
+            return {"evidence": [], "cve_id": cve_id, "cve_known": False}
 
     async def inject_reference_code(text: str, run_id: str | None,
-                                    pre_evidence: list[dict[str, Any]] | None = None) -> tuple[str, dict[str, Any]]:
-        """Deterministic Section-1 placement: the model never writes Section 1 (see
-        prompts/exploit.md) — this places it from the merged evidence (deterministic
-        prefetch + whatever the model's own agentic run gathered, deduplicated by
-        sha256). Real evidence → the exact fetched code (never the model's own words). No
-        real evidence → the canonical "no PoC info" sentence, never fabricated/AI-
-        illustrated code. Also strips any line where the model narrates the Section-1
-        auto-insertion mechanism back to the user (observed live — a leak of the system
-        prompt's own instruction wording into the visible answer). Fail-open — on any
-        error the model's own text is returned so this never breaks the response.
+                                    pre_evidence: list[dict[str, Any]] | None = None, *,
+                                    cve_known: bool = False,
+                                    cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
+        """Deterministic Section-1 placement via `enforce_section1` (poc/inject.py): the
+        tier (real fetched code / synthesized-from-README / synthesized-from-CVE-definition
+        / not-found) is decided from the merged evidence (deterministic prefetch + whatever
+        the model's own agentic run gathered, deduplicated by sha256) and `cve_known`, never
+        from what the model claims. Real evidence → the exact fetched code (never the
+        model's own words). Synthesize tiers → the model's own Section-1 text (it was told
+        to write one only for these tiers) with a mandatory AI-SYNTHESIZED banner
+        force-prepended. Neither → the canonical "no PoC info" sentence, naming the CVE
+        when one was identified. Also strips any line where the model narrates the
+        Section-1 auto-insertion mechanism back to the user (observed live — a leak of the
+        system prompt's own instruction wording into the visible answer). Fail-open — on
+        any error the model's own text is returned so this never breaks the response.
 
         Before rendering, each evidence file's context-truncated code is swapped for its FULL
         store bytes (`_fullen_evidence_for_display`) — the model already ran on the bounded
@@ -360,13 +535,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
         ledger = getattr(state.runner, "ledger", None)
         try:
             text = strip_system_narration(text)
+            # Deterministic air-gap backstop: strip internet/URL/upstream-path leaks the model
+            # may still emit in Mục 2/3 despite prompt rules. Runs on model text only, before
+            # Section-1 injection, so the real injected PoC code is never rewritten.
+            text = sanitize_airgap_runguide(text, cve_id)
             run_evidence = ledger.evidence_for_run(run_id) if (ledger is not None and run_id) else []
             evidence = merge_evidence(pre_evidence or [], run_evidence)
             evidence = await _fullen_evidence_for_display(evidence, getattr(state.runner, "poc", None))
-            text, report = enforce_reference_code(text, evidence)
-            if not report.get("reference_code_injected"):
-                text, fallback = force_no_poc_notice(text, evidence)
-                report.update(fallback)
+            text, report = enforce_section1(text, evidence, cve_known=cve_known, cve_id=cve_id)
             return text, report
         except Exception:
             logger.exception("reference-code injection failed run_id=%s", run_id)
@@ -381,18 +557,66 @@ def register_routes(app: FastAPI, state: Any) -> None:
         meta.setdefault("provenance", []); meta.setdefault("candidate_status", "not_generated")
         return meta
 
+    def exploit_guidance_meta() -> dict[str, Any]:
+        """Metadata for the chitchat→"nhập CVE" guidance reply: keeps the same shape the FE
+        reads (evidence/provenance/candidate_status) but flags no PoC work was done."""
+        meta = base_meta("exploit_research", None)
+        meta.update({"evidence_ids": [], "edb_ids": [], "provenance": [],
+                     "candidate_status": "not_generated",
+                     "reference_code_injected": False, "input_kind": "chitchat"})
+        return meta
+
+    async def _maybe_web_hints(prefetch_result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Deterministic web-research for the T3 tier: only when WEB_SEARCH_ENABLED and the
+        CVE is real but the catalog returned NO PoC (T1 already covers a found PoC). Gathers
+        allowlisted reference pages so the model can synthesize a reference PoC from real
+        hints. Fail-open — any miss (disabled, no SearXNG, error) → [] → T3 stays KB-only."""
+        if not getattr(state.settings, "web_search_enabled", False):
+            return []
+        if prefetch_result.get("evidence"):          # catalog PoC exists (T1) — no web needed
+            return []
+        cve_id = prefetch_result.get("cve_id")
+        if not cve_id or not prefetch_result.get("cve_known"):  # only real CVE with no PoC
+            return []
+        ledger = getattr(state.runner, "ledger", None)
+        if ledger is None:
+            return []
+        try:
+            return await gather_web_hints(cve_id, ledger, f"webhint:{uuid4().hex}")
+        except Exception:
+            logger.exception("web hints gather failed")
+            return []
+
     @app.post("/ai/exploit")
     async def exploit(body: LegacyRequest) -> dict[str, Any]:
         prompt_text = require_public_input(body.supplied_text())
+        if _is_exploit_chitchat(prompt_text):
+            return {"description": EXPLOIT_CVE_GUIDE, "exploit_guide": EXPLOIT_CVE_GUIDE,
+                    "metadata": exploit_guidance_meta()}
+        prompt_text = normalize_cve_ids(prompt_text)
         session_id = _exploit_session_id(body)
         kt_run_id = f"kt:{uuid4().hex}"
         kt_result = await _run_kt_if_applicable(state.settings, body, prompt_text, kt_run_id)
-        agent_prompt = prompt_text + (_kt_prompt_appendix(kt_result) if kt_result else "")
-        prefetch_task = asyncio.create_task(exploit_prefetch(prompt_text, session_id))
+        # Await prefetch BEFORE the model so its fetched PoC grounds the model's Mục 2/3 (see
+        # _prefetch_prompt_appendix). A successful prefetch otherwise stands the search hooks
+        # down and the model non-deterministically writes "no info" under a populated Section
+        # 1. Adds prefetch latency to the critical path — it's a local catalog lookup, fast.
+        prefetch_result = await exploit_prefetch(prompt_text, session_id)
+        # Case 3: real CVE, no catalog PoC → pull public web hints so the T3 synthesize tier
+        # is grounded on real reference pages (gated OFF; no-op unless WEB_SEARCH_ENABLED).
+        web_hints = await _maybe_web_hints(prefetch_result)
+        agent_prompt = (prompt_text
+                        + (_kt_prompt_appendix(kt_result) if kt_result else "")
+                        + _prefetch_prompt_appendix(prefetch_result)
+                        + _web_hints_prompt_appendix(web_hints))
         text, metadata = await complete("exploit_research", body, session_id=session_id,
                                         prompt_override=agent_prompt)
-        pre_evidence = await prefetch_task
-        text, injected = await inject_reference_code(text, metadata.get("run_id"), pre_evidence)
+        # web_hints merged in too — enforce_section1's synthesis footer names its sources
+        # from `evidence`, and it never sees the prompt appendix text, only this list.
+        pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints)
+        text, injected = await inject_reference_code(
+            text, metadata.get("run_id"), pre_evidence,
+            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
@@ -424,16 +648,36 @@ def register_routes(app: FastAPI, state: Any) -> None:
         appends a compact JSON appendix to the model prompt so it summarizes real logs."""
         text = require_public_input(body.supplied_text())
         no_poc = "No verified public PoC was found in the supplied evidence."
+
+        # Bare greeting / no CVE → short guide, no model turn, no forced "## 1." scaffolding.
+        if _is_exploit_chitchat(text):
+            async def gen_guide() -> AsyncIterator[bytes]:
+                yield sse_frame("token", {"delta": EXPLOIT_CVE_GUIDE})
+                yield sse_frame("final", {
+                    "content": EXPLOIT_CVE_GUIDE, "exploit_guide": EXPLOIT_CVE_GUIDE,
+                    "description": EXPLOIT_CVE_GUIDE, "metadata": exploit_guidance_meta()})
+                yield b"data: [DONE]\n\n"
+            return StreamingResponse(gen_guide(), media_type="text/event-stream")
+
+        text = normalize_cve_ids(text)
         session_id = _exploit_session_id(body)
         prefetch_task = asyncio.create_task(exploit_prefetch(text, session_id))
         kt_run_id = f"kt:{uuid4().hex}"
         kt_task: asyncio.Task | None = asyncio.create_task(
             _run_kt_if_applicable(state.settings, body, text, kt_run_id))
 
+        # Populated by gen()'s prefetch step below, before build_final ever runs (build_final
+        # is only invoked from inside gen(), after that step completes or fails) — read here
+        # so enforce_section1's synthesis footer can name its web sources, same as non-stream.
+        web_hints_holder: list[dict[str, Any]] = []
+
         async def build_final(final: str, run_id: str | None,
                               kt_result: dict[str, Any] | None = None) -> dict[str, Any]:
-            pre_evidence = await prefetch_task
-            final, injected = await inject_reference_code(final, run_id, pre_evidence)
+            prefetch_result = await prefetch_task
+            pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
+            final, injected = await inject_reference_code(
+                final, run_id, pre_evidence,
+                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
             if kt_result is not None:
@@ -448,9 +692,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
             section1_sent = False
             kt_result: dict[str, Any] | None = None
             kt_emitted = False
+            # Await prefetch BEFORE the model so its fetched PoC grounds Mục 2/3 (parity with
+            # the non-stream path — otherwise a successful prefetch stands the search hooks
+            # down and the model non-deterministically writes "no info" under a populated
+            # Section 1). The task result is cached, so the loop below still emits the Section-1
+            # preview from `pending_prefetch` as before (it's simply already done by then).
+            prefetch_appendix = ""
+            try:
+                _pf = await prefetch_task
+                _hints = await _maybe_web_hints(_pf)
+                web_hints_holder.extend(_hints)  # visible to build_final (see declaration above)
+                prefetch_appendix = _prefetch_prompt_appendix(_pf) + _web_hints_prompt_appendix(_hints)
+            except Exception:
+                logger.exception("prefetch appendix build failed")
             # Wait up to 2s for KT so we can append appendix before the model starts when
             # intent is clear; if slower, start model and emit tool SSE when KT finishes.
-            agent_text = text
+            agent_text = text + prefetch_appendix
             pending_kt: asyncio.Task | None = kt_task
             if pending_kt is not None:
                 done, _ = await asyncio.wait({pending_kt}, timeout=2.0)
@@ -462,7 +719,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         kt_result = None
                     pending_kt = None
                     if kt_result is not None:
-                        agent_text = text + _kt_prompt_appendix(kt_result)
+                        agent_text = text + _kt_prompt_appendix(kt_result) + prefetch_appendix
 
             model_agen = state.runner.stream("exploit_research", agent_text, session_id).__aiter__()
             model_next = asyncio.ensure_future(model_agen.__anext__())
@@ -529,12 +786,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                     "ok": kt_result.get("ok")})
 
                     if pending_prefetch is not None and pending_prefetch in done:
-                        pre_evidence = pending_prefetch.result()
+                        _pfres = pending_prefetch.result()
+                        pre_evidence = _pfres.get("evidence") or []
                         pending_prefetch = None
                         if not section1_sent:
                             fullened = await _fullen_evidence_for_display(
                                 list(pre_evidence), getattr(state.runner, "poc", None))
-                            preview_body = canonical_block(fullened)
+                            preview_body = canonical_block(fullened, _pfres.get("cve_id"))
                             if preview_body:
                                 section1_sent = True
                                 yield sse_frame("section1", {"body": preview_body, "preview": True})
@@ -655,7 +913,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 if stream_fn is None:
                     raise RuntimeError("runner does not support stream_bughunt")
                 async for event in stream_fn(
-                    target=target, scope_note=scope_note, run_id=run_id,
+                    target=target,
+                    scope_note=scope_note,
+                    run_id=run_id,
+                    enable_exploit=bool(body.enable_exploit),
+                    run_cve_sweep=bool(getattr(body, "run_cve_sweep", True)),
                 ):
                     if isinstance(event, dict) and event.get("type") == "bughunt_result":
                         result = event.get("result") if isinstance(event.get("result"), dict) else event
@@ -666,6 +928,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             "line": event.get("line") or "",
                             "run_id": event.get("run_id") or run_id,
                         })
+                        # Flush each scanner line so the FE console streams live.
+                        await asyncio.sleep(0)
                         continue
                     frame = event_to_sse(event)
                     if frame:

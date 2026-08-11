@@ -92,7 +92,9 @@ def test_inject_escapes_embedded_fence() -> None:
 
 
 # ── multi-file contract ──────────────────────────────────────────────────────
-def test_inject_multifile_preserves_hierarchy_and_order() -> None:
+def test_inject_multifile_flattens_to_local_airgap_names() -> None:
+    # Air-gap contract: entry PoC renamed to <cve>.<ext>, companions to bare basenames;
+    # repo hierarchy and the source URL are stripped (offline report names local files).
     ev = {
         "source": "poc_github", "source_ref": "acme/wp2shell/wp2shell/exploit.py",
         "url": "https://github.com/acme/wp2shell", "sha256": "d" * 64,
@@ -105,14 +107,16 @@ def test_inject_multifile_preserves_hierarchy_and_order() -> None:
              "language": None, "role": "support"},
         ],
     }
-    out, report = enforce_reference_code(_REPORT, [ev])
+    out, report = enforce_reference_code(_REPORT, [ev], cve_id="CVE-2026-1234")
     assert report["reference_code_injected"] is True and report["files"] == 3
-    assert "Cấu trúc PoC" in out                              # repo tree header
-    assert "**`wp2shell/exploit.py`**" in out                # hierarchy preserved, not flattened
-    assert "**`wp2shell/sqli.py`**" in out
+    assert "Các tệp PoC (cục bộ)" in out                      # local-file listing header
+    assert "**`cve-2026-1234.py`**" in out                   # entry -> <cve>.<ext>
+    assert "**`sqli.py`**" in out                            # companion -> bare basename
+    assert "wp2shell/" not in out                            # repo hierarchy stripped
+    assert "github.com" not in out                           # source URL never leaked
     # manifest sorts last; entry PoC first
-    assert out.index("`wp2shell/exploit.py`") < out.index("`wp2shell/sqli.py`")
-    assert out.index("`wp2shell/sqli.py`") < out.index("`requirements.txt`")
+    assert out.index("`cve-2026-1234.py`") < out.index("`sqli.py`")
+    assert out.index("`sqli.py`") < out.index("`requirements.txt`")
 
 
 def test_render_files_orders_manifest_last() -> None:
@@ -121,7 +125,8 @@ def test_render_files_orders_manifest_last() -> None:
         {"path": "pkg/main.py", "code": "x=1\n"},
     ]
     rendered = render_files(files)
-    assert rendered.index("`pkg/main.py`") < rendered.index("`requirements.txt`")
+    assert rendered.index("`main.py`") < rendered.index("`requirements.txt`")
+    assert "pkg/" not in rendered                             # directory stripped (air-gap)
 
 
 def test_render_files_excludes_readme_body_but_keeps_it_in_tree() -> None:
@@ -145,9 +150,10 @@ def test_render_files_suppresses_tree_when_show_tree_false() -> None:
         {"path": "modules/exploits/multi/http/foo.rb", "code": "class X\nend\n", "role": "entry"},
         {"path": "documentation/modules/exploit/multi/http/foo.md", "code": "## Steps\n...\n", "role": "readme"},
     ]
-    r = render_files(files, show_tree=False)
-    assert "Cấu trúc PoC" not in r
-    assert "**`modules/exploits/multi/http/foo.rb`**" in r   # file blocks still render
+    r = render_files(files, show_tree=False, cve_id="CVE-2026-7777")
+    assert "Các tệp PoC" not in r
+    assert "**`cve-2026-7777.rb`**" in r                     # entry -> local <cve>.<ext>
+    assert "modules/exploits/" not in r                      # msf module path stripped
 
 
 def test_render_files_shows_tree_by_default_for_dedicated_multifile() -> None:
@@ -155,8 +161,10 @@ def test_render_files_shows_tree_by_default_for_dedicated_multifile() -> None:
         {"path": "wp2shell/exploit.py", "code": "print(1)\n", "role": "entry"},
         {"path": "wp2shell/sqli.py", "code": "print(2)\n", "role": "support"},
     ]
-    r = render_files(files)   # show_tree defaults True
-    assert "Cấu trúc PoC" in r
+    r = render_files(files, cve_id="CVE-2026-2222")   # show_tree defaults True
+    assert "Các tệp PoC (cục bộ)" in r
+    assert "cve-2026-2222.py" in r and "sqli.py" in r
+    assert "wp2shell/" not in r                              # no repo hierarchy in air-gap
 
 
 def test_blocks_for_respects_companion_doc_only_flag() -> None:

@@ -76,7 +76,7 @@ def remove_chinese_content(text: str) -> str:
 _THINK_BLOCK = re.compile(r"(?is)<think>.*?</think>")
 _THINK_TAG = re.compile(r"(?is)</?think>")
 _REASONING_LEAK_MARKERS = re.compile(
-    r"(tool_discipline|qdrant_search|neo4j_search|poc_search"
+    r"(tool_discipline|qdrant_search|neo4j_search|poc_search|web_fetch"
     r"|Ngữ cảnh\s*:|Người dùng (?:hỏi|đang hỏi|muốn)"
     r"|tôi (?:đã có|cần|nên|sẽ) (?:gọi|tra cứu|trả lời)"
     r"|Kết thúc bằng câu hỏi hỗ trợ"
@@ -108,6 +108,75 @@ def strip_reasoning_leak(text: str) -> str:
     return cleaned.strip() or text.strip()
 
 
+# Internal tool names the model must never echo into the visible answer (base_system.md
+# output_integrity forbids it, but the model doesn't always comply). A leak looks like
+# `qdrant_search(query="CVE-2026-4253333")` — a bare call echo, not prose. strip_reasoning_leak
+# lists these as markers too, but it only cuts text when it ALSO finds an "answer pivot"; a
+# standalone call echo has no pivot and slips through. This strips the echo directly.
+_TOOL_NAMES_ALT = (
+    r"qdrant_search|neo4j_search|poc_search|poc_fetch|poc_verify|poc_scan|poc_exec"
+    r"|poc_kt_exploit|web_fetch|run_recon|run_vuln_scan|bh_http_probe"
+)
+# Whole-line echo (optional markdown/quote lead-in, optional trailing punctuation) → drop the
+# entire line including its newline, so no blank gap is left behind.
+_TOOL_CALL_LINE = re.compile(
+    r"(?im)^[ \t>*_#-]*(?:" + _TOOL_NAMES_ALT + r")\s*\([^\n]*\)[ \t.。;:]*$\n?"
+)
+# Inline echo mid-sentence → remove just the `name(...)` span, leave surrounding words.
+_TOOL_CALL_INLINE = re.compile(
+    r"(?i)\b(?:" + _TOOL_NAMES_ALT + r")\s*\([^\n]*?\)"
+)
+_MULTI_BLANK = re.compile(r"\n{3,}")
+
+
+def strip_tool_call_echoes(text: str) -> str:
+    """Remove leaked internal tool-call echoes (e.g. ``qdrant_search(query="…")``) from the
+    visible answer. Fail-open: never blanks the whole message."""
+    if not text:
+        return text
+    cleaned = _TOOL_CALL_LINE.sub("", text)
+    cleaned = _TOOL_CALL_INLINE.sub("", cleaned)
+    cleaned = _MULTI_BLANK.sub("\n\n", cleaned)
+    return cleaned.strip() or text.strip()
+
+
+# The exploit model sometimes narrates HOW it built the report instead of just writing it —
+# echoing exploit.md's own methodology wording and referring to the report's sections in
+# prose. Observed live: "Kết luận về Mục 2: Vì không có tài liệu … được xác thực trong dữ
+# liệu nội bộ … nên chỉ dựa vào đó để trình bày cách chạy bằng tiếng Việt (diễn giải lại,
+# không sao chép nguyên văn)." base_system.md output_integrity already forbids this; the
+# model doesn't reliably comply, so strip it deterministically (same approach as
+# strip_system_narration / strip_tool_call_echoes).
+#
+# "(… không sao chép nguyên văn)" — a methodology aside lifted verbatim from exploit.md;
+# never legitimate user-facing content. Removed inline so an otherwise-useful line survives.
+_META_METHOD_PAREN = re.compile(r"[ \t]*\((?:[^)\n]*\bsao chép nguyên văn\b[^)\n]*)\)")
+# Any remaining line still carrying that methodology phrase (not in parentheses) → drop it.
+_META_METHOD_LINE = re.compile(r"(?im)^[^\n]*\bsao chép nguyên văn\b[^\n]*\n?")
+# The model referring to the report's own sections in prose ("Kết luận về Mục 2: …",
+# "Lưu ý về Mục 3: …"). Requires BOTH a label lead-word AND a "Mục 1–3" reference, so a
+# legit "Tóm lại, lỗ hổng cho phép RCE" (no section number) or "mục tiêu"/"mục đích" is
+# never matched, and the "## 2."/"## 3." headings (no lead word) are untouched.
+_META_SECTION_LINE = re.compile(
+    r"(?im)^[ \t>*_#-]*"
+    r"(?:kết luận|tóm lại|tóm tắt|ghi chú|lưu ý|nhận xét|về việc|đối với|liên quan(?:\s+đến)?)"
+    r"[^\n]*\bmục\s*[1-3]\b[^\n]*\n?"
+)
+
+
+def strip_meta_narration(text: str) -> str:
+    """Remove leaked meta-commentary where the model narrates how it constructed the report
+    (methodology asides + prose references to its own "Mục N" sections), leaving the actual
+    technical content. Fail-open: never blanks the whole message."""
+    if not text:
+        return text
+    cleaned = _META_METHOD_PAREN.sub("", text)
+    cleaned = _META_SECTION_LINE.sub("", cleaned)
+    cleaned = _META_METHOD_LINE.sub("", cleaned)
+    cleaned = _MULTI_BLANK.sub("\n\n", cleaned)
+    return cleaned.strip() or text.strip()
+
+
 def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
     """Clean assistant output before it reaches the user: drop leaked reasoning/meta
     planning, then strip CJK ideographs so responses stay VI/EN-only.
@@ -115,4 +184,5 @@ def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
     Always strips. ``max_ratio`` is unused (kept for call-site compatibility);
     use ``cjk_ratio`` separately if you need contamination metrics.
     """
-    return remove_chinese_content(strip_reasoning_leak(text))
+    return remove_chinese_content(
+        strip_meta_narration(strip_tool_call_echoes(strip_reasoning_leak(text))))

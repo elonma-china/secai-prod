@@ -34,13 +34,22 @@ class VulhubCollector:
             rel = str((compose or d).relative_to(self.root))
             title = f"{app} — {cve} vulnerable lab"
             readme = d / "README.md"
+            readme_text = ""
             if readme.is_file():
-                for line in readme.read_text(encoding="utf-8", errors="replace").splitlines():
+                readme_text = readme.read_text(encoding="utf-8", errors="replace")
+                for line in readme_text.splitlines():
                     if line.startswith("# "):
                         title = line[2:].strip()[:160]; break
+            # No compose file to list as an artifact: the README body is the only real
+            # evidence left for this CVE (reproduction steps, affected versions) — surface
+            # it as `description` instead of discarding it, so a code-less catalog hit still
+            # carries real text for the synthesize-from-evidence tier (poc/inject.py) to use.
+            description = f"Vulhub reproducible lab for {cve} ({app})."
+            if not compose and readme_text.strip():
+                description = readme_text.strip()[:2000]
             yield NormalizedPoc(
                 source="vulhub", source_ref=f"{app}/{cve}", kind="lab", title=title,
-                cve_ids=[cve], description=f"Vulhub reproducible lab for {cve} ({app}).",
+                cve_ids=[cve], description=description,
                 platform="docker", language="yaml", verified=True, rank=RANK,
                 url=f"https://github.com/vulhub/vulhub/tree/master/{d.relative_to(self.root)}",
                 license="Vulhub (MIT); reference only — never executed", redistributable=False,

@@ -6,7 +6,20 @@ const gateway = process.env.VITE_GATEWAY_PROXY || "http://127.0.0.1:8131";
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: "0.0.0.0",
     port: 5173,
+    // Cloudflare quick tunnel + LAN access
+    allowedHosts: [
+      "graphics-accent-collective-instantly.trycloudflare.com",
+      ".trycloudflare.com",
+      "localhost",
+      "127.0.0.1",
+    ],
+    // Avoid ENOSPC when host inotify watchers are exhausted.
+    watch: {
+      usePolling: true,
+      interval: 1000,
+    },
     proxy: {
       "/ai": {
         target: gateway,

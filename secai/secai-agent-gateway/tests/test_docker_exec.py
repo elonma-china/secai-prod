@@ -48,11 +48,15 @@ def _patch_subprocess(monkeypatch, tracker: dict):
 
 @pytest.fixture(autouse=True)
 def _reset_semaphore():
-    """`_semaphore` là singleton module-level — reset giữa các test để kích cỡ test này
-    không rò sang test khác."""
-    de._sem, de._sem_size = None, None
+    """Named pools are module-level — reset between tests."""
+    de.reset_pool_semaphores()
+    # Back-compat aliases if any leftover
+    if hasattr(de, "_sem"):
+        de._sem, de._sem_size = None, None
     yield
-    de._sem, de._sem_size = None, None
+    de.reset_pool_semaphores()
+    if hasattr(de, "_sem"):
+        de._sem, de._sem_size = None, None
 
 
 async def _run_n(n: int, cfg: ExecConfig):
@@ -81,14 +85,21 @@ async def test_concurrency_cap_allows_parallelism_up_to_limit(monkeypatch):
 
 
 def test_semaphore_singleton_reused_same_size():
-    assert de._semaphore(4) is de._semaphore(4)
+    assert de._semaphore(4, pool="poc") is de._semaphore(4, pool="poc")
 
 
 def test_semaphore_recreated_on_size_change():
-    a = de._semaphore(4)
-    b = de._semaphore(2)
+    a = de._semaphore(4, pool="poc")
+    b = de._semaphore(2, pool="poc")
     assert a is not b
     assert b._value == 2  # type: ignore[attr-defined]
+
+
+def test_bughunt_and_poc_pools_are_independent():
+    """PoC and bughunt must not share one semaphore — scale without starving each other."""
+    a = de._semaphore(2, pool="poc")
+    b = de._semaphore(2, pool="bughunt")
+    assert a is not b
 
 
 def test_container_name_empty_without_run_id():

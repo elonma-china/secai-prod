@@ -12,11 +12,12 @@ KHÔNG có logic verdict — chỉ chạy rồi trả output thô.
 Mỗi lệnh là 1 `docker run --rm` biệt lập (container mới, tự huỷ) → KHÔNG có state/container dùng
 chung giữa các request, nên không có đường trộn lẫn output giữa 2 user. Hai rủi ro còn lại được xử
 lý ở đây:
-  1. Quá tải host khi nhiều container chạy cùng lúc → `_semaphore()` giới hạn số `docker run` chạy
-     song song trên toàn tiến trình (không phải per-user) — vượt trần thì CHỜ, không rớt request.
+  1. Quá tải host khi nhiều container chạy cùng lúc → `_semaphore(pool)` giới hạn số `docker run`
+     chạy song song **per pool** (`poc` vs `bughunt`) — vượt trần thì CHỜ, không rớt request.
   2. Truy vết đúng request nào ra container/kết quả nào → mỗi container được đặt `--name` từ
      `run_id` (nếu có) + hậu tố ngẫu nhiên, để `docker ps`/log phân biệt được ngay cả khi 1 run_id
-     gọi nhiều lệnh (multi-turn) hoặc nhiều run_id chạy đồng thời."""
+     gọi nhiều lệnh (multi-turn) hoặc nhiều run_id chạy đồng thời.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -26,19 +27,22 @@ from dataclasses import dataclass
 
 _NAME_SAFE = re.compile(r"[^a-zA-Z0-9_.-]")
 
-_sem: asyncio.Semaphore | None = None
-_sem_size: int | None = None
+# pool_name -> (Semaphore, size)
+_pool_sems: dict[str, tuple[asyncio.Semaphore, int]] = {}
 
 
-def _semaphore(max_concurrent: int) -> asyncio.Semaphore:
-    """Semaphore DÙNG CHUNG cho cả tiến trình (không phải theo settings instance — Settings được
-    dựng mới mỗi lần get_settings(), xem config.py). Đổi kích cỡ giữa các lần gọi (hiếm, thường
-    chỉ khi test đổi env) sẽ dựng lại semaphore mới."""
-    global _sem, _sem_size
-    if _sem is None or _sem_size != max_concurrent:
-        _sem = asyncio.Semaphore(max_concurrent)
-        _sem_size = max_concurrent
-    return _sem
+def _semaphore(max_concurrent: int, *, pool: str = "poc") -> asyncio.Semaphore:
+    """Per-pool process-wide semaphore. PoC verify and bughunt do not share one queue."""
+    key = (pool or "poc").strip() or "poc"
+    cur = _pool_sems.get(key)
+    if cur is None or cur[1] != max_concurrent:
+        _pool_sems[key] = (asyncio.Semaphore(max_concurrent), max_concurrent)
+    return _pool_sems[key][0]
+
+
+def reset_pool_semaphores() -> None:
+    """Test helper — clear all named pools."""
+    _pool_sems.clear()
 
 
 def _container_name(run_id: str) -> list[str]:
@@ -57,6 +61,8 @@ class ExecConfig:
     cpus: str = "2"
     pids: int = 256
     max_concurrent: int = 4
+    # Named docker concurrency pool: "poc" (default) or "bughunt"
+    pool: str = "poc"
 
 
 @dataclass(frozen=True)
@@ -67,8 +73,14 @@ class ExecResult:
     timed_out: bool = False
 
 
-async def _run(cmd: list[str], timeout_s: int, max_concurrent: int) -> ExecResult:
-    async with _semaphore(max_concurrent):
+async def _run(
+    cmd: list[str],
+    timeout_s: int,
+    max_concurrent: int,
+    *,
+    pool: str = "poc",
+) -> ExecResult:
+    async with _semaphore(max_concurrent, pool=pool):
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
@@ -108,7 +120,7 @@ async def run_executor(cfg: ExecConfig, args: list[str],
     for host, cont in (mounts or []):
         cmd += ["-v", f"{host}:{cont}:ro"]
     cmd += ["--memory", cfg.mem, "--cpus", cfg.cpus, "-e", f"EXEC_TIMEOUT={cfg.timeout_s}", cfg.image, *args]
-    return await _run(cmd, cfg.timeout_s, cfg.max_concurrent)
+    return await _run(cmd, cfg.timeout_s, cfg.max_concurrent, pool=cfg.pool)
 
 
 async def run_raw(cfg: ExecConfig, *, argv: list[str] | None = None, shell: str | None = None,
@@ -131,4 +143,4 @@ async def run_raw(cfg: ExecConfig, *, argv: list[str] | None = None, shell: str 
         cmd += ["raw", *argv]
     else:
         raise ValueError("cần 'argv' hoặc 'shell'")
-    return await _run(cmd, cfg.timeout_s, cfg.max_concurrent)
+    return await _run(cmd, cfg.timeout_s, cfg.max_concurrent, pool=cfg.pool)

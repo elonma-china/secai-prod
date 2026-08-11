@@ -8,6 +8,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 # Lightweight path wordlist — enough to fingerprint the local demo + common web apps.
+# Lightweight path wordlist — enough to fingerprint the local demo + common web apps.
 _DEFAULT_PATHS: tuple[str, ...] = (
     "/",
     "/robots.txt",
@@ -16,6 +17,8 @@ _DEFAULT_PATHS: tuple[str, ...] = (
     "/admin",
     "/api/health",
     "/api",
+    "/.env",
+    "/debug/info",
     "/wp-login.php",
     "/.well-known/security.txt",
 )
@@ -218,6 +221,26 @@ async def probe_http_surface(
                     severity="info",
                     path=path,
                 ))
+            if path == "/.env" and resp.status_code == 200 and any(
+                k in body.lower() for k in ("password", "secret", "aws_", "jwt")
+            ):
+                findings.append(_finding(
+                    kind="secrets_exposure",
+                    title="Exposed .env with secrets",
+                    evidence=body[:300],
+                    severity="high",
+                    path="/.env",
+                ))
+            if path == "/debug/info" and resp.status_code == 200 and any(
+                k in body.lower() for k in ("secret", "dsn", "jwt", "ssn")
+            ):
+                findings.append(_finding(
+                    kind="debug_info_leak",
+                    title="Debug endpoint leaks secrets/PII",
+                    evidence=body[:300],
+                    severity="high",
+                    path="/debug/info",
+                ))
 
     # De-dupe findings by (kind, title, path)
     seen: set[tuple[str, str, str | None]] = set()
@@ -286,10 +309,23 @@ def hunt_from_surface(surface: dict[str, Any]) -> dict[str, Any]:
         hypotheses.append({
             "vul_class": "lab_demo_app",
             "cve": None,
-            "confidence": 0.9,
+            "confidence": 0.5,
             "evidence": "X-App-Name/Server match SecAI demo target",
-            "next": "Local demo — use for pipeline smoke, not real CVE claims.",
+            "next": "Local demo — run verify_high_signal; not a CVE claim.",
         })
+
+    for f in findings:
+        kind = str(f.get("kind") or "")
+        sev = str(f.get("severity") or "").lower()
+        if kind in {"secrets_exposure", "debug_info_leak"} or sev == "high":
+            hypotheses.append({
+                "vul_class": kind or "high_finding",
+                "cve": None,
+                "confidence": 0.85,
+                "evidence": str(f.get("evidence") or f.get("title") or "")[:400],
+                "path": f.get("path"),
+                "next": "Validate with concrete HTTP PoC; do not invent CVE.",
+            })
 
     if not hypotheses:
         hypotheses.append({
@@ -307,29 +343,7 @@ def hunt_from_surface(surface: dict[str, Any]) -> dict[str, Any]:
 
 
 def validate_hypotheses(surface: dict[str, Any], hunt: dict[str, Any]) -> dict[str, Any]:
-    """Phase Validate stub: keep only evidence-backed leads; never mark CVE confirmed."""
-    hyps = list(hunt.get("hypotheses") or [])
-    kept: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
-    for h in hyps:
-        if h.get("cve"):
-            # Phase 1 must not confirm CVEs.
-            rejected.append({**h, "reason": "CVE present without exploit evidence — blocked"})
-            continue
-        if float(h.get("confidence") or 0) < 0.3:
-            rejected.append({**h, "reason": "confidence too low"})
-            continue
-        if not surface.get("reachable"):
-            rejected.append({**h, "reason": "target unreachable"})
-            continue
-        kept.append({**h, "validated": False, "note": "lead only — needs Phase 2/3"})
+    """Deprecated alias — use ``triage.triage_leads`` (BB triage-validation)."""
+    from .triage import triage_leads
+    return triage_leads(surface, hunt)
 
-    return {
-        "ok": bool(kept),
-        "leads": kept,
-        "rejected": rejected,
-        "summary": (
-            f"Validate: {len(kept)} lead(s) kept, {len(rejected)} rejected; "
-            "no exploit opened (scan-first gate)."
-        ),
-    }

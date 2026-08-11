@@ -57,12 +57,69 @@ async def test_streaming_endpoints() -> None:
     }
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
         for path, profile in stream_paths.items():
-            response = await client.post(path, json={"user_id": "u1", "message": "hello", "text": "hello"})
+            # The exploit endpoint expects a CVE id; a bare "hello" is now treated as
+            # chitchat and returns the "nhập CVE" guide instead of running the model, so
+            # give this one a real CVE to exercise the model streaming path.
+            body = {"user_id": "u1", "message": "hello", "text": "hello"}
+            if path == "/ai/exploit/stream":
+                body = {"user_id": "u1", "text": "CVE-2024-1234"}
+            response = await client.post(path, json=body)
             assert response.status_code == 200, path
             assert "event: token" in response.text
             assert f"{profile}:" in response.text
             assert "event: final" in response.text
             assert "data: [DONE]" in response.text
+
+
+def test_prefetch_prompt_appendix_grounds_muc2_3() -> None:
+    """When prefetch fetched a PoC, its content is fed into the model prompt so Mục 2/3 are
+    grounded regardless of the model's own tool-calling (the CVE-2026-33032 root cause)."""
+    from secai_gateway.api.routes import _prefetch_prompt_appendix
+
+    # No evidence → no appendix (honest not-found path unchanged).
+    assert _prefetch_prompt_appendix({"evidence": []}) == ""
+
+    ev = [{"source": "nuclei", "url": "https://x/CVE-2026-33032.yaml",
+           "source_files": [{"path": "CVE-2026-33032.yaml",
+                             "code": "id: CVE-2026-33032\ninfo:\n  severity: critical\n",
+                             "role": "entry"}]}]
+    appendix = _prefetch_prompt_appendix({"evidence": ev})
+    assert "CVE-2026-33032.yaml" in appendix          # real PoC content reached the prompt
+    assert "id: CVE-2026-33032" in appendix            # the fetched bytes, not just a mention
+    assert "nuclei" in appendix                        # provenance named
+    assert "Mục 2" in appendix and "Mục 3" in appendix
+    assert "không có thông tin" in appendix            # explicit instruction not to say it
+
+
+@pytest.mark.asyncio
+async def test_exploit_chitchat_returns_cve_guide() -> None:
+    """A greeting on the exploit endpoints returns a short "nhập CVE" guide WITHOUT running
+    the model or forcing the "## 1. …" report scaffolding."""
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        # Non-stream: guide body, chitchat flag, and the model was never called.
+        resp = await client.post("/ai/exploit", json={"user_id": "u1", "message": "xin chào"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "CVE-2026-42533" in data["description"]  # the guide's example id
+        assert "## 1." not in data["description"]
+        assert data["metadata"]["input_kind"] == "chitchat"
+        assert fake.calls == []
+
+        # Stream: same guide via token+final, still no model call.
+        stream = await client.post("/ai/exploit/stream", json={"user_id": "u1", "text": "hello"})
+        assert stream.status_code == 200
+        assert "event: token" in stream.text
+        assert "event: final" in stream.text
+        assert "data: [DONE]" in stream.text
+        assert '"input_kind": "chitchat"' in stream.text
+        assert "## 1." not in stream.text
+        assert fake.calls == []
+
+        # A malformed CVE is NOT chitchat — it reaches the model (normalized to canonical).
+        await client.post("/ai/exploit", json={"user_id": "u1", "message": "cve 2024 1234"})
+        assert fake.calls, "malformed CVE should have run the model"
+        assert "CVE-2024-1234" in fake.calls[-1][1]  # prompt normalized before the model
 
 
 @pytest.mark.asyncio

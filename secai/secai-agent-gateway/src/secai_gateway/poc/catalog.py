@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .models import NormalizedPoc
+from .normalize import normalize_cve_ids
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 
@@ -133,7 +134,10 @@ class PocCatalog:
         return out
 
     def search(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        query = (query or "").strip()
+        # Repair separator/case typos ("cve 2026 42533") so a malformed id still reaches the
+        # CVE-exact path below instead of degrading to weaker keyword FTS. Covers BOTH the
+        # deterministic prefetch and the model's own poc_search — both land here.
+        query = normalize_cve_ids((query or "").strip())
         if not query:
             return []
         limit = max(1, min(limit, 50))

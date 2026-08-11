@@ -10,7 +10,14 @@ from linch.loop_guard import LoopGuard
 
 from ..config import get_settings
 from ..poc.backend import _MAX_FETCH_PER_RUN
-from .hooks import RequireRunInstructionsHook, RequireSearchBeforeAnswerHook, ToolCallBudgetHook
+from .hooks import (
+    RequireChatGroundingHook,
+    RequireKbSearchBeforeSynthesisHook,
+    RequireRunInstructionsHook,
+    RequireSearchBeforeAnswerHook,
+    RequireSection1SynthesisHook,
+    ToolCallBudgetHook,
+)
 from .profiles import compose_system_prompt
 
 
@@ -50,15 +57,31 @@ def make_gateway_agent(
         # never blocks correctness, only widens evidence coverage). Complements
         # poc/prefetch.py's deterministic search, which covers most requests without
         # touching the model's turn at all.
+        # RequireKbSearchBeforeSynthesisHook closes a gap the poc_search-only hook above
+        # doesn't cover: when the PoC catalog is empty, prefetch's own search already
+        # satisfies RequireSearchBeforeAnswerHook, so nothing forced a qdrant_search/
+        # neo4j_search call — a model could finalize (and, since poc/inject.py now trusts
+        # its own Section 1 text for the synthesize-from-CVE tier, fabricate) without ever
+        # consulting the KB. See hooks.py's docstring for the live-observed failure.
+        # RequireSection1SynthesisHook: when T2/T3 evidence exists (catalog description or
+        # a confirmed CVE) but the model skipped Section 1 anyway, force one retry asking it
+        # to write it — turns a reticent first pass into a synthesized answer instead of a
+        # correct-but-unhelpful "không tổng hợp được" (see hooks.py's docstring).
         # RequireRunInstructionsHook is a completeness nudge, not a safety gate: when real
         # run-info evidence exists (README-role file / argparse signals) but the model's own
         # text never wrote "Cách chạy PoC", force it to add one — deterministic on both
         # sides (see hooks.py's docstring for why this isn't an LLM-judged check).
+        # RequireChatGroundingHook: chat must web_fetch taxonomy pages / qdrant entity IDs
+        # instead of answering OWASP 2021 / CWE lists from stale parametric memory.
         hooks=[
-            ToolCallBudgetHook({"poc_fetch": _MAX_FETCH_PER_RUN}),
+            ToolCallBudgetHook({"poc_fetch": _MAX_FETCH_PER_RUN, "web_fetch": 4}),
             RequireSearchBeforeAnswerHook(search_tool="poc_search", fetch_tool="poc_fetch",
                                           profile="exploit_research"),
+            RequireKbSearchBeforeSynthesisHook(tools=("qdrant_search", "neo4j_search"),
+                                               profile="exploit_research"),
+            RequireSection1SynthesisHook(ledger=ledger, profile="exploit_research"),
             RequireRunInstructionsHook(ledger=ledger, profile="exploit_research"),
+            RequireChatGroundingHook(profile="chat"),
         ],
         compaction_ladder=CompactionLadder(),
         max_turns=s.step_cap,

@@ -37,6 +37,7 @@ from typing import Any, Literal
 
 from ..state import SqliteLedger
 from .backend import LocalPocBackend, PocError
+from .normalize import normalize_cve_ids
 from .tools import record_fetch_evidence
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
@@ -77,6 +78,45 @@ def clear_session_coverage(session_id: str | None = None) -> None:
     _session_coverage.pop(session_id, None)
 
 
+_session_cve_known: "OrderedDict[str, bool]" = OrderedDict()
+
+
+def set_session_cve_known(session_id: str | None, known: bool) -> None:
+    """Record the deterministic `cve_exists_in_kb` result for an exploit session (routes →
+    hook) — same shape as `set_session_coverage`, but for the T3 (synthesize-from-CVE)
+    signal, which RequireSection1SynthesisHook (agent/hooks.py) needs and can't compute
+    itself (it has no CVE-KB access)."""
+    if not session_id:
+        return
+    _session_cve_known[session_id] = known
+    _session_cve_known.move_to_end(session_id)
+    while len(_session_cve_known) > _MAX_TRACKED_SESSIONS:
+        _session_cve_known.popitem(last=False)
+
+
+def get_session_cve_known(session_id: str | None) -> bool:
+    if not session_id:
+        return False
+    return bool(_session_cve_known.get(session_id))
+
+
+def clear_session_cve_known(session_id: str | None = None) -> None:
+    """Test helper: clear one session or the whole store."""
+    if session_id is None:
+        _session_cve_known.clear()
+        return
+    _session_cve_known.pop(session_id, None)
+
+
+def extract_cve_id(prompt: str) -> str | None:
+    """The same CVE-ID extraction `prefetch_evidence` does internally, exposed standalone
+    for callers that need the ID independently — e.g. the CVE-KB existence check
+    (`retrieval.neo4j.cve_exists_in_kb`), which runs concurrently with, not after, the
+    catalog prefetch."""
+    m = _CVE.search(normalize_cve_ids(prompt or ""))
+    return m.group(0).upper() if m else None
+
+
 def _rank(hit: dict[str, Any]) -> tuple[bool, bool]:
     return (not hit.get("verified"), hit.get("source") not in _PRIORITY_SOURCES)
 
@@ -88,8 +128,9 @@ async def prefetch_evidence(poc: LocalPocBackend, ledger: SqliteLedger, prompt: 
     agentic session ends up using). Returns a small report with ``coverage``, never raises
     — the caller's agentic path and the final injection backstop both work with zero
     evidence, so a prefetch failure here degrades gracefully, not fatally."""
-    m = _CVE.search(prompt or "")
-    query = m.group(0).upper() if m else (prompt or "").strip()
+    prompt = normalize_cve_ids(prompt or "")
+    m = _CVE.search(prompt)
+    query = m.group(0).upper() if m else prompt.strip()
     if not query:
         return {"prefetched": False, "reason": "empty_prompt", "coverage": "failed"}
     try:

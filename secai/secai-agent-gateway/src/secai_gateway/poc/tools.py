@@ -19,16 +19,25 @@ def record_fetch_evidence(
     run_id: str,
     idempotency_key: str,
     result: dict[str, Any],
+    tool_name: str = "poc_fetch",
 ) -> None:
     """Persist a successful fetch in the shape consumed by evidence injection.
 
     The identifier is scoped to the run: the same artifact fetched by independent
     runs must remain available to both reports.
-    """
+
+    A metadata-only fetch (GHSA advisory, vulhub lab without a compose file — no
+    `source_code`/`source_files`, so no `sha256` to key on) still carries real
+    `description` text that poc/inject.py's synthesize-from-README tier needs — it must
+    NOT be silently dropped just because there's no artifact hash. Keyed instead on
+    `source`+`source_ref`, which is stable and unique per catalog entry."""
     sha256 = str(result.get("sha256") or "")
-    if not sha256:
+    description = str(result.get("description") or "").strip()
+    if not sha256 and not description:
         return
-    evidence_id = f"evidence:{run_id}:{sha256[:24]}"
+    key = sha256[:24] if sha256 else hashlib.sha256(
+        f"{result.get('source')}:{result.get('source_ref')}".encode()).hexdigest()[:24]
+    evidence_id = f"evidence:{run_id}:{key}"
     evidence = dict(result)
     evidence["draft_not_executed"] = True
     evidence["draft_notice"] = _DRAFT
@@ -38,9 +47,9 @@ def record_fetch_evidence(
     ledger.save_evidence(evidence_id, run_id, evidence)
     payload = json.dumps(result, ensure_ascii=False, sort_keys=True, default=str)
     ledger.audit_once(
-        idempotency_key or f"{run_id}:poc_fetch:{sha256[:24]}",
+        idempotency_key or f"{run_id}:{tool_name}:{key}",
         run_id,
-        "poc_fetch",
+        tool_name,
         hashlib.sha256(payload.encode()).hexdigest(),
         {"evidence_id": evidence_id, "sha256": sha256, "source": result.get("source")},
     )

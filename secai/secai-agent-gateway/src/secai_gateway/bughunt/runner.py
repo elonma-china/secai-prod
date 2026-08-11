@@ -20,25 +20,32 @@ async def stream_bughunt_workflow(
     max_concurrency: int = 4,
     use_llm: bool | None = None,
     use_recon_engine: bool | None = None,
+    enable_exploit: bool = False,
+    run_cve_sweep: bool = True,
 ) -> AsyncIterator[Event | dict[str, Any]]:
-    """Yield workflow events + live ``log`` dicts, then ``bughunt_result``.
-
-    Bridges ``agent.run_workflow(..., on_event=...)`` through an asyncio queue so
-    the FastAPI SSE generator can forward frames as they happen (not only at end).
-    """
+    """Yield workflow events + live ``log`` dicts, then ``bughunt_result``."""
     rid = (run_id or "").strip() or f"bh:{uuid4().hex}"
     queue: asyncio.Queue[Event | dict[str, Any] | None] = asyncio.Queue()
+    loop = asyncio.get_running_loop()
 
     def on_event(event: Event) -> None:
         queue.put_nowait(event)
 
     def on_log(stream: str, line: str) -> None:
-        queue.put_nowait({
+        payload = {
             "type": "log",
             "stream": stream,
             "line": line,
             "run_id": rid,
-        })
+        }
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            running = None
+        if running is loop:
+            queue.put_nowait(payload)
+        else:
+            loop.call_soon_threadsafe(queue.put_nowait, payload)
 
     async def _run() -> None:
         try:
@@ -51,13 +58,15 @@ async def stream_bughunt_workflow(
                     use_recon_engine=use_recon_engine,
                     on_log=on_log,
                     run_id=rid,
+                    enable_exploit=enable_exploit,
+                    run_cve_sweep=run_cve_sweep,
                 ),
                 run_id=rid,
                 max_concurrency=max_concurrency,
                 on_event=on_event,
             )
             queue.put_nowait({"type": "bughunt_result", "run_id": rid, "result": result})
-        except Exception as exc:  # noqa: BLE001 — surface to SSE as ErrorEvent
+        except Exception as exc:  # noqa: BLE001
             queue.put_nowait(ErrorEvent(error=exc))
         finally:
             queue.put_nowait(None)

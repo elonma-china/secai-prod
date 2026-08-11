@@ -27,20 +27,46 @@ interface Hypothesis {
   source?: string;
 }
 
-const PHASES = ["AgentHunt", "Validate"] as const;
+const PHASES = ["AgentHunt", "Validate", "MapCVE", "Report", "Exploit"] as const;
 
 function nowTs() {
   const d = new Date();
   return d.toLocaleTimeString("en-GB", { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
 }
 
-function shortJson(v: unknown, max = 280): string {
+/** Decode JSON / \\uXXXX so Vietnamese (and other Unicode) renders, not escapes. */
+function displayText(v: unknown, max = 280): string {
   try {
-    const s = typeof v === "string" ? v : JSON.stringify(v);
+    let s: string;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (
+        (t.startsWith("{") && t.endsWith("}")) ||
+        (t.startsWith("[") && t.endsWith("]"))
+      ) {
+        try {
+          s = JSON.stringify(JSON.parse(t));
+        } catch {
+          s = unescapeUnicode(v);
+        }
+      } else {
+        s = unescapeUnicode(v);
+      }
+    } else if (v === undefined || v === null) {
+      return "";
+    } else {
+      s = JSON.stringify(v);
+    }
     return s.length > max ? s.slice(0, max) + "…" : s;
   } catch {
     return String(v);
   }
+}
+
+function unescapeUnicode(s: string): string {
+  return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) =>
+    String.fromCharCode(parseInt(h, 16)),
+  );
 }
 
 export default function BughuntPanel({ streaming }: { streaming: boolean }) {
@@ -56,6 +82,11 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
   const [engineCounts, setEngineCounts] = useState<Record<string, number> | null>(null);
   const [summary, setSummary] = useState("");
   const [runMeta, setRunMeta] = useState<Record<string, unknown> | null>(null);
+  const [enableExploit, setEnableExploit] = useState(false);
+  const [reportMd, setReportMd] = useState("");
+  const [reportPath, setReportPath] = useState("");
+  const [reportMeta, setReportMeta] = useState<{ lead_count?: number; cve_count?: number } | null>(null);
+  const [validatedLeads, setValidatedLeads] = useState<Hypothesis[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
@@ -93,6 +124,10 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
     setEngineCounts(null);
     setSummary("");
     setRunMeta(null);
+    setReportMd("");
+    setReportPath("");
+    setReportMeta(null);
+    setValidatedLeads([]);
     tokenBuf.current = "";
     logId.current = 0;
   }
@@ -114,7 +149,7 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
     }
     flushTokens();
     const bits: string[] = [`✓ ${title || kind}`];
-    if (p.result_text) bits.push(p.result_text.replace(/\s+/g, " ").slice(0, 220));
+    if (p.result_text) bits.push(displayText(p.result_text, 220).replace(/\s+/g, " "));
     append(kind === "agent_end" ? "ok" : "info", bits.join(" — "));
 
     const so = p.structured_output;
@@ -133,19 +168,35 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
       const hyps = (so.hypotheses as Hypothesis[]) || [];
       if (hyps.length) setHypotheses(hyps);
     }
+    if (so && title === "validate-leads") {
+      const leads = (so.leads as Hypothesis[]) || [];
+      if (leads.length) {
+        setValidatedLeads(leads);
+        setHypotheses(leads);
+      }
+    }
+    if (so && title === "report-draft") {
+      const md = String(so.markdown || so.preview || "");
+      if (md) setReportMd(md);
+      if (so.path) setReportPath(String(so.path));
+      setReportMeta({
+        lead_count: typeof so.lead_count === "number" ? so.lead_count : undefined,
+        cve_count: typeof so.cve_count === "number" ? so.cve_count : undefined,
+      });
+    }
   }
 
   function onToolCall(t: ToolCall) {
     flushTokens();
     append("tool", `$ ${t.name}${t.summary ? " · " + t.summary : ""}`);
-    if (t.input !== undefined) append("info", `  args ${shortJson(t.input)}`);
+    if (t.input !== undefined) append("info", `  args ${displayText(t.input)}`);
   }
 
   function onToolResult(t: ToolCall) {
     const flag = t.is_error ? "✗" : "✓";
     const dur = t.duration_ms != null ? ` ${t.duration_ms}ms` : "";
     append(t.is_error ? "err" : "result", `${flag} ${t.name}${dur}`);
-    if (t.result) append("info", `  ← ${shortJson(t.result, 360)}`);
+    if (t.result) append("info", `  ← ${displayText(t.result, 360)}`);
   }
 
   async function start() {
@@ -165,6 +216,8 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
     const body = {
       target: t,
       scope_note: scopeNote.trim() || undefined,
+      enable_exploit: enableExploit,
+      run_cve_sweep: true,
     };
 
     try {
@@ -180,6 +233,18 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
           },
           onToolCall,
           onToolResult,
+          onLog: (p) => {
+            const stream = (p.stream || "stdout").toLowerCase();
+            const line = (p.line || "").trimEnd();
+            if (!line) return;
+            const kind =
+              stream === "stderr" || stream === "err"
+                ? "err"
+                : stream === "sys"
+                  ? "sys"
+                  : "info";
+            append(kind, stream === "sys" ? line : `[${stream}] ${line}`);
+          },
           onError: (e) => {
             append("err", e);
             setError(e);
@@ -200,6 +265,28 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
             }
             append(ok ? "ok" : "err", ok ? "final OK" : `final FAIL: ${p.error || "unknown"}`);
             if (result.status) append("info", `status=${result.status} llm_hunt=${result.llm_hunt}`);
+            const mapCve = (result.map_cve as Record<string, unknown>) || {};
+            if (Array.isArray(mapCve.cves) && mapCve.cves.length) {
+              append("ok", `CVEs: ${(mapCve.cves as { cve?: string }[]).map((c) => c.cve).filter(Boolean).join(", ")}`);
+            }
+            const report = (result.report as Record<string, unknown>) || {};
+            if (report.path) {
+              append("info", `report: ${String(report.path)}`);
+              setReportPath(String(report.path));
+            }
+            const md = String(report.markdown || report.preview || "");
+            if (md) setReportMd(md);
+            setReportMeta({
+              lead_count: typeof report.lead_count === "number" ? report.lead_count : undefined,
+              cve_count: typeof report.cve_count === "number" ? report.cve_count : undefined,
+            });
+            const validation = (result.validation as Record<string, unknown>) || {};
+            if (Array.isArray(validation.leads) && validation.leads.length) {
+              setValidatedLeads(validation.leads as Hypothesis[]);
+              setHypotheses(validation.leads as Hypothesis[]);
+            }
+            const exploit = (result.exploit as Record<string, unknown>) || {};
+            if (exploit.summary) append("info", String(exploit.summary));
             setActivePhase("");
           },
         },
@@ -237,7 +324,8 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
       <div className="card bh-form">
         <h3>Scan-first bughunt</h3>
         <p className="bh-hint">
-          Target only — AgentHunt (Linch ReAct + BugHunter tools) → Validate. Không nhập CVE.
+          Target only — AgentHunt → Validate (triage) → MapCVE → Report → Exploit (opt-in).
+          Không nhập CVE thủ công; CVE chỉ từ scanner evidence.
         </p>
         <div className="grid2">
           <label className="lbl">
@@ -261,6 +349,15 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
             />
           </label>
         </div>
+        <label className="lbl bh-check" style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={enableExploit}
+            onChange={(e) => setEnableExploit(e.target.checked)}
+            disabled={busy}
+          />
+          Enable Exploit phase (cần POC_EXPLOIT_ENABLED + CVE evidence)
+        </label>
         <div className="bh-actions">
           {busy ? (
             <button className="btn danger" onClick={stop}>Dừng</button>
@@ -348,7 +445,12 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
           </div>
 
           <div className="card">
-            <h3>Leads / hypotheses ({hypotheses.length})</h3>
+            <h3>
+              Leads / hypotheses ({hypotheses.length})
+              {validatedLeads.length > 0 && (
+                <span className="bh-conf"> · validated {validatedLeads.length}</span>
+              )}
+            </h3>
             {hypotheses.length === 0 ? (
               <div className="empty" style={{ padding: 12 }}>Chưa có</div>
             ) : (
@@ -365,6 +467,52 @@ export default function BughuntPanel({ streaming }: { streaming: boolean }) {
                   </li>
                 ))}
               </ul>
+            )}
+          </div>
+
+          <div className="card bh-report-card">
+            <div className="bh-report-head">
+              <h3>
+                Report
+                {reportMeta?.lead_count != null && (
+                  <span className="bh-conf">
+                    {" "}
+                    · {reportMeta.lead_count} leads
+                    {reportMeta.cve_count != null ? `, ${reportMeta.cve_count} CVEs` : ""}
+                  </span>
+                )}
+              </h3>
+              {reportMd && (
+                <button
+                  type="button"
+                  className="btn ghost sm"
+                  onClick={() => {
+                    const blob = new Blob([reportMd], { type: "text/markdown;charset=utf-8" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "bughunt-report.md";
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  Tải .md
+                </button>
+              )}
+            </div>
+            {!reportMd ? (
+              <div className="empty" style={{ padding: 12 }}>
+                Chưa có — hiện sau phase Report
+              </div>
+            ) : (
+              <>
+                {reportPath && (
+                  <div className="bh-report-path" title={reportPath}>
+                    {reportPath}
+                  </div>
+                )}
+                <pre className="bh-report-md">{reportMd}</pre>
+              </>
             )}
           </div>
 

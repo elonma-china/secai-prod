@@ -32,14 +32,16 @@ def build_llm_provider() -> tuple[Any, str]:
         base_url=s.qwen_base_url.rstrip("/"),
         context_window=s.qwen_context_window,
         parallel_tool_calls=True,
-        # Cyber-F1 (Qwen3.5-MoE) model-card recommended sampling. Only `temperature` is a
-        # first-class OpenAI field (linch); top_p/top_k/min_p/presence_penalty/
-        # repetition_penalty are vLLM sampling extensions, so all six go through
-        # extra_body — the OpenAI SDK merges these into the actual HTTP request body.
+        # Cyber-F1 (Qwen3.5-MoE) model-card recommended sampling, now env-tunable via
+        # Settings (LLM_TEMPERATURE, LLM_TOP_P, …). Only `temperature` is a first-class
+        # OpenAI field (linch); top_p/top_k/min_p/presence_penalty/repetition_penalty are
+        # vLLM sampling extensions, so all six go through extra_body — the OpenAI SDK
+        # merges these into the actual HTTP request body.
         extra_body={
             "chat_template_kwargs": {"enable_thinking": False},
-            "temperature": 0.85, "top_p": 0.95, "top_k": 20, "min_p": 0.0,
-            "presence_penalty": 1.1, "repetition_penalty": 1.0,
+            "temperature": s.llm_temperature, "top_p": s.llm_top_p, "top_k": s.llm_top_k,
+            "min_p": s.llm_min_p, "presence_penalty": s.llm_presence_penalty,
+            "repetition_penalty": s.llm_repetition_penalty,
         },
     ))
     return provider, s.qwen_model

@@ -3,7 +3,9 @@ from __future__ import annotations
 from secai_gateway.agent.profiles import compose_system_prompt
 from secai_gateway.security import (
     sanitize_output_language,
+    strip_meta_narration,
     strip_reasoning_leak,
+    strip_tool_call_echoes,
 )
 
 # A representative chain-of-thought leak (shape observed live on the chat profile T10):
@@ -43,6 +45,65 @@ def test_strip_reasoning_leak_without_pivot_is_not_truncated() -> None:
 def test_strip_reasoning_leak_removes_think_blocks() -> None:
     text = "<think>tôi cần tra cứu</think>CVE-2025-3248 là lỗ hổng nghiêm trọng."
     assert strip_reasoning_leak(text) == "CVE-2025-3248 là lỗ hổng nghiêm trọng."
+
+
+def test_strip_tool_call_echo_standalone_line() -> None:
+    # The exact leak the user reported: a bare tool-call echo under Section 1.
+    text = ('Chưa có thông tin PoC được xác thực trong dữ liệu nội bộ cho lỗ hổng này.\n\n'
+            'qdrant_search(query="CVE-2026-4253333").')
+    out = sanitize_output_language(text)
+    assert "qdrant_search" not in out
+    assert out.strip() == "Chưa có thông tin PoC được xác thực trong dữ liệu nội bộ cho lỗ hổng này."
+
+
+def test_strip_tool_call_echo_multiline_and_inline() -> None:
+    text = ('## 2. Cách chạy PoC\n\npoc_search(query="CVE-2021-44228")\n'
+            'poc_fetch(ref="poc:1")\n\nSau đó neo4j_search(cve="X") để tra CWE. Dùng nuclei.')
+    out = sanitize_output_language(text)
+    for banned in ("poc_search", "poc_fetch", "neo4j_search"):
+        assert banned not in out
+    assert "## 2. Cách chạy PoC" in out and "Dùng nuclei." in out
+
+
+def test_strip_tool_call_echo_leaves_legit_content() -> None:
+    # A tool name mentioned in prose WITHOUT a call-paren, real commands, and C calls stay.
+    for legit in (
+        "Kết quả từ qdrant_search cho thấy CVE-2025-3248 ảnh hưởng Langflow < 1.3.0.",
+        "Chạy: `nuclei -t template.yaml -u http://target`",
+        "Hàm system() trong C có thể dẫn tới RCE khi truyền input chưa lọc.",
+    ):
+        assert strip_tool_call_echoes(legit) == legit.strip()
+
+
+def test_strip_meta_narration_removes_section_methodology_leak() -> None:
+    # The exact leak the user reported: the model narrating how it wrote Section 2.
+    text = ("## 2. Cách chạy PoC\n\n"
+            "Kết luận về Mục 2: Vì không có tài liệu hướng dẫn chạy PoC độc lập chuẩn nào được "
+            "xác thực trong dữ liệu nội bộ ngoài phần README của DepthFirstDisclosures, nên chỉ "
+            "dựa vào đó để trình bày cách chạy bằng tiếng Việt (diễn giải lại, không sao chép "
+            "nguyên văn).\n\n## 3. Tổng quan Lỗ hổng\n\nLỗ hổng cho phép RCE.")
+    out = sanitize_output_language(text)
+    assert "Kết luận về Mục 2" not in out
+    assert "sao chép nguyên văn" not in out
+    assert "## 2. Cách chạy PoC" in out and "## 3. Tổng quan Lỗ hổng" in out and "RCE" in out
+
+
+def test_strip_meta_narration_removes_inline_aside_keeps_command() -> None:
+    text = ("## 2. Cách chạy PoC\n\nDựa trên README (diễn giải lại, không sao chép nguyên văn), "
+            "chạy `nuclei -t x.yaml -u http://target`.")
+    out = strip_meta_narration(text)
+    assert "sao chép nguyên văn" not in out
+    assert "nuclei -t x.yaml -u http://target" in out  # the real command survives
+
+
+def test_strip_meta_narration_leaves_legit_content() -> None:
+    for legit in (
+        "Tóm lại, lỗ hổng cho phép RCE khi input chưa được lọc.",  # 'Tóm lại' but no 'Mục N'
+        "Mục tiêu tấn công là máy chủ web Apache.",                # 'mục tiêu' ≠ 'mục 1-3'
+        "## 2. Cách chạy PoC",
+        "## 3. Tổng quan Lỗ hổng",
+    ):
+        assert strip_meta_narration(legit) == legit.strip()
 
 
 def test_sanitize_output_language_strips_reasoning_then_cjk() -> None:

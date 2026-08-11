@@ -70,6 +70,10 @@ class BughuntRequest(BaseModel):
     scope_note: str | None = None
     user_id: str | int | None = None
     run_id: str | None = None
+    # Opt-in Exploit phase (also requires POC_EXPLOIT_ENABLED + API URL).
+    enable_exploit: bool = False
+    # Run BB cve_scan.sh during MapCVE (disable for faster lab smoke).
+    run_cve_sweep: bool = True
 
 
 class LegacyRequest(BaseModel):
