@@ -11,13 +11,22 @@ import asyncio
 import importlib.util
 import logging
 import os
+import re
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
+
+LogFn = Callable[[str, str], None]  # (stream, line)
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[mK]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 # Soft-deps recon_engine.sh cares about (plus curl/dig which are usually present).
 _ARSENAL = (
@@ -43,9 +52,9 @@ def bugbounty_root(settings: Any | None = None) -> Path:
     env = (os.environ.get("BUGBOUNTY_ROOT") or "").strip()
     if env:
         return Path(env).expanduser().resolve()
-    # secai/secai-agent-gateway → sibling secai/claude-bug-bounty
+    # .../secai/secai-agent-gateway/src/secai_gateway/bughunt/engine.py → secai/claude-bug-bounty
     here = Path(__file__).resolve()
-    sibling = here.parents[3] / "claude-bug-bounty"  # .../secai/claude-bug-bounty
+    sibling = here.parents[4] / "claude-bug-bounty"
     if sibling.is_dir():
         return sibling
     return Path("/home/ict/AIEngines/secai/claude-bug-bounty")
@@ -96,6 +105,39 @@ def _seed_recon_dir(out: Path, *, target: str, seed_urls: list[str]) -> None:
         urls = [f"{scheme}://{host}/"]
     if urls:
         (out / "live" / "urls.txt").write_text("\n".join(urls) + "\n", encoding="utf-8")
+
+
+def _live_url_count(out: Path) -> int:
+    p = out / "live" / "urls.txt"
+    if not p.is_file():
+        return 0
+    return sum(1 for ln in p.read_text(encoding="utf-8", errors="replace").splitlines() if ln.strip())
+
+
+def _restore_seed_live_urls(out: Path, seed_urls: list[str]) -> int:
+    """If httpx wiped live/urls.txt, put probe seeds back for downstream tools."""
+    seeds = [u.rstrip("/") + "/" for u in seed_urls if u]
+    if not seeds or _live_url_count(out) > 0:
+        return 0
+    live = out / "live"
+    live.mkdir(parents=True, exist_ok=True)
+    (live / "urls.txt").write_text("\n".join(seeds) + "\n", encoding="utf-8")
+    # Keep a marker line so read_recon_summary / adapters see something non-empty.
+    marker = live / "httpx_full.txt"
+    if not marker.is_file() or marker.stat().st_size == 0:
+        marker.write_text(
+            "\n".join(f"{u} [seed-restored]" for u in seeds) + "\n",
+            encoding="utf-8",
+        )
+    return len(seeds)
+
+
+def _is_ip_lab_target(target: str) -> bool:
+    """True for IPv4 / IPv4:port lab targets (not FQDN bounty scope)."""
+    host = _host_from_target(target).split("/")[0]
+    bare = host.split(":")[0]
+    parts = bare.split(".")
+    return len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts if p)
 
 
 def _summarize_dir(recon_dir: Path) -> dict[str, Any]:
@@ -149,6 +191,28 @@ def _summarize_dir(recon_dir: Path) -> dict[str, Any]:
     }
 
 
+async def _pump_stream(
+    stream: asyncio.StreamReader | None,
+    *,
+    name: str,
+    chunks: list[str],
+    on_log: LogFn | None,
+) -> None:
+    if stream is None:
+        return
+    while True:
+        line_b = await stream.readline()
+        if not line_b:
+            break
+        line = _strip_ansi(line_b.decode("utf-8", "replace")).rstrip("\n")
+        chunks.append(line)
+        if on_log and line:
+            try:
+                on_log(name, line)
+            except Exception:  # noqa: BLE001 — never break recon on SSE log failure
+                logger.debug("on_log failed", exc_info=True)
+
+
 async def _run_host(
     *,
     script: Path,
@@ -157,12 +221,14 @@ async def _run_host(
     out: Path,
     timeout_s: int,
     cwd: Path,
+    on_log: LogFn | None = None,
 ) -> dict[str, Any]:
     env = os.environ.copy()
     env["RECON_OUT_DIR"] = str(out)
     # Prefer Go tools if installed later.
     go_bin = str(Path.home() / "go" / "bin")
-    env["PATH"] = f"{go_bin}:{env.get('PATH', '')}"
+    local_bin = "/usr/local/bin"
+    env["PATH"] = f"{go_bin}:{local_bin}:{env.get('PATH', '')}"
     # IP/CIDR: skip wildcard subdomain noise (recon_engine respects TARGET_TYPE).
     host = _host_from_target(target)
     if host.replace(".", "").replace(":", "").isdigit() or ":" in host.split("/")[0]:
@@ -172,7 +238,11 @@ async def _run_host(
             env["TARGET_TYPE"] = "ip"
             env["SCOPE_LOCK"] = "1"
 
-    argv = ["bash", str(script), target]
+    # stdbuf -oL for line-buffered live SSE logs when available.
+    argv: list[str] = []
+    if shutil.which("stdbuf"):
+        argv.extend(["stdbuf", "-oL", "-eL"])
+    argv.extend(["bash", str(script), target])
     if quick:
         argv.append("--quick")
     proc = await asyncio.create_subprocess_exec(
@@ -182,16 +252,26 @@ async def _run_host(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    out_chunks: list[str] = []
+    err_chunks: list[str] = []
     timed_out = False
+    pumps = [
+        asyncio.create_task(_pump_stream(proc.stdout, name="stdout", chunks=out_chunks, on_log=on_log)),
+        asyncio.create_task(_pump_stream(proc.stderr, name="stderr", chunks=err_chunks, on_log=on_log)),
+    ]
     try:
-        stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+        await asyncio.wait_for(proc.wait(), timeout=timeout_s)
     except asyncio.TimeoutError:
         timed_out = True
         proc.kill()
         await proc.wait()
-        stdout_b, stderr_b = b"", b"timed out"
-    stdout = stdout_b.decode("utf-8", "replace")
-    stderr = stderr_b.decode("utf-8", "replace")
+        if on_log:
+            on_log("sys", f"recon_engine timed out after {timeout_s}s")
+    await asyncio.gather(*pumps, return_exceptions=True)
+    stdout = "\n".join(out_chunks)
+    stderr = "\n".join(err_chunks)
+    if timed_out and not stderr:
+        stderr = "timed out"
     return {
         "rc": proc.returncode if proc.returncode is not None else -1,
         "timed_out": timed_out,
@@ -224,7 +304,12 @@ async def _run_kali(
         mem=getattr(settings, "verify_mem", None) or "2g",
         cpus=getattr(settings, "verify_cpus", None) or "2",
         pids=max(256, int(getattr(settings, "verify_pids", 256) or 256)),
-        max_concurrent=int(getattr(settings, "verify_max_concurrent", 4) or 4),
+        max_concurrent=int(
+            getattr(settings, "bughunt_docker_max_concurrent", None)
+            or getattr(settings, "verify_max_concurrent", 4)
+            or 4
+        ),
+        pool="bughunt",
     )
     quick_flag = "--quick" if quick else ""
     # target is gateway-built (allowlisted); still quote for shell.
@@ -263,8 +348,12 @@ async def run_recon_engine(
     timeout_s: int | None = None,
     run_id: str = "",
     out_dir: Path | str | None = None,
+    on_log: LogFn | None = None,
 ) -> dict[str, Any]:
-    """Run BugHunter recon_engine and return a capped JSON summary."""
+    """Run BugHunter recon_engine and return a capped JSON summary.
+
+    ``on_log(stream, line)`` receives live stdout/stderr lines (host backend).
+    """
     if settings is None:
         from ..config import get_settings
         settings = get_settings()
@@ -300,7 +389,12 @@ async def run_recon_engine(
     else:
         out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    _seed_recon_dir(out, target=target, seed_urls=list(seed_urls or []))
+    seeds = [u.rstrip("/") + "/" for u in (seed_urls or []) if u]
+    _seed_recon_dir(out, target=target, seed_urls=seeds)
+    # Persist seeds — httpx overwrites live/urls.txt even when the lab was only
+    # briefly down or PD httpx missed host:port; restore after the engine run.
+    if seeds:
+        (out / "live" / "urls_seed.txt").write_text("\n".join(seeds) + "\n", encoding="utf-8")
 
     # auto: prefer kali when host lacks nmap/nuclei/ffuf (common on this GPU host).
     use_kali = backend_choice == "kali"
@@ -311,6 +405,8 @@ async def run_recon_engine(
     bb = bugbounty_root(settings)
     try:
         if use_kali:
+            if on_log:
+                on_log("sys", "recon_engine via kali (stdout buffered until container exits)")
             run_meta = await _run_kali(
                 settings=settings,
                 script_host=script,
@@ -321,6 +417,11 @@ async def run_recon_engine(
                 timeout_s=timeout,
                 run_id=run_id,
             )
+            if on_log:
+                for line in (run_meta.get("stdout_tail") or "").splitlines()[-40:]:
+                    on_log("stdout", line)
+                for line in (run_meta.get("stderr_tail") or "").splitlines()[-20:]:
+                    on_log("stderr", line)
         else:
             run_meta = await _run_host(
                 script=script,
@@ -329,6 +430,7 @@ async def run_recon_engine(
                 out=out,
                 timeout_s=timeout,
                 cwd=bb,
+                on_log=on_log,
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception("recon_engine failed")
@@ -339,6 +441,10 @@ async def run_recon_engine(
             "arsenal": arsenal,
             "backend": "kali" if use_kali else "host",
         }
+
+    restored_seed = _restore_seed_live_urls(out, seeds)
+    if restored_seed and on_log:
+        on_log("sys", f"restored {restored_seed} seed live URL(s) after empty httpx")
 
     summary = _summarize_dir(out)
     counts = summary.get("counts") or {}
@@ -352,10 +458,12 @@ async def run_recon_engine(
         "recon_dir": str(out),
         "arsenal": arsenal,
         "bugbounty_root": str(bb),
+        "seed_restored": restored_seed,
         **run_meta,
         **summary,
         "summary_text": (
             f"recon_engine({run_meta.get('backend')}) counts={counts} "
             f"rc={run_meta.get('rc')} timed_out={run_meta.get('timed_out')}"
+            + (f" seed_restored={restored_seed}" if restored_seed else "")
         ),
     }

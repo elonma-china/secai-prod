@@ -44,6 +44,18 @@ _EXT_LANG = {
 _MANIFEST = {"requirements.txt", "package.json", "go.mod", "cargo.toml", "gemfile",
              "setup.py", "pyproject.toml", "dockerfile", "makefile"}
 
+# language -> canonical file extension. The exploit environment is fully air-gapped: the
+# report must present each PoC as a LOCAL file named after the CVE (e.g. cve-2026-21111.py),
+# never the upstream GitHub URL / nuclei-template path / exploit-db path the artifact was
+# fetched from — those imply an online checkout that doesn't exist offline. See _airgap_name.
+_LANG_EXT = {
+    "python": "py", "typescript": "ts", "tsx": "tsx", "javascript": "js", "jsx": "jsx",
+    "ruby": "rb", "go": "go", "rust": "rs", "c": "c", "cpp": "cpp", "csharp": "cs",
+    "java": "java", "php": "php", "perl": "pl", "bash": "sh", "powershell": "ps1",
+    "json": "json", "yaml": "yaml", "yml": "yaml", "toml": "toml", "markdown": "md",
+    "html": "html", "xml": "xml", "sql": "sql", "ini": "ini",
+}
+
 
 def _lang_from_path(path: str, fallback: str = "") -> str:
     name = (path or "").rsplit("/", 1)[-1].lower()
@@ -89,6 +101,37 @@ def _order_key(f: dict[str, Any]) -> tuple[bool, bool]:
     return (_is_manifest(f.get("path", "")), (f.get("role") or "") != "entry")
 
 
+def _airgap_name(cve_id: str | None, lang: str, orig_path: str = "") -> str:
+    """Local, air-gapped display filename for a PoC block. `<cve-id>.<ext>` (lowercased) when
+    a CVE was identified, else the bare basename of the original path — NEVER a URL, repo
+    path or upstream template/module path. The report is consumed offline, so it must name a
+    file the reader saved locally, not the internet location it came from."""
+    ext = _LANG_EXT.get((lang or "").strip().lower(), "")
+    base = _safe_path(orig_path).rsplit("/", 1)[-1]
+    if not ext and "." in base:  # fall back to the artifact's own extension (never its dirs)
+        ext = base.rsplit(".", 1)[-1].lower()
+    if cve_id:
+        stem = cve_id.strip().lower()
+        return f"{stem}.{ext}" if ext else stem
+    return base or (f"poc.{ext}" if ext else "poc")
+
+
+def _airgap_names(files: list[dict[str, Any]], cve_id: str | None, default_lang: str) -> list[str]:
+    """Display names aligned with `files`: the entry PoC → `<cve>.<ext>`, every
+    companion/readme/manifest → its bare basename (no directories, no URLs)."""
+    names: list[str] = []
+    entry_done = False
+    for f in files:
+        path = f.get("path", "")
+        lang = (f.get("language") or _lang_from_path(path, default_lang))
+        if not entry_done and (f.get("role") or "") != "readme" and not _is_manifest(path):
+            names.append(_airgap_name(cve_id, lang, path))
+            entry_done = True
+        else:
+            names.append(_safe_path(path).rsplit("/", 1)[-1] or "poc")
+    return names
+
+
 def _file_tree(paths: list[str]) -> str:
     """A `tree`-style listing of the repo-relative paths, directories first."""
     root: dict[str, Any] = {}
@@ -110,33 +153,34 @@ def _file_tree(paths: list[str]) -> str:
     return "\n".join(lines)
 
 
-def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree: bool = True) -> str:
-    """The multi-file contract: a repo-tree header (when >1 file AND `show_tree`) followed
-    by one path-headed, extension-typed block per file — entry files first, manifests
-    last, directory hierarchy preserved. Each `file` is {path, code, sha256?, truncated?,
-    language?}. Shared by the injector and (in prose) by the exploit prompt.
+def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree: bool = True,
+                 cve_id: str | None = None) -> str:
+    """The multi-file contract: a local-file listing (when >1 file AND `show_tree`) followed
+    by one file-headed, extension-typed block per file — entry file first, manifests last.
+    Each `file` is {path, code, sha256?, truncated?, language?}. Shared by the injector and
+    (in prose) by the exploit prompt.
 
-    `show_tree=False` for a companion-doc set (metasploit/vulhub — see
-    FetchResult.companion_doc_only): those two files are specific, disparate paths
-    plucked from one huge shared external repo, not this PoC's own small dedicated
-    repo — a tree would misleadingly imply otherwise."""
+    Air-gap naming: the entry PoC is shown as `<cve-id>.<ext>` and companions as their bare
+    basename (see `_airgap_names`) — never the upstream repo/URL path, which is meaningless
+    offline. `show_tree=False` for a companion-doc set (metasploit/vulhub —
+    FetchResult.companion_doc_only): those files are disparate paths plucked from a huge
+    shared external repo, not this PoC's own repo."""
     usable = [f for f in files if f.get("code")]
     ordered = sorted(usable, key=_order_key)
+    names = _airgap_names(ordered, cve_id, default_lang)
     parts: list[str] = []
     if show_tree and len(ordered) > 1:
-        # Tree shows the FULL real structure (README included) for transparency — even
-        # though the README's content isn't dumped as a fenced block below (see loop): the
-        # model translates that real text into "Cách chạy PoC" at the top of its own Mục 2,
-        # so showing the raw English block here would just duplicate it.
-        tree = _file_tree([f.get("path", "") for f in ordered])
-        parts.append(f"Cấu trúc PoC (dạng repo):\n\n```\n{tree}\n```")
-    for f in ordered:
+        # Flat list of the LOCAL file names (README included) so the reader knows the whole
+        # set; the README's content isn't dumped as a fenced block below (see loop) — the
+        # model translates that into "Cách chạy PoC" at the top of its own Mục 2.
+        tree = _file_tree(names)
+        parts.append(f"Các tệp PoC (cục bộ):\n\n```\n{tree}\n```")
+    for f, name in zip(ordered, names):
         if f.get("role") == "readme":
             continue
-        path = _safe_path(f.get("path", ""))
-        lang = (f.get("language") or _lang_from_path(path, default_lang))
+        lang = (f.get("language") or _lang_from_path(f.get("path", ""), default_lang))
         sha = (f.get("sha256") or "")[:12]
-        header = f"**`{path}`**"
+        header = f"**`{name}`**"
         if sha:
             header += f" — sha256 `{sha}…`"
         if f.get("truncated"):
@@ -145,30 +189,120 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
     return "\n\n".join(parts)
 
 
-def _blocks_for(ev: dict[str, Any]) -> str:
+def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
     """Render an evidence entry's code. No provenance prose — the UI shows the "PoC công
     khai (nguồn: …)" sentence as clutter, and the API response's `metadata.provenance`
-    already carries source/URL/sha256 per entry for anything that wants it. Single-file
-    evidence still gets the SAME terse per-file header multi-file uses (path + sha256 +
-    truncated flag) so it isn't a bare, unlabeled block — just without the paragraph."""
+    already carries source/URL/sha256 per entry for anything that wants it. The header names
+    the PoC as a local file (`<cve-id>.<ext>` in air-gap), not its upstream path/URL."""
     files = ev.get("source_files")
     if files:
         return render_files(files, default_lang=_lang_from_evidence(ev),
-                            show_tree=not ev.get("companion_doc_only", False))
+                            show_tree=not ev.get("companion_doc_only", False), cve_id=cve_id)
     code = ev.get("source_code")
     if not code:
         return ""
-    path = ev.get("source_ref") or ev.get("edb_id") or "poc"
+    lang = _lang_from_evidence(ev)
+    name = _airgap_name(cve_id, lang, ev.get("source_ref") or ev.get("edb_id") or "")
     sha = (ev.get("sha256") or "")[:12]
-    header = f"**`{path}`**"
+    header = f"**`{name}`**"
     if sha:
         header += f" — sha256 `{sha}…`"
     if ev.get("code_truncated"):
         header += " — *(đã cắt bớt theo giới hạn tải)*"
-    return f"{header}\n\n{_fence(code, _lang_from_evidence(ev))}"
+    return f"{header}\n\n{_fence(code, lang)}"
 
 
-def canonical_block(evidence: list[dict[str, Any]]) -> str | None:
+def _description_for(ev: dict[str, Any]) -> str:
+    """Fallback evidence text when there's no runnable code (`_blocks_for` empty): a GHSA
+    advisory body, a vulhub lab whose README was captured because it has no compose file,
+    or a GitHub-fetched PoC whose only file is a README (`role="readme"`, deliberately
+    skipped by `render_files`). All of this currently reaches `FetchResult` but was
+    silently dropped from Section-1 consideration — this is the synthesize-from-evidence
+    tier's input."""
+    if _blocks_for(ev):
+        return ""
+    desc = str(ev.get("description") or "").strip()
+    if desc:
+        return desc
+    for f in ev.get("source_files") or []:
+        if f.get("role") == "readme" and f.get("code"):
+            return str(f["code"]).strip()
+    return ""
+
+
+def has_real_code_evidence(evidence: list[dict[str, Any]]) -> bool:
+    """Whether any entry in `evidence` has real runnable code (`_blocks_for`) — the T1
+    signal. Used by RequireSection1SynthesisHook (agent/hooks.py) to skip forcing a
+    synthesis retry when Section 1 will be the deterministic real-code tier regardless."""
+    return any(_blocks_for(e) for e in (evidence or []))
+
+
+def has_synthesis_evidence(evidence: list[dict[str, Any]]) -> bool:
+    """Whether any entry in `evidence` has real description/README text but no runnable
+    code (`_description_for`) — the T2 signal, independent of `cve_known` (T3). Used by
+    RequireSection1SynthesisHook to know whether forcing a Section-1 retry is worth it."""
+    return any(_description_for(e) for e in (evidence or []))
+
+
+def section1_has_body(text: str) -> bool:
+    """Whether `text` already contains a non-empty `## 1.` section — used by
+    RequireSection1SynthesisHook to check the model's own candidate answer before forcing
+    a retry."""
+    bounds = _section1_bounds(text or "")
+    return bool(bounds and (text[bounds[0]:bounds[1]] or "").strip())
+
+
+_SYNTHESIS_BANNER = (
+    "⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP DỰA TRÊN BẰNG CHỨNG NỘI BỘ, "
+    "KHÔNG PHẢI PoC ĐÃ FETCH THẬT, CHƯA ĐƯỢC THỰC THI HAY XÁC THỰC."
+)
+# Distinct from _NO_POC_NOTE: evidence/CVE DID exist (see Mục 3 for real CWE/CVSS/CAPEC
+# data), only the synthesis attempt itself failed this turn — must not claim the CVE is
+# unknown when it demonstrably isn't.
+_SYNTHESIS_FAILED_NOTE = "Không tổng hợp được PoC minh hoạ cho lỗ hổng này từ dữ liệu nội bộ."
+
+# A SECOND, END-OF-ANSWER warning for the synthesized tiers (T2/T3), on top of the
+# in-place `_SYNTHESIS_BANNER` at the top of Mục 1. The banner lives inline with the code
+# and can get skimmed past; a reader scrolling to act on Mục 2's run instructions may never
+# scroll back up to it. Placing the same warning again at the very end — where a reader's
+# eye naturally lands after reading the whole report — is a deliberate, requested redundancy,
+# not a duplicate: it's the last thing read before acting on the PoC.
+# Substring used for the idempotency check below — must stay a stable prefix of the footer.
+_SYNTHESIS_FOOTER_MARKER = "Mã PoC/hướng dẫn ở trên là bản GỢI Ý do AI tự tổng hợp"
+_SYNTHESIS_FOOTER_TEMPLATE = (
+    "\n\n---\n\n⚠️ **Cảnh báo:** " + _SYNTHESIS_FOOTER_MARKER + "{sources}, KHÔNG phải PoC đã "
+    "fetch và xác thực từ nguồn thật. Đây là bản nháp CHƯA được thực thi — cần kiểm chứng lại "
+    "trong môi trường lab được uỷ quyền trước khi sử dụng cho bất kỳ mục đích nào."
+)
+
+
+def _synthesis_source_urls(evidence: list[dict[str, Any]]) -> list[str]:
+    """URLs of the description/README-only evidence that fed the synthesis (T2 catalog
+    GHSA/README, or T3 web hints from ``retrieval.websearch.gather_web_hints`` — both carry
+    ``url``/``source_ref``) — named in the end-of-answer footer so the warning is concrete
+    ("dựa trên X") rather than generic."""
+    urls: list[str] = []
+    for e in evidence or []:
+        if not _description_for(e):
+            continue
+        url = e.get("url") or e.get("source_ref")
+        if url and str(url) not in urls:
+            urls.append(str(url))
+    return urls
+
+
+def _append_synthesis_footer(text: str, evidence: list[dict[str, Any]]) -> str:
+    """Append the end-of-answer synthesis warning once. Idempotent — a second pass over
+    already-footed text (e.g. a retry that re-runs enforce_section1) is a no-op by marker
+    check, mirroring force_no_poc_notice's own idempotency pattern."""
+    if _SYNTHESIS_FOOTER_MARKER in text:
+        return text
+    urls = _synthesis_source_urls(evidence)
+    sources = f" (tham khảo: {', '.join(urls)})" if urls else ""
+    return text.rstrip() + _SYNTHESIS_FOOTER_TEMPLATE.format(sources=sources)
+
+
+def canonical_block(evidence: list[dict[str, Any]], cve_id: str | None = None) -> str | None:
     """The SAME body `enforce_reference_code` would place as Section 1, standalone (no
     heading, not prepended to any text) — for streaming a PREVIEW as soon as prefetch
     evidence resolves (concurrently with the model's own turn), instead of only ever
@@ -177,7 +311,82 @@ def canonical_block(evidence: list[dict[str, Any]]) -> str | None:
     refs = [e for e in (evidence or []) if _blocks_for(e)]
     if not refs:
         return None
-    return "\n\n".join(_blocks_for(e) for e in refs)
+    return "\n\n".join(_blocks_for(e, cve_id) for e in refs)
+
+
+_CODE_HOST_RE = re.compile(
+    r"(?:raw\.|gist\.|objects\.|codeload\.)?(?:github|githubusercontent|gitlab|bitbucket|gitee)"
+    r"\.com|(?:www\.)?exploit-db\.com|packetstormsecurity\.com", re.I)
+_SRC_EXTS = {"yaml", "yml", "py", "rb", "sh", "ps1", "pl", "php", "js", "ts", "go", "rs",
+             "c", "cpp", "cc", "h", "java", "json", "nasl", "rc"}
+_URL_RE = re.compile(r"""https?://[^\s`)\]<>"']+""", re.I)
+# a path (>=1 leading dir) OR bare filename ending in CVE-YYYY-NNNN.<ext>
+_CVE_PATH_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+(CVE-\d{4}-\d{3,})\.([A-Za-z0-9]+)", re.I)
+_CVE_FILE_RE = re.compile(r"\b(CVE-\d{4}-\d{3,})\.([A-Za-z0-9]+)", re.I)
+# `-t <token>` whose value is still a template path/URL (nuclei et al.)
+_DASH_T_RE = re.compile(r"(-t\s+)(\S+)")
+# Internet package/tool installers + git clone. NOT curl/wget — those may BE the PoC action
+# (an exploit request against the target), not a tooling download; rewriting them is unsafe.
+_INSTALL_RE = re.compile(
+    r"(?:sudo\s+)?(?:go\s+(?:install|get)|git\s+clone|pip[0-9]?\s+install|pipx\s+install|"
+    r"python[0-9.]*\s+-m\s+pip\s+install|npm\s+(?:install|i|ci)|yarn\s+add|pnpm\s+add|"
+    r"gem\s+install|cargo\s+install|apt(?:-get)?\s+install|yum\s+install|dnf\s+install|"
+    r"brew\s+install)\b[^\n`]*", re.I)
+_AIRGAP_INSTALL_NOTE = "công cụ đã có sẵn cục bộ (môi trường air-gap)"
+
+
+def _basename_ext(path: str) -> str:
+    tail = path.rstrip("/").rsplit("/", 1)[-1]
+    return tail.rsplit(".", 1)[-1].lower() if "." in tail else ""
+
+
+def sanitize_airgap_runguide(text: str, cve_id: str | None = None) -> str:
+    """Deterministically remove internet/upstream-path leaks from the MODEL's run guide
+    (Mục 2/3) — a backstop for when the exploit prompt's air-gap rules don't hold (model
+    non-determinism, same reason enforce_section1 doesn't trust the model). It:
+      1. rewrites source URLs (github/raw/gitlab/exploit-db/…) to the local `<cve>.<ext>`;
+      2. flattens upstream template/repo paths carrying the CVE id (e.g.
+         `javascript/cves/2026/CVE-….yaml`) and normalizes bare `CVE-….yaml` to `<cve>.<ext>`;
+      3. rewrites any remaining `-t <path|url>` template arg to `<cve>.yaml`;
+      4. neutralizes package-manager/`git clone` install commands (tools are pre-present).
+    It never touches curl/wget (those can be the PoC itself) and is meant to run on the model
+    text BEFORE Section-1 injection, so the real injected PoC code is left untouched.
+    Target URLs like `http://<target>:<port>` are preserved (not a code host, no source ext)."""
+    if not text:
+        return text
+    stem = (cve_id or "").strip().lower()
+
+    def _local(ext: str) -> str:
+        ext = (ext or "").lower()
+        if stem:
+            return f"{stem}.{ext}" if ext else stem
+        return f"poc.{ext}" if ext else "poc"
+
+    def _url_sub(m: "re.Match[str]") -> str:
+        url = m.group(0)
+        host_m = re.match(r"https?://([^/\s]+)", url, re.I)
+        host = host_m.group(1) if host_m else ""
+        ext = _basename_ext(url.split("://", 1)[-1])
+        if _CODE_HOST_RE.search(host) or ext in _SRC_EXTS:
+            return _local(ext if ext in _SRC_EXTS else "")
+        return url  # target URL / non-source host — leave as-is
+
+    def _cve_sub(m: "re.Match[str]") -> str:
+        ext = m.group(2).lower()
+        return f"{m.group(1).lower()}.{ext}" if ext in _SRC_EXTS else m.group(0)
+
+    def _dash_t_sub(m: "re.Match[str]") -> str:
+        tok = m.group(2)
+        if "://" in tok or ("/" in tok and _basename_ext(tok) in {"yaml", "yml", "json"}):
+            return f"{m.group(1)}{_local('yaml')}"
+        return m.group(0)
+
+    text = _URL_RE.sub(_url_sub, text)
+    text = _CVE_PATH_RE.sub(_cve_sub, text)
+    text = _CVE_FILE_RE.sub(_cve_sub, text)
+    text = _DASH_T_RE.sub(_dash_t_sub, text)
+    text = _INSTALL_RE.sub(_AIRGAP_INSTALL_NOTE, text)
+    return text
 
 
 def strip_system_narration(text: str) -> str:
@@ -217,7 +426,8 @@ def _place_section1(text: str, body: str) -> str:
     return f"{_SECTION1_HEADING}\n\n{body}{sep}{text}"
 
 
-def enforce_reference_code(text: str, evidence: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
+                           cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
     """Place the canonical fetched code as Section 1 for this run.
 
     Returns (rewritten text, report). `report["reference_code_injected"]` is False (with a
@@ -225,7 +435,7 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]]) -> tuple[s
     refs = [e for e in (evidence or []) if _blocks_for(e)]
     if not refs:
         return text, {"reference_code_injected": False, "reason": "no_source_code"}
-    canonical = "\n\n".join(_blocks_for(e) for e in refs)
+    canonical = "\n\n".join(_blocks_for(e, cve_id) for e in refs)
     new_text = _place_section1(text, canonical)
     n_files = sum(len(e.get("source_files") or [None]) for e in refs)
     return new_text, {
@@ -236,19 +446,77 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]]) -> tuple[s
     }
 
 
-def force_no_poc_notice(text: str, evidence: list[dict[str, Any]]) -> tuple[str, dict[str, Any]]:
+def force_no_poc_notice(text: str, evidence: list[dict[str, Any]],
+                        notice: str = _NO_POC_NOTE) -> tuple[str, dict[str, Any]]:
     """Place the canonical "no PoC info" sentence as Section 1 when the run gathered no
     real evidence — unconditionally, regardless of anything the model wrote (fabricated
     code, inconsistently-worded honesty, or nothing). Only call this when
-    `enforce_reference_code` did NOT already place real evidence."""
+    `enforce_reference_code` did NOT already place real evidence.
+
+    `notice` overrides the default sentence (e.g. to name a specific CVE that isn't in the
+    KB at all) — still enforced unconditionally, idempotency checked against whatever
+    string is passed."""
     if any(_blocks_for(e) for e in (evidence or [])):
         return text, {"no_poc_forced": False, "reason": "has_real_evidence"}
     bounds = _section1_bounds(text or "")
     if bounds:
         body_start, body_end = bounds
-        if (text[body_start:body_end] or "").strip() == _NO_POC_NOTE:
+        if (text[body_start:body_end] or "").strip() == notice:
             return text, {"no_poc_forced": False, "reason": "already_canonical"}
-    elif (text or "").lstrip().startswith(f"{_SECTION1_HEADING}\n\n{_NO_POC_NOTE}"):
+    elif (text or "").lstrip().startswith(f"{_SECTION1_HEADING}\n\n{notice}"):
         return text, {"no_poc_forced": False, "reason": "already_canonical"}
-    new_text = _place_section1(text, _NO_POC_NOTE)
+    new_text = _place_section1(text, notice)
     return new_text, {"no_poc_forced": True}
+
+
+def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
+                     cve_known: bool = False, cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
+    """4-tier dispatch for Section 1, replacing the old binary
+    `enforce_reference_code` → `force_no_poc_notice` fallback with two grounded synthesis
+    tiers in between. The system decides the tier from measured evidence/CVE-KB state —
+    never from what the model claims — matching this module's existing "don't trust the
+    model to self-classify" philosophy (see prefetch.py's rationale).
+
+    T1 real code    : `evidence` has real `source_code`/`source_files` → delegates to
+                       `enforce_reference_code` unchanged, discarding anything the model wrote.
+    T2 readme/desc   : no real code, but a catalog entry has real description/README text
+                       (`_description_for`) → keeps the model's own `## 1.` body (it was told,
+                       for this case only, to write one) with a mandatory warning banner
+                       force-prepended.
+    T3 cve-only      : no catalog evidence at all, but `cve_known` (confirmed via the CVE KB)
+                       → same as T2, model writes from the CVE definition instead.
+    synthesis_failed : T2/T3 evidence exists (readme text or a confirmed CVE) but the model
+                       wrote no usable Section 1 anyway — fail-closed, but the message must
+                       NOT claim the CVE is unknown (it demonstrably isn't: Mục 3 may already
+                       show real CWE/CVSS/CAPEC data from the same tool calls).
+    not_found        : no evidence and no confirmed CVE at all → the canonical notice,
+                       naming `cve_id` when one was identified.
+    """
+    text = text or ""
+    text, report = enforce_reference_code(text, evidence, cve_id=cve_id)
+    if report.get("reference_code_injected"):
+        report["section1_tier"] = "real"
+        return text, report
+
+    readme_refs = [e for e in (evidence or []) if _description_for(e)]
+    if readme_refs or cve_known:
+        bounds = _section1_bounds(text)
+        body = (text[bounds[0]:bounds[1]] if bounds else "").strip()
+        if body:
+            tier = "synthesized_readme" if readme_refs else "synthesized_cve"
+            # Idempotency guard: a second pass over text this function already produced sees
+            # its own banner as the start of `body` — re-wrapping would nest the banner twice.
+            new_text = text if body.startswith(_SYNTHESIS_BANNER) else \
+                _place_section1(text, f"{_SYNTHESIS_BANNER}\n\n{body}")
+            new_text = _append_synthesis_footer(new_text, evidence)
+            return new_text, {**report, "section1_tier": tier, "synthesized": True}
+        text, fallback = force_no_poc_notice(text, evidence, notice=_SYNTHESIS_FAILED_NOTE)
+        report.update(fallback)
+        report["section1_tier"] = "synthesis_failed"
+        return text, report
+
+    notice = f"CVE {cve_id} chưa có trong dữ liệu nội bộ." if cve_id else _NO_POC_NOTE
+    text, fallback = force_no_poc_notice(text, evidence, notice=notice)
+    report.update(fallback)
+    report["section1_tier"] = "not_found"
+    return text, report

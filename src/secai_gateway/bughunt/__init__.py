@@ -1,6 +1,7 @@
-"""Bughunt agent: Linch ``run_workflow`` + BugHunter-style ReAct tools (no langgraph).
+"""Bughunt agent: Linch ``run_workflow`` + BugHunter arsenal tools (no langgraph).
 
-Multi-session / CCU: each hunt gets ``run_id`` workdir + HuntMemory.
+Multi-session / CCU: each hunt gets ``run_id`` workdir + ``BughuntRunState``.
+Deep tools call ``arsenal.py`` → ``claude-bug-bounty/tools/*``.
 """
 from __future__ import annotations
 

@@ -59,6 +59,17 @@ class Settings(BaseSettings):
     qwen_base_url: str = "http://127.0.0.1:8000/v1"
     qwen_context_window: int = 32768
 
+    # ── LLM sampling (vLLM/Qwen path) ──────────────────────────────────────────
+    # Defaults = Cyber-F1 (Qwen3.5-MoE) model-card recommendation. Override per-deploy via
+    # env (LLM_TEMPERATURE, LLM_TOP_P, …). `temperature` is a first-class OpenAI field;
+    # top_p/top_k/min_p/presence_penalty/repetition_penalty go through vLLM's extra_body.
+    llm_temperature: float = 0.85
+    llm_top_p: float = 0.95
+    llm_top_k: int = 20
+    llm_min_p: float = 0.0
+    llm_presence_penalty: float = 1.1
+    llm_repetition_penalty: float = 1.0
+
     # ── Agent loop ─────────────────────────────────────────────────────────────
     # 16 gives headroom for the exploit_research tool chain (qdrant→neo4j→poc_search→
     # poc_fetch, ×multiple PoCs) and legit multi-hop, without letting a
@@ -120,6 +131,42 @@ class Settings(BaseSettings):
     # auto | host | kali — auto prefers kali when host lacks nmap/nuclei/ffuf.
     bughunt_recon_backend: str = "auto"
     bughunt_recon_timeout_s: int = 600
+    # Linch per-tool ceiling for bughunt arsenal (run_recon / vuln_scan / …).
+    # Default matches recon timeout; override via BUGHUNT_TOOL_TIMEOUT_MS.
+    bughunt_tool_timeout_ms: int = 600_000
+    # Parallel post-recon wave (verify + vuln + cors + …) concurrency.
+    bughunt_wave_concurrency: int = 4
+    # Dedicated docker pool size for bughunt kali jobs (separate from VERIFY_MAX_CONCURRENT).
+    bughunt_docker_max_concurrent: int = 8
+
+    # ── web_fetch (allowlisted HTTPS → markdown for chat taxonomy grounding) ───
+    web_fetch_enabled: bool = True
+    # Comma-separated host allowlist (exact or subdomain of apex). Empty → built-in defaults.
+    web_fetch_allowed_hosts: str = (
+        "owasp.org,cwe.mitre.org,cisa.gov,www.cisa.gov,nvd.nist.gov"
+    )
+    web_fetch_timeout_s: float = 20.0
+    web_fetch_max_chars: int = 24000
+
+    # ── fetch_reference (broader security-reference allowlist → markdown; chat + exploit) ──
+    # Serves both the chat and exploit_research profiles: CVE records, GHSA/vendor advisories,
+    # MITRE CWE/CAPEC/ATT&CK, CISA, exploit-db and public PoC pages. Same SSRF posture as
+    # web_fetch (HTTPS-only, public-IP check, per-hop redirect re-validation) — only the host
+    # allowlist and read window differ. Empty allowlist → the built-in curated default set.
+    fetch_reference_enabled: bool = True
+    fetch_reference_allowed_hosts: str = ""
+    fetch_reference_timeout_s: float = 20.0
+    fetch_reference_max_chars: int = 40000
+
+    # ── web_search (SearXNG-backed discovery for exploit PoC hints; gated OFF) ──
+    # Off by default: needs a self-hosted SearXNG (SEARXNG_URL, JSON format enabled). When on,
+    # it powers deterministic web-research for the T3 synthesize tier (CVE known but no catalog
+    # PoC). SEARCH ≠ FETCH: search may surface any URL, but only fetch_reference-allowlisted
+    # hosts are ever fetched — the SSRF posture is unchanged. Empty SEARXNG_URL → inert.
+    web_search_enabled: bool = False
+    searxng_url: str = ""
+    web_search_timeout_s: float = 10.0
+    web_search_max_results: int = 6
 
     @property
     def cors_origins(self) -> list[str]:

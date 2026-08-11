@@ -40,6 +40,18 @@ def test_search_returns_opaque_ref_no_path() -> None:
         assert "path" not in hits[0] and "artifact_path" not in hits[0]
 
 
+def test_search_normalizes_malformed_cve(tmp_path: Path) -> None:
+    """Separator/case typos still reach the CVE-exact path — a malformed id must return the
+    same indexed PoC as the canonical form, not degrade to keyword search."""
+    be = _backend(tmp_path)
+    canonical = asyncio.run(be.search("CVE-2021-44228", 10, "r0"))["hits"]
+    assert canonical, "sanity: canonical id indexes the demo PoC"
+    for malformed in ("cve 2021 44228", "CVE2021-44228", "cve_2021_44228", "cVe-2021 44228"):
+        hits = asyncio.run(be.search(malformed, 10, "r1"))["hits"]
+        assert hits, malformed
+        assert "CVE-2021-44228" in hits[0]["cve_ids"], malformed
+
+
 def test_fetch_returns_source_for_redistributable(tmp_path: Path) -> None:
     # ExploitDbCollector marks redistributable=True → fetch grounds source_code in the
     # actual artifact text (never model-generated).

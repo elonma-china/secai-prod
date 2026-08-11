@@ -5,7 +5,7 @@
 #   max_turns  : agent loop cap for this profile
 chat:
   prompt: chat.md
-  tools: [qdrant_search, neo4j_search, poc_search]
+  tools: [qdrant_search, neo4j_search, poc_search, web_fetch, fetch_reference]
   base: true
   max_turns: 10
 
@@ -13,12 +13,13 @@ exploit_research:
   prompt: exploit.md
   # poc_verify/poc_scan chỉ tồn tại khi VERIFY_ENABLED=true; poc_exec chỉ khi EXEC_ENABLED=true
   # poc_kt_exploit chỉ khi POC_EXPLOIT_ENABLED=true + POC_EXPLOIT_API_URL (runner bỏ qua tên chưa tạo)
-  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, poc_verify, poc_scan, poc_exec, poc_kt_exploit]
+  # web_search gated by WEB_SEARCH_ENABLED + SEARXNG_URL (runner skips the name when unbuilt).
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, poc_verify, poc_scan, poc_exec, poc_kt_exploit, fetch_reference, web_search]
   base: true
   max_turns: 16
 
-# BugHunter agent.py ReAct on Linch. Outer phases: AgentHunt → Validate.
-# Tools mirror ToolDispatcher; max_turns ≈ agent.py max_steps.
+# BugHunter agent.py ReAct on Linch.
+# Phases: AgentHunt → Validate (triage) → MapCVE → Report → Exploit(opt-in).
 bughunt:
   prompt: bughunt.md
   tools:
@@ -41,7 +42,7 @@ bughunt:
     - update_working_memory
     - finish
   base: true
-  max_turns: 20
+  max_turns: 32
 
 translate:
   prompt: translate.md

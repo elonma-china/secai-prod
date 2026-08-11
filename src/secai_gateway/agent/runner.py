@@ -11,7 +11,7 @@ from linch.types import SystemBlock
 
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
-from ..retrieval import neo4j_search, qdrant_search
+from ..retrieval import build_reference_tools, neo4j_search, qdrant_search, web_fetch, web_search
 from ..state import RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
@@ -37,6 +37,13 @@ class LinchRunner:
         self.tools: dict[str, Any] = {
             qdrant_search.name: qdrant_search,
             neo4j_search.name: neo4j_search,
+            # Allowlisted HTTPS→markdown for current OWASP/CWE taxonomy pages (chat).
+            **({web_fetch.name: web_fetch} if get_settings().web_fetch_enabled else {}),
+            # Broader security-reference fetch (CVE/GHSA/advisory/PoC) for chat + exploit.
+            # Ledger-bound: a successful fetch records evidence for the report pipeline.
+            **(build_reference_tools(self.ledger) if get_settings().fetch_reference_enabled else {}),
+            # SearXNG-backed web discovery for exploit PoC hints — gated OFF (needs SEARXNG_URL).
+            **({web_search.name: web_search} if get_settings().web_search_enabled else {}),
             # settings gates the optional `poc_verify` tool (verify_enabled) — absent by default.
             **build_poc_tools(self.poc, self.ledger, get_settings()),
             **build_bughunt_tools(),
@@ -55,7 +62,7 @@ class LinchRunner:
             run_store=self.run_store, ledger=self.ledger,
         )
 
-    def _apply_profile(self, session: Any, profile_name: str) -> None:
+    def _apply_profile(self, session: Any, profile_name: str, prompt: str = "") -> None:
         # Override both runnable registry and system context per session. The exploit tools
         # are absent from chat, rather than merely hidden from model instructions.
         profile = PROFILES[profile_name]
@@ -64,11 +71,17 @@ class LinchRunner:
         session.tools_override = empty_tools(
             *(self.tools[name] for name in profile.tool_names if name in self.tools))
         session.system_blocks_override = [SystemBlock(text=compose_system_prompt(profile, settings=get_settings()))]
+        # RequireChatGroundingHook reads last_user_prompt from session.meta.
+        meta = dict(getattr(session, "meta", None) or {})
+        meta["profile"] = profile.name
+        if prompt:
+            meta["last_user_prompt"] = prompt
+        session.meta = meta
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         profile = PROFILES[profile_name]
         session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name)
+        self._apply_profile(session, profile_name, prompt)
         final = ""
         run_id = None
         async for event in session.run(prompt):
@@ -87,7 +100,7 @@ class LinchRunner:
         the enforcement boundary is identical whether streaming or not."""
         profile = PROFILES[profile_name]
         session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name)
+        self._apply_profile(session, profile_name, prompt)
         async for event in session.run(prompt):
             yield event
 
@@ -97,11 +110,15 @@ class LinchRunner:
         target: str,
         scope_note: str = "",
         run_id: str | None = None,
+        enable_exploit: bool = False,
+        run_cve_sweep: bool = True,
     ) -> AsyncIterator[Any]:
-        """Linch ``run_workflow`` AgentHunt ReAct. Yields WorkflowEvents + result dict."""
+        """Linch workflow: AgentHunt → Validate → MapCVE → Report → Exploit."""
         return stream_bughunt_workflow(
             self.agent,
             target=target,
             scope_note=scope_note,
             run_id=run_id,
+            enable_exploit=enable_exploit,
+            run_cve_sweep=run_cve_sweep,
         )

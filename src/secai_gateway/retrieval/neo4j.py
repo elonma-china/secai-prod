@@ -52,6 +52,39 @@ def _auth_header() -> str:
     return f"Basic {token}"
 
 
+async def cve_exists_in_kb(cve_id: str) -> bool:
+    """Deterministic exact-match existence check on the same `(c:CVE {id: $id})` primary-key
+    path `build_cypher("cve", ...)` uses, minus the OPTIONAL MATCH fan-out a full
+    `neo4j_search` traversal needs. Used by the exploit-research prefetch (poc/prefetch.py)
+    to gate the synthesize-from-CVE-definition tier on whether the CVE is real, independent
+    of whether a PoC artifact exists for it. Never raises — any transport/query error is
+    treated as "not confirmed" (fail-closed to the safer "not found" tier, not to synthesis)."""
+    cve_id = (cve_id or "").strip().upper()
+    if not cve_id:
+        return False
+    body = {"statements": [{
+        "statement": "MATCH (c:CVE {id: $id}) RETURN count(c) AS n",
+        "parameters": {"id": cve_id},
+    }]}
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": _auth_header()}
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(f"{_neo4j_http_url()}/db/{NEO4J_DATABASE}/tx/commit",
+                                      json=body, headers=headers, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            return False
+    if data.get("errors"):
+        return False
+    results = data.get("results") or []
+    rows = (results[0].get("data") if results else None) or []
+    if not rows:
+        return False
+    row = rows[0].get("row") or []
+    return bool(row and row[0])
+
+
 async def _neo4j_search(query: str, ctx: ToolContext, depth: int = 3) -> ToolResult:
     depth = max(1, min(depth or 3, 5))
     mode = "count" if COUNT_RE.search(query or "") else "list"
