@@ -432,7 +432,9 @@ class RequireChatGroundingHook:
                     f"web_fetch URL không hợp lệ ({exc}). Chỉ dùng HTTPS trên allowlist "
                     "(owasp.org, cwe.mitre.org, cisa.gov, nvd.nist.gov), ví dụ "
                     "https://owasp.org/Top10/2025/ hoặc "
-                    "https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html"
+                    "https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html "
+                    "(nếu 404, thử https://owasp.org/www-project-top-ten/ hoặc "
+                    "https://cwe.mitre.org/top25/archive/ để tìm bản mới nhất)"
                 ),
             )
         return None
@@ -474,7 +476,9 @@ class RequireChatGroundingHook:
             feedback = (
                 "Route=taxonomy: call web_fetch on the current canonical page "
                 "(https://owasp.org/Top10/2025/ or "
-                "https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html). "
+                "https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html; "
+                "if that 404s, try https://owasp.org/www-project-top-ten/ or "
+                "https://cwe.mitre.org/top25/archive/ to find the latest edition). "
                 "Do not list Top-N categories from memory."
             )
             reason = "chat_web_fetch_required"
