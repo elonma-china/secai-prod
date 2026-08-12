@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
 from linch.events import ResultEvent
@@ -18,6 +20,33 @@ from ..bughunt.tools import build_bughunt_tools
 from .factory import make_gateway_agent
 from .profiles import PROFILES, compose_system_prompt
 from .providers import build_llm_provider
+
+
+_VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+# Python's Monday=0 .. Sunday=6; Vietnamese calendars count Chủ Nhật (Sunday) as
+# the week start and label the rest "Thứ 2".."Thứ 7" — a plain %A/weekday number
+# doesn't map to that, and the model reliably miscalculates weekday-from-date on
+# its own, so compute the label deterministically instead of letting it guess.
+_VN_WEEKDAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
+
+
+def _dated_prompt(prompt: str) -> str:
+    """Prefix the user turn with today's date (Vietnam local time, weekday included).
+
+    Deliberately NOT part of the system prompt: the system block (+ the tool
+    schemas the Qwen chat template appends right after it) is meant to stay a
+    byte-identical, indefinitely prefix-cacheable prefix under vLLM
+    ``--enable-prefix-caching`` (see factory.py's ``compaction_ladder`` note).
+    The user turn is already unique per request/never cached across requests,
+    so prefixing it here costs nothing extra — while landing the date in the
+    system block would invalidate that whole cached prefix (system + tools)
+    once a day. ``meta["last_user_prompt"]`` keeps the unwrapped prompt so
+    grounding-classification hooks aren't affected.
+    """
+    now = datetime.now(_VN_TZ)
+    weekday = _VN_WEEKDAYS[now.weekday()]
+    today = now.strftime("%d/%m/%Y")
+    return f"[Hôm nay là {weekday}, ngày {today} (giờ Việt Nam)]\n{prompt}"
 
 
 class CompletionRunner(Protocol):
@@ -84,7 +113,7 @@ class LinchRunner:
         self._apply_profile(session, profile_name, prompt)
         final = ""
         run_id = None
-        async for event in session.run(prompt):
+        async for event in session.run(_dated_prompt(prompt)):
             run_id = session.active_run_id or run_id
             if isinstance(event, ResultEvent):
                 final = event.final_text or ""
@@ -101,7 +130,7 @@ class LinchRunner:
         profile = PROFILES[profile_name]
         session = await self.agent.session(id=session_id, meta={"profile": profile.name})
         self._apply_profile(session, profile_name, prompt)
-        async for event in session.run(prompt):
+        async for event in session.run(_dated_prompt(prompt)):
             yield event
 
     def stream_bughunt(
