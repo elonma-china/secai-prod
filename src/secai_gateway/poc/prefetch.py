@@ -18,7 +18,11 @@ itself finds nothing.
 
 Each report includes ``coverage`` — a measured predicate for RequireSearchBeforeAnswerHook:
 
-* ``enough``  — fetched ≥1 artifact (Mục 1 injectable)
+* ``enough``  — fetched ≥1 artifact (the search+fetch step is DONE, nothing left for the
+  model to search for) — NOT the same as "real code was fetched": a metadata-only fetch
+  (ghsa advisory, README-only PoC) still counts, since the *search* step is what this
+  predicate is about. Do not read ``coverage == "enough"`` as "Section 1 will be the real
+  T1 tier regardless" anywhere else — see ``set_session_real_code_evidence`` below for that.
 * ``empty``   — search ran, hits=0 (đã tìm, không có)
 * ``partial`` — hits>0 but fetched=0 (ref/fetch hỏng — hook vẫn bắt model thử)
 * ``failed``  — chưa search được (empty prompt / search error)
@@ -106,6 +110,77 @@ def clear_session_cve_known(session_id: str | None = None) -> None:
         _session_cve_known.clear()
         return
     _session_cve_known.pop(session_id, None)
+
+
+_session_synthesis_evidence: "OrderedDict[str, bool]" = OrderedDict()
+
+
+def set_session_synthesis_evidence(session_id: str | None, has_evidence: bool) -> None:
+    """Record whether the DETERMINISTIC prefetch (not the model's own tool calls) turned up
+    T2-grade evidence (a catalog description/README, no runnable code) — same shape as
+    `set_session_cve_known`, needed for the same reason: `prefetch_evidence` writes into the
+    ledger under its OWN scratch `run_id` (`f"prefetch:{uuid4().hex}"`, see routes.py's
+    `exploit_prefetch` docstring — "independent of ... whatever run_id the model's session
+    ends up using"), so `RequireSection1SynthesisHook`'s own `ledger.evidence_for_run(ctx.run_id)`
+    lookup can NEVER see it — it only sees evidence the model itself fetched during its own
+    turn. Without this, the hook silently under-fires exactly when prefetch is the only
+    reason synthesis evidence exists at all (the same gap prefetch.py's module docstring
+    already documents for search-skipping, just one layer further down at the retry-hook)."""
+    if not session_id:
+        return
+    _session_synthesis_evidence[session_id] = has_evidence
+    _session_synthesis_evidence.move_to_end(session_id)
+    while len(_session_synthesis_evidence) > _MAX_TRACKED_SESSIONS:
+        _session_synthesis_evidence.popitem(last=False)
+
+
+def get_session_synthesis_evidence(session_id: str | None) -> bool:
+    if not session_id:
+        return False
+    return bool(_session_synthesis_evidence.get(session_id))
+
+
+def clear_session_synthesis_evidence(session_id: str | None = None) -> None:
+    """Test helper: clear one session or the whole store."""
+    if session_id is None:
+        _session_synthesis_evidence.clear()
+        return
+    _session_synthesis_evidence.pop(session_id, None)
+
+
+_session_real_code_evidence: "OrderedDict[str, bool]" = OrderedDict()
+
+
+def set_session_real_code_evidence(session_id: str | None, has_real_code: bool) -> None:
+    """Record whether the deterministic prefetch found REAL, injectable `source_code`/
+    `source_files` (T1) — as opposed to merely `coverage == "enough"`, which only means
+    "prefetch fetched *something*" and is true just as often for a metadata-only ghsa/
+    README fetch as for real code (see the `coverage` docstring above). Consumed by
+    `RequireSection1SynthesisHook`, which previously treated `coverage == "enough"` as "T1
+    will happen regardless, skip forcing synthesis" — wrong whenever prefetch's one fetch
+    was description-only, which silently let a description-only CVE fall through to
+    `synthesis_failed` on the model's very first reticent turn, never getting the forced
+    retry it needed. This flag is the precise signal that check actually wanted."""
+    if not session_id:
+        return
+    _session_real_code_evidence[session_id] = has_real_code
+    _session_real_code_evidence.move_to_end(session_id)
+    while len(_session_real_code_evidence) > _MAX_TRACKED_SESSIONS:
+        _session_real_code_evidence.popitem(last=False)
+
+
+def get_session_real_code_evidence(session_id: str | None) -> bool:
+    if not session_id:
+        return False
+    return bool(_session_real_code_evidence.get(session_id))
+
+
+def clear_session_real_code_evidence(session_id: str | None = None) -> None:
+    """Test helper: clear one session or the whole store."""
+    if session_id is None:
+        _session_real_code_evidence.clear()
+        return
+    _session_real_code_evidence.pop(session_id, None)
 
 
 def extract_cve_id(prompt: str) -> str | None:

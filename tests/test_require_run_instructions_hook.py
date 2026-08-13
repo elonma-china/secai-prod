@@ -23,6 +23,9 @@ def _hook(ledger: SqliteLedger, max_retries: int = 1) -> RequireRunInstructionsH
     return RequireRunInstructionsHook(ledger=ledger, profile="exploit_research", max_retries=max_retries)
 
 
+_SECTION1_BODY = "## 1. Mã Khai thác (PoC) và Payload\n\nMinh hoạ đoạn code tối giản.\n\n"
+
+
 def test_allows_when_no_evidence_at_all(tmp_path) -> None:
     ledger = SqliteLedger(tmp_path / "ledger.db")
     hook = _hook(ledger)
@@ -30,7 +33,12 @@ def test_allows_when_no_evidence_at_all(tmp_path) -> None:
     assert result is None  # nothing to require a run-instructions section from
 
 
-def test_blocks_when_readme_evidence_exists_but_section_missing(tmp_path) -> None:
+def test_allows_readme_evidence_when_section1_never_materializes(tmp_path) -> None:
+    """Regression for the CVE-2026-21509 bug: raw README/argparse evidence alone doesn't
+    mean Section 1 will end up with a PoC — enforce_section1 (poc/inject.py) decides that,
+    and without real code or a model-written Section-1 body it falls through to
+    synthesis_failed/not_found. Forcing a run-instructions section in that state made the
+    model fabricate a run command for a local PoC file that was never produced."""
     ledger = SqliteLedger(tmp_path / "ledger.db")
     ledger.save_evidence("ev:1", "run1", {
         "sha256": "a" * 64,
@@ -38,11 +46,28 @@ def test_blocks_when_readme_evidence_exists_but_section_missing(tmp_path) -> Non
     })
     hook = _hook(ledger)
     result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", "## 2. Tổng quan\n")))
+    assert result is None
+
+
+def test_blocks_when_readme_evidence_exists_and_section1_already_written(tmp_path) -> None:
+    """Once the model has actually synthesized a Section-1 body this turn (T2/T3 —
+    enforce_section1 will keep it), README run-info evidence DOES justify requiring a
+    matching Section 2."""
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    ledger.save_evidence("ev:1", "run1", {
+        "sha256": "a" * 64,
+        "source_files": [{"path": "README.md", "role": "readme"}],
+    })
+    hook = _hook(ledger)
+    text = f"{_SECTION1_BODY}## 2. Tổng quan\n"
+    result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", text)))
     assert result is not None and result.action == "force_continue"
     assert "Cách chạy PoC" in result.feedback
 
 
-def test_blocks_when_argparse_signal_in_source_code(tmp_path) -> None:
+def test_blocks_when_argparse_signal_in_real_source_code(tmp_path) -> None:
+    # Real `source_code` (not just a file listing) satisfies has_real_code_evidence on its
+    # own — Section 1 will be the deterministic real-code tier regardless of the model.
     ledger = SqliteLedger(tmp_path / "ledger.db")
     ledger.save_evidence("ev:1", "run1", {
         "sha256": "a" * 64,
@@ -60,7 +85,7 @@ def test_allows_when_section_already_present(tmp_path) -> None:
         "source_files": [{"path": "README.md", "role": "readme"}],
     })
     hook = _hook(ledger)
-    text = "## 2. Tổng quan\n\n### Cách chạy PoC\n- chạy: python poc.py --host X\n"
+    text = f"{_SECTION1_BODY}## 2. Tổng quan\n\n### Cách chạy PoC\n- chạy: python poc.py --host X\n"
     result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", text)))
     assert result is None
 
@@ -92,7 +117,7 @@ def test_gives_up_after_max_retries_and_allows_through(tmp_path) -> None:
     ledger = SqliteLedger(tmp_path / "ledger.db")
     ledger.save_evidence("ev:1", "run1", {
         "sha256": "a" * 64,
-        "source_files": [{"path": "README.md", "role": "readme"}],
+        "source_code": "import argparse\nparser = argparse.ArgumentParser()\n",
     })
     hook = _hook(ledger, max_retries=1)
     ctx = _final_ctx("run1", "exploit_research", "## 2. Tổng quan\n")
@@ -106,11 +131,11 @@ def test_state_is_independent_per_run(tmp_path) -> None:
     ledger = SqliteLedger(tmp_path / "ledger.db")
     ledger.save_evidence("ev:1", "run1", {
         "sha256": "a" * 64,
-        "source_files": [{"path": "README.md", "role": "readme"}],
+        "source_code": "import argparse\nparser = argparse.ArgumentParser()\n",
     })
     ledger.save_evidence("ev:2", "run2", {
         "sha256": "b" * 64,
-        "source_files": [{"path": "README.md", "role": "readme"}],
+        "source_code": "import argparse\nparser = argparse.ArgumentParser()\n",
     })
     hook = _hook(ledger, max_retries=1)
     asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", "no section")))
