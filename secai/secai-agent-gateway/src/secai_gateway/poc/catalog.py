@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS poc (
   duplicate_of INTEGER REFERENCES poc(id),
   UNIQUE(source, source_ref)
 );
+-- `poc_by_artifact_sha256` (full-artifact /poc/file serving, and read_artifact's
+-- single-file fallback) filters on artifact_sha256 with no other equality predicate SQLite
+-- can use — without this it falls back to idx_poc_dupof (duplicate_of IS NULL, true for
+-- most rows) and linearly scans the match, ~50ms at 121k rows. Partial (WHERE NOT NULL):
+-- the column is NULL for the ~half of rows never fetched, and never queried as NULL.
+CREATE INDEX IF NOT EXISTS idx_poc_artifact_sha ON poc(artifact_sha256) WHERE artifact_sha256 IS NOT NULL;
 CREATE TABLE IF NOT EXISTS poc_cve (poc_id INTEGER, cve_id TEXT, PRIMARY KEY(poc_id, cve_id));
 CREATE INDEX IF NOT EXISTS idx_poc_cve_cve ON poc_cve(cve_id);
 CREATE TABLE IF NOT EXISTS artifact (
@@ -47,6 +53,10 @@ CREATE TABLE IF NOT EXISTS poc_file (
   PRIMARY KEY(poc_id, rel_path)
 );
 CREATE INDEX IF NOT EXISTS idx_poc_file_poc ON poc_file(poc_id);
+-- `file_by_sha256` (multi-file member lookup, same /poc/file path) filters on sha256 with
+-- no index today — a real SCAN in EXPLAIN QUERY PLAN, cheap only because poc_file is still
+-- small (~5k rows); grows with every multi-file PoC fetched, so index it before it isn't.
+CREATE INDEX IF NOT EXISTS idx_poc_file_sha ON poc_file(sha256);
 CREATE TABLE IF NOT EXISTS collector_run (
   id INTEGER PRIMARY KEY, source TEXT, started TEXT, finished TEXT,
   added INTEGER, updated INTEGER, errors INTEGER, note TEXT

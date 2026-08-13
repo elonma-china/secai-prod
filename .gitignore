@@ -18,3 +18,8 @@ POC_API_Guide.docx
 
 # Nested git backup (do not commit)
 **/.git.bak-nested/
+
+# Local logs and untracked scratch — keep out of the startup git-status blob
+*.log
+CVE_exploit_info.md
+secai/claude-bug-bounty/

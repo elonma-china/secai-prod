@@ -18,6 +18,10 @@ export interface ExploitMeta {
   profile?: string;
   candidate_status?: string;
   reference_code_injected?: boolean;
+  synthesized?: boolean;
+  section1_tier?: string;
+  reason?: string;
+  tool_registry?: string[];
   refs?: number;
   files?: number;
   sha256?: string[];

@@ -229,6 +229,11 @@ label.lbl input, label.lbl select, label.lbl textarea {
   border: 1px dashed var(--warn); border-radius: 8px;
   padding: 8px 12px; margin-bottom: 10px;
 }
+.rewrite-banner.ok {
+  color: var(--accent-2);
+  background: rgba(52, 211, 153, 0.08);
+  border-color: var(--accent-2);
+}
 
 .error-box { background: rgba(248,113,113,.1); border: 1px solid var(--danger); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
 .hint { color: var(--muted); font-size: 12px; }

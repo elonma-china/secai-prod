@@ -12,13 +12,22 @@ from secai_gateway.agent.hooks import RequireSection1SynthesisHook
 from secai_gateway.poc.prefetch import (
     clear_session_coverage,
     clear_session_cve_known,
+    clear_session_real_code_evidence,
+    clear_session_synthesis_evidence,
     set_session_coverage,
     set_session_cve_known,
+    set_session_real_code_evidence,
+    set_session_synthesis_evidence,
 )
 from secai_gateway.state import SqliteLedger
 
 _NO_SECTION1 = "## 2. Cách chạy PoC\n\n- không có\n\n## 3. Tổng quan\n- mô tả\n"
-_WITH_SECTION1 = "## 1. Mã Khai thác (PoC) và Payload\n\n```python\nx=1\n```\n\n## 2. Cách chạy PoC\n"
+_WITH_SECTION1 = (
+    "## 1. Mã Khai thác (PoC) và Payload\n\n```python\nx=1\n```\n\n"
+    "## 2. Cách chạy PoC\n- chạy thử\n\n## 3. Tổng quan Lỗ hổng\n- mô tả\n"
+)
+_SECTION1_ONLY = "## 1. Mã Khai thác (PoC) và Payload\n\n```python\nx=1\n```\n"
+_SECTION1_AND_2_ONLY = _SECTION1_ONLY + "\n## 2. Cách chạy PoC\n- chạy thử\n"
 
 
 @dataclass
@@ -41,6 +50,8 @@ def _hook(ledger: SqliteLedger, max_retries: int = 2) -> RequireSection1Synthesi
 def _reset() -> None:
     clear_session_coverage()
     clear_session_cve_known()
+    clear_session_synthesis_evidence()
+    clear_session_real_code_evidence()
 
 
 def test_allows_when_no_synthesis_evidence_at_all(tmp_path) -> None:
@@ -70,6 +81,29 @@ def test_allows_when_section1_already_written(tmp_path) -> None:
     assert result is None
 
 
+def test_blocks_when_section1_written_but_section2_and_3_missing(tmp_path) -> None:
+    """Regression guard: observed live twice (CVE-2025-40639, CVE-2026-41265) — the model
+    writes a correct, banner-wrapped Mục 1 then jumps straight to the closing footer,
+    skipping Mục 2 and Mục 3 entirely. section1_has_body alone must not be read as "done"."""
+    _reset()
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    ledger.save_evidence("ev:1", "run1", {"source": "ghsa", "description": "SSRF trong endpoint /admin"})
+    hook = _hook(ledger)
+    result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", _SECTION1_ONLY)))
+    assert result is not None and result.action == "force_continue"
+    assert "## 2" in result.feedback and "## 3" in result.feedback
+
+
+def test_blocks_when_only_section3_missing(tmp_path) -> None:
+    _reset()
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    ledger.save_evidence("ev:1", "run1", {"source": "ghsa", "description": "SSRF trong endpoint /admin"})
+    hook = _hook(ledger)
+    result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", _SECTION1_AND_2_ONLY)))
+    assert result is not None and result.action == "force_continue"
+    assert "## 3" in result.feedback and "## 2" not in result.feedback
+
+
 def test_blocks_when_cve_known_but_no_catalog_evidence(tmp_path) -> None:
     _reset()
     set_session_cve_known("sess-1", True)
@@ -80,16 +114,46 @@ def test_blocks_when_cve_known_but_no_catalog_evidence(tmp_path) -> None:
     assert result is not None and result.action == "force_continue"
 
 
-def test_skips_when_coverage_enough_real_code_regardless_of_section1(tmp_path) -> None:
+def test_blocks_when_prefetch_found_description_but_model_fetched_nothing_itself(tmp_path) -> None:
+    """The gap this test guards: `exploit_prefetch` (routes.py) runs the deterministic
+    catalog search under its OWN scratch run_id, so a T2-worthy catalog description it
+    found is never in `ledger.evidence_for_run(ctx.run_id)` — only `set_session_synthesis_
+    evidence` (called from prefetch) can carry that signal to this hook. Empty ledger
+    evidence for THIS run_id must not be read as "nothing to synthesize from" when
+    prefetch already found something."""
+    _reset()
+    set_session_synthesis_evidence("sess-3", True)
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    hook = _hook(ledger)
+    result = asyncio.run(hook.on_before_final_answer(
+        _final_ctx("run1", "exploit_research", _NO_SECTION1, session_id="sess-3")))
+    assert result is not None and result.action == "force_continue"
+
+
+def test_skips_when_prefetch_found_real_code_regardless_of_section1(tmp_path) -> None:
     # T1 applies regardless — forcing a synthesis retry here would be pure waste
     _reset()
-    set_session_coverage("sess-2", "enough")
+    set_session_real_code_evidence("sess-2", True)
     set_session_cve_known("sess-2", True)
     ledger = SqliteLedger(tmp_path / "ledger.db")
     hook = _hook(ledger)
     result = asyncio.run(hook.on_before_final_answer(
         _final_ctx("run1", "exploit_research", _NO_SECTION1, session_id="sess-2")))
     assert result is None
+
+
+def test_coverage_enough_alone_does_NOT_skip_when_it_was_description_only(tmp_path) -> None:
+    """Regression guard for the bug this fix closes: `coverage == "enough"` only means
+    prefetch fetched *something*, not that it was real code — a metadata-only ghsa/README
+    fetch also sets it. Must NOT be read as "T1 will happen regardless" on its own."""
+    _reset()
+    set_session_coverage("sess-4", "enough")  # description-only fetch also sets this
+    set_session_synthesis_evidence("sess-4", True)
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    hook = _hook(ledger)
+    result = asyncio.run(hook.on_before_final_answer(
+        _final_ctx("run1", "exploit_research", _NO_SECTION1, session_id="sess-4")))
+    assert result is not None and result.action == "force_continue"
 
 
 def test_skips_when_model_itself_fetched_real_code(tmp_path) -> None:

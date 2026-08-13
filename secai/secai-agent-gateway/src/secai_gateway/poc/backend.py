@@ -110,6 +110,12 @@ class LocalPocBackend:
             "vulhub": (src / "vulhub").resolve(),
             "ghsa": (src / "advisory-database").resolve(),
             "poc_github": Path(s.poc_artifact_store).resolve(),  # sandbox-fetched artifacts
+            # Evidence-grounded fetches (secai-data/poc/_ground_cve_update_evidence.py) write
+            # into this SAME content-addressed store, just tagged source='vendor' at the
+            # catalog level — without this entry, fetch()'s early "no local artifact"
+            # metadata_only path fires before `_allow_code` is ever consulted, since it looks
+            # up the root by source name first.
+            "vendor": Path(s.poc_artifact_store).resolve(),
         }
         self._refs: "OrderedDict[str, tuple[str, int]]" = OrderedDict()  # ref -> (run_id, poc_id)
         self._fetch_counts: "OrderedDict[str, int]" = OrderedDict()  # run_id -> fetch() calls so far
@@ -143,12 +149,8 @@ class LocalPocBackend:
         for f in files[:_MAX_SET_FILES]:
             if total >= _MAX_SET_CHARS:
                 break
-            candidate = (root / f["storage_path"]).resolve()
-            try:
-                candidate.relative_to(root)          # path-escape guard
-            except ValueError:
-                continue
-            if not candidate.is_file():
+            candidate = self._locate(root, f["storage_path"])
+            if candidate is None:
                 continue
             text = candidate.read_bytes().decode("utf-8", errors="replace")
             cap = min(_MAX_SET_FILE_CHARS, _MAX_SET_CHARS - total)
@@ -181,28 +183,60 @@ class LocalPocBackend:
             return str(Path(artifact_path).parent / "README.md")
         return None
 
+    def _locate(self, root: Path | None, rel_path: str | None) -> Path | None:
+        """Resolve ``rel_path`` under ``root``, path-escape-guarded, falling back to the
+        content-addressed store (``roots["poc_github"]``, same physical dir as
+        ``roots["vendor"]``) when it's not under the source's own root.
+
+        Grounding a poc row with real fetched bytes (``_ground_cve_update_evidence.py``)
+        writes into that ONE shared store regardless of which `source` the row already
+        carried — e.g. a CVE with no prior ``vendor`` row canonicalizes onto its existing
+        ``ghsa`` row and gets `artifact_path` set there, but `roots["ghsa"]` points at the
+        advisory-database mirror, not the store. Without this fallback the artifact silently
+        "isn't found on disk" even though `_allow_code` correctly permits it (observed live:
+        9/44 grounded CVEs landed on a pre-existing ghsa/poc_github row and fell through to
+        T2 synthesis instead of T1 real code purely because of this path mismatch). A sha256-
+        addressed relative path (``xx/xxxxx…``) can't collide with an unrelated real file
+        under a different root, so trying a second root is safe."""
+        if not rel_path:
+            return None
+        candidates = [root] if root is not None else []
+        store = self.roots.get("poc_github")
+        if store is not None and store != root:
+            candidates.append(store)
+        for r in candidates:
+            candidate = (r / rel_path).resolve()
+            try:
+                candidate.relative_to(r)   # path-escape guard
+            except ValueError:
+                continue
+            if candidate.is_file():
+                return candidate
+        return None
+
     def _artifact_path(self, poc: dict[str, Any]) -> Path:
-        root = self.roots.get(poc["source"])
-        if root is None or not poc.get("artifact_path"):
+        if not poc.get("artifact_path"):
             raise PocError(f"No local artifact for source '{poc['source']}'")
-        candidate = (root / poc["artifact_path"]).resolve()
-        try:
-            candidate.relative_to(root)   # path-escape guard
-        except ValueError as exc:
-            raise PocError("Artifact path escapes source root") from exc
-        if not candidate.is_file():
+        found = self._locate(self.roots.get(poc["source"]), poc.get("artifact_path"))
+        if found is None:
             raise PocError("Artifact not found on disk")
-        return candidate
+        return found
 
     def _allow_code(self, poc: dict[str, Any]) -> bool:
         """The SINGLE license/verification gate deciding whether real PoC source may leave
         the box — shared by ``fetch`` (LLM grounding) and the ``/poc/file`` full-artifact
         endpoint so both honor identical rules:
         - redistributable sources (exploitdb/metasploit/nuclei/ghsa) always
-        - sandbox-fetched GitHub/vulhub artifacts (private SecAI lab) only when verified or
-          when an artifact was explicitly stored for offline retrieval."""
+        - sandbox-fetched GitHub/vulhub/vendor artifacts (private SecAI lab) only when
+          verified or when an artifact was explicitly stored for offline retrieval.
+          ``vendor`` covers the same-trust-class case of a poc row whose bytes were fetched
+          directly from the CVE's OWN Evidence link (commit diff, GitHub blob, PoC repo,
+          researcher-hosted PoC file) by ``secai-data/poc/_ground_cve_update_evidence.py`` —
+          identical fetch/verify contract to poc_github's sandbox fetcher, just a different
+          collector tag. Only rows THIS grounding pass touched carry both artifact_path AND
+          verified=1 on a vendor row; a bare catalog placeholder never does."""
         return bool(poc.get("redistributable")) or (
-            poc.get("source") in {"poc_github", "vulhub"} and bool(poc.get("artifact_path"))
+            poc.get("source") in {"poc_github", "vulhub", "vendor"} and bool(poc.get("artifact_path"))
             and (bool(poc.get("verified")) or bool(poc.get("artifact_sha256")))
         )
 
@@ -233,12 +267,8 @@ class LocalPocBackend:
             raise PocNotFound("No local root for source")
         if not self._allow_code(poc):
             raise PocForbidden("Artifact source is not cleared for full retrieval")
-        candidate = (root / storage).resolve()
-        try:
-            candidate.relative_to(root)          # path-escape guard (mirrors _artifact_path)
-        except ValueError as exc:
-            raise PocNotFound("Artifact path escapes source root") from exc
-        if not candidate.is_file():
+        candidate = self._locate(root, storage)
+        if candidate is None:
             raise PocNotFound("Artifact not found on disk")
         blob = await asyncio.to_thread(candidate.read_bytes)
         text = blob.decode("utf-8", errors="replace")
@@ -270,12 +300,8 @@ class LocalPocBackend:
         rows = await asyncio.to_thread(self.catalog.get_files, frow["poc_id"])
         out: list[dict[str, Any]] = []
         for f in rows:
-            candidate = (root / f["storage_path"]).resolve()
-            try:
-                candidate.relative_to(root)          # path-escape guard
-            except ValueError:
-                continue
-            if not candidate.is_file():
+            candidate = self._locate(root, f["storage_path"])
+            if candidate is None:
                 continue
             blob = await asyncio.to_thread(candidate.read_bytes)
             out.append({"path": f["rel_path"], "code": blob.decode("utf-8", errors="replace"),

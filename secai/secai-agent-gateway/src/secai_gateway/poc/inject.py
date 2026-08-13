@@ -179,10 +179,7 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
         if f.get("role") == "readme":
             continue
         lang = (f.get("language") or _lang_from_path(f.get("path", ""), default_lang))
-        sha = (f.get("sha256") or "")[:12]
         header = f"**`{name}`**"
-        if sha:
-            header += f" — sha256 `{sha}…`"
         if f.get("truncated"):
             header += " — *(đã cắt bớt theo giới hạn tải)*"
         parts.append(f"{header}\n\n{_fence(f['code'], lang)}")
@@ -192,8 +189,11 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
 def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
     """Render an evidence entry's code. No provenance prose — the UI shows the "PoC công
     khai (nguồn: …)" sentence as clutter, and the API response's `metadata.provenance`
-    already carries source/URL/sha256 per entry for anything that wants it. The header names
-    the PoC as a local file (`<cve-id>.<ext>` in air-gap), not its upstream path/URL."""
+    already carries source/URL/sha256 per entry for anything that wants it (the rendered
+    header itself skips the hash too — readers just want the generated report, not a
+    content-address; sha256 stays available programmatically via metadata for anything
+    that needs to verify/refetch the exact bytes). The header names the PoC as a local
+    file (`<cve-id>.<ext>` in air-gap), not its upstream path/URL."""
     files = ev.get("source_files")
     if files:
         return render_files(files, default_lang=_lang_from_evidence(ev),
@@ -203,10 +203,7 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
         return ""
     lang = _lang_from_evidence(ev)
     name = _airgap_name(cve_id, lang, ev.get("source_ref") or ev.get("edb_id") or "")
-    sha = (ev.get("sha256") or "")[:12]
     header = f"**`{name}`**"
-    if sha:
-        header += f" — sha256 `{sha}…`"
     if ev.get("code_truncated"):
         header += " — *(đã cắt bớt theo giới hạn tải)*"
     return f"{header}\n\n{_fence(code, lang)}"

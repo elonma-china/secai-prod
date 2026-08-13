@@ -52,7 +52,7 @@ def test_inject_prepends_section1_when_model_writes_none() -> None:
     assert out.startswith("## 1. Mã Khai thác (PoC) và Payload")
     assert "import socket\nprint('real exploit')" in out
     assert "```python" in out
-    assert "sha256" in out and "51234" in out
+    assert "51234" in out and "sha256" not in out  # header names the file, no hash clutter
     assert "PoC công khai" not in out  # no verbose provenance blockquote — UI clutter
     # model's own Section 2 preserved verbatim after the prepended Section 1
     assert out.index("## 1.") < out.index("## 2. Tổng quan Lỗ hổng")
@@ -77,7 +77,7 @@ def test_inject_replaces_stray_section1_the_model_wrote_anyway() -> None:
     assert "FAKE_MODEL_CODE" not in out           # model's code was discarded
     assert "import socket\nprint('real exploit')" in out   # real bytes injected
     assert "```python" in out                     # language from static_indicators
-    assert "sha256" in out and "51234" in out
+    assert "51234" in out and "sha256" not in out  # header names the file, no hash clutter
     assert "PoC công khai" not in out  # no verbose provenance blockquote — UI clutter
     # later section untouched, no duplicated Section 1
     assert out.count("## 1.") == 1

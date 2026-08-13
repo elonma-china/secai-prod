@@ -17,9 +17,17 @@ from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, P
 from linch.hooks.types import HookResult
 
 from ..poc.inject import has_real_code_evidence, has_synthesis_evidence, section1_has_body
-from ..poc.prefetch import COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known
+from ..poc.prefetch import (
+    COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known,
+    get_session_real_code_evidence, get_session_synthesis_evidence,
+)
 
 _MAX_TRACKED_RUNS = 20000
+# Numbered-heading match for Mục 2/Mục 3, mirroring poc/inject.py's own `_H1` pattern
+# (any ##-###### heading starting with "2."/"3." then non-space content) rather than the
+# exact Vietnamese wording, since the model's phrasing can drift slightly turn to turn.
+_H2 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*2\.[ \t]*\S")
+_H3 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*3\.[ \t]*\S")
 
 
 def _trim(store: OrderedDict[str, Any]) -> None:
@@ -224,10 +232,26 @@ class RequireSection1SynthesisHook:
     one. Observed live: a plain re-ask consistently produces a synthesized Section 1 on
     retry, so the failure was reticence, not incapability.
 
-    Skipped entirely when prefetch coverage is "enough" (real fetched PoC code exists —
-    Section 1 will be the deterministic real-code tier regardless of what the model
-    writes, so forcing a synthesis attempt would be pure waste) or when the model's own
-    run already surfaced real code itself."""
+    Skipped entirely when prefetch found REAL fetched PoC code (Section 1 will be the
+    deterministic real-code tier regardless of what the model writes, so forcing a
+    synthesis attempt would be pure waste) or when the model's own run already surfaced
+    real code itself.
+
+    NOTE: this is deliberately NOT `get_session_coverage(session_id) == "enough"` — that
+    predicate only means "prefetch fetched *something*" (see prefetch.py's `coverage`
+    docstring) and is equally true for a metadata-only ghsa/README fetch, which is NOT T1.
+    Using it here used to let a description-only CVE silently skip the forced retry and
+    fall straight to `synthesis_failed` the first time the model was reticent — see
+    `get_session_real_code_evidence`, the precise T1 signal this needs.
+
+    Also checks Mục 2/3 are present once Mục 1 exists, not just Mục 1 alone — observed
+    live (twice, same failure mode both times: CVE-2025-40639 and CVE-2026-41265) that the
+    model sometimes writes a correct, banner-wrapped Mục 1 then jumps straight to the
+    footer, skipping "## 2. Cách chạy PoC" and "## 3. Tổng quan Lỗ hổng" entirely even
+    though `exploit_output_contract` requires all three for this tier. Nothing else in the
+    hook chain catches this: `RequireRunInstructionsHook` only fires on run-info evidence
+    (a README file or CLI-flag signal in real source code), which a pure GHSA-description
+    synthesis never has."""
 
     name = "require_section1_synthesis"
 
@@ -242,11 +266,24 @@ class RequireSection1SynthesisHook:
             return None
         session_id = _session_id_of(ctx)
         run_evidence = self.ledger.evidence_for_run(ctx.run_id)
-        if get_session_coverage(session_id) == "enough" or has_real_code_evidence(run_evidence):
+        if get_session_real_code_evidence(session_id) or has_real_code_evidence(run_evidence):
             return None  # T1 applies regardless of what the model wrote
-        if not (has_synthesis_evidence(run_evidence) or get_session_cve_known(session_id)):
+        # `run_evidence` only covers what the MODEL itself fetched this turn — the
+        # deterministic prefetch (routes.py's `exploit_prefetch`) runs concurrently under
+        # its own scratch run_id and is invisible to `ledger.evidence_for_run(ctx.run_id)`,
+        # so a session-level flag (set from prefetch's own evidence) is the only way this
+        # hook can see it. Without it, this exact retry silently never fires whenever
+        # prefetch is the ONLY reason T2 evidence exists (the model's own poc_search/fetch
+        # came up empty) — which was observed live turning a legitimate T2 case into a
+        # bare "synthesis_failed" the first time, every time.
+        if not (has_synthesis_evidence(run_evidence) or get_session_synthesis_evidence(session_id)
+                or get_session_cve_known(session_id)):
             return None  # genuinely nothing to ground on — T4 is the correct, honest answer
-        if section1_has_body(ctx.final_text or ""):
+
+        text = ctx.final_text or ""
+        has_s1 = section1_has_body(text)
+        missing = [n for n, rx in ((2, _H2), (3, _H3)) if has_s1 and not rx.search(text)]
+        if has_s1 and not missing:
             return None
 
         attempts = self._attempts.get(ctx.run_id, 0)
@@ -255,14 +292,20 @@ class RequireSection1SynthesisHook:
         self._attempts[ctx.run_id] = attempts + 1
         self._attempts.move_to_end(ctx.run_id)
         _trim(self._attempts)
-        return HookResult.force_continue(
-            "Evidence confirms this CVE/vulnerability exists (KB match or catalog "
-            "description) even though no runnable PoC was found. Write Section 1 "
-            "(`## 1. Mã Khai thác (PoC) và Payload`) with a minimal illustrative exploit "
-            "grounded in that evidence, per section1_policy trường hợp 2 — do not leave "
-            "it out.",
-            reason="section1_synthesis_missing",
-        )
+        if not has_s1:
+            feedback = (
+                "Evidence confirms this CVE/vulnerability exists (KB match or catalog "
+                "description) even though no runnable PoC was found. Write Section 1 "
+                "(`## 1. Mã Khai thác (PoC) và Payload`) with a minimal illustrative exploit "
+                "grounded in that evidence, per section1_policy trường hợp 2 — do not leave "
+                "it out.")
+        else:
+            names = " and ".join(f"`## {n}. {'Cách chạy PoC' if n == 2 else 'Tổng quan Lỗ hổng'}`" for n in missing)
+            feedback = (
+                f"Section 1 is written but {names} — required by exploit_output_contract "
+                "for this tier — is missing from your answer. Add the missing section(s) "
+                "after Section 1, keeping Section 1 exactly as already written.")
+        return HookResult.force_continue(feedback, reason="section1_synthesis_missing")
 
 
 _RUN_INFO_SIGNAL = re.compile(r"argparse|optparse|ArgumentParser|click\.command|usage:|--help", re.I)
@@ -294,6 +337,16 @@ class RequireRunInstructionsHook:
 
     async def on_before_final_answer(self, ctx: BeforeFinalAnswerContext) -> HookResult | None:
         if _profile_of(ctx) != self.profile or not self._has_run_info_evidence(ctx.run_id):
+            return None
+        # Run-info evidence alone doesn't mean Section 1 will end up with a PoC to run —
+        # that's decided by enforce_section1's tiers (poc/inject.py). If there's no real
+        # fetched code AND the model hasn't actually written a Section-1 body this turn,
+        # Section 1 will fall through to synthesis_failed/not_found and there is no local
+        # PoC file to reference. Forcing a run-instructions section in that case makes the
+        # model fabricate a command for a file that will never exist (see
+        # RequireSection1SynthesisHook, which gates the same way).
+        run_evidence = self.ledger.evidence_for_run(ctx.run_id)
+        if not (has_real_code_evidence(run_evidence) or section1_has_body(ctx.final_text or "")):
             return None
         if _RUN_SECTION_HEADING.search(ctx.final_text or ""):
             return None

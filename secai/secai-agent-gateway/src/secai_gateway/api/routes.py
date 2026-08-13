@@ -481,8 +481,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
         in ``enforce_section1`` knows whether the CVE is real even when the catalog has
         nothing for it. Also records it on ``session_id`` (``set_session_cve_known``) so
         RequireSection1SynthesisHook can force a retry when the model skipped Section 1
-        despite the CVE being confirmed real. Returns ``{"evidence", "cve_id", "cve_known"}``."""
-        from ..poc.prefetch import set_session_coverage, set_session_cve_known
+        despite the CVE being confirmed real. Same for T2 catalog-description evidence
+        (``set_session_synthesis_evidence``) and T1 real-code evidence
+        (``set_session_real_code_evidence``) — prefetch's own fetches land in the ledger
+        under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
+        cannot see them any other way (see prefetch.py's own docstring on these functions).
+        Returns ``{"evidence", "cve_id", "cve_known"}``."""
+        from ..poc.inject import has_real_code_evidence, has_synthesis_evidence
+        from ..poc.prefetch import (
+            set_session_coverage, set_session_cve_known, set_session_real_code_evidence,
+            set_session_synthesis_evidence,
+        )
         from ..retrieval.neo4j import cve_exists_in_kb
         cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
@@ -491,6 +500,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             set_session_coverage(session_id, "failed")
             cve_known = await cve_exists_in_kb(cve_id) if cve_id else False
             set_session_cve_known(session_id, cve_known)
+            set_session_synthesis_evidence(session_id, False)
+            set_session_real_code_evidence(session_id, False)
             return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known}
         run_id = f"prefetch:{uuid4().hex}"
         try:
@@ -504,11 +515,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 cov = "failed"
             set_session_coverage(session_id, cov)
             set_session_cve_known(session_id, cve_known)
-            return {"evidence": ledger.evidence_for_run(run_id), "cve_id": cve_id, "cve_known": cve_known}
+            evidence = ledger.evidence_for_run(run_id)
+            set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
+            set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
+            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known}
         except Exception:
             logger.exception("deterministic PoC prefetch failed")
             set_session_coverage(session_id, "failed")
             set_session_cve_known(session_id, False)
+            set_session_synthesis_evidence(session_id, False)
+            set_session_real_code_evidence(session_id, False)
             return {"evidence": [], "cve_id": cve_id, "cve_known": False}
 
     async def inject_reference_code(text: str, run_id: str | None,
