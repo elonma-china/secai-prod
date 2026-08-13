@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -84,6 +86,13 @@ class LinchRunner:
         self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
         # InMemory is enough for Phase 0 journal; durable SQLite can land with Phase 4 resume.
         self.run_store = InMemoryRunStore()
+        # linch's Session is single-flight (Session.run() raises ConfigError if a run is
+        # already active) and agent.session(id=...) returns the SAME live Session object
+        # for a given id — so two requests for the same user_id (e.g. a caller that fires a
+        # second chat message before the first stream finished) race onto one Session and
+        # the loser crashes instead of getting an answer. Serialize per session_id here so
+        # the second request queues and runs after the first, rather than failing.
+        self._session_locks: dict[str, asyncio.Lock] = {}
         provider, model = build_llm_provider()
         self.agent = make_gateway_agent(
             model=model, provider=provider,
@@ -107,16 +116,41 @@ class LinchRunner:
             meta["last_user_prompt"] = prompt
         session.meta = meta
 
+    @asynccontextmanager
+    async def _session_lock(self, session_id: str | None):
+        """Serialize concurrent runs against the same linch Session. No-op when
+        ``session_id`` is falsy (anonymous callers get a fresh id/Session per request
+        anyway, so there's nothing to contend on — see ``_chat_session_id``).
+
+        The dict entry is removed once the holder releases it (guarded by identity, so a
+        waiter that already grabbed the lock object isn't affected by another task's
+        cleanup) rather than kept forever — a stable per-user id is reused indefinitely,
+        so an uncapped cache would grow for as long as the process runs."""
+        if not session_id:
+            yield
+            return
+        lock = self._session_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._session_locks[session_id] = lock
+        try:
+            async with lock:
+                yield
+        finally:
+            if self._session_locks.get(session_id) is lock:
+                del self._session_locks[session_id]
+
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
-        profile = PROFILES[profile_name]
-        session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name, prompt)
-        final = ""
-        run_id = None
-        async for event in session.run(_dated_prompt(prompt)):
-            run_id = session.active_run_id or run_id
-            if isinstance(event, ResultEvent):
-                final = event.final_text or ""
+        async with self._session_lock(session_id):
+            profile = PROFILES[profile_name]
+            session = await self.agent.session(id=session_id, meta={"profile": profile.name})
+            self._apply_profile(session, profile_name, prompt)
+            final = ""
+            run_id = None
+            async for event in session.run(_dated_prompt(prompt)):
+                run_id = session.active_run_id or run_id
+                if isinstance(event, ResultEvent):
+                    final = event.final_text or ""
         metadata = {"run_id": run_id, "profile": profile.name, "tool_registry": sorted(profile.tool_names)}
         if profile_name == "exploit_research":
             metadata.update(self.ledger.exploit_metadata(run_id))
@@ -127,11 +161,12 @@ class LinchRunner:
         Result, …) so the caller can render tool calls separately from assistant text
         over SSE. Applies the same per-profile tool/system override as ``complete()`` —
         the enforcement boundary is identical whether streaming or not."""
-        profile = PROFILES[profile_name]
-        session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name, prompt)
-        async for event in session.run(_dated_prompt(prompt)):
-            yield event
+        async with self._session_lock(session_id):
+            profile = PROFILES[profile_name]
+            session = await self.agent.session(id=session_id, meta={"profile": profile.name})
+            self._apply_profile(session, profile_name, prompt)
+            async for event in session.run(_dated_prompt(prompt)):
+                yield event
 
     def stream_bughunt(
         self,
