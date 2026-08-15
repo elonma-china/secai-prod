@@ -45,9 +45,10 @@ from .normalize import normalize_cve_ids
 from .tools import record_fetch_evidence
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
-# Same priority `required_tool_sequence` step 4 already tells the model to apply: verified
-# hits first, then sources whose license makes real `source_code` likely.
-_PRIORITY_SOURCES = {"exploitdb", "metasploit", "nuclei", "ghsa"}
+# Exploit-capable redistributable sources first. nuclei is intentionally absent — detection
+# YAML is T2 synthesis grounding, not a T1 PoC; prefetch must prefer EDB/MSF/GitHub exploit
+# rows over nuclei even when nuclei is verified and higher-ranked by source tier alone.
+_PRIORITY_SOURCES = {"exploitdb", "metasploit", "ghsa"}
 _MAX_PREFETCH = 2  # matches poc/backend.py's _MAX_FETCH_PER_RUN — same evidence budget
 
 Coverage = Literal["enough", "empty", "partial", "failed"]
@@ -192,8 +193,22 @@ def extract_cve_id(prompt: str) -> str | None:
     return m.group(0).upper() if m else None
 
 
-def _rank(hit: dict[str, Any]) -> tuple[bool, bool]:
-    return (not hit.get("verified"), hit.get("source") not in _PRIORITY_SOURCES)
+def _rank(hit: dict[str, Any]) -> tuple[int, bool, bool, bool]:
+    """Lower sorts first. Prefer real exploit PoCs over detection templates, GitHub PoCs
+    first within the exploit tier (they are what the consolidation step merges into one
+    runnable file), then verified, then license-friendly sources. Catalog CVE-exact already
+    puts kind=exploit + poc_github first; this re-sorts the hit window so prefetch's top-2
+    budget is not eaten by nuclei YAML."""
+    kind = str(hit.get("kind") or "").strip().lower()
+    source = str(hit.get("source") or "").strip().lower()
+    if kind == "exploit" or source in {"exploitdb", "metasploit", "poc_github", "vendor"}:
+        tier = 0
+    elif kind == "detection" or source == "nuclei":
+        tier = 2
+    else:
+        tier = 1  # advisory / lab — between exploit and detection
+    return (tier, source != "poc_github", not hit.get("verified"),
+            hit.get("source") not in _PRIORITY_SOURCES)
 
 
 async def prefetch_evidence(poc: LocalPocBackend, ledger: SqliteLedger, prompt: str,

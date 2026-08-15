@@ -3,6 +3,7 @@ synthesize-from-CVE-definition / not-found)."""
 from __future__ import annotations
 
 from secai_gateway.poc.inject import (
+    _CONSOLIDATED_BANNER,
     _SYNTHESIS_BANNER,
     _SYNTHESIS_FOOTER_MARKER,
     _description_for,
@@ -19,7 +20,7 @@ _SYNTHESIZED_REPORT = (
 _EMPTY_SECTION1_REPORT = "## 1. Mã Khai thác (PoC) và Payload\n\n## 2. Tổng quan Lỗ hổng\n\n- mô tả\n"
 
 _REAL_EVIDENCE = [{
-    "source": "exploitdb", "source_ref": "51234", "sha256": "a" * 64,
+    "source": "exploitdb", "kind": "exploit", "source_ref": "51234", "sha256": "a" * 64,
     "source_code": "import socket\nprint('real exploit')\n",
     "static_indicators": {"language": "py"},
 }]
@@ -30,6 +31,16 @@ _GHSA_DESCRIPTION_ONLY = [{
 _README_ONLY_SOURCE_FILES = [{
     "source": "poc_github", "source_ref": "foo/bar", "source_code": None,
     "source_files": [{"path": "README.md", "role": "readme", "code": "## Reproduce\n1. curl ...\n"}],
+}]
+_NUCLEI_DETECTION = [{
+    "source": "nuclei", "kind": "detection", "source_ref": "CVE-2024-9999",
+    "sha256": "b" * 64,
+    "source_code": (
+        "id: CVE-2024-9999\ninfo:\n  name: Demo RCE\n  description: RCE via /api/exec\n"
+        "http:\n  - method: POST\n    path:\n      - \"{{BaseURL}}/api/exec\"\n"
+    ),
+    "description": "",
+    "static_indicators": {"language": "yaml"},
 }]
 _NO_EVIDENCE: list[dict] = []
 
@@ -52,6 +63,13 @@ def test_description_for_empty_with_nothing() -> None:
     assert _description_for({"source": "vulhub", "source_code": None}) == ""
 
 
+def test_description_for_uses_nuclei_yaml_body_as_synthesis_grounding() -> None:
+    """Detection YAML with no catalog description still counts as T2 evidence."""
+    text = _description_for(_NUCLEI_DETECTION[0])
+    assert "/api/exec" in text
+    assert "method: POST" in text
+
+
 # ── T1: real code always wins, model's own text discarded ───────────────────────
 def test_tier1_real_code_unchanged_behavior() -> None:
     out, report = enforce_section1(_MODEL_REPORT, _REAL_EVIDENCE)
@@ -66,6 +84,66 @@ def test_tier1_wins_even_with_cve_known_true() -> None:
     assert report["section1_tier"] == "real"
     assert "import socket" in out
 
+
+# ── consolidated tier: AI-merged single file, light banner (not SYNTHESIZED) ────
+_CONSOLIDATED_EVIDENCE = [{
+    "source": "poc_github", "kind": "exploit", "source_ref": "foo/bar/exploit.py",
+    "url": "https://github.com/foo/bar/blob/main/exploit.py", "sha256": "c" * 64,
+    "source_code": "import requests\nrequests.get('http://TARGET/vuln')\n",
+    "language": "python", "consolidated": True,
+    "static_indicators": {"language": "python", "consolidated": True},
+}]
+
+
+def test_tier_consolidated_uses_light_banner_and_keeps_provenance() -> None:
+    out, report = enforce_section1(_MODEL_REPORT, _CONSOLIDATED_EVIDENCE, cve_id="CVE-2026-31431")
+    assert report["section1_tier"] == "real_consolidated"
+    assert report["reference_code_injected"] is True
+    assert report["consolidated"] is True
+    assert report["sha256"] == ["c" * 64]              # provenance preserved
+    assert _CONSOLIDATED_BANNER in out                 # light banner shown
+    assert _SYNTHESIS_BANNER not in out                # NOT the strong synthesized banner
+    assert _SYNTHESIS_FOOTER_MARKER not in out         # no synthesis footer either
+    assert "requests.get('http://TARGET/vuln')" in out  # the merged code IS Section 1
+    assert "cve-2026-31431.py" in out                  # air-gap local filename
+
+
+def test_nuclei_yaml_is_not_tier1_injection() -> None:
+    """Nuclei YAML must NOT be injected as Mục 1 — that blocked synthesis of a real PoC."""
+    from secai_gateway.poc.inject import has_real_code_evidence, has_synthesis_evidence
+
+    assert has_real_code_evidence(_NUCLEI_DETECTION) is False
+    assert has_synthesis_evidence(_NUCLEI_DETECTION) is True
+    out, report = enforce_section1(_MODEL_REPORT, _NUCLEI_DETECTION)
+    assert report.get("reference_code_injected") is False
+    assert "id: CVE-2024-9999" not in out  # YAML body must not appear as injected Mục 1
+    assert report["section1_tier"] == "synthesis_failed"  # model wrote no Mục 1
+
+
+def test_nuclei_yaml_plus_model_section1_is_synthesized_tier() -> None:
+    out, report = enforce_section1(_SYNTHESIZED_REPORT, _NUCLEI_DETECTION)
+    assert report["section1_tier"] == "synthesized_readme"
+    assert report["synthesized"] is True
+    assert _SYNTHESIS_BANNER in out
+    assert "requests.get('http://target/vuln')" in out
+    assert "id: CVE-2024-9999" not in out  # still not injecting the YAML
+
+
+def test_nuclei_yaml_with_cve_known_still_synthesizes() -> None:
+    """YAML + confirmed CVE (no README) → synthesis path, not not_found."""
+    out, report = enforce_section1(
+        _SYNTHESIZED_REPORT, _NUCLEI_DETECTION, cve_known=True, cve_id="CVE-2024-9999")
+    assert report["section1_tier"] == "synthesized_readme"
+    assert _SYNTHESIS_BANNER in out
+
+
+def test_exploit_wins_over_nuclei_when_both_present() -> None:
+    """When both exploit and detection evidence exist, T1 injects the exploit only."""
+    mixed = _REAL_EVIDENCE + _NUCLEI_DETECTION
+    out, report = enforce_section1(_MODEL_REPORT, mixed)
+    assert report["section1_tier"] == "real"
+    assert "import socket\nprint('real exploit')" in out
+    assert "id: CVE-2024-9999" not in out
 
 # ── T2: description/README evidence, model wrote Section 1 → banner enforced ────
 def test_tier2_readme_evidence_keeps_model_code_with_banner() -> None:

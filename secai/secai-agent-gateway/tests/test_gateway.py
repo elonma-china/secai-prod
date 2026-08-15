@@ -72,24 +72,39 @@ async def test_streaming_endpoints() -> None:
 
 
 def test_prefetch_prompt_appendix_grounds_muc2_3() -> None:
-    """When prefetch fetched a PoC, its content is fed into the model prompt so Mục 2/3 are
-    grounded regardless of the model's own tool-calling (the CVE-2026-33032 root cause)."""
+    """When prefetch fetched evidence, its content is fed into the model prompt. Nuclei
+    YAML is detection-only (T2) — appendix must REQUIRE Mục 1 synthesis, not claim the
+    system will inject a real PoC."""
     from secai_gateway.api.routes import _prefetch_prompt_appendix
 
     # No evidence → no appendix (honest not-found path unchanged).
     assert _prefetch_prompt_appendix({"evidence": []}) == ""
 
-    ev = [{"source": "nuclei", "url": "https://x/CVE-2026-33032.yaml",
+    ev = [{"source": "nuclei", "kind": "detection", "url": "https://x/CVE-2026-33032.yaml",
            "source_files": [{"path": "CVE-2026-33032.yaml",
                              "code": "id: CVE-2026-33032\ninfo:\n  severity: critical\n",
                              "role": "entry"}]}]
     appendix = _prefetch_prompt_appendix({"evidence": ev})
-    assert "CVE-2026-33032.yaml" in appendix          # real PoC content reached the prompt
+    assert "CVE-2026-33032.yaml" in appendix          # template content reached the prompt
     assert "id: CVE-2026-33032" in appendix            # the fetched bytes, not just a mention
     assert "nuclei" in appendix                        # provenance named
-    assert "Mục 2" in appendix and "Mục 3" in appendix
+    assert "Mục 1" in appendix and "Mục 2" in appendix and "Mục 3" in appendix
     assert "không có thông tin" in appendix            # explicit instruction not to say it
+    assert "BẮT BUỘC viết Mục 1" in appendix
+    assert "KHÔNG viết Mục 1" not in appendix         # must NOT use the T1 "don't write" framing
 
+
+def test_prefetch_prompt_appendix_t1_exploit_forbids_section1() -> None:
+    """Real exploit code → system injects Mục 1; appendix tells the model not to write it."""
+    from secai_gateway.api.routes import _prefetch_prompt_appendix
+
+    ev = [{"source": "exploitdb", "kind": "exploit", "url": "https://exploit-db.com/1",
+           "source_code": "import socket\nprint(1)\n",
+           "static_indicators": {"language": "py"}}]
+    appendix = _prefetch_prompt_appendix({"evidence": ev})
+    assert "KHÔNG viết Mục 1" in appendix
+    assert "BẮT BUỘC viết Mục 1" not in appendix
+    assert "import socket" in appendix
 
 @pytest.mark.asyncio
 async def test_exploit_chitchat_returns_cve_guide() -> None:

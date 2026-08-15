@@ -7,6 +7,7 @@ import logging
 import re
 import unicodedata
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
 
@@ -19,12 +20,14 @@ from linch.events import ResultEvent, SystemEvent
 from ..agent import registry_for
 from ..poc import (
     canonical_block,
+    consolidate_poc,
     enforce_section1,
-    sanitize_airgap_runguide,
     extract_cve_id,
+    has_real_code_evidence,
     merge_evidence,
     normalize_cve_ids,
     prefetch_evidence,
+    sanitize_airgap_runguide,
     strip_system_narration,
 )
 from ..poc.backend import PocBadRequest, PocError, PocForbidden, PocNotFound
@@ -196,12 +199,15 @@ def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
 
 
 def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
-    """Feed deterministically-fetched PoC evidence into the model prompt so Mục 2/3 are
-    grounded on it REGARDLESS of whether the model calls its own tools. A successful prefetch
-    (coverage="enough") stands the search hooks down, which non-deterministically lets the
-    model finalize from parametric memory and write "không có thông tin" right under a Section
-    1 the prefetch populated with a real PoC. Mirrors _kt_prompt_appendix. Empty evidence →
-    no appendix, so the honest not-found path is unchanged."""
+    """Feed deterministically-fetched PoC evidence into the model prompt so Mục 2/3 (and
+    Mục 1 when synthesizing) are grounded REGARDLESS of whether the model calls its own
+    tools. Empty evidence → no appendix, so the honest not-found path is unchanged.
+
+    Two framings:
+    * T1 — real exploit code present → system will inject Mục 1; model must NOT write it.
+    * T2 — only detection YAML / README / description → model MUST write Mục 1 (standalone
+      PoC, not pasted nuclei YAML); system adds the SYNTHESIZED banner later.
+    """
     evidence = prefetch_result.get("evidence") or []
     if not evidence:
         return ""
@@ -210,14 +216,29 @@ def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
         return ""
     sources = [f"{ev.get('source') or '?'}: {ev.get('url') or ev.get('source_ref') or ''}"
                for ev in evidence]
+    sources_line = "Nguồn: " + " ; ".join(sources) + "\n"
+    body = "Nội dung (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+    if has_real_code_evidence(evidence):
+        return (
+            "\n\n[Hệ thống đã tìm thấy PoC khai thác công khai đã xác thực cho lỗ hổng này qua "
+            "tra cứu nội bộ (deterministic). Mục 1 (mã PoC/Payload) sẽ do hệ thống tự chèn — "
+            "bạn KHÔNG viết Mục 1. Hãy dùng bằng chứng thật dưới đây làm căn cứ để viết Mục 2 "
+            "(Cách chạy PoC) và Mục 3 (Tổng quan Lỗ hổng); TUYỆT ĐỐI không trả lời 'không có "
+            "thông tin' khi bằng chứng này tồn tại. Chỉ dùng thông tin có trong bằng chứng, "
+            "không bịa.\n"
+            + sources_line + body
+        )
+    # Detection YAML / README / advisory-only — synthesis tier.
     return (
-        "\n\n[Hệ thống đã tìm thấy PoC công khai đã xác thực cho lỗ hổng này qua tra cứu nội bộ "
-        "(deterministic). Mục 1 (mã PoC/Payload) sẽ do hệ thống tự chèn — bạn KHÔNG viết Mục 1. "
-        "Hãy dùng bằng chứng thật dưới đây làm căn cứ để viết Mục 2 (Cách chạy PoC) và Mục 3 "
-        "(Tổng quan Lỗ hổng); TUYỆT ĐỐI không trả lời 'không có thông tin' khi bằng chứng này "
-        "tồn tại. Chỉ dùng thông tin có trong bằng chứng, không bịa.\n"
-        "Nguồn: " + " ; ".join(sources) + "\n"
-        "Nội dung PoC (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+        "\n\n[Hệ thống đã tìm thấy bằng chứng detection/mô tả (template nuclei YAML, README "
+        "hoặc advisory) — CHƯA phải PoC khai thác đã fetch. BẮT BUỘC viết Mục 1 (`## 1. Mã "
+        "Khai thác (PoC) và Payload`) dưới dạng script độc lập (ưu tiên Python requests hoặc "
+        "curl) bám method/path/header/body/payload/matcher và mô tả CVE trong bằng chứng; "
+        "TUYỆT ĐỐI không dán YAML nuclei làm PoC. Hệ thống sẽ tự chèn banner SYNTHESIZED — "
+        "bạn không tự viết banner. Dùng bằng chứng dưới đây cho Mục 1, Mục 2 và Mục 3; không "
+        "trả lời 'không có thông tin' khi bằng chứng này tồn tại; không bịa chi tiết không có "
+        "trong bằng chứng.\n"
+        + sources_line + body
     )
 
 
@@ -309,6 +330,11 @@ async def _fullen_evidence_for_display(evidence: list[dict[str, Any]], poc: Any,
         return evidence
     total = 0
     for ev in evidence or []:
+        # A consolidated (AI-merged) entry has no bytes in the store — its `sha256` is the
+        # ORIGINAL artifact's, so re-reading by it would overwrite the merged code with the
+        # verbatim source. Leave it exactly as produced by poc/consolidate.py.
+        if ev.get("consolidated"):
+            continue
         files = ev.get("source_files")
         if files:
             # First try to render the WHOLE repo, not just the files the fetch budget let in:
@@ -351,6 +377,135 @@ async def _fullen_evidence_for_display(evidence: list[dict[str, Any]], poc: Any,
             ev["source_code"], ev["code_truncated"] = content, bool(full.get("truncated"))
             total += len(content)
     return evidence
+
+
+# language -> local air-gap file extension for the consolidated-file name in the model appendix
+# (mirrors poc/inject.py _LANG_EXT for the handful of PoC languages we ever emit).
+_APPENDIX_EXT = {
+    "python": "py", "py": "py", "ruby": "rb", "rb": "rb", "php": "php", "javascript": "js",
+    "js": "js", "typescript": "ts", "go": "go", "rust": "rs", "c": "c", "cpp": "cpp",
+    "java": "java", "perl": "pl", "bash": "sh", "sh": "sh", "powershell": "ps1",
+}
+
+
+def _consolidated_local_name(consolidated: dict[str, Any], cve_id: str | None) -> str:
+    """Air-gap local filename for the consolidated PoC (``<cve>.<ext>`` lowercased) — the name
+    Mục 2 must reference, matching what poc/inject.py renders as the Section-1 header."""
+    lang = str(consolidated.get("language") or "").strip().lower()
+    ext = _APPENDIX_EXT.get(lang, lang or "txt")
+    stem = (cve_id or "poc").strip().lower()
+    return f"{stem}.{ext}" if ext else stem
+
+
+# The consolidated file is a single bounded script produced by our OWN consolidation call
+# (poc/consolidate.py caps its OUTPUT at ~_RESERVE_OUTPUT_TOKENS*_CHARS_PER_TOKEN = 36k chars
+# worst case) — NOT a raw multi-file repo, so it doesn't need the tight shared
+# `_PREFETCH_APPENDIX_BUDGET` (3000 chars) used for the T1-verbatim/T2/T3 evidence preview.
+# A truncated preview here is a real correctness bug, not just a context-saving nicety: the
+# argparse/CLI block a PoC needs for Mục 2 is often near the END of the file (after the class/
+# functions), so a short head-only preview silently hides the real flags and the model falls
+# back to plausible-looking-but-wrong ones (observed live — see CVE-2024-38856 eval). Give the
+# model the WHOLE merged file, capped only as a pathological-size backstop.
+_CONSOLIDATED_APPENDIX_MAX_CHARS = 40_000
+
+
+def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | None) -> str:
+    """Tell the model the consolidated single file WILL be Mục 1 (system-injected) so it writes
+    Mục 2 (Cách chạy) against exactly that file + Mục 3 — never Mục 1 itself. Includes the FULL
+    merged code (see budget note above) so run steps are grounded in the real file, including
+    argparse/CLI blocks that often sit near the end, not just the first few KB."""
+    name = _consolidated_local_name(consolidated, cve_id)
+    code = consolidated.get("source_code") or ""
+    truncated = len(code) > _CONSOLIDATED_APPENDIX_MAX_CHARS
+    preview = code[:_CONSOLIDATED_APPENDIX_MAX_CHARS]
+    cut_note = " (đã cắt bớt do quá dài)" if truncated else ""
+    return (
+        "\n\n[Hệ thống đã hợp nhất PoC công khai đã fetch thành MỘT tệp cục bộ tên "
+        f"`{name}` và sẽ TỰ chèn nó làm Mục 1 — bạn KHÔNG viết Mục 1 (không viết `## 1.`, "
+        "không dán lại mã). Nhiệm vụ của bạn: viết Mục 2 (Cách chạy PoC) bám ĐÚNG tệp "
+        f"`{name}` này — lệnh chạy, tham số (kể cả các cờ argparse/CLI thật xuất hiện ở BẤT KỲ "
+        "đâu trong mã, kể cả cuối tệp), tiền đề — dựa trên chính đoạn mã dưới đây; và Mục 3 "
+        "(Tổng quan Lỗ hổng). Chỉ dùng thông tin có trong mã, không bịa endpoint/tham số/"
+        "phiên bản/cờ dòng lệnh không tồn tại. Giữ air-gap: không tải/clone/cài từ internet.\n"
+        f"Mã tệp `{name}`{cut_note} (KHÔNG chép lại vào câu trả lời):\n"
+        + preview + "\n]"
+    )
+
+
+def _github_evidence_from_fetch(entry_bytes: bytes, entry_rel: str,
+                                file_set: list[tuple[str, bytes]], row: dict[str, Any],
+                                cve_id: str | None) -> dict[str, Any]:
+    """Turn a request-path on-demand GitHub tarball fetch (fetch_github.fetch_repo_code) into
+    the same evidence-dict shape poc_fetch produces, so consolidation + Section-1 injection
+    treat it identically to a pre-fetched catalog PoC. Full bytes (no truncation)."""
+    from ..poc.fetch_github import _is_doc_file
+    entry_text = entry_bytes.decode("utf-8", errors="replace")
+    entry_sha = hashlib.sha256(entry_bytes).hexdigest()
+    lang = Path(entry_rel).suffix.lstrip(".") or None
+    cves = [cve_id.upper()] if cve_id else []
+    base = {
+        "source": "poc_github",
+        "source_ref": row.get("source_ref") or entry_rel,
+        "url": row.get("url") or "",
+        "kind": "exploit",
+        "title": (row.get("source_ref") or entry_rel or "GitHub PoC"),
+        "description": "",
+        "cve_ids": cves,
+        "language": lang,
+        "sha256": entry_sha,
+        "code_truncated": False,
+        "candidate_status": "draft_not_executed",
+        "static_indicators": {"language": lang, "on_demand": True},
+    }
+    if len(file_set) > 1:
+        source_files: list[dict[str, Any]] = []
+        for frel, fdata in file_set:
+            role = ("entry" if frel == entry_rel
+                    else "readme" if _is_doc_file(Path(frel).name) else "support")
+            source_files.append({
+                "path": frel, "code": fdata.decode("utf-8", errors="replace"),
+                "sha256": hashlib.sha256(fdata).hexdigest(),
+                "language": Path(frel).suffix.lstrip(".") or None,
+                "role": role, "truncated": False,
+            })
+        base["source_files"] = source_files
+        base["source_code"] = entry_text
+    else:
+        base["source_code"] = entry_text
+        base["source_files"] = None
+    return base
+
+
+async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list[dict[str, Any]]:
+    """Fetch a link-only GitHub PoC's code on demand for ``cve_id`` (highest-star, link-only
+    first) and return it as real-code evidence — or ``[]`` on any miss. Blocking tarball I/O is
+    off-loaded to a thread; stops at the first repo that yields a picked PoC. Never raises."""
+    from ..poc.fetch_github import fetch_repo_code
+    catalog = getattr(poc, "catalog", None)
+    if catalog is None:
+        return []
+    try:
+        rows = await asyncio.to_thread(catalog.github_candidates, cve_id, 3)
+    except Exception:
+        logger.exception("github_candidates lookup failed for %s", cve_id)
+        return []
+    for row in rows:
+        try:
+            prov = json.loads(row.get("provenance") or "{}")
+        except (ValueError, TypeError):
+            prov = {}
+        branch = prov.get("default_branch") or "master"
+        try:
+            fetched = await asyncio.to_thread(
+                fetch_repo_code, row.get("source_ref") or "", row.get("url") or "",
+                branch, cve_id, timeout)
+        except Exception:
+            logger.info("on-demand github fetch errored for %s (%s)", cve_id, row.get("url"))
+            continue
+        if fetched:
+            entry_bytes, entry_rel, file_set = fetched
+            return [_github_evidence_from_fetch(entry_bytes, entry_rel, file_set, row, cve_id)]
+    return []
 
 
 def register_routes(app: FastAPI, state: Any) -> None:
@@ -487,7 +642,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
         cannot see them any other way (see prefetch.py's own docstring on these functions).
         Returns ``{"evidence", "cve_id", "cve_known"}``."""
-        from ..poc.inject import has_real_code_evidence, has_synthesis_evidence
+        from ..poc.inject import has_synthesis_evidence
         from ..poc.prefetch import (
             set_session_coverage, set_session_cve_known, set_session_real_code_evidence,
             set_session_synthesis_evidence,
@@ -583,16 +738,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return meta
 
     async def _maybe_web_hints(prefetch_result: dict[str, Any]) -> list[dict[str, Any]]:
-        """Deterministic web-research for the T3 tier: only when WEB_SEARCH_ENABLED and the
-        CVE is real but the catalog returned NO PoC (T1 already covers a found PoC). Gathers
-        allowlisted reference pages so the model can synthesize a reference PoC from real
-        hints. Fail-open — any miss (disabled, no SearXNG, error) → [] → T3 stays KB-only."""
+        """Deterministic web-research when WEB_SEARCH_ENABLED and the catalog has NO real
+        exploit code for the CVE. Per the requirement "any CVE not in the DB must be
+        websearched", this fires for ANY identified CVE-ID lacking fetched code — not only
+        CVEs already confirmed in the internal KB (``cve_known``). ``gather_web_hints`` has its
+        own CVE-mention relevance gate, so a bogus/unknown id simply returns []. The hints feed
+        (a) a raw PoC script found on the web → real code → consolidation, or (b) advisory/
+        description text → the synthesize-a-logic-following-PoC tier. Fail-open — any miss
+        (disabled, no SearXNG, error) → []."""
         if not getattr(state.settings, "web_search_enabled", False):
             return []
-        if prefetch_result.get("evidence"):          # catalog PoC exists (T1) — no web needed
+        # Real code already in the catalog (T1) — no web needed. Description-only catalog
+        # evidence does NOT block web research: we still want the internet's richer hints.
+        if has_real_code_evidence(prefetch_result.get("evidence") or []):
             return []
         cve_id = prefetch_result.get("cve_id")
-        if not cve_id or not prefetch_result.get("cve_known"):  # only real CVE with no PoC
+        if not cve_id:
             return []
         ledger = getattr(state.runner, "ledger", None)
         if ledger is None:
@@ -602,6 +763,81 @@ def register_routes(app: FastAPI, state: Any) -> None:
         except Exception:
             logger.exception("web hints gather failed")
             return []
+
+    async def _build_exploit_grounding(
+        prefetch_result: dict[str, Any], web_hints: list[dict[str, Any]],
+        session_id: str | None) -> tuple[list[dict[str, Any]], str, bool]:
+        """Acquire the best real PoC code (catalog → temp cache → on-demand GitHub → web raw
+        script), consolidate it into ONE runnable file when enabled, and build the model
+        appendix. Internet-fetched code is saved to the temp cache for reuse next time.
+
+        Returns ``(pre_evidence, appendix, consolidated)``:
+        * consolidated → ``pre_evidence`` is ``[merged_file] + description-only hints``; the
+          appendix tells the model Mục 1 is that file (system-injected) and to write Mục 2/3
+          against it. Session real-code/coverage flags are set so the synthesis/search hooks
+          don't force a spurious retry.
+        * not consolidated → the unchanged verbatim path: on-demand/web real code is still
+          merged in (better coverage), and the existing prefetch + web-hint appendices apply.
+        """
+        from ..poc.ondemand_cache import load_cached, resolve_cache_dir, save_cached
+        from ..poc.prefetch import set_session_coverage, set_session_real_code_evidence
+        settings = state.settings
+        poc = getattr(state.runner, "poc", None)
+        cve_id = prefetch_result.get("cve_id")
+        base_evidence = prefetch_result.get("evidence") or []
+        base_real = [e for e in base_evidence if has_real_code_evidence([e])]
+
+        # Acquisition priority when the catalog has no code: TEMP cache → INTERNET (GitHub
+        # on-demand). Internet-acquired code is saved back to the temp cache below so the next
+        # request for the same CVE reuses it instead of re-downloading.
+        cache_dir = resolve_cache_dir(settings)
+        extra_real: list[dict[str, Any]] = []
+        cached_hit = False
+        if not base_real and cve_id:
+            cached = load_cached(cache_dir, cve_id)
+            if cached:
+                extra_real = [cached]
+                cached_hit = True
+            elif poc is not None and getattr(settings, "poc_github_ondemand_enabled", False):
+                extra_real = await _ondemand_github_evidence(
+                    poc, cve_id, int(getattr(settings, "poc_github_ondemand_timeout_s", 30)))
+
+        web_real = [e for e in (web_hints or []) if e.get("source_code")]
+        all_real = base_real + extra_real
+        if not all_real:
+            all_real = web_real  # web raw PoC script → real code (also internet)
+
+        # Cache whatever we pulled from the internet (GitHub on-demand or web) so DB→temp→internet
+        # holds next time. Skip DB-sourced code (already persistent) and cache re-reads.
+        if cve_id and not base_real and not cached_hit and all_real:
+            save_cached(cache_dir, cve_id, all_real[0])
+
+        if all_real:  # tell the hooks real code exists (prefetch only saw the catalog)
+            set_session_real_code_evidence(session_id, True)
+            set_session_coverage(session_id, "enough")
+
+        consolidated: dict[str, Any] | None = None
+        if all_real and getattr(settings, "poc_consolidate_enabled", False):
+            try:
+                real_full = await _fullen_evidence_for_display(list(all_real), poc)
+                consolidated = await consolidate_poc(state.runner, real_full, cve_id)
+            except Exception:
+                logger.exception("poc consolidation failed for %s", cve_id)
+                consolidated = None
+
+        if consolidated:
+            desc_only = [e for e in list(base_evidence) + list(web_hints or [])
+                         if not has_real_code_evidence([e])]
+            pre_evidence = [consolidated] + merge_evidence(desc_only)
+            return pre_evidence, _consolidated_prompt_appendix(consolidated, cve_id), True
+
+        # Fallback (consolidation off/failed, or no code anywhere): unchanged verbatim/synthesis.
+        merged_for_appendix = {**prefetch_result,
+                               "evidence": merge_evidence(base_evidence, extra_real)}
+        pre_evidence = merge_evidence(base_evidence, extra_real, web_hints or [])
+        appendix = (_prefetch_prompt_appendix(merged_for_appendix)
+                    + _web_hints_prompt_appendix(web_hints or []))
+        return pre_evidence, appendix, False
 
     @app.post("/ai/exploit")
     async def exploit(body: LegacyRequest) -> dict[str, Any]:
@@ -618,18 +854,19 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # down and the model non-deterministically writes "no info" under a populated Section
         # 1. Adds prefetch latency to the critical path — it's a local catalog lookup, fast.
         prefetch_result = await exploit_prefetch(prompt_text, session_id)
-        # Case 3: real CVE, no catalog PoC → pull public web hints so the T3 synthesize tier
-        # is grounded on real reference pages (gated OFF; no-op unless WEB_SEARCH_ENABLED).
+        # No real catalog code → websearch (any CVE not in DB) so the consolidate/synthesize
+        # tiers have real hints; no-op unless WEB_SEARCH_ENABLED. gather_web_hints self-gates
+        # on CVE relevance, so an unknown id simply yields nothing.
         web_hints = await _maybe_web_hints(prefetch_result)
+        # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
+        # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
+        pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
+            prefetch_result, web_hints, session_id)
         agent_prompt = (prompt_text
                         + (_kt_prompt_appendix(kt_result) if kt_result else "")
-                        + _prefetch_prompt_appendix(prefetch_result)
-                        + _web_hints_prompt_appendix(web_hints))
+                        + grounding_appendix)
         text, metadata = await complete("exploit_research", body, session_id=session_id,
                                         prompt_override=agent_prompt)
-        # web_hints merged in too — enforce_section1's synthesis footer names its sources
-        # from `evidence`, and it never sees the prompt appendix text, only this list.
-        pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints)
         text, injected = await inject_reference_code(
             text, metadata.get("run_id"), pre_evidence,
             cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
@@ -686,11 +923,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # is only invoked from inside gen(), after that step completes or fails) — read here
         # so enforce_section1's synthesis footer can name its web sources, same as non-stream.
         web_hints_holder: list[dict[str, Any]] = []
+        # gen() stores the grounding result (consolidated pre_evidence) here so build_final and
+        # the Section-1 preview use the SAME evidence the model was grounded on.
+        grounding_holder: dict[str, Any] = {}
 
         async def build_final(final: str, run_id: str | None,
                               kt_result: dict[str, Any] | None = None) -> dict[str, Any]:
             prefetch_result = await prefetch_task
-            pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
+            pre_evidence = grounding_holder.get("pre_evidence")
+            if pre_evidence is None:  # prelude failed before grounding — fall back to raw merge
+                pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
             final, injected = await inject_reference_code(
                 final, run_id, pre_evidence,
                 cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
@@ -718,7 +960,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 _pf = await prefetch_task
                 _hints = await _maybe_web_hints(_pf)
                 web_hints_holder.extend(_hints)  # visible to build_final (see declaration above)
-                prefetch_appendix = _prefetch_prompt_appendix(_pf) + _web_hints_prompt_appendix(_hints)
+                _pre, prefetch_appendix, _cons = await _build_exploit_grounding(
+                    _pf, _hints, session_id)
+                grounding_holder["pre_evidence"] = _pre
+                grounding_holder["consolidated"] = _cons
             except Exception:
                 logger.exception("prefetch appendix build failed")
             # Wait up to 2s for KT so we can append appendix before the model starts when
@@ -803,11 +1048,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
                     if pending_prefetch is not None and pending_prefetch in done:
                         _pfres = pending_prefetch.result()
-                        pre_evidence = _pfres.get("evidence") or []
                         pending_prefetch = None
                         if not section1_sent:
+                            # Preview the SAME evidence the model was grounded on (consolidated
+                            # single file when available) — set by the prelude's grounding step,
+                            # which has already run by now. Fall back to raw prefetch evidence.
+                            preview_evidence = grounding_holder.get("pre_evidence")
+                            if preview_evidence is None:
+                                preview_evidence = _pfres.get("evidence") or []
                             fullened = await _fullen_evidence_for_display(
-                                list(pre_evidence), getattr(state.runner, "poc", None))
+                                list(preview_evidence), getattr(state.runner, "poc", None))
                             preview_body = canonical_block(fullened, _pfres.get("cve_id"))
                             if preview_body:
                                 section1_sent = True

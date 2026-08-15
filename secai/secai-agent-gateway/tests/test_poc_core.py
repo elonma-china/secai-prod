@@ -133,3 +133,44 @@ def test_ref_scoped_to_run(tmp_path: Path) -> None:
     ref = asyncio.run(be.search("CVE-2021-44228", 10, "runA"))["hits"][0]["ref"]
     with pytest.raises(PocError):
         asyncio.run(be.fetch(ref, "runB"))  # ref belongs to a different session
+
+
+def test_search_prefers_exploit_kind_over_higher_rank_nuclei(tmp_path: Path) -> None:
+    """CVE-exact search must surface kind=exploit before nuclei detection even when the
+    nuclei row has a higher source-tier rank (the historical bury-GitHub-PoCs bug)."""
+    from secai_gateway.poc.models import NormalizedPoc
+
+    cat = PocCatalog(tmp_path / "rank.db")
+    cat.upsert(NormalizedPoc(
+        source="nuclei", source_ref="CVE-2021-44228", kind="detection",
+        title="Nuclei detect", cve_ids=["CVE-2021-44228"], language="yaml",
+        verified=True, rank=21, url="https://n/x.yaml", redistributable=True,
+        artifact_path="http/cves/2021/CVE-2021-44228.yaml"))
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/log4shell", kind="exploit",
+        title="GitHub PoC", cve_ids=["CVE-2021-44228"], language="py",
+        verified=False, rank=5, url="https://github.com/alice/log4shell",
+        redistributable=False))
+    cat.commit()
+    be = LocalPocBackend(catalog=cat, source_roots={
+        "nuclei": tmp_path / "nuclei", "poc_github": tmp_path / "gh"})
+    hits = asyncio.run(be.search("CVE-2021-44228", 10, "run1"))["hits"]
+    assert len(hits) >= 2
+    assert hits[0]["kind"] == "exploit"
+    assert hits[0]["source"] == "poc_github"
+    assert hits[0].get("language") == "py"
+    assert any(h["kind"] == "detection" for h in hits)
+
+
+def test_prefetch_rank_prefers_github_then_exploit_over_nuclei() -> None:
+    from secai_gateway.poc.prefetch import _rank
+
+    nuclei = {"kind": "detection", "source": "nuclei", "verified": True}
+    github = {"kind": "exploit", "source": "poc_github", "verified": False}
+    edb = {"kind": "exploit", "source": "exploitdb", "verified": True}
+    ranked = sorted([nuclei, github, edb], key=_rank)
+    # GitHub PoCs are preferred within the exploit tier (they feed the consolidation step),
+    # then other exploit sources, with detection templates (nuclei) always last.
+    assert ranked[0]["source"] == "poc_github"
+    assert ranked[1]["source"] == "exploitdb"
+    assert ranked[2]["source"] == "nuclei"
