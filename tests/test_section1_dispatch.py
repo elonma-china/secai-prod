@@ -209,7 +209,9 @@ def test_tier4_no_cve_id_uses_generic_notice() -> None:
 def test_tier4_names_the_specific_cve_when_known() -> None:
     out, report = enforce_section1(_MODEL_REPORT, _NO_EVIDENCE, cve_known=False, cve_id="CVE-1999-99999")
     assert report["section1_tier"] == "not_found"
-    assert "CVE CVE-1999-99999 chưa có trong dữ liệu nội bộ." in out
+    assert "Không tìm thấy CVE-1999-99999 trong dữ liệu nội bộ" in out
+    assert "CVE CVE-1999-99999" not in out                 # no doubled "CVE" prefix
+    assert "## 2." not in out and "- mô tả" not in out     # model's own prose is discarded
 
 
 def test_tier4_is_idempotent() -> None:

@@ -21,8 +21,8 @@ _BANNER_LINE = re.compile(
     rf"""^[ \t]*(?:
         {_COMMENT_PREFIX}?[ \t]*[#/*;\-_=+~]{{8,}}[#/*;\-_=+~\s]*$  # # ===== / // **** rulers
       | [─━═░▒▓█▄▀■□★☆✔✗⚠🚀💀🔥]{{3,}}                              # box-drawing / emoji art
-      | {_COMMENT_PREFIX}?[ \t]*(?:Author|Coded\s+by|POC\s+by|Written\s+by|Discovered\s+by)\s*:
-      | {_COMMENT_PREFIX}?[ \t]*(?:Twitter|Telegram|Follow\s+me|Website|Blog|Email)\s*:
+      | {_COMMENT_PREFIX}[ \t]*(?:Author|Coded\s+by|POC\s+by|Written\s+by|Discovered\s+by)\s*:
+      | {_COMMENT_PREFIX}[ \t]*(?:Twitter|Telegram|Follow\s+me|Website|Blog|Email)\s*:
       | {_COMMENT_PREFIX}?[ \t]*DISCLAIMER\b
       | {_COMMENT_PREFIX}?[ \t]*={{3,}}\s*[A-Za-z].*={{3,}}\s*$       # === TITLE ===
     )""",
@@ -39,6 +39,8 @@ _H1 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*1\.[ \t]*\S[^\n]*$")
 _NEXT_SECTION = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*[2-9]\.[ \t]*\S")
 _ANY_HEADING = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]+\S")
 _SECTION1_HEADING = "## 1. Mã Khai thác (PoC) và Payload"
+_SECTION3_HEADING = "## 3. Tổng quan Lỗ hổng"
+_S3 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*3\.[ \t]*\S[^\n]*$")
 # The canonical, single-sentence "no evidence" statement per exploit.md — exact-string
 # idempotency check, not a regex/negation heuristic: a second pass on already-canonical
 # text is a no-op by construction, no whack-a-mole against natural-language phrasing.
@@ -56,6 +58,40 @@ _NO_POC_NOTE = "Chưa có thông tin PoC được xác thực trong dữ liệu 
 _SECTION1_NARRATION = re.compile(
     r"(?m)^(?=[^\n]*\bhệ thống\b)(?=[^\n]*\b(?:chèn|bổ sung|thêm)\b)(?=[^\n]*\bMục\s*1\b)[^\n]*\n?",
     re.I)
+
+# The model also leaks internal TOOL identifiers into the visible "Phân tích bằng chứng"
+# prose it writes for synthesized tiers (T2/T3) — observed live: "poc_search không tìm thấy
+# PoC nào trong danh mục nội bộ." base_system.md's output_integrity already tells it not to
+# narrate tool names ("không nhắc... tên công cụ như một lời kể"), but compliance is
+# inconsistent (same non-determinism as _SECTION1_NARRATION above), so this is a
+# deterministic backstop: word-substitute each exact tool identifier (optionally
+# backtick-wrapped) for a plain-Vietnamese phrase, in place — unlike
+# `strip_system_narration` this does NOT delete the sentence, since the surrounding analysis
+# is real content worth keeping, only the internal identifier itself is noise/a leak.
+_TOOL_NAME_PHRASES: dict[str, str] = {
+    "qdrant_search": "tra cứu CVE/CWE nội bộ",
+    "neo4j_search": "tra cứu quan hệ dữ liệu nội bộ",
+    "poc_search": "tra cứu danh mục PoC nội bộ",
+    "poc_fetch": "lấy dữ liệu PoC nội bộ",
+    "poc_verify": "xác minh PoC",
+    "poc_scan": "quét PoC",
+    "poc_exec": "thực thi PoC",
+    "poc_kt_exploit": "chạy PoC trong lab",
+    "fetch_reference": "tra cứu nguồn tham khảo",
+    "web_search": "tìm kiếm web",
+    "web_fetch": "tra cứu trang tham khảo",
+}
+_TOOL_NAME_RE = re.compile(
+    r"`?\b(" + "|".join(re.escape(k) for k in _TOOL_NAME_PHRASES) + r")\b`?")
+
+
+def strip_tool_name_mentions(text: str) -> str:
+    """Replace any literal internal tool identifier (``poc_search``, ``qdrant_search``, …)
+    in the model's visible text with a plain-Vietnamese phrase describing what it did,
+    in place. Call this alongside `strip_system_narration`, before Section-1 placement."""
+    if not text:
+        return text
+    return _TOOL_NAME_RE.sub(lambda m: _TOOL_NAME_PHRASES[m.group(1)], text)
 
 # file extension -> markdown fence language hint
 _EXT_LANG = {
@@ -279,7 +315,10 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
 def _with_consolidated_banner(block: str, ev: dict[str, Any]) -> str:
     """Prepend the light consolidated-tier banner to a rendered code block when the evidence
     entry is an AI-merged single file (`consolidated=True`). Idempotent — a block that already
-    opens with the banner is returned unchanged."""
+    opens with the banner is returned unchanged.
+
+    A `fixed=True` entry (poc/fixed_pocs.py) is still rendered under the SAME banner as every
+    other consolidated PoC, so the output stays uniform regardless of how the code was produced."""
     if not block or not ev.get("consolidated"):
         return block
     if block.lstrip().startswith(_CONSOLIDATED_BANNER):
@@ -519,6 +558,23 @@ def _place_section1(text: str, body: str) -> str:
     return f"{_SECTION1_HEADING}\n\n{body}{sep}{text}"
 
 
+def override_section3(text: str, section3_body: str) -> str:
+    """Replace the model's ``## 3. Tổng quan Lỗ hổng`` section with curated, accurate content.
+
+    Used for the fixed (lab-verified) tier: Mục 3 is still written by the model from the KB,
+    which can hallucinate version ranges / product names / vuln class. A verified-good store
+    entry carries an authoritative ``section3`` body; this swaps the model's section for it so
+    the whole report (Mục 1 code + Mục 3 overview) is deterministic. If the model wrote no Mục 3
+    at all, the curated body is appended under the canonical heading."""
+    body = (section3_body or "").strip()
+    if not body:
+        return text
+    m = _S3.search(text or "")
+    if not m:
+        return (text or "").rstrip() + f"\n\n{_SECTION3_HEADING}\n\n{body}\n"
+    return f"{text[:m.start()]}{_SECTION3_HEADING}\n\n{body}\n"
+
+
 def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
                            cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
     """Place the canonical fetched code as Section 1 for this run.
@@ -526,6 +582,11 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
     Returns (rewritten text, report). `report["reference_code_injected"]` is False (with a
     `reason`) when the run gathered no real evidence to place."""
     refs = [e for e in (evidence or []) if _blocks_for(e)]
+    fixed = [e for e in refs if e.get("fixed")]
+    if fixed:
+        # Verified-good override: a fixed (lab-verified) PoC wins — render ONLY it, dropping any
+        # other real-code entry the model may have re-fetched (e.g. the unfixed catalog copy).
+        refs = fixed
     if not refs:
         return text, {"reference_code_injected": False, "reason": "no_source_code"}
     canonical = "\n\n".join(_blocks_for(e, cve_id) for e in refs)
@@ -615,8 +676,17 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
         report["section1_tier"] = "synthesis_failed"
         return text, report
 
-    notice = f"CVE {cve_id} chưa có trong dữ liệu nội bộ." if cve_id else _NO_POC_NOTE
-    text, fallback = force_no_poc_notice(text, evidence, notice=notice)
-    report.update(fallback)
-    report["section1_tier"] = "not_found"
-    return text, report
+    # not_found: no evidence and no confirmed CVE at all. Emit ONE canonical notice as a clean,
+    # standalone Section 1 and DISCARD the model's own text entirely — for a CVE that isn't in
+    # the KB the model's prose is only a redundant "không tìm thấy" restatement, a fabricated
+    # Mục 3, or an off-topic apology, never real analysis (`synthesis_failed` above deliberately
+    # keeps the model text because a real CVE's Mục 3 may hold genuine CWE/CVSS data). `cve_id`
+    # already includes the "CVE-" prefix, so it is used as-is (no "CVE {cve_id}" double prefix).
+    notice = (f"Không tìm thấy {cve_id} trong dữ liệu nội bộ (KB) hoặc danh mục PoC công khai — "
+              "không đủ căn cứ để phân tích hay sinh PoC cho mã CVE này." if cve_id else _NO_POC_NOTE)
+    canonical = f"{_SECTION1_HEADING}\n\n{notice}"
+    if (text or "").strip() == canonical:
+        report.update({"no_poc_forced": False, "reason": "already_canonical", "section1_tier": "not_found"})
+        return text, report
+    report.update({"no_poc_forced": True, "section1_tier": "not_found"})
+    return canonical, report

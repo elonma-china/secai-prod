@@ -26,9 +26,11 @@ from ..poc import (
     has_real_code_evidence,
     merge_evidence,
     normalize_cve_ids,
+    override_section3,
     prefetch_evidence,
     sanitize_airgap_runguide,
     strip_system_narration,
+    strip_tool_name_mentions,
 )
 from ..poc.backend import PocBadRequest, PocError, PocForbidden, PocNotFound
 from ..poc.kt_client import KtClientError
@@ -720,6 +722,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
         ledger = getattr(state.runner, "ledger", None)
         try:
             text = strip_system_narration(text)
+            # Deterministic backstop for the sibling leak: internal TOOL identifiers
+            # (poc_search, qdrant_search, …) named in the model's own "Phân tích bằng chứng"
+            # prose instead of described in plain Vietnamese — observed live for the
+            # synthesized tiers. Word-substitutes in place (keeps the surrounding analysis).
+            text = strip_tool_name_mentions(text)
             # Deterministic air-gap backstop: strip internet/URL/upstream-path leaks the model
             # may still emit in Mục 2/3 despite prompt rules. Runs on model text only, before
             # Section-1 injection, so the real injected PoC code is never rewritten.
@@ -728,6 +735,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
             evidence = merge_evidence(pre_evidence or [], run_evidence)
             evidence = await _fullen_evidence_for_display(evidence, getattr(state.runner, "poc", None))
             text, report = enforce_section1(text, evidence, cve_known=cve_known, cve_id=cve_id)
+            # Curated Mục 3 override for fixed (lab-verified) CVEs — the model's Tổng quan can
+            # hallucinate product/version/class; the store carries an authoritative section.
+            fixed3 = next((e.get("section3") for e in evidence
+                           if e.get("fixed") and e.get("section3")), None)
+            if fixed3:
+                text = override_section3(text, fixed3)
             return text, report
         except Exception:
             logger.exception("reference-code injection failed run_id=%s", run_id)
@@ -794,6 +807,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
           merged in (better coverage), and the existing prefetch + web-hint appendices apply.
         """
         from ..poc.ondemand_cache import load_cached, resolve_cache_dir, save_cached
+        from ..poc.fixed_pocs import load_fixed, resolve_fixed_dir
         from ..poc.prefetch import set_session_coverage, set_session_real_code_evidence
         settings = state.settings
         poc = getattr(state.runner, "poc", None)
@@ -831,7 +845,19 @@ def register_routes(app: FastAPI, state: Any) -> None:
             set_session_coverage(session_id, "enough")
 
         consolidated: dict[str, Any] | None = None
-        if all_real and getattr(settings, "poc_consolidate_enabled", False):
+        # Verified-good override: a PoC previously fixed + lab-verified wins over the LLM
+        # consolidation, so the CVE returns the known-good runnable file with zero re-fix.
+        fixed = load_fixed(resolve_fixed_dir(settings), cve_id) if cve_id else None
+        if fixed:
+            set_session_real_code_evidence(session_id, True)
+            set_session_coverage(session_id, "enough")
+            # Keep response latency comparable to a normal CVE (which pays an LLM consolidation
+            # pass) instead of returning the cached copy instantly.
+            delay = float(getattr(settings, "poc_fixed_simulate_delay_s", 0) or 0)
+            if delay > 0:
+                await asyncio.sleep(delay)
+            consolidated = fixed
+        elif all_real and getattr(settings, "poc_consolidate_enabled", False):
             try:
                 real_full = await _fullen_evidence_for_display(list(all_real), poc)
                 consolidated = await consolidate_poc(state.runner, real_full, cve_id)

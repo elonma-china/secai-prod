@@ -184,27 +184,115 @@ def _has_relative_import(code: str) -> bool:
     return any(isinstance(n, ast.ImportFrom) and n.level > 0 for n in ast.walk(tree))
 
 
-def validate_runnable(code: str, language: str, cve_id: str | None = None) -> bool:
-    """Cheap, EXECUTION-FREE sanity check that the consolidated file is well-formed. Python is
-    syntax-checked with ``compile`` (compiles, never runs) PLUS an AST scan rejecting
-    package-relative imports (see ``_has_relative_import`` — a class of guaranteed-crash bug
-    ``compile()`` cannot see, since the import statement itself is syntactically valid). Other
-    languages can't be validated cheaply offline → accept as-is (the light banner already flags
-    it as unverified). Empty code always fails."""
+def _undefined_names(code: str) -> set[str]:
+    """Names that are *loaded* but never bound anywhere in the file (minus builtins/dunders).
+
+    A consolidated single file is self-contained by construction, so a loaded-but-unbound name
+    is almost always a real runtime ``NameError`` introduced by the merge — a dropped ``import``
+    (e.g. ``import time``), an inconsistently renamed module constant, or a referenced function
+    parameter that was dropped. Detected live: a wp2shell merge lost ``import time`` (→
+    ``name 'time' is not defined``) and renamed ``POSTS_ITEM_SOURCE_PATH`` at its definition
+    only (→ ``name 'POSTS_ITEM_SOURCE_PATH' is not defined``). Both are syntactically valid, so
+    ``compile()`` cannot see them. AST walk only — never executes code.
+
+    Deliberately conservative: a name that is only ever bound through ``exec``/``eval`` or a
+    star import is NOT reliably detectable; those are rare in PoC scripts and the miss merely
+    lets a broken file through (same as today) rather than falsely rejecting a good one."""
+    import ast
+    import builtins
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+    bound: set[str] = set()
+    used: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                bound.add((a.asname or a.name).split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for a in node.names:
+                if a.name != "*":
+                    bound.add(a.asname or a.name)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, ast.arg):  # Python 3.8+ function params are ast.arg, not Name
+            bound.add(node.arg)
+        elif isinstance(node, ast.ExceptHandler):  # `except X as exc` binds `exc` (a str field)
+            if node.name:
+                bound.add(node.name)
+        elif isinstance(node, ast.MatchAs):  # pattern matching `case x as y` (Py 3.10+)
+            if node.name:
+                bound.add(node.name)
+        elif isinstance(node, ast.MatchStar):  # `case *rest`
+            if node.name:
+                bound.add(node.name)
+        elif isinstance(node, ast.MatchMapping):  # `case {"k": v, **rest}`
+            if node.rest:
+                bound.add(node.rest)
+        elif isinstance(node, ast.Name):
+            if isinstance(node.ctx, ast.Load):
+                used.add(node.id)
+            else:  # Store / Del / Param
+                bound.add(node.id)
+    builtins_names = set(dir(builtins)) | {
+        "__name__", "__file__", "__doc__", "__package__", "__spec__", "__loader__",
+        "__builtins__", "__annotations__", "__debug__", "__cached__",
+    }
+    return {n for n in used - bound - builtins_names if not n.startswith("__")}
+
+
+def validation_failure(code: str, language: str, cve_id: str | None = None) -> str | None:
+    """The single EXECUTION-FREE check on a consolidated file. Returns ``None`` when it passes,
+    else a short Vietnamese reason naming the exact defect — usable both for logging and as
+    corrective feedback on a consolidation retry (see ``consolidate_poc``).
+
+    Python is syntax-checked with ``compile`` (compiles, never runs) PLUS an AST scan rejecting
+    package-relative imports (``_has_relative_import`` — a guaranteed-crash bug ``compile()``
+    can't see, the import being syntactically valid) and loaded-but-unbound names
+    (``_undefined_names`` — dropped imports / renamed constants). Other languages can't be
+    validated cheaply offline → accepted (the light banner already flags them unverified).
+    Empty code always fails."""
     if not code or not code.strip():
-        return False
+        return "tệp rỗng"
     if language in ("python", "py"):
         name = f"{(cve_id or 'poc').strip().lower()}.py"
         try:
             compile(code, name, "exec")
         except SyntaxError as exc:
-            logger.info("consolidated PoC failed python syntax check: %s", exc)
-            return False
+            return f"lỗi cú pháp Python: {exc.msg} (dòng {exc.lineno})"
         if _has_relative_import(code):
-            logger.info("consolidated PoC for %s kept a relative import — guaranteed crash "
-                        "standalone, rejecting", cve_id)
-            return False
+            return ("còn import tương đối kiểu package (vd `from . import x`) — tệp hợp nhất là "
+                    "một script độc lập nên sẽ lỗi ImportError ngay khi chạy; hãy nội tuyến giá "
+                    "trị/hàm đó thay vì giữ câu import")
+        undef = _undefined_names(code)
+        if undef:
+            return ("dùng tên chưa được định nghĩa/import trong tệp: " + ", ".join(sorted(undef))
+                    + " — thường do gộp làm rớt một `import` hoặc đổi tên hằng/biến ở nơi định "
+                    "nghĩa nhưng không đổi ở nơi dùng; hãy đảm bảo mọi tên đều có định nghĩa/import")
+    return None
+
+
+def validate_runnable(code: str, language: str, cve_id: str | None = None) -> bool:
+    """Boolean gate over ``validation_failure`` (kept for existing callers/tests). Logs the
+    named defect when it rejects."""
+    reason = validation_failure(code, language, cve_id)
+    if reason is not None:
+        logger.info("consolidated PoC for %s rejected: %s", cve_id, reason)
+        return False
     return True
+
+
+# Corrective suffix appended to the consolidation prompt on a retry. Names the exact defect
+# the execution-free validator found in the previous attempt (dropped import, undefined name,
+# syntax error, relative import, missing code block) so the model fixes THAT rather than
+# re-rolling blindly. The base prompt (consolidate.md) already carries every merge rule; this
+# only points at what went wrong last time.
+_RETRY_FEEDBACK = (
+    "LƯU Ý SỬA LỖI: bản hợp nhất TRƯỚC của bạn bị loại vì {reason}. Hãy sinh lại TOÀN BỘ tệp và "
+    "sửa đúng lỗi này, vẫn tuân thủ mọi quy tắc ở trên (một tệp độc lập chạy được, giữ NGUYÊN mọi "
+    "giá trị kỹ thuật thật trong mã gốc, không bịa thêm). Chỉ trả về DUY NHẤT một khối mã."
+)
 
 
 async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
@@ -229,30 +317,62 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
     source = _gather_source(ev, budget)
     if not source.strip():
         return None
-    prompt = build_consolidation_prompt(ev, cve_id, budget)
-    timeout_s = get_settings().poc_consolidate_timeout_s
-    try:
-        text, _meta = await asyncio.wait_for(
-            runner.complete("poc_consolidate", prompt), timeout=timeout_s)
-    except asyncio.TimeoutError:
-        logger.warning("poc consolidation LLM call timed out (%ss) for %s", timeout_s, cve_id)
-        return None
-    except Exception:
-        logger.exception("poc consolidation LLM call failed for %s", cve_id)
-        return None
-    parsed = extract_code_block(text or "")
-    if not parsed:
-        return None
-    code, lang = parsed
-    language = lang or _entry_language(ev) or ""
-    if not validate_runnable(code, language, cve_id):
+    base_prompt = build_consolidation_prompt(ev, cve_id, budget)
+    settings = get_settings()
+    # Output cache: the merge is a pure function of the prompt (source bytes + CVE + language +
+    # budget-truncation) at a fixed sampling temperature, so a repeat request for the same CVE
+    # can reuse the merged file and skip the whole LLM pass — including any retry attempts. The
+    # verified-good `fixed` override in routes already short-circuits earlier; this catches
+    # every OTHER CVE. Fail-open: a miss just recomputes.
+    cache_dir = resolve_consolidated_cache_dir(settings)
+    ckey = cache_key(base_prompt, float(getattr(settings, "llm_temperature", 0.0) or 0.0))
+    cached = load_consolidated(cache_dir, cve_id or "", ckey)
+    if cached is not None:
+        logger.info("poc consolidation cache hit for %s", cve_id)
+        return cached
+    timeout_s = settings.poc_consolidate_timeout_s
+    max_attempts = max(1, int(getattr(settings, "poc_consolidate_max_attempts", 1) or 1))
+    code = language = None
+    prompt = base_prompt
+    for attempt in range(1, max_attempts + 1):
+        try:
+            text, _meta = await asyncio.wait_for(
+                runner.complete("poc_consolidate", prompt), timeout=timeout_s)
+        except asyncio.TimeoutError:
+            # A timeout is a transport/capacity problem, not a fidelity one — retrying would
+            # just burn more of the request's time budget on the same stall. Give up now.
+            logger.warning("poc consolidation timed out (%ss) for %s (attempt %d/%d)",
+                           timeout_s, cve_id, attempt, max_attempts)
+            return None
+        except Exception:
+            logger.exception("poc consolidation LLM call failed for %s (attempt %d/%d)",
+                             cve_id, attempt, max_attempts)
+            return None
+        parsed = extract_code_block(text or "")
+        if not parsed:
+            reason: str | None = "không tìm thấy khối mã trong phản hồi (có thể kèm lời dẫn thừa)"
+        else:
+            code, lang = parsed
+            language = lang or _entry_language(ev) or ""
+            reason = validation_failure(code, language, cve_id)
+            if reason is None:
+                break  # merged file passes the execution-free checks — done
+        # Rejected. Retry with the exact defect fed back, unless this was the last attempt.
+        if attempt >= max_attempts:
+            logger.info("poc consolidation for %s gave up after %d attempt(s); last defect: %s",
+                        cve_id, max_attempts, reason)
+            return None
+        logger.info("poc consolidation for %s attempt %d rejected (%s) — retrying with feedback",
+                    cve_id, attempt, reason)
+        prompt = f"{base_prompt}\n\n{_RETRY_FEEDBACK.format(reason=reason)}"
+    if code is None or validation_failure(code, language, cve_id) is not None:
         return None
     # Provenance: keep the ORIGINAL artifact's hash/url so metadata still points at the real
     # source, even though Mục 1 now shows the AI-merged file. `sha256` is preserved but the
     # entry is flagged `consolidated` so _fullen_evidence_for_display won't re-read the verbatim
     # bytes over our merged code.
     orig_files = [f.get("path") for f in (ev.get("source_files") or []) if f.get("path")]
-    return {
+    result = {
         "source": ev.get("source"),
         "source_ref": ev.get("source_ref"),
         "url": ev.get("url"),
@@ -273,3 +393,6 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
         },
         "static_indicators": {"language": language or None, "consolidated": True},
     }
+    # Persist the validated merge so the next request for this CVE skips the LLM pass entirely.
+    save_consolidated(cache_dir, cve_id or "", ckey, result)
+    return result

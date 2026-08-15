@@ -6,7 +6,7 @@ a VPN/private ingress or an IP-allowlisting reverse proxy. `X-API-Key` is requir
 for `/admin/refresh-models`.
 
 The LLM backend is selected by `LLM_PROVIDER` (`deepseek` → DeepSeek `deepseek-v4-flash`,
-or `vllm` → local Qwen). Chat and exploit research are the only agentic profiles;
+or `vllm` → local Qwen). Chat and PoC research are the only agentic profiles;
 translate/report/statistical profiles never receive tools.
 
 ## Deploying to another machine
@@ -45,7 +45,7 @@ Each AI task has a JSON form and an SSE `…/stream` form (streams `tool_call` /
 - `POST /ai/translate` · `POST /ai/translate/stream` — EN⇄VI security translation
 - `POST /ai/generate-report` · `POST /ai/generate-report/stream` — analyse a log/data blob into a Markdown report
 - `POST /ai/generate-statistical-report` · `…/stream` — period report as `report_title`/`summary`/`detail`
-- `POST /ai/exploit` · `POST /ai/exploit/stream` — Exploit-DB-grounded exploit research
+- `POST /ai/exploit` · `POST /ai/exploit/stream` — Exploit-DB-grounded PoC research
 - `GET  /health` · `POST /admin/refresh-models` (needs `X-API-Key`)
 - Interactive API docs at `/docs` (Swagger) and `/redoc`
 
