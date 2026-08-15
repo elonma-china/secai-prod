@@ -5,6 +5,32 @@ from __future__ import annotations
 import re
 from typing import Any
 
+# Decorative banner noise stripped at DISPLAY time only (Mục 1). Catalog bytes / sha256
+# stay untouched so provenance remains grounded. Docstrings, argparse help, and normal
+# technical comments are kept — they feed Mục 2 ("Cách chạy PoC").
+#
+# Comment-prefix variants (line-start only — we do NOT strip mid-line or string contents):
+#   #        Python / Ruby / Perl / YAML / shell
+#   //  /*   C / C++ / Java / JS / Go / Rust / PHP / C#
+#   ;        asm / Lisp / some INI
+#   --       SQL / Lua / Haskell
+#   '  REM   VB / BASIC / batch
+# A lone "# probe the endpoint" technical comment does NOT match (no long ruler / banner key).
+_COMMENT_PREFIX = r"(?:\#|//|/\*|\;|--|'|REM\b)"
+_BANNER_LINE = re.compile(
+    rf"""^[ \t]*(?:
+        {_COMMENT_PREFIX}?[ \t]*[#/*;\-_=+~]{{8,}}[#/*;\-_=+~\s]*$  # # ===== / // **** rulers
+      | [─━═░▒▓█▄▀■□★☆✔✗⚠🚀💀🔥]{{3,}}                              # box-drawing / emoji art
+      | {_COMMENT_PREFIX}?[ \t]*(?:Author|Coded\s+by|POC\s+by|Written\s+by|Discovered\s+by)\s*:
+      | {_COMMENT_PREFIX}?[ \t]*(?:Twitter|Telegram|Follow\s+me|Website|Blog|Email)\s*:
+      | {_COMMENT_PREFIX}?[ \t]*DISCLAIMER\b
+      | {_COMMENT_PREFIX}?[ \t]*={{3,}}\s*[A-Za-z].*={{3,}}\s*$       # === TITLE ===
+    )""",
+    re.I | re.X,
+)
+# Collapse 3+ blank lines left after banner removal → at most one blank.
+_MULTI_BLANK = re.compile(r"\n{3,}")
+
 # Section 1 heading (markdown H2..H6, "1."). A single-`#` code comment can't match, so a
 # `# 1. step` line inside a PoC is never mistaken for the heading.
 _H1 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*1\.[ \t]*\S[^\n]*$")
@@ -71,10 +97,36 @@ def _lang_from_evidence(ev: dict[str, Any]) -> str:
     return _EXT_LANG.get(lang, lang)
 
 
+def sanitize_poc_display(code: str) -> str:
+    """Strip decorative PoC banners for Mục 1 display — not a full comment remover.
+
+    Removes Exploit-DB / community-style noise (long ``====`` rulers, ASCII/emoji art,
+    ``Author:`` / ``Twitter:`` / ``DISCLAIMER`` banner lines). Keeps shebang, encoding
+    cookies, normal ``#`` technical comments, docstrings, and argparse/usage text so Mục 2
+    can still ground run instructions. Idempotent; empty input unchanged.
+    """
+    if not code:
+        return code
+    kept: list[str] = []
+    for line in code.splitlines(keepends=True):
+        core = line.rstrip("\n\r")
+        if _BANNER_LINE.match(core):
+            continue
+        kept.append(line)
+    out = "".join(kept)
+    out = _MULTI_BLANK.sub("\n\n", out)
+    # Preserve a trailing newline when the original had one (typical source files).
+    if code.endswith("\n") and out and not out.endswith("\n"):
+        out += "\n"
+    return out
+
+
 def _fence(code: str, lang: str) -> str:
     # Use a fence longer than any backtick run inside the artifact so embedded ``` is safe.
+    # Decorative banners are stripped here (display path) — catalog/sha stay original.
+    code = sanitize_poc_display(code or "")
     ticks = "```"
-    for run in re.findall(r"`+", code or ""):
+    for run in re.findall(r"`+", code):
         if len(run) >= len(ticks):
             ticks = "`" * (len(run) + 1)
     return f"{ticks}{lang}\n{code}\n{ticks}"
@@ -186,18 +238,33 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
     return "\n\n".join(parts)
 
 
+def _is_detection_evidence(ev: dict[str, Any]) -> bool:
+    """Nuclei / kind=detection templates detect a vuln — they are NOT exploit PoCs for T1
+    injection. Their YAML body is synthesis grounding (T2) instead: method/path/payload/
+    matcher feed the model so it can write a real standalone PoC."""
+    kind = str(ev.get("kind") or "").strip().lower()
+    source = str(ev.get("source") or "").strip().lower()
+    return kind == "detection" or source == "nuclei"
+
+
 def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
-    """Render an evidence entry's code. No provenance prose — the UI shows the "PoC công
-    khai (nguồn: …)" sentence as clutter, and the API response's `metadata.provenance`
-    already carries source/URL/sha256 per entry for anything that wants it (the rendered
-    header itself skips the hash too — readers just want the generated report, not a
-    content-address; sha256 stays available programmatically via metadata for anything
-    that needs to verify/refetch the exact bytes). The header names the PoC as a local
-    file (`<cve-id>.<ext>` in air-gap), not its upstream path/URL."""
+    """Render an evidence entry's exploit code for T1 Section-1 injection.
+
+    Detection templates (nuclei YAML, ``kind=detection``) are deliberately excluded even
+    when they carry ``source_code`` — injecting the scanner template as "Mã Khai thác"
+    blocked synthesis of a real PoC. Those entries go through ``_description_for`` (T2).
+
+    No provenance prose — the UI shows the "PoC công khai (nguồn: …)" sentence as clutter,
+    and the API response's ``metadata.provenance`` already carries source/URL/sha256 per
+    entry. The header names the PoC as a local file (``<cve-id>.<ext>`` in air-gap), not
+    its upstream path/URL."""
+    if _is_detection_evidence(ev):
+        return ""
     files = ev.get("source_files")
     if files:
-        return render_files(files, default_lang=_lang_from_evidence(ev),
-                            show_tree=not ev.get("companion_doc_only", False), cve_id=cve_id)
+        block = render_files(files, default_lang=_lang_from_evidence(ev),
+                             show_tree=not ev.get("companion_doc_only", False), cve_id=cve_id)
+        return _with_consolidated_banner(block, ev)
     code = ev.get("source_code")
     if not code:
         return ""
@@ -206,15 +273,26 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
     header = f"**`{name}`**"
     if ev.get("code_truncated"):
         header += " — *(đã cắt bớt theo giới hạn tải)*"
-    return f"{header}\n\n{_fence(code, lang)}"
+    return _with_consolidated_banner(f"{header}\n\n{_fence(code, lang)}", ev)
+
+
+def _with_consolidated_banner(block: str, ev: dict[str, Any]) -> str:
+    """Prepend the light consolidated-tier banner to a rendered code block when the evidence
+    entry is an AI-merged single file (`consolidated=True`). Idempotent — a block that already
+    opens with the banner is returned unchanged."""
+    if not block or not ev.get("consolidated"):
+        return block
+    if block.lstrip().startswith(_CONSOLIDATED_BANNER):
+        return block
+    return f"{_CONSOLIDATED_BANNER}\n\n{block}"
 
 
 def _description_for(ev: dict[str, Any]) -> str:
-    """Fallback evidence text when there's no runnable code (`_blocks_for` empty): a GHSA
-    advisory body, a vulhub lab whose README was captured because it has no compose file,
-    or a GitHub-fetched PoC whose only file is a README (`role="readme"`, deliberately
-    skipped by `render_files`). All of this currently reaches `FetchResult` but was
-    silently dropped from Section-1 consideration — this is the synthesize-from-evidence
+    """Fallback evidence text when there's no injectable exploit code (`_blocks_for` empty):
+    a GHSA advisory body, a vulhub lab whose README was captured because it has no compose
+    file, a GitHub-fetched PoC whose only file is a README (`role="readme"`, deliberately
+    skipped by `render_files`), or a nuclei/detection YAML (template body = synthesis
+    grounding: HTTP method/path/payload/matcher). This is the synthesize-from-evidence
     tier's input."""
     if _blocks_for(ev):
         return ""
@@ -224,20 +302,30 @@ def _description_for(ev: dict[str, Any]) -> str:
     for f in ev.get("source_files") or []:
         if f.get("role") == "readme" and f.get("code"):
             return str(f["code"]).strip()
+    # Detection YAML with no separate description — the template itself is the evidence.
+    if _is_detection_evidence(ev):
+        code = ev.get("source_code")
+        if code:
+            return str(code).strip()
+        for f in ev.get("source_files") or []:
+            if f.get("code"):
+                return str(f["code"]).strip()
     return ""
 
 
 def has_real_code_evidence(evidence: list[dict[str, Any]]) -> bool:
-    """Whether any entry in `evidence` has real runnable code (`_blocks_for`) — the T1
-    signal. Used by RequireSection1SynthesisHook (agent/hooks.py) to skip forcing a
-    synthesis retry when Section 1 will be the deterministic real-code tier regardless."""
+    """Whether any entry has injectable exploit code (`_blocks_for`) — the T1 signal.
+    Detection YAML does NOT count (see ``_is_detection_evidence``). Used by
+    RequireSection1SynthesisHook to skip forcing a synthesis retry when Section 1 will be
+    the deterministic real-code tier regardless."""
     return any(_blocks_for(e) for e in (evidence or []))
 
 
 def has_synthesis_evidence(evidence: list[dict[str, Any]]) -> bool:
-    """Whether any entry in `evidence` has real description/README text but no runnable
-    code (`_description_for`) — the T2 signal, independent of `cve_known` (T3). Used by
-    RequireSection1SynthesisHook to know whether forcing a Section-1 retry is worth it."""
+    """Whether any entry has description/README/detection-YAML text but no injectable
+    exploit code (`_description_for`) — the T2 signal, independent of `cve_known` (T3).
+    Used by RequireSection1SynthesisHook to know whether forcing a Section-1 retry is
+    worth it."""
     return any(_description_for(e) for e in (evidence or []))
 
 
@@ -252,6 +340,14 @@ def section1_has_body(text: str) -> bool:
 _SYNTHESIS_BANNER = (
     "⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP DỰA TRÊN BẰNG CHỨNG NỘI BỘ, "
     "KHÔNG PHẢI PoC ĐÃ FETCH THẬT, CHƯA ĐƯỢC THỰC THI HAY XÁC THỰC."
+)
+# LIGHT banner for the consolidated tier (poc/consolidate.py): the code IS grounded in a real
+# fetched PoC — only merged into one runnable file and stripped of noise by an LLM pass — so it
+# gets a softer note than the SYNTHESIZED banner (which is for code invented from a description).
+# Provenance (original sha256/URL) stays in metadata regardless. Prepended by `_blocks_for`.
+_CONSOLIDATED_BANNER = (
+    "ℹ️ Tệp dưới đây đã được AI hợp nhất/tinh gọn thành MỘT tệp duy nhất từ (các) tệp PoC gốc "
+    "đã fetch — CHƯA chạy thử; nguồn gốc (URL/sha256) xem ở metadata."
 )
 # Distinct from _NO_POC_NOTE: evidence/CVE DID exist (see Mục 3 for real CWE/CVSS/CAPEC
 # data), only the synthesis attempt itself failed this turn — must not claim the CVE is
@@ -492,7 +588,14 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
     text = text or ""
     text, report = enforce_reference_code(text, evidence, cve_id=cve_id)
     if report.get("reference_code_injected"):
-        report["section1_tier"] = "real"
+        # Consolidated tier: the injected code is a real fetched PoC merged into one runnable
+        # file (poc/consolidate.py), shown with the LIGHT banner (not SYNTHESIZED). Provenance
+        # (sha256/url) already sits in `report`; flag it so the FE/metadata can label it.
+        consolidated = any(
+            e.get("consolidated") for e in (evidence or []) if _blocks_for(e))
+        report["section1_tier"] = "real_consolidated" if consolidated else "real"
+        if consolidated:
+            report["consolidated"] = True
         return text, report
 
     readme_refs = [e for e in (evidence or []) if _description_for(e)]

@@ -1,6 +1,7 @@
 """Unified PoC catalog: normalized sources and read-only Linch tools."""
 from .backend import LocalPocBackend, PocBadRequest, PocError, PocForbidden, PocNotFound
 from .catalog import PocCatalog
+from .consolidate import consolidate_poc
 from .inject import (
     canonical_block,
     enforce_reference_code,
@@ -10,6 +11,7 @@ from .inject import (
     has_synthesis_evidence,
     render_files,
     sanitize_airgap_runguide,
+    sanitize_poc_display,
     section1_has_body,
     strip_system_narration,
 )
@@ -36,6 +38,7 @@ __all__ = [
     "PocForbidden",
     "PocNotFound",
     "PocCatalog",
+    "consolidate_poc",
     "FetchResult",
     "NormalizedPoc",
     "SearchHit",
@@ -54,6 +57,7 @@ __all__ = [
     "merge_evidence",
     "strip_system_narration",
     "sanitize_airgap_runguide",
+    "sanitize_poc_display",
     "set_session_coverage",
     "get_session_coverage",
     "clear_session_coverage",

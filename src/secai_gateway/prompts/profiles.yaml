@@ -50,6 +50,14 @@ translate:
   base: false
   max_turns: 2
 
+# Single-shot PoC consolidation: merge a fetched PoC's full source (1+ files) into ONE
+# self-contained runnable file for Section 1. No tools, no RAG — pure text→code transform.
+poc_consolidate:
+  prompt: consolidate.md
+  tools: []
+  base: false
+  max_turns: 2
+
 report:
   prompt: report.md
   tools: [qdrant_search, neo4j_search]

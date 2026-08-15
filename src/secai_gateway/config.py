@@ -168,6 +168,21 @@ class Settings(BaseSettings):
     web_search_timeout_s: float = 10.0
     web_search_max_results: int = 6
 
+    # ── PoC consolidation (single runnable file) ───────────────────────────────
+    # After fetching a PoC's real source (catalog / on-demand GitHub / web), an LLM pass
+    # (profile `poc_consolidate`) merges it into ONE self-contained file for Section 1 —
+    # replacing the verbatim multi-file dump. Off → verbatim injection (old behaviour).
+    poc_consolidate_enabled: bool = True
+    # Fetch a link-only GitHub PoC's code on demand (codeload tarball, in-memory, no exec) from
+    # the request path when the catalog row has a URL but no local artifact. Network egress —
+    # fail-open (a miss simply falls through to web/synthesis). Off → only pre-fetched rows.
+    poc_github_ondemand_enabled: bool = True
+    poc_github_ondemand_timeout_s: int = 30
+    # Persistent cache for PoC code fetched on-demand from the internet (GitHub tarball / web
+    # raw script), keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
+    # Lookup order becomes DB → this cache → internet. Empty → "<poc_artifact_store>/../ondemand-cache".
+    poc_ondemand_cache_dir: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

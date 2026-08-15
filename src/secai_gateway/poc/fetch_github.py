@@ -250,6 +250,26 @@ def _owner_repo(source_ref: str, url: str = "") -> tuple[str, str] | None:
     return None
 
 
+def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
+                    cve: str = "", timeout: int = _REPO_TIMEOUT
+                    ) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+    """On-demand, READ-ONLY code fetch for a link-only GitHub PoC — the request-path twin of
+    ``run()``'s per-row body, WITHOUT any store/catalog writes.
+
+    Given a catalog row's ``source_ref``/``url`` (and optionally the recorded default
+    ``branch`` + the ``cve`` for entry-file picking), download the repo tarball and return
+    ``(entry_bytes, entry_rel, file_set)`` exactly like ``_fetch_one`` — or ``None`` on any
+    miss (bad url, 404, no picked PoC). Never raises, never touches disk beyond the in-memory
+    tarball, never executes code — same safety envelope as ``run()``. The caller turns the
+    bytes into ledger evidence; nothing is persisted to the poc catalog/store."""
+    parsed = _owner_repo(str(source_ref or ""), str(url or ""))
+    if not parsed:
+        return None
+    owner, repo = parsed
+    return _fetch_one(_tarball_urls(owner, repo, branch or "master"),
+                      cve or repo, timeout)
+
+
 def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT, refetch: bool = False) -> None:
     be = LocalPocBackend()
     store = be.roots["poc_github"]

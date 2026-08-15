@@ -30,7 +30,9 @@ class NormalizedPoc:
 @dataclass(frozen=True, slots=True)
 class SearchHit:
     """A poc_search result the model sees. `ref` is an opaque capability token — the model
-    passes it to poc_fetch; it can never be fabricated or reused across runs. No raw path."""
+    passes it to poc_fetch; it can never be fabricated or reused across runs. No raw path.
+    ``kind`` + ``language`` let the model prefer exploit scripts (py/rb/…) over detection
+    YAML without fetching every hit."""
     ref: str
     title: str
     source: str
@@ -39,6 +41,7 @@ class SearchHit:
     verified: bool
     url: str
     platform: str | None = None
+    language: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
