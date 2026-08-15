@@ -173,6 +173,12 @@ class Settings(BaseSettings):
     # (profile `poc_consolidate`) merges it into ONE self-contained file for Section 1 —
     # replacing the verbatim multi-file dump. Off → verbatim injection (old behaviour).
     poc_consolidate_enabled: bool = True
+    # Hard ceiling on the consolidation LLM turn. runner.complete() has no internal timeout, so a
+    # stuck backend call (network stall, queue starvation) would otherwise block the whole
+    # /ai/exploit request indefinitely (observed: one call hung ~3h before failing). Normal calls
+    # finish in 8-55s; 180s gives generous headroom while still bounding the worst case. Timeout
+    # → treated like any other consolidation miss (logged, falls back to verbatim injection).
+    poc_consolidate_timeout_s: int = 180
     # Fetch a link-only GitHub PoC's code on demand (codeload tarball, in-memory, no exec) from
     # the request path when the catalog row has a URL but no local artifact. Network egress —
     # fail-open (a miss simply falls through to web/synthesis). Off → only pre-fetched rows.

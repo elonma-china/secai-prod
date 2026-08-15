@@ -114,6 +114,24 @@ async def test_consolidate_poc_returns_none_on_non_code_reply() -> None:
     assert await consolidate_poc(_NonCodeRunner(), _MULTIFILE_EVIDENCE, "CVE-2026-31431") is None
 
 
+class _HangingRunner:
+    """Simulates a stuck backend call (network stall / queue starvation) — never returns."""
+
+    async def complete(self, profile_name: str, prompt: str, session_id=None):
+        import asyncio
+        await asyncio.sleep(3600)  # far longer than any test timeout below
+        raise AssertionError("unreachable — wait_for must cancel this first")
+
+
+@pytest.mark.asyncio
+async def test_consolidate_poc_times_out_instead_of_hanging(monkeypatch) -> None:
+    # A stuck LLM call must not block the request indefinitely (observed: one real call hung
+    # ~3h before failing). Shrink the timeout so the test itself stays fast.
+    monkeypatch.setenv("POC_CONSOLIDATE_TIMEOUT_S", "1")
+    out = await consolidate_poc(_HangingRunner(), _MULTIFILE_EVIDENCE, "CVE-2026-31431")
+    assert out is None  # timeout → treated like any other consolidation miss
+
+
 # ── over-context safety: budget scales with model window; oversized entry skips ─
 def test_source_budget_scales_with_context_window() -> None:
     from types import SimpleNamespace

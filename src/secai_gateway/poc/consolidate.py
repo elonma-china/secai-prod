@@ -15,6 +15,7 @@ NOT run it); other languages are passed through unvalidated.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -229,8 +230,13 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
     if not source.strip():
         return None
     prompt = build_consolidation_prompt(ev, cve_id, budget)
+    timeout_s = get_settings().poc_consolidate_timeout_s
     try:
-        text, _meta = await runner.complete("poc_consolidate", prompt)
+        text, _meta = await asyncio.wait_for(
+            runner.complete("poc_consolidate", prompt), timeout=timeout_s)
+    except asyncio.TimeoutError:
+        logger.warning("poc consolidation LLM call timed out (%ss) for %s", timeout_s, cve_id)
+        return None
     except Exception:
         logger.exception("poc consolidation LLM call failed for %s", cve_id)
         return None
