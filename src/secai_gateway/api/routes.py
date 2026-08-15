@@ -81,6 +81,44 @@ _CHITCHAT_RE = re.compile(
     r")[\s.,!?…]*$",
     re.I,
 )
+# Strict CVE format: CVE-YYYY-NNNNN (4-digit year, 3-7 digit ID, only digits/hyphens)
+_CVE_STRICT = re.compile(r"^CVE-\d{4}-\d{3,7}$", re.I)
+
+
+def _validate_cve_format(cve_id: str) -> tuple[bool, str]:
+    """Validate CVE ID format strictly (CVE-YYYY-NNNNN only, no 'zz' or other suffixes)."""
+    cve_id = (cve_id or "").strip().upper()
+    if not cve_id:
+        return False, "CVE ID không được để trống."
+    if not _CVE_STRICT.match(cve_id):
+        return False, f"Định dạng CVE không hợp lệ: '{cve_id}'. Cần CVE-YYYY-NNNNN (ví dụ CVE-2026-42533)."
+    return True, ""
+
+
+async def _check_cve_existence(cve_id: str, session_id: str) -> tuple[bool, str]:
+    """Check if CVE exists in DB or web. Returns (exists, error_msg)."""
+    cve_id = (cve_id or "").strip().upper()
+
+    # Step 1: Query DB catalog
+    from ..poc.catalog import search as search_catalog
+    try:
+        results = search_catalog(cve_id, limit=1, cve_only=True)
+        if results and len(results) > 0:
+            return True, ""
+    except Exception:
+        pass  # DB query failed, try web
+
+    # Step 2: Websearch to verify CVE exists
+    if state.settings.WEB_SEARCH_ENABLED:
+        try:
+            hints = await gather_web_hints(cve_id, session_id)
+            if hints and len(hints) > 0:
+                return True, ""
+        except Exception as e:
+            logger.debug(f"Web search for {cve_id} failed: {e}")
+
+    # Not found anywhere
+    return False, f"CVE {cve_id} không được tìm thấy trong cơ sở dữ liệu hoặc trên mạng. Vui lòng kiểm tra lại mã CVE."
 
 
 def _fold_diacritics(text: str) -> str:
@@ -847,6 +885,21 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     "metadata": exploit_guidance_meta()}
         prompt_text = normalize_cve_ids(prompt_text)
         session_id = _exploit_session_id(body)
+
+        # Check CVE format & existence before proceeding
+        cve_match = _CVE_ANY.search(prompt_text)
+        if cve_match:
+            cve_id = cve_match.group(0).upper()
+            valid, fmt_err = _validate_cve_format(cve_id)
+            if not valid:
+                return {"description": fmt_err, "exploit_guide": fmt_err,
+                        "metadata": {"error": fmt_err, "cve_id": cve_id}}
+
+            exists, exists_err = await _check_cve_existence(cve_id, session_id)
+            if not exists:
+                return {"description": exists_err, "exploit_guide": exists_err,
+                        "metadata": {"error": exists_err, "cve_id": cve_id}}
+
         kt_run_id = f"kt:{uuid4().hex}"
         kt_result = await _run_kt_if_applicable(state.settings, body, prompt_text, kt_run_id)
         # Await prefetch BEFORE the model so its fetched PoC grounds the model's Mục 2/3 (see
@@ -914,6 +967,31 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         text = normalize_cve_ids(text)
         session_id = _exploit_session_id(body)
+
+        # Check CVE format & existence before streaming
+        cve_match = _CVE_ANY.search(text)
+        if cve_match:
+            cve_id = cve_match.group(0).upper()
+            valid, fmt_err = _validate_cve_format(cve_id)
+            if not valid:
+                async def gen_error_fmt() -> AsyncIterator[bytes]:
+                    yield sse_frame("token", {"delta": fmt_err})
+                    yield sse_frame("final", {
+                        "content": fmt_err, "exploit_guide": fmt_err,
+                        "description": fmt_err, "metadata": {"error": fmt_err, "cve_id": cve_id}})
+                    yield b"data: [DONE]\n\n"
+                return StreamingResponse(gen_error_fmt(), media_type="text/event-stream")
+
+            exists, exists_err = await _check_cve_existence(cve_id, session_id)
+            if not exists:
+                async def gen_error_exists() -> AsyncIterator[bytes]:
+                    yield sse_frame("token", {"delta": exists_err})
+                    yield sse_frame("final", {
+                        "content": exists_err, "exploit_guide": exists_err,
+                        "description": exists_err, "metadata": {"error": exists_err, "cve_id": cve_id}})
+                    yield b"data: [DONE]\n\n"
+                return StreamingResponse(gen_error_exists(), media_type="text/event-stream")
+
         prefetch_task = asyncio.create_task(exploit_prefetch(text, session_id))
         kt_run_id = f"kt:{uuid4().hex}"
         kt_task: asyncio.Task | None = asyncio.create_task(
