@@ -866,6 +866,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
         cve_match = _CVE_ANY.search(prompt_text)
         if cve_match:
             cve_id = cve_match.group(0).upper()
+            # Check if there's a non-numeric suffix immediately after the CVE number
+            end_pos = cve_match.end()
+            if end_pos < len(prompt_text) and prompt_text[end_pos].isalpha():
+                fmt_err = f"Định dạng CVE không hợp lệ: '{cve_id}{prompt_text[end_pos:].split()[0]}'. Cần CVE-YYYY-NNNNN (ví dụ CVE-2026-42533)."
+                return {"description": fmt_err, "exploit_guide": fmt_err,
+                        "metadata": {"error": fmt_err, "cve_id": cve_id}}
             valid, fmt_err = _validate_cve_format(cve_id)
             if not valid:
                 return {"description": fmt_err, "exploit_guide": fmt_err,
@@ -943,8 +949,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         cve_match = _CVE_ANY.search(text)
         if cve_match:
             cve_id = cve_match.group(0).upper()
-            valid, fmt_err = _validate_cve_format(cve_id)
-            if not valid:
+            # Check if there's a non-numeric suffix immediately after the CVE number
+            end_pos = cve_match.end()
+            if end_pos < len(text) and text[end_pos].isalpha():
+                fmt_err = f"Định dạng CVE không hợp lệ: '{cve_id}{text[end_pos:].split()[0]}'. Cần CVE-YYYY-NNNNN (ví dụ CVE-2026-42533)."
                 async def gen_error_fmt() -> AsyncIterator[bytes]:
                     yield sse_frame("token", {"delta": fmt_err})
                     yield sse_frame("final", {
@@ -952,6 +960,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "description": fmt_err, "metadata": {"error": fmt_err, "cve_id": cve_id}})
                     yield b"data: [DONE]\n\n"
                 return StreamingResponse(gen_error_fmt(), media_type="text/event-stream")
+            valid, fmt_err = _validate_cve_format(cve_id)
+            if not valid:
+                async def gen_error_fmt2() -> AsyncIterator[bytes]:
+                    yield sse_frame("token", {"delta": fmt_err})
+                    yield sse_frame("final", {
+                        "content": fmt_err, "exploit_guide": fmt_err,
+                        "description": fmt_err, "metadata": {"error": fmt_err, "cve_id": cve_id}})
+                    yield b"data: [DONE]\n\n"
+                return StreamingResponse(gen_error_fmt2(), media_type="text/event-stream")
 
         prefetch_task = asyncio.create_task(exploit_prefetch(text, session_id))
         kt_run_id = f"kt:{uuid4().hex}"
