@@ -14,6 +14,7 @@ from secai_gateway.poc.inject import (
     force_no_poc_notice,
     render_files,
     strip_system_narration,
+    strip_tool_name_mentions,
 )
 from secai_gateway.poc.models import NormalizedPoc
 from secai_gateway.poc.tools import build_poc_tools
@@ -503,3 +504,29 @@ def test_strip_system_narration_does_not_touch_legitimate_system_mentions() -> N
 def test_strip_system_narration_noop_on_clean_text() -> None:
     text = "## 2. Cách chạy PoC\n\n- chạy: python poc.py --host X\n"
     assert strip_system_narration(text) == text
+
+
+# ── strip_tool_name_mentions ─────────────────────────────────────────────────
+def test_strip_tool_name_mentions_replaces_leaked_identifier() -> None:
+    # observed live (CVE-2026-43749): the model named the internal tool in its own
+    # "Phân tích bằng chứng" prose instead of describing the result in plain Vietnamese.
+    text = (
+        "Dữ liệu nội bộ xác nhận CVE-2026-43749 tồn tại, thuộc CWE-22, CVSS 7.8 (HIGH). "
+        "Tuy nhiên, poc_search không tìm thấy PoC nào trong danh mục nội bộ."
+    )
+    out = strip_tool_name_mentions(text)
+    assert "poc_search" not in out
+    assert "tra cứu danh mục PoC nội bộ không tìm thấy PoC nào trong danh mục nội bộ" in out
+    assert "CVE-2026-43749" in out and "CWE-22" in out  # surrounding analysis kept intact
+
+
+def test_strip_tool_name_mentions_handles_backticks_and_multiple_tools() -> None:
+    text = "Kết quả từ `qdrant_search` và neo4j_search đều xác nhận CVE tồn tại."
+    out = strip_tool_name_mentions(text)
+    assert "qdrant_search" not in out and "neo4j_search" not in out
+    assert "tra cứu CVE/CWE nội bộ" in out and "tra cứu quan hệ dữ liệu nội bộ" in out
+
+
+def test_strip_tool_name_mentions_noop_on_clean_text() -> None:
+    text = "## 3. Tổng quan Lỗ hổng\n\n- CWE-22, CVSS 7.8\n"
+    assert strip_tool_name_mentions(text) == text

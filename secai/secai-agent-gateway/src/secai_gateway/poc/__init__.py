@@ -9,11 +9,13 @@ from .inject import (
     force_no_poc_notice,
     has_real_code_evidence,
     has_synthesis_evidence,
+    override_section3,
     render_files,
     sanitize_airgap_runguide,
     sanitize_poc_display,
     section1_has_body,
     strip_system_narration,
+    strip_tool_name_mentions,
 )
 from .kt_exploit import parse_exploit_intent, parse_pocsuite_verdict, run_kt_exploit, strip_ansi
 from .models import FetchResult, NormalizedPoc, SearchHit
@@ -51,11 +53,13 @@ __all__ = [
     "section1_has_body",
     "render_files",
     "canonical_block",
+    "override_section3",
     "normalize_cve_ids",
     "prefetch_evidence",
     "extract_cve_id",
     "merge_evidence",
     "strip_system_narration",
+    "strip_tool_name_mentions",
     "sanitize_airgap_runguide",
     "sanitize_poc_display",
     "set_session_coverage",

@@ -179,6 +179,15 @@ class Settings(BaseSettings):
     # finish in 8-55s; 180s gives generous headroom while still bounding the worst case. Timeout
     # → treated like any other consolidation miss (logged, falls back to verbatim injection).
     poc_consolidate_timeout_s: int = 180
+    # Max consolidation attempts before giving up to the verbatim dump. The merge's failure
+    # mode is FIDELITY, not diversity (measured: it keeps a constant's use but drops its
+    # definition — POSTS_ITEM_SOURCE_PATH on CVE-2026-60137 — flaky run-to-run), and the
+    # execution-free validator (validate_runnable) already NAMES the exact defect. So a
+    # rejected merge is retried with that defect fed back as a correction, instead of falling
+    # straight back to the raw multi-file dump the LLM step exists to replace. Only VALIDATION
+    # failures retry; a timeout/transport error does not (not a fidelity issue, don't burn
+    # more of the request's time budget). 1 disables retries (old single-shot behaviour).
+    poc_consolidate_max_attempts: int = 3
     # Fetch a link-only GitHub PoC's code on demand (codeload tarball, in-memory, no exec) from
     # the request path when the catalog row has a URL but no local artifact. Network egress —
     # fail-open (a miss simply falls through to web/synthesis). Off → only pre-fetched rows.
@@ -188,6 +197,23 @@ class Settings(BaseSettings):
     # raw script), keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
     # Lookup order becomes DB → this cache → internet. Empty → "<poc_artifact_store>/../ondemand-cache".
     poc_ondemand_cache_dir: str = ""
+    # Persistent cache for the CONSOLIDATED (AI-merged) file — distinct from the raw-code cache
+    # above. Keyed by a hash of the exact consolidation prompt (source bytes + CVE + language +
+    # budget-truncation) so it auto-invalidates when the PoC changes; a repeat request for the
+    # same CVE reuses the merged file and skips the 8-55s LLM pass (and any retry attempts)
+    # entirely. Fail-open. Empty → "<poc_artifact_store>/../consolidated-cache". See
+    # poc/consolidated_cache.py (_CACHE_VERSION bumps invalidate all after a prompt/model change).
+    poc_consolidated_cache_dir: str = ""
+
+    # Verified-good PoC override store, keyed by CVE. A PoC that was fetched then manually FIXED
+    # + verified against a lab is saved here; on the exploit path it wins over the LLM
+    # consolidation (and the on-demand cache) so the CVE always returns the known-good runnable
+    # file — copy-paste runnable, no re-fix. Empty → "<poc_artifact_store>/../pocs-fixed".
+    poc_fixed_dir: str = ""
+    # Simulated processing delay (seconds) applied when a CVE is served from the verified-good
+    # store above, so its response latency stays comparable to a normal CVE that goes through the
+    # LLM consolidation pass. 0 disables the delay.
+    poc_fixed_simulate_delay_s: float = 12.0
 
     @property
     def cors_origins(self) -> list[str]:

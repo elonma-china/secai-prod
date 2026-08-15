@@ -186,6 +186,26 @@ async def searxng_search(query: str, *, max_results: int | None = None) -> list[
     return out
 
 
+# NVD serves HTTP 200 even for a nonexistent / rejected CVE-ID — the body is its "CVE ID Not
+# Found" (or rejected/withdrawn) error page, which still embeds the queried CVE-ID string, so
+# the CVE-mention relevance gate below can't catch it. Detect that page so the NVD anchor (which
+# is otherwise "trusted by construction") isn't fed into synthesis for a CVE that does not exist.
+_NVD_ABSENT_RE = re.compile(
+    r"CVE\s*ID\s*Not\s*Found"
+    r"|does not exist in the CVE"
+    r"|This CVE(?:\s*ID|\s*Record)?\s*(?:has been\s*)?(?:rejected|withdrawn)"
+    r"|rejected or withdrawn",
+    re.I,
+)
+
+
+def _is_nvd_absent(markdown: str) -> bool:
+    """True when an NVD ``/vuln/detail/<cve>`` page is its not-found / rejected error page
+    rather than a real CVE record (NVD answers HTTP 200 for a bogus ID, embedding the ID in
+    the error body — so 'trusted by construction' only holds for a page that is a real record)."""
+    return bool(_NVD_ABSENT_RE.search(markdown or ""))
+
+
 async def gather_web_hints(cve_id: str, ledger: SqliteLedger, run_id: str) -> list[dict[str, Any]]:
     """Deterministic web-research for the T3 tier: fetch the top allowlisted pages via
     ``fetch_reference`` (same SSRF guards) and return them as evidence dicts (also recorded
@@ -237,6 +257,13 @@ async def gather_web_hints(cve_id: str, ledger: SqliteLedger, run_id: str) -> li
     nvd_payload = nvd_result if isinstance(nvd_result, dict) else None
     if isinstance(nvd_result, Exception):
         logger.info("gather_web_hints NVD anchor failed for %s: %s", cve_id, nvd_result)
+    # Drop the NVD anchor when the page is NVD's "CVE ID Not Found" / rejected error (still a
+    # 200 with the CVE-ID in the body). Otherwise a nonexistent CVE would carry a bogus
+    # "description" into synthesis and land on `synthesis_failed` instead of the honest
+    # `not_found` tier — and, worse, hand the model an error page to write a PoC from.
+    if nvd_payload and _is_nvd_absent(nvd_payload.get("markdown") or ""):
+        logger.info("gather_web_hints: NVD reports %s absent (not-found/rejected) — dropping anchor", cve_id)
+        nvd_payload = None
     if isinstance(ghsa_url, Exception):
         ghsa_url = None
 
