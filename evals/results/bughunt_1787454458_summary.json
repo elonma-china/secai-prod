@@ -1,0 +1,16 @@
+{
+  "function": "bughunt",
+  "total": 1,
+  "passed": 1,
+  "pass_rate": 100.0,
+  "wall_s": 19.6,
+  "by_category": {
+    "local_authorized": {
+      "total": 1,
+      "passed": 1,
+      "pass_rate": 100.0
+    }
+  },
+  "top_failure_reasons": [],
+  "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/bughunt_1787454458.jsonl"
+}

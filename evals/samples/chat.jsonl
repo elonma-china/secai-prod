@@ -1,0 +1,100 @@
+{"id": "chat-000", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2021-44228 và mức độ nghiêm trọng.", "mentions_cve": "CVE-2021-44228", "mentions_cwe": null}
+{"id": "chat-001", "category": "topic_qa", "message": "CWE-89 là loại lỗ hổng gì, cho ví dụ.", "mentions_cve": null, "mentions_cwe": "89"}
+{"id": "chat-002", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-003", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-004", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2019-0708 ở mức khái niệm (không cần payload).", "mentions_cve": "CVE-2019-0708", "mentions_cwe": null}
+{"id": "chat-005", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2020-1472 hay không.", "mentions_cve": "CVE-2020-1472", "mentions_cwe": null}
+{"id": "chat-006", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-007", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-008", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-009", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2022-22965 là gì.", "mentions_cve": "CVE-2022-22965", "mentions_cwe": null}
+{"id": "chat-010", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-011", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính.", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-012", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2023-22515 và mức độ nghiêm trọng. (câu hỏi #12)", "mentions_cve": "CVE-2023-22515", "mentions_cwe": null}
+{"id": "chat-013", "category": "topic_qa", "message": "CWE-78 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #13)", "mentions_cve": null, "mentions_cwe": "78"}
+{"id": "chat-014", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #14)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-015", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #15)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-016", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2018-7600 ở mức khái niệm (không cần payload). (câu hỏi #16)", "mentions_cve": "CVE-2018-7600", "mentions_cwe": null}
+{"id": "chat-017", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2021-34473 hay không. (câu hỏi #17)", "mentions_cve": "CVE-2021-34473", "mentions_cwe": null}
+{"id": "chat-018", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #18)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-019", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #19)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-020", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #20)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-021", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2022-1388 là gì. (câu hỏi #21)", "mentions_cve": "CVE-2022-1388", "mentions_cwe": null}
+{"id": "chat-022", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #22)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-023", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #23)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-024", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2024-27198 và mức độ nghiêm trọng. (câu hỏi #24)", "mentions_cve": "CVE-2024-27198", "mentions_cwe": null}
+{"id": "chat-025", "category": "topic_qa", "message": "CWE-352 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #25)", "mentions_cve": null, "mentions_cwe": "352"}
+{"id": "chat-026", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #26)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-027", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #27)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-028", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2017-0144 ở mức khái niệm (không cần payload). (câu hỏi #28)", "mentions_cve": "CVE-2017-0144", "mentions_cwe": null}
+{"id": "chat-029", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2019-0708 hay không. (câu hỏi #29)", "mentions_cve": "CVE-2019-0708", "mentions_cwe": null}
+{"id": "chat-030", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #30)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-031", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #31)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-032", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #32)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-033", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2022-0847 là gì. (câu hỏi #33)", "mentions_cve": "CVE-2022-0847", "mentions_cwe": null}
+{"id": "chat-034", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #34)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-035", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #35)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-036", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2022-26134 và mức độ nghiêm trọng. (câu hỏi #36)", "mentions_cve": "CVE-2022-26134", "mentions_cwe": null}
+{"id": "chat-037", "category": "topic_qa", "message": "CWE-502 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #37)", "mentions_cve": null, "mentions_cwe": "502"}
+{"id": "chat-038", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #38)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-039", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #39)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-040", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2017-5638 ở mức khái niệm (không cần payload). (câu hỏi #40)", "mentions_cve": "CVE-2017-5638", "mentions_cwe": null}
+{"id": "chat-041", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2018-7600 hay không. (câu hỏi #41)", "mentions_cve": "CVE-2018-7600", "mentions_cwe": null}
+{"id": "chat-042", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #42)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-043", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #43)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-044", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #44)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-045", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2021-21972 là gì. (câu hỏi #45)", "mentions_cve": "CVE-2021-21972", "mentions_cwe": null}
+{"id": "chat-046", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #46)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-047", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #47)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-048", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2024-3094 và mức độ nghiêm trọng. (câu hỏi #48)", "mentions_cve": "CVE-2024-3094", "mentions_cwe": null}
+{"id": "chat-049", "category": "topic_qa", "message": "CWE-918 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #49)", "mentions_cve": null, "mentions_cwe": "918"}
+{"id": "chat-050", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #50)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-051", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #51)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-052", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2014-6271 ở mức khái niệm (không cần payload). (câu hỏi #52)", "mentions_cve": "CVE-2014-6271", "mentions_cwe": null}
+{"id": "chat-053", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2017-0144 hay không. (câu hỏi #53)", "mentions_cve": "CVE-2017-0144", "mentions_cwe": null}
+{"id": "chat-054", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #54)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-055", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #55)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-056", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #56)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-057", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2021-4034 là gì. (câu hỏi #57)", "mentions_cve": "CVE-2021-4034", "mentions_cwe": null}
+{"id": "chat-058", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #58)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-059", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #59)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-060", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2022-30190 và mức độ nghiêm trọng. (câu hỏi #60)", "mentions_cve": "CVE-2022-30190", "mentions_cwe": null}
+{"id": "chat-061", "category": "topic_qa", "message": "CWE-89 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #61)", "mentions_cve": null, "mentions_cwe": "89"}
+{"id": "chat-062", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #62)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-063", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #63)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-064", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2023-38408 ở mức khái niệm (không cần payload). (câu hỏi #64)", "mentions_cve": "CVE-2023-38408", "mentions_cwe": null}
+{"id": "chat-065", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2017-5638 hay không. (câu hỏi #65)", "mentions_cve": "CVE-2017-5638", "mentions_cwe": null}
+{"id": "chat-066", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #66)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-067", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #67)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-068", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #68)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-069", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2019-19781 là gì. (câu hỏi #69)", "mentions_cve": "CVE-2019-19781", "mentions_cwe": null}
+{"id": "chat-070", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #70)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-071", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #71)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-072", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2023-27997 và mức độ nghiêm trọng. (câu hỏi #72)", "mentions_cve": "CVE-2023-27997", "mentions_cwe": null}
+{"id": "chat-073", "category": "topic_qa", "message": "CWE-78 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #73)", "mentions_cve": null, "mentions_cwe": "78"}
+{"id": "chat-074", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #74)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-075", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #75)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-076", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2014-0160 ở mức khái niệm (không cần payload). (câu hỏi #76)", "mentions_cve": "CVE-2014-0160", "mentions_cwe": null}
+{"id": "chat-077", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2014-6271 hay không. (câu hỏi #77)", "mentions_cve": "CVE-2014-6271", "mentions_cwe": null}
+{"id": "chat-078", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #78)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-079", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #79)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-080", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #80)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-081", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2021-34527 là gì. (câu hỏi #81)", "mentions_cve": "CVE-2021-34527", "mentions_cwe": null}
+{"id": "chat-082", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #82)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-083", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #83)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-084", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2022-22965 và mức độ nghiêm trọng. (câu hỏi #84)", "mentions_cve": "CVE-2022-22965", "mentions_cwe": null}
+{"id": "chat-085", "category": "topic_qa", "message": "CWE-352 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #85)", "mentions_cve": null, "mentions_cwe": "352"}
+{"id": "chat-086", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #86)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-087", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #87)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-088", "category": "topic_qa", "message": "Giải thích kỹ thuật khai thác CVE-2023-34362 ở mức khái niệm (không cần payload). (câu hỏi #88)", "mentions_cve": "CVE-2023-34362", "mentions_cwe": null}
+{"id": "chat-089", "category": "topic_qa", "message": "Làm sao phát hiện một hệ thống có dính CVE-2023-38408 hay không. (câu hỏi #89)", "mentions_cve": "CVE-2023-38408", "mentions_cwe": null}
+{"id": "chat-090", "category": "topic_qa", "message": "CAPEC là gì và khác CWE ở điểm nào. (câu hỏi #90)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-091", "category": "topic_qa", "message": "Zero-day khác với N-day như thế nào. (câu hỏi #91)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-092", "category": "topic_qa", "message": "Giải thích MITRE ATT&CK technique T1059. (câu hỏi #92)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-093", "category": "topic_qa", "message": "Best practice vá lỗ hổng CVE-2020-0796 là gì. (câu hỏi #93)", "mentions_cve": "CVE-2020-0796", "mentions_cwe": null}
+{"id": "chat-094", "category": "topic_qa", "message": "Container escape là gì, cho ví dụ CVE liên quan. (câu hỏi #94)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-095", "category": "topic_qa", "message": "Giải thích khái niệm CVSS score và cách tính. (câu hỏi #95)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-096", "category": "topic_qa", "message": "Tóm tắt lỗ hổng CVE-2022-1388 và mức độ nghiêm trọng. (câu hỏi #96)", "mentions_cve": "CVE-2022-1388", "mentions_cwe": null}
+{"id": "chat-097", "category": "topic_qa", "message": "CWE-502 là loại lỗ hổng gì, cho ví dụ. (câu hỏi #97)", "mentions_cve": null, "mentions_cwe": "502"}
+{"id": "chat-098", "category": "topic_qa", "message": "So sánh SQL Injection và XSS về cơ chế khai thác. (câu hỏi #98)", "mentions_cve": null, "mentions_cwe": null}
+{"id": "chat-099", "category": "topic_qa", "message": "OWASP Top 10 2026 gồm những hạng mục nào. (câu hỏi #99)", "mentions_cve": null, "mentions_cwe": null}

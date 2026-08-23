@@ -1,0 +1,21 @@
+{
+  "function": "report",
+  "total": 100,
+  "passed": 99,
+  "pass_rate": 99.0,
+  "wall_s": 727.3,
+  "by_category": {
+    "incident_log": {
+      "total": 100,
+      "passed": 99,
+      "pass_rate": 99.0
+    }
+  },
+  "top_failure_reasons": [
+    [
+      "HTTP 429",
+      1
+    ]
+  ],
+  "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/report_1787454486.jsonl"
+}

@@ -101,7 +101,13 @@ def test_blocks_when_only_section3_missing(tmp_path) -> None:
     hook = _hook(ledger)
     result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", _SECTION1_AND_2_ONLY)))
     assert result is not None and result.action == "force_continue"
-    assert "## 3" in result.feedback and "## 2" not in result.feedback
+    # Feedback asks for the FULL required set (## 1/2/3), not just the literally-missing
+    # piece — force_continue's retry turn is NOT merged with the rejected draft into the
+    # final delivered text (see class docstring), so "just add what's missing" instructions
+    # measurably caused the model to drop already-written sections on retry. Must also name
+    # the "rewrite everything" framing so the model doesn't rely on the old draft persisting.
+    assert "## 1" in result.feedback and "## 2" in result.feedback and "## 3" in result.feedback
+    assert "REPLACED" in result.feedback or "COMPLETE" in result.feedback
 
 
 def test_blocks_when_cve_known_but_no_catalog_evidence(tmp_path) -> None:
@@ -131,7 +137,10 @@ def test_blocks_when_prefetch_found_description_but_model_fetched_nothing_itself
 
 
 def test_skips_when_prefetch_found_real_code_regardless_of_section1(tmp_path) -> None:
-    # T1 applies regardless — forcing a synthesis retry here would be pure waste
+    # T1 applies regardless — forcing a synthesis retry here would be pure waste. Note
+    # _NO_SECTION1 already HAS both Mục 2 and Mục 3 (it's only missing Mục 1) — this test
+    # is about Section 1 being optional in T1, not about Mục 2/3 completeness (see the
+    # T1-specific tests below for that).
     _reset()
     set_session_real_code_evidence("sess-2", True)
     set_session_cve_known("sess-2", True)
@@ -139,6 +148,52 @@ def test_skips_when_prefetch_found_real_code_regardless_of_section1(tmp_path) ->
     hook = _hook(ledger)
     result = asyncio.run(hook.on_before_final_answer(
         _final_ctx("run1", "exploit_research", _NO_SECTION1, session_id="sess-2")))
+    assert result is None
+
+
+def test_t1_blocks_when_section3_missing_after_section2(tmp_path) -> None:
+    """Regression guard for the eval-discovered gap (evals/, 2026-08-23): T1 (real fetched
+    code) used to `return None` before ever checking Mục 2/3, so a model that wrote Mục 2
+    then stopped — never reaching Mục 3 — sailed through unnoticed. ~8% of real/
+    real_consolidated exploit answers hit exactly this in the eval run."""
+    _reset()
+    set_session_real_code_evidence("sess-t1", True)
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    hook = _hook(ledger)
+    text = "## 2. Cách chạy PoC\n\n- chạy thử\n"  # Mục 3 missing
+    result = asyncio.run(hook.on_before_final_answer(
+        _final_ctx("run1", "exploit_research", text, session_id="sess-t1")))
+    assert result is not None and result.action == "force_continue"
+    # Feedback asks for BOTH ## 2 and ## 3 (the full T1 set), not just the literally-missing
+    # ## 3 — see class docstring: a "just add what's missing" instruction was tried first and
+    # measurably caused the model to drop the already-written ## 2 on retry (second eval pass,
+    # same session: all 8 T1 retries landed on "Mục 2 now missing, Mục 3 now present" — the
+    # exact inverse of this test's starting point).
+    assert "## 2" in result.feedback and "## 3" in result.feedback
+    assert "REPLACED" in result.feedback or "COMPLETE" in result.feedback
+    assert "Section 1" not in result.feedback.split("required")[0]  # không nói viết lại Mục 1
+
+
+def test_t1_blocks_when_both_section2_and_3_missing(tmp_path) -> None:
+    _reset()
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    ledger.save_evidence("ev:1", "run1", {"source": "exploitdb", "sha256": "b" * 64,
+                                          "source_code": "import socket\n"})
+    hook = _hook(ledger)
+    text = "Một vài câu mở đầu không đúng heading nào."
+    result = asyncio.run(hook.on_before_final_answer(_final_ctx("run1", "exploit_research", text)))
+    assert result is not None and result.action == "force_continue"
+    assert "## 2" in result.feedback and "## 3" in result.feedback
+
+
+def test_t1_allows_when_section2_and_3_both_present(tmp_path) -> None:
+    _reset()
+    set_session_real_code_evidence("sess-t1b", True)
+    ledger = SqliteLedger(tmp_path / "ledger.db")
+    hook = _hook(ledger)
+    text = "## 2. Cách chạy PoC\n- chạy thử\n\n## 3. Tổng quan Lỗ hổng\n- mô tả\n"
+    result = asyncio.run(hook.on_before_final_answer(
+        _final_ctx("run1", "exploit_research", text, session_id="sess-t1b")))
     assert result is None
 
 

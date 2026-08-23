@@ -1,0 +1,80 @@
+[
+  {
+    "function": "chat",
+    "total": 3,
+    "passed": 3,
+    "pass_rate": 100.0,
+    "wall_s": 14.0,
+    "by_category": {
+      "topic_qa": {
+        "total": 3,
+        "passed": 3,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/chat_1787454247.jsonl"
+  },
+  {
+    "function": "translate",
+    "total": 3,
+    "passed": 3,
+    "pass_rate": 100.0,
+    "wall_s": 1.1,
+    "by_category": {
+      "explicit_target": {
+        "total": 3,
+        "passed": 3,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/translate_1787454247.jsonl"
+  },
+  {
+    "function": "report",
+    "total": 3,
+    "passed": 2,
+    "pass_rate": 66.67,
+    "wall_s": 4.4,
+    "by_category": {
+      "incident_log": {
+        "total": 3,
+        "passed": 2,
+        "pass_rate": 66.7
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "thiếu section",
+        1
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/report_1787454247.jsonl"
+  },
+  {
+    "function": "statistical_report",
+    "total": 3,
+    "passed": 2,
+    "pass_rate": 66.67,
+    "wall_s": 23.7,
+    "by_category": {
+      "period_summary": {
+        "total": 3,
+        "passed": 2,
+        "pass_rate": 66.7
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "report_title rỗng -> model không trả đúng JSON 3 field",
+        1
+      ],
+      [
+        "cả summary lẫn detail đều rỗng",
+        1
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/statistical_report_1787454247.jsonl"
+  }
+]

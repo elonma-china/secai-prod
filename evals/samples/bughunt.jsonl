@@ -1,0 +1,12 @@
+{"id": "bughunt-000", "category": "local_authorized", "target": "http://127.0.0.1:8131", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-001", "category": "local_authorized", "target": "http://127.0.0.1:6333", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-002", "category": "local_authorized", "target": "http://127.0.0.1:7474", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-003", "category": "local_authorized", "target": "http://127.0.0.1:8131", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-004", "category": "local_authorized", "target": "http://127.0.0.1:6333", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-005", "category": "local_authorized", "target": "http://127.0.0.1:7474", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-006", "category": "local_authorized", "target": "http://127.0.0.1:8131", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-007", "category": "local_authorized", "target": "http://127.0.0.1:6333", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-008", "category": "local_authorized", "target": "http://127.0.0.1:7474", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-009", "category": "local_authorized", "target": "http://127.0.0.1:8131", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-010", "category": "local_authorized", "target": "http://127.0.0.1:6333", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}
+{"id": "bughunt-011", "category": "local_authorized", "target": "http://127.0.0.1:7474", "scope_note": "self-owned local infra, contract test only", "run_cve_sweep": false, "enable_exploit": false}

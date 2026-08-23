@@ -1,0 +1,177 @@
+[
+  {
+    "function": "exploit",
+    "total": 100,
+    "passed": 47,
+    "pass_rate": 47.0,
+    "wall_s": 526.0,
+    "by_category": {
+      "chitchat": {
+        "total": 5,
+        "passed": 5,
+        "pass_rate": 100.0
+      },
+      "catalog_desc_only": {
+        "total": 17,
+        "passed": 1,
+        "pass_rate": 5.9
+      },
+      "multi_cve": {
+        "total": 5,
+        "passed": 1,
+        "pass_rate": 20.0
+      },
+      "natural_sentence": {
+        "total": 10,
+        "passed": 5,
+        "pass_rate": 50.0
+      },
+      "catalog_with_artifact": {
+        "total": 18,
+        "passed": 7,
+        "pass_rate": 38.9
+      },
+      "english_input": {
+        "total": 5,
+        "passed": 4,
+        "pass_rate": 80.0
+      },
+      "fake_cve": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 100.0
+      },
+      "curated_known": {
+        "total": 25,
+        "passed": 11,
+        "pass_rate": 44.0
+      },
+      "invalid_format": {
+        "total": 5,
+        "passed": 3,
+        "pass_rate": 60.0
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "rò URL/internet trong Mục 2/3",
+        44
+      ],
+      [
+        "thiếu heading Mục [3]",
+        8
+      ],
+      [
+        "không phát hiện lỗi format CVE như kỳ vọng",
+        2
+      ],
+      [
+        "HTTP 0",
+        1
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/exploit_1787454486.jsonl"
+  },
+  {
+    "function": "chat",
+    "total": 100,
+    "passed": 100,
+    "pass_rate": 100.0,
+    "wall_s": 494.9,
+    "by_category": {
+      "topic_qa": {
+        "total": 100,
+        "passed": 100,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/chat_1787454486.jsonl"
+  },
+  {
+    "function": "translate",
+    "total": 100,
+    "passed": 100,
+    "pass_rate": 100.0,
+    "wall_s": 722.5,
+    "by_category": {
+      "explicit_target": {
+        "total": 100,
+        "passed": 100,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/translate_1787454486.jsonl"
+  },
+  {
+    "function": "report",
+    "total": 100,
+    "passed": 99,
+    "pass_rate": 99.0,
+    "wall_s": 727.3,
+    "by_category": {
+      "incident_log": {
+        "total": 100,
+        "passed": 99,
+        "pass_rate": 99.0
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "HTTP 429",
+        1
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/report_1787454486.jsonl"
+  },
+  {
+    "function": "statistical_report",
+    "total": 100,
+    "passed": 90,
+    "pass_rate": 90.0,
+    "wall_s": 750.8,
+    "by_category": {
+      "period_summary": {
+        "total": 100,
+        "passed": 90,
+        "pass_rate": 90.0
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "report_title rỗng -> model không trả đúng JSON 3 field",
+        7
+      ],
+      [
+        "cả summary lẫn detail đều rỗng",
+        4
+      ],
+      [
+        "HTTP 429",
+        2
+      ],
+      [
+        "HTTP 0",
+        1
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/statistical_report_1787454486.jsonl"
+  },
+  {
+    "function": "bughunt",
+    "total": 12,
+    "passed": 12,
+    "pass_rate": 100.0,
+    "wall_s": 35.6,
+    "by_category": {
+      "local_authorized": {
+        "total": 12,
+        "passed": 12,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/bughunt_1787454486.jsonl"
+  }
+]
