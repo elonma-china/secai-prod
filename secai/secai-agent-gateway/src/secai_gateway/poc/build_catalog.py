@@ -19,6 +19,7 @@ precision high for dataset generation; provenance is retained so the rule can be
 from __future__ import annotations
 
 import re
+from typing import Any
 
 from . import fetch_github
 from .backend import LocalPocBackend
@@ -164,6 +165,58 @@ def merge_duplicate_artifacts(db) -> dict[str, int]:
     return {"hash_groups": dup_groups, "merged": merged}
 
 
+def dedup_same_repo(db) -> dict[str, int]:
+    """TIER-3 dedup (post-fetch, repo identity). A fetched PoC retargets ``source_ref`` from
+    the link-only ``owner/repo`` to the picked code file ``owner/repo/path/file`` (see
+    fetch_github.py's ``set_artifact``), so a later re-collect that re-yields the link-only
+    ``owner/repo`` no longer collides on UNIQUE(source, source_ref) and inserts a SECOND row
+    for the SAME repo: one fetched (code-path ref), one link-only (repo-root ref). Tier-1
+    can't see it (needs a DIFFERENT owner — fork family), Tier-2 can't see it (needs an exact
+    ``artifact_sha256`` on BOTH rows — the link-only twin has none). Result: ``github_candidates``
+    re-downloads an already-fetched repo and search returns the same PoC twice.
+
+    Groups still-canonical ``poc_github`` rows by their normalized repo identity
+    (``provenance.repo``, always ``owner/repo`` regardless of the code-path retarget). A
+    group is only collapsed when it contains BOTH a fetched row and a link-only row — the
+    twin signature. The highest-starred fetched row is canonical; every link-only row is
+    marked ``duplicate_of`` it, absorbing its CVE links first. Groups that are all-fetched
+    (two legitimately distinct PoCs under one repo) or all-link-only (impossible — the
+    collector's ON CONFLICT merges them) are left to the other tiers. Reversible (flag only,
+    never deletes)."""
+    from collections import defaultdict
+
+    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    rows = db.execute(
+        "SELECT p.id, p.artifact_path, "
+        "  COALESCE(CAST(json_extract(p.provenance,'$.stars') AS INTEGER),0) AS stars, "
+        "  COALESCE(json_extract(p.provenance,'$.repo'),'') AS repo "
+        "FROM poc p "
+        "WHERE p.source='poc_github' AND p.duplicate_of IS NULL").fetchall()
+    for r in rows:
+        repo = str(r["repo"]).strip().lower()
+        if not repo:
+            continue
+        groups[repo].append({"id": r["id"], "stars": r["stars"],
+                             "fetched": r["artifact_path"] is not None})
+
+    marked = same_repo_groups = 0
+    for members in groups.values():
+        fetched = [m for m in members if m["fetched"]]
+        link_only = [m for m in members if not m["fetched"]]
+        if not fetched or not link_only:
+            continue  # twin needs both; leave the rest to tier-1/tier-2
+        same_repo_groups += 1
+        winner = max(fetched, key=lambda m: (m["stars"], -m["id"]))
+        for m in link_only:
+            db.execute("INSERT OR IGNORE INTO poc_cve(poc_id, cve_id) "
+                       "SELECT ?, cve_id FROM poc_cve WHERE poc_id=?", (winner["id"], m["id"]))
+            cur = db.execute("UPDATE poc SET duplicate_of=? WHERE id=? AND duplicate_of IS NULL",
+                             (winner["id"], m["id"]))
+            marked += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+    db.commit()
+    return {"same_repo_groups": same_repo_groups, "marked_dup": marked}
+
+
 def main() -> None:
     import argparse
     ap = argparse.ArgumentParser(description="(Re)build the unified PoC catalog.")
@@ -198,6 +251,7 @@ def main() -> None:
 
     print(f"  backfill offline hashes: {backfill_offline_hashes(be)}")
     print(f"  merge duplicate artifacts: {merge_duplicate_artifacts(be.catalog._db)}")
+    print(f"  dedup same repo: {dedup_same_repo(be.catalog._db)}")
 
     canonical = be.catalog._db.execute(
         "SELECT COUNT(*) FROM poc WHERE duplicate_of IS NULL").fetchone()[0]

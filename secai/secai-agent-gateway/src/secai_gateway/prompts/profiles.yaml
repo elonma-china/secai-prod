@@ -58,6 +58,14 @@ poc_consolidate:
   base: false
   max_turns: 2
 
+# Keep/drop decision for the deterministic slicer (poc/slicer.py): receives ONLY the AST
+# structure graph (never source bytes), returns {"keep": [...], "drop": [...]}. No tools.
+poc_slice:
+  prompt: slice.md
+  tools: []
+  base: false
+  max_turns: 2
+
 report:
   prompt: report.md
   tools: [qdrant_search, neo4j_search]

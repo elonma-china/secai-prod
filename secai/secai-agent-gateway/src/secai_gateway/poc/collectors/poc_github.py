@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from ..models import NormalizedPoc
+from .github_kind import classify_github_poc_kind
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 RANK = 5  # lowest tier — unverified, community
@@ -45,10 +46,13 @@ class PocGithubCollector:
                 if not full:
                     continue
                 stars = r.get("stargazers_count") or 0
+                title = str(r.get("name") or full)[:200]
+                description = str(r.get("description") or "")[:500]
                 yield NormalizedPoc(
-                    source="poc_github", source_ref=str(full), kind="exploit",
-                    title=str(r.get("name") or full)[:200], cve_ids=[cve],
-                    description=str(r.get("description") or "")[:500],
+                    source="poc_github", source_ref=str(full),
+                    kind=classify_github_poc_kind(title, description, str(full)),
+                    title=title, cve_ids=[cve],
+                    description=description,
                     platform=None, language=None, verified=False,
                     rank=RANK + (1 if stars >= 50 else 0),
                     url=str(r.get("html_url") or f"https://github.com/{full}"),

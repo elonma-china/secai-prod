@@ -10,6 +10,7 @@ from secai_gateway.poc.backend import LocalPocBackend
 from secai_gateway.poc.build_catalog import (
     backfill_offline_hashes,
     dedup_fork_families,
+    dedup_same_repo,
     merge_duplicate_artifacts,
 )
 from secai_gateway.poc.catalog import PocCatalog
@@ -129,3 +130,85 @@ def test_backfill_and_content_merge_cross_source(tmp_path: Path) -> None:
 
     hits = cat.search("CVE-2021-44228")
     assert [h["source"] for h in hits] == ["exploitdb"]
+
+
+def test_dedup_same_repo_twin(tmp_path: Path) -> None:
+    # Same repo, two rows: the fetched one (source_ref retargeted to the code file) and the
+    # link-only twin (source_ref still the repo root) re-inserted by a later re-collect.
+    # Tier-1 misses it (same owner), tier-2 misses it (link-only has no hash).
+    cat = PocCatalog(tmp_path / "c.db")
+    body = b"import socket\n# real PoC\n"
+    sha = hashlib.sha256(body).hexdigest()
+    # fetched twin — source_ref points at the picked code file (as set_artifact does)
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/log4shell/main.py", kind="exploit",
+        title="log4shell", cve_ids=["CVE-2021-44228"], rank=5, redistributable=False,
+        artifact_sha256=sha, artifact_path=f"{sha[:2]}/{sha}", language="py",
+        provenance={"repo": "alice/log4shell", "stars": 100, "collector": "poc_github"}))
+    # link-only twin — same repo, no artifact
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/log4shell", kind="exploit",
+        title="log4shell", cve_ids=["CVE-2021-44228"], rank=5, redistributable=False,
+        provenance={"repo": "alice/log4shell", "stars": 100, "collector": "poc_github"}))
+    cat.commit()
+
+    res = dedup_same_repo(cat._db)
+    assert res == {"same_repo_groups": 1, "marked_dup": 1}
+
+    fetched_id = _id(cat, "alice/log4shell/main.py")
+    assert _dupof(cat, "alice/log4shell/main.py") is None  # fetched is canonical
+    assert _dupof(cat, "alice/log4shell") == fetched_id
+
+    # search surfaces only the canonical fetched row
+    hits = cat.search("CVE-2021-44228")
+    assert [h["source_ref"] for h in hits] == ["alice/log4shell/main.py"]
+
+
+def test_dedup_same_repo_absorbs_exclusive_cve(tmp_path: Path) -> None:
+    # The link-only twin may carry a CVE the fetched row lacks — the winner must absorb it.
+    cat = PocCatalog(tmp_path / "c.db")
+    body = b"payload = 1\n"
+    sha = hashlib.sha256(body).hexdigest()
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="bob/exploit/poc.py", kind="exploit",
+        title="exploit", cve_ids=["CVE-2021-0001"], rank=5, redistributable=False,
+        artifact_sha256=sha, artifact_path=f"{sha[:2]}/{sha}", language="py",
+        provenance={"repo": "bob/exploit", "stars": 10, "collector": "poc_github"}))
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="bob/exploit", kind="exploit",
+        title="exploit", cve_ids=["CVE-2021-0001", "CVE-2021-0002"], rank=5, redistributable=False,
+        provenance={"repo": "bob/exploit", "stars": 10, "collector": "poc_github"}))
+    cat.commit()
+
+    dedup_same_repo(cat._db)
+
+    fetched_id = _id(cat, "bob/exploit/poc.py")
+    cves = {r[0] for r in cat._db.execute("SELECT cve_id FROM poc_cve WHERE poc_id=?", (fetched_id,))}
+    assert cves == {"CVE-2021-0001", "CVE-2021-0002"}
+    assert _dupof(cat, "bob/exploit") == fetched_id
+    hits = cat.search("CVE-2021-0002")
+    assert [h["source_ref"] for h in hits] == ["bob/exploit/poc.py"]
+
+
+def test_dedup_same_repo_leaves_all_fetched_or_all_link_only(tmp_path: Path) -> None:
+    # Two FETCHED rows under one repo = two distinct PoCs — must NOT be merged (no link-only
+    # twin to demote).
+    cat = PocCatalog(tmp_path / "c.db")
+    body = b"x = 1\n"
+    sha = hashlib.sha256(body).hexdigest()
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="carol/repo/a.py", kind="exploit",
+        title="a", cve_ids=["CVE-2020-1111"], rank=5, redistributable=False,
+        artifact_sha256=sha, artifact_path=f"{sha[:2]}/{sha}", language="py",
+        provenance={"repo": "carol/repo", "stars": 5, "collector": "poc_github"}))
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="carol/repo/b.py", kind="exploit",
+        title="b", cve_ids=["CVE-2020-2222"], rank=5, redistributable=False,
+        artifact_sha256=sha, artifact_path=f"{sha[:2]}/{sha}", language="py",
+        provenance={"repo": "carol/repo", "stars": 5, "collector": "poc_github"}))
+    cat.commit()
+
+    res = dedup_same_repo(cat._db)
+    assert res == {"same_repo_groups": 0, "marked_dup": 0}
+    assert _dupof(cat, "carol/repo/a.py") is None
+    assert _dupof(cat, "carol/repo/b.py") is None

@@ -20,7 +20,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
+import subprocess
+import time
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
@@ -31,7 +35,7 @@ from linch.tools.function import tool
 from ..config import get_settings
 from ..poc.tools import record_fetch_evidence
 from ..state import SqliteLedger
-from .http_fetch import host_allowed
+from .http_fetch import host_allowed, validate_fetch_url
 from .reference_fetch import (
     _evidence_from_payload,
     fetch_reference_markdown,
@@ -104,7 +108,13 @@ def _extract_reference_links(markdown: str, allowed_hosts: list[str]) -> list[st
     out: list[str] = []
     for raw in _URL_RE.findall(markdown or ""):
         url = _to_diff_url(raw.rstrip(".,;:"))
-        host = urlparse(url).hostname or ""
+        try:
+            host = urlparse(url).hostname or ""
+        except ValueError:
+            # Malformed URL (e.g. an unbalanced IPv6 bracket like "https://[::1") — urlparse
+            # raises ValueError instead of returning a parsed result. Skip it, don't crash the
+            # whole reference scan (this was breaking patch-diff acquisition for GHSA-only CVEs).
+            continue
         if host_allowed(host, allowed_hosts) and url not in seen:
             seen.add(url)
             out.append(url)
@@ -147,6 +157,227 @@ async def _find_ghsa_url(cve_id: str) -> str | None:
         return None
     m = re.search(r"/advisories/(GHSA-[\w-]+)", payload.get("markdown") or "")
     return f"https://github.com/advisories/{m.group(1)}" if m else None
+
+
+# ── GitHub advisory + patch-diff grounding ─────────────────────────────────────
+# The T3 synthesize tier's weakest output is a PoC whose endpoint/param/payload is GUESSED
+# because the model only saw a one-line description. The single highest-value antidote is the
+# FIXING COMMIT's diff — it shows the exact vulnerable code before/after. GitHub Security
+# Advisories carry ``first_patched_version``; comparing that tag against the previous release
+# yields the diff, fetched here via the GitHub REST API with a Bearer token (``github_token``
+# setting, or auto-resolved from the local ``gh auth token`` CLI). All results are synthesis
+# INPUT (``description`` only — never ``source_code``), so Section 1 still carries the
+# SYNTHESIZED banner; nothing here is ever treated as a verified, runnable exploit.
+_GH_TOKEN_CACHE: dict[str, Any] = {"value": None, "ts": 0.0}
+_GH_TOKEN_TTL_S = 300.0
+_GH_API_TIMEOUT_S = 20.0
+# A compare diff is usually several files; paths matching these are the ones most likely to
+# be the vulnerable component itself (vs. changelog/version-bump noise) — ranked first + kept
+# even when the total diff budget is tight.
+_DIFF_RELEVANT_PATH_RE = re.compile(
+    r"(customer|contact|view|validate|login|auth|admin|controller|upload|email|user|session|"
+    r"sanitize|escape|mail|form)", re.I)
+_REF_PREFIXES = ("", "edition/", "release/", "v")
+
+
+def _github_token_from_cli() -> str | None:
+    # 1) gh CLI — try PATH first, then the common user-local install (the systemd service's
+    #    PATH does not include ~/.local/bin, so `gh` alone is not found there).
+    for gh in ("gh", os.path.expanduser("~/.local/bin/gh")):
+        try:
+            out = subprocess.run([gh, "auth", "token"], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        tok = (out.stdout or "").strip()
+        if tok:
+            return tok
+    # 2) fallback — read gh's stored credential file directly (no subprocess, no PATH dependency).
+    try:
+        text = Path.home().joinpath(".config", "gh", "hosts.yml").read_text(encoding="utf-8")
+        m = re.search(r"oauth_token:\s*(\S+)", text)
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return None
+
+
+async def _github_token() -> str | None:
+    """Resolve a GitHub token: explicit ``github_token`` setting, else the local ``gh`` CLI
+    (cached a few minutes). Never logged."""
+    settings = get_settings()
+    tok = (getattr(settings, "github_token", "") or "").strip()
+    if tok:
+        return tok
+    now = time.monotonic()
+    if _GH_TOKEN_CACHE["value"] and now - _GH_TOKEN_CACHE["ts"] < _GH_TOKEN_TTL_S:
+        return _GH_TOKEN_CACHE["value"]
+    tok = await asyncio.to_thread(_github_token_from_cli)
+    _GH_TOKEN_CACHE["value"] = tok
+    _GH_TOKEN_CACHE["ts"] = now
+    return tok
+
+
+async def _github_api_get(url: str, token: str) -> Any:
+    """GET a GitHub REST API URL (api.github.com) with a Bearer token, SSRF-guarded by the
+    same validate_fetch_url the rest of the pipeline uses. Returns parsed JSON, or None on any
+    policy/transport/parse miss (fail-open)."""
+    try:
+        validate_fetch_url(url, allowed=reference_hosts())
+    except ValueError as exc:
+        logger.info("github api URL rejected (%s): %s", url, exc)
+        return None
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "SECAI-IAS-github-advisory/1.0",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_GH_API_TIMEOUT_S, follow_redirects=False) as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.info("github api fetch failed for %s: %s", url, exc)
+        return None
+
+
+async def _resolve_ghsa(cve_id: str, token: str) -> dict[str, Any] | None:
+    """Resolve the GitHub Security Advisory for ``cve_id`` via the advisory list API. Returns
+    the advisory dict (ghsa_id, description, html_url, vulnerabilities, …) or None."""
+    data = await _github_api_get(
+        f"https://api.github.com/advisories?cve_id={quote(cve_id)}", token)
+    if not isinstance(data, list) or not data:
+        return None
+    for adv in data:
+        if str(adv.get("cve_id") or "").upper() == cve_id.upper():
+            return adv
+    return data[0]
+
+
+def _prev_version(patched: str) -> str | None:
+    """Best-effort previous release by decrementing the last numeric segment (covers the common
+    patch-release fix, e.g. 8.2.6 → 8.2.5). None when the version isn't a plain X.Y.Z."""
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", patched)
+    if not m:
+        return None
+    a, b, c = (int(x) for x in m.groups())
+    if c > 0:
+        return f"{a}.{b}.{c - 1}"
+    if b > 0:
+        return f"{a}.{b - 1}.0"
+    return f"{a - 1}.0.0"
+
+
+def _render_diff(files: list[dict[str, Any]], max_chars: int) -> str:
+    parts: list[str] = []
+    used = 0
+    ordered = sorted(
+        files,
+        key=lambda f: (0 if _DIFF_RELEVANT_PATH_RE.search(f.get("filename") or "") else 1,
+                       f.get("filename") or ""),
+    )
+    for f in ordered:
+        patch = f.get("patch") or ""
+        fn = f.get("filename") or ""
+        if not patch:
+            continue
+        chunk = f"=== {fn} ({f.get('status')} +{f.get('additions', 0)}/-{f.get('deletions', 0)}) ===\n{patch}"
+        if used + len(chunk) > max_chars:
+            continue
+        parts.append(chunk)
+        used += len(chunk)
+    return "\n\n".join(parts)
+
+
+async def _compare_diff(owner: str, repo: str, base: str, head: str, token: str,
+                        max_chars: int) -> str | None:
+    """Fetch the fix diff between the previous release (``base``) and the patched one (``head``)
+    via the compare API, trying a few common tag-prefix variants. Returns the bounded, rendered
+    diff, or None when no comparison yielded files."""
+    for bp in _REF_PREFIXES:
+        for hp in _REF_PREFIXES:
+            url = (f"https://api.github.com/repos/{owner}/{repo}/compare/"
+                   f"{quote(bp + base)}...{quote(hp + head)}")
+            data = await _github_api_get(url, token)
+            if not isinstance(data, dict):
+                continue
+            files = data.get("files") or []
+            if not files or data.get("status") == "identical":
+                continue
+            diff = _render_diff(files, max_chars)
+            if diff:
+                return diff
+    return None
+
+
+async def _fetch_fix_diff(advisory: dict[str, Any], token: str, max_chars: int) -> str | None:
+    """Given a resolved advisory, derive owner/repo + patched version and fetch the fix diff."""
+    owner = repo = None
+    # owner/repo comes from the repo-level advisory URL or the source-code location (the
+    # advisory's own html_url points at /advisories/GHSA-…, which has no repo path).
+    for url in (advisory.get("repository_advisory_url") or "",
+                advisory.get("source_code_location") or ""):
+        m = re.search(r"github\.com/(?:repos/)?([^/]+)/([^/]+)", url or "")
+        if m:
+            owner, repo = m.group(1), m.group(2)
+            break
+    if not owner:
+        # composer/npm/go package names are usually owner/name — last resort.
+        for v in advisory.get("vulnerabilities") or []:
+            name = (v.get("package") or {}).get("name") or ""
+            if "/" in name:
+                owner, repo = name.split("/", 1)
+                break
+    if not owner or not repo:
+        return None
+    for v in advisory.get("vulnerabilities") or []:
+        patched = (v.get("first_patched_version") or "").strip()
+        base = _prev_version(patched)
+        if not patched or not base:
+            continue
+        diff = await _compare_diff(owner, repo, base, patched, token, max_chars)
+        if diff:
+            return diff
+    return None
+
+
+async def _github_advisory_evidence(cve_id: str) -> list[dict[str, Any]]:
+    """Fetch the CVE's GitHub advisory description + fixing commit diff and shape them as
+    synthesis-input evidence (``description`` only). [] on any miss — the caller degrades to the
+    existing description-only path."""
+    settings = get_settings()
+    if not getattr(settings, "github_advisory_enabled", True):
+        return []
+    token = await _github_token()
+    if not token:
+        return []
+    advisory = await _resolve_ghsa(cve_id, token)
+    if not advisory:
+        return []
+    out: list[dict[str, Any]] = []
+    url = advisory.get("html_url") or ""
+    desc = (advisory.get("description") or "").strip()
+    if desc:
+        out.append({
+            "url": url,
+            "source": "github_advisory",
+            "source_ref": url,
+            "title": advisory.get("summary") or f"GitHub Advisory {advisory.get('ghsa_id') or cve_id}",
+            "cve_ids": [cve_id],
+            "description": desc,
+        })
+    diff = await _fetch_fix_diff(advisory, token, int(getattr(settings, "github_diff_max_chars", 30000)))
+    if diff:
+        out.append({
+            "url": url,
+            "source": "github_compare",
+            "source_ref": url,
+            "title": "GitHub fix commit diff (base...patched)",
+            "cve_ids": [cve_id],
+            "description": diff,
+        })
+    return out
 
 
 async def searxng_search(query: str, *, max_results: int | None = None) -> list[dict[str, Any]]:
@@ -249,10 +480,13 @@ async def gather_web_hints(cve_id: str, ledger: SqliteLedger, run_id: str) -> li
     nvd_url = f"https://nvd.nist.gov/vuln/detail/{cve_id}"
 
     ghsa_url_task = _find_ghsa_url(cve_id)
+    gh_evidence_task = _github_advisory_evidence(cve_id)
     nvd_fetch = fetch_reference_markdown(nvd_url)
     search_fetches = [searxng_search(t.format(cve=cve_id)) for t in _SEARCH_QUERY_TEMPLATES]
-    (nvd_result, ghsa_url, *hit_lists) = await asyncio.gather(
-        nvd_fetch, ghsa_url_task, *search_fetches, return_exceptions=True)
+    (nvd_result, ghsa_url, gh_evidence, *hit_lists) = await asyncio.gather(
+        nvd_fetch, ghsa_url_task, gh_evidence_task, *search_fetches, return_exceptions=True)
+    if not isinstance(gh_evidence, list):
+        gh_evidence = []
 
     nvd_payload = nvd_result if isinstance(nvd_result, dict) else None
     if isinstance(nvd_result, Exception):
@@ -359,7 +593,9 @@ async def gather_web_hints(cve_id: str, ledger: SqliteLedger, run_id: str) -> li
                                   tool_name="web_search")
         except Exception:  # noqa: BLE001 — evidence bookkeeping must not fail the gather
             pass
-    return evidence
+    # GitHub advisory + fix diff are the highest-value synthesis input — return them FIRST so
+    # they outrank NVD/SearXNG prose in the model's grounding appendix.
+    return gh_evidence + evidence
 
 
 _INPUT_SCHEMA = {

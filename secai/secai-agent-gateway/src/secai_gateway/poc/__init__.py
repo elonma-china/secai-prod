@@ -2,6 +2,8 @@
 from .backend import LocalPocBackend, PocBadRequest, PocError, PocForbidden, PocNotFound
 from .catalog import PocCatalog
 from .consolidate import consolidate_poc
+from .fidelity import cli_surface
+from .slicer import safe_slice, slice_entry
 from .inject import (
     canonical_block,
     enforce_reference_code,
@@ -41,6 +43,9 @@ __all__ = [
     "PocNotFound",
     "PocCatalog",
     "consolidate_poc",
+    "cli_surface",
+    "safe_slice",
+    "slice_entry",
     "FetchResult",
     "NormalizedPoc",
     "SearchHit",

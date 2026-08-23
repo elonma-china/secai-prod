@@ -101,6 +101,9 @@ async def test_consolidate_poc_merges_and_preserves_provenance() -> None:
     assert out["sha256"] == "d" * 64            # provenance = original artifact hash
     assert out["consolidated_from"]["files"] == ["exploit.py", "helper.py", "README.md"]
     assert out["language"] == "python"
+    # README run-instructions survive the merge so Mục 2 can be grounded in the author's own
+    # usage (not guessed from code) — the CVE-2026-60137/45504 failure mode.
+    assert out["readme_text"] == "# run: python exploit.py"
 
 
 class _NonCodeRunner:
@@ -165,6 +168,74 @@ async def test_consolidate_skips_when_entry_exceeds_budget(monkeypatch) -> None:
             raise AssertionError("LLM must not be called when the entry exceeds budget")
 
     assert await consolidate_poc(_R(), huge, "CVE-2026-9") is None
+
+
+# ── imported-sibling guard: never drop a dependency the entry imports ───────────
+def test_imported_sibling_names_detects_dependencies() -> None:
+    from secai_gateway.poc.consolidate import _imported_sibling_names
+
+    sibs = {"utils", "helper", "requirements"}
+    assert _imported_sibling_names("from utils.menu_functions import run\n", sibs) == {"utils"}
+    assert _imported_sibling_names("import helper\n", sibs) == {"helper"}
+    assert _imported_sibling_names("from Crypto.Cipher import AES\n", sibs) == set()
+    assert _imported_sibling_names("import requests\n", sibs) == set()
+    # package-relative import can't be resolved to one file → all siblings treated as needed
+    assert _imported_sibling_names("from . import version\n", sibs) == sibs
+
+
+@pytest.mark.asyncio
+async def test_consolidate_skips_when_imported_sibling_would_exceed_budget(monkeypatch) -> None:
+    # Entry imports a huge support file; entry + imported deps exceed the budget → must skip
+    # (a dropped dependency is what makes the LLM invent its contents), not feed a truncated set.
+    import secai_gateway.poc.consolidate as C
+
+    monkeypatch.setattr(C, "_source_budget", lambda _s: 500)
+    huge_dep = [{
+        "source": "poc_github", "kind": "exploit", "source_ref": "a/b/exploit.py",
+        "language": "python", "sha256": "e" * 64,
+        "source_files": [
+            {"path": "exploit.py", "role": "entry", "language": "python",
+             "code": "from payloads import get\nprint(get())\n"},
+            {"path": "payloads.py", "role": "support", "language": "python",
+             "code": "def get():\n    return 'x'\n" * 300},  # ~8100 chars >> 500 budget
+        ],
+    }]
+
+    class _R:
+        async def complete(self, *a, **k):
+            raise AssertionError("LLM must not be called when entry+imported deps exceed budget")
+
+    assert await consolidate_poc(_R(), huge_dep, "CVE-2026-10") is None
+
+
+@pytest.mark.asyncio
+async def test_consolidate_feeds_imported_sibling_in_full_within_budget() -> None:
+    # When entry + imported deps DO fit, the imported sibling is fed in full (not capped) and
+    # ordered right after the entry, ahead of unrelated support/README.
+    import secai_gateway.poc.consolidate as C
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(C, "_MAX_FILE_CHARS", 100)  # would cap a non-imported support file
+    ev = {
+        "source": "poc_github", "kind": "exploit", "source_ref": "a/b/exploit.py",
+        "language": "python", "sha256": "e" * 64,
+        "source_files": [
+            {"path": "exploit.py", "role": "entry", "language": "python",
+             "code": "from payloads import get\nprint(get())\n"},
+            {"path": "payloads.py", "role": "support", "language": "python",
+             "code": "def get():\n    return 'x' * 2000\n"},  # imported → must be full, ~40 chars
+            {"path": "unrelated.py", "role": "support", "language": "python",
+             "code": "y = 1\n" * 100},                       # not imported → capped at 100
+        ],
+    }
+    src = C._gather_source(ev, budget=1000, needed=C._imported_sibling_names(
+        C._entry_code(ev), C._sibling_basenames(ev)))
+    try:
+        assert src.index("exploit.py") < src.index("payloads.py") < src.index("unrelated.py")
+    finally:
+        monkeypatch.undo()
+    assert "return 'x' * 2000" in src           # imported dep is full, uncapped
+    assert "y = 1\n" * 100 not in src           # unrelated support was capped
 
 
 # ── on-demand temp cache (DB → temp → internet) ─────────────────────────────────

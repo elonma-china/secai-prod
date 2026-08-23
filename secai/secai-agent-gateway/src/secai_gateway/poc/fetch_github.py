@@ -26,7 +26,9 @@ import json
 import re
 import tarfile
 from collections.abc import Iterable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePosixPath
+from typing import Any
 
 import httpx
 
@@ -270,15 +272,28 @@ def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
                       cve or repo, timeout)
 
 
-def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT, refetch: bool = False) -> None:
+def _fetch_row(args: tuple[tuple[str, str], str, str, int]) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+    """Network-only half of a fetch: download + pick, no store/catalog writes. Thread-safe
+    (a fresh httpx client per call) so a worker pool can run it in parallel."""
+    (owner, repo), pick_hint, branch, timeout = args
+    return _fetch_one(_tarball_urls(owner, repo, branch), pick_hint, timeout)
+
+
+def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT,
+        refetch: bool = False, workers: int = 1) -> None:
     be = LocalPocBackend()
     store = be.roots["poc_github"]
     store.mkdir(parents=True, exist_ok=True)
     rows = be.catalog.pending_github(limit, min_stars, refetch=refetch)
     mode = "re-fetch (multi-file backfill)" if refetch else "fetch"
-    print(f"pending github PoCs to {mode}: {len(rows)} (min_stars={min_stars})", flush=True)
+    print(f"pending github PoCs to {mode}: {len(rows)} (min_stars={min_stars}, workers={workers})",
+          flush=True)
     ok = skip = 0
-    for i, r in enumerate(rows, 1):
+
+    # Prepare the immutable per-row fetch spec (owner/repo/branch/pick-hint/provenance) up
+    # front so the worker threads never touch the shared catalog connection.
+    specs: list[tuple[int, tuple[tuple[str, str], str, str, int], dict[str, Any]]] = []
+    for r in rows:
         poc_id, full, url = r["id"], r["source_ref"], r["url"]
         parsed = _owner_repo(str(full), str(url or ""))
         if not parsed:
@@ -291,61 +306,75 @@ def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT, refetch: b
         poc_meta = be.catalog.get(poc_id)
         if poc_meta and poc_meta.get("cve_ids"):
             pick_hint = poc_meta["cve_ids"][0]
-        picked = _fetch_one(_tarball_urls(owner, repo, branch), pick_hint, per_timeout)
-        if not picked:
-            skip += 1
-            continue
-        blob, rel_in_repo, file_set = picked
-        lang = Path(rel_in_repo).suffix.lstrip(".") or None  # store name is hash-only
-        sha = hashlib.sha256(blob).hexdigest()
-        dst = store / sha[:2] / sha
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        if not dst.exists():
-            dst.write_bytes(blob)
-        # Point catalog at the CODE FILE (not repo root) so LLM retrieval is grounded.
-        file_ref = f"{owner}/{repo}/{rel_in_repo}"
-        blob_url = f"https://github.com/{owner}/{repo}/blob/{branch}/{rel_in_repo}"
-        prov.update({
-            "repo": f"{owner}/{repo}",
-            "canonical_poc_path": rel_in_repo,
-            "points_to_code_file": True,
-            "fetched_bytes": len(blob),
-            "fileset_checked": 1,  # processed for a multi-file set (single-file repos too) → backfill skips next time
-        })
-        be.catalog.set_artifact(
-            poc_id, sha, f"{sha[:2]}/{sha}",
-            license="upstream repo license; static analysis / lab grounding only",
-            language=lang,
-            source_ref=file_ref,
-            url=blob_url,
-            provenance=prov,
-            verified=True,
-        )
-        # Multi-file PoC: store the whole bounded set (hierarchy preserved) so fetch can
-        # return a real repo layout, not just the entry file. Single-file repos skip this.
-        if len(file_set) > 1:
-            file_rows = []
-            for frel, fdata in file_set:
-                fsha = hashlib.sha256(fdata).hexdigest()
-                fdst = store / fsha[:2] / fsha
-                fdst.parent.mkdir(parents=True, exist_ok=True)
-                if not fdst.exists():
-                    fdst.write_bytes(fdata)
-                if frel == rel_in_repo:
-                    role = "entry"
-                elif _is_doc_file(Path(frel).name):
-                    role = "readme"
-                else:
-                    role = "support"
-                file_rows.append({
-                    "rel_path": frel, "sha256": fsha, "storage_path": f"{fsha[:2]}/{fsha}",
-                    "language": Path(frel).suffix.lstrip(".") or None, "size": len(fdata),
-                    "role": role,
-                })
-            be.catalog.set_files(poc_id, file_rows)
-        ok += 1
-        if i % 20 == 0 or ok <= 5:
-            print(f"  [{i}/{len(rows)}] fetched {file_ref} sha={sha[:12]}", flush=True)
+        specs.append((poc_id, ((owner, repo), pick_hint, branch, per_timeout), prov))
+
+    done = 0
+    # Network phase in parallel (the slow part); store/catalog writes stay on THIS thread so
+    # the single SQLite connection (WAL + busy_timeout) never sees concurrent writers.
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futures = {pool.submit(_fetch_row, spec): (poc_id, spec, prov)
+                   for poc_id, spec, prov in specs}
+        for fut in as_completed(futures):
+            poc_id, spec, prov = futures[fut]
+            (parsed, _pick_hint, branch, _timeout) = spec
+            owner, repo = parsed
+            picked = fut.result()
+            if not picked:
+                skip += 1
+                done += 1
+                continue
+            blob, rel_in_repo, file_set = picked
+            lang = Path(rel_in_repo).suffix.lstrip(".") or None  # store name is hash-only
+            sha = hashlib.sha256(blob).hexdigest()
+            dst = store / sha[:2] / sha
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists():
+                dst.write_bytes(blob)
+            # Point catalog at the CODE FILE (not repo root) so LLM retrieval is grounded.
+            file_ref = f"{owner}/{repo}/{rel_in_repo}"
+            blob_url = f"https://github.com/{owner}/{repo}/blob/{branch}/{rel_in_repo}"
+            prov.update({
+                "repo": f"{owner}/{repo}",
+                "canonical_poc_path": rel_in_repo,
+                "points_to_code_file": True,
+                "fetched_bytes": len(blob),
+                "fileset_checked": 1,  # processed for a multi-file set (single-file repos too) → backfill skips next time
+            })
+            be.catalog.set_artifact(
+                poc_id, sha, f"{sha[:2]}/{sha}",
+                license="upstream repo license; static analysis / lab grounding only",
+                language=lang,
+                source_ref=file_ref,
+                url=blob_url,
+                provenance=prov,
+                verified=True,
+            )
+            # Multi-file PoC: store the whole bounded set (hierarchy preserved) so fetch can
+            # return a real repo layout, not just the entry file. Single-file repos skip this.
+            if len(file_set) > 1:
+                file_rows = []
+                for frel, fdata in file_set:
+                    fsha = hashlib.sha256(fdata).hexdigest()
+                    fdst = store / fsha[:2] / fsha
+                    fdst.parent.mkdir(parents=True, exist_ok=True)
+                    if not fdst.exists():
+                        fdst.write_bytes(fdata)
+                    if frel == rel_in_repo:
+                        role = "entry"
+                    elif _is_doc_file(Path(frel).name):
+                        role = "readme"
+                    else:
+                        role = "support"
+                    file_rows.append({
+                        "rel_path": frel, "sha256": fsha, "storage_path": f"{fsha[:2]}/{fsha}",
+                        "language": Path(frel).suffix.lstrip(".") or None, "size": len(fdata),
+                        "role": role,
+                    })
+                be.catalog.set_files(poc_id, file_rows)
+            ok += 1
+            done += 1
+            if ok % 20 == 0 or ok <= 5:
+                print(f"  [{done}/{len(specs)}] fetched {file_ref} sha={sha[:12]}", flush=True)
     print(f"DONE fetched={ok} skipped={skip} · store={store}", flush=True)
 
 
@@ -354,11 +383,14 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=200)
     ap.add_argument("--min-stars", type=int, default=5)
     ap.add_argument("--timeout", type=int, default=_REPO_TIMEOUT)
+    ap.add_argument("--workers", type=int, default=1,
+                    help="Parallel tarball downloads (network is the bottleneck; store/catalog "
+                         "writes stay single-threaded).")
     ap.add_argument("--refetch", action="store_true",
                     help="Backfill mode: re-download already-fetched repos that lack a "
                          "multi-file set and populate it (upgrade a pre-multi-file catalog).")
     a = ap.parse_args()
-    run(a.limit, a.min_stars, a.timeout, refetch=a.refetch)
+    run(a.limit, a.min_stars, a.timeout, refetch=a.refetch, workers=a.workers)
 
 
 if __name__ == "__main__":
