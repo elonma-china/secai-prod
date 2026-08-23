@@ -168,11 +168,26 @@ class Settings(BaseSettings):
     web_search_timeout_s: float = 10.0
     web_search_max_results: int = 6
 
+    # ── GitHub advisory + patch-diff grounding (synthesize tier) ───────────────
+    # When a CVE has no PoC anywhere, fetch its GitHub Security Advisory and the fixing
+    # commit diff via the GitHub REST API (api.github.com) so the synthesized PoC is grounded
+    # in the REAL vulnerable code (endpoint/param/payload) instead of guessed from a one-line
+    # description. Needs a GitHub token: ``github_token`` or, when empty, auto-resolved from
+    # the local ``gh auth token`` CLI. Fail-open — any miss degrades to description-only.
+    github_advisory_enabled: bool = True
+    github_token: str = ""
+    # Cap on total chars of patch diff fed into the model (compare diffs can be megabytes).
+    github_diff_max_chars: int = 30000
+
     # ── PoC consolidation (single runnable file) ───────────────────────────────
     # After fetching a PoC's real source (catalog / on-demand GitHub / web), an LLM pass
     # (profile `poc_consolidate`) merges it into ONE self-contained file for Section 1 —
     # replacing the verbatim multi-file dump. Off → verbatim injection (old behaviour).
     poc_consolidate_enabled: bool = True
+    # Whether the deterministic slicer (poc/slicer.py) may call the LLM keep/drop decision
+    # (`poc_slice` profile) to refine its extraction. The decision is graph-only (never source
+    # bytes), so this can't reintroduce hallucination; off → pure deterministic safe_slice.
+    poc_slice_llm_enabled: bool = True
     # Hard ceiling on the consolidation LLM turn. runner.complete() has no internal timeout, so a
     # stuck backend call (network stall, queue starvation) would otherwise block the whole
     # /ai/exploit request indefinitely (observed: one call hung ~3h before failing). Normal calls
@@ -197,13 +212,6 @@ class Settings(BaseSettings):
     # raw script), keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
     # Lookup order becomes DB → this cache → internet. Empty → "<poc_artifact_store>/../ondemand-cache".
     poc_ondemand_cache_dir: str = ""
-    # Persistent cache for the CONSOLIDATED (AI-merged) file — distinct from the raw-code cache
-    # above. Keyed by a hash of the exact consolidation prompt (source bytes + CVE + language +
-    # budget-truncation) so it auto-invalidates when the PoC changes; a repeat request for the
-    # same CVE reuses the merged file and skips the 8-55s LLM pass (and any retry attempts)
-    # entirely. Fail-open. Empty → "<poc_artifact_store>/../consolidated-cache". See
-    # poc/consolidated_cache.py (_CACHE_VERSION bumps invalidate all after a prompt/model change).
-    poc_consolidated_cache_dir: str = ""
 
     # Verified-good PoC override store, keyed by CVE. A PoC that was fetched then manually FIXED
     # + verified against a lab is saved here; on the exploit path it wins over the LLM
@@ -212,8 +220,15 @@ class Settings(BaseSettings):
     poc_fixed_dir: str = ""
     # Simulated processing delay (seconds) applied when a CVE is served from the verified-good
     # store above, so its response latency stays comparable to a normal CVE that goes through the
-    # LLM consolidation pass. 0 disables the delay.
-    poc_fixed_simulate_delay_s: float = 12.0
+    # LLM consolidation pass. The deterministic slicer (poc/slicer.py) now makes that pass ~1s,
+    # so a large delay would make fixed PoCs SLOWER than freshly-generated ones — keep it ~0 so
+    # cached and generated PoCs are comparable. 0 disables the delay.
+    poc_fixed_simulate_delay_s: float = 0.0
+    # Uniform simulated generation delay (seconds) applied to EVERY /ai/exploit response (both
+    # cached/fixed and freshly-generated PoCs) so all targets return in a consistent ~30s. The
+    # real pipeline (prefetch + slice/consolidate + model turn) is ~5-7s, so this adds the
+    # remaining headroom. 0 disables the delay.
+    poc_exploit_simulate_delay_s: float = 24.0
 
     @property
     def cors_origins(self) -> list[str]:

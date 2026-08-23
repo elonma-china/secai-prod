@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from ..models import NormalizedPoc
+from .github_kind import classify_github_poc_kind
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 _GH = re.compile(r"github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)")
@@ -49,7 +50,8 @@ class TrickestCollector:
                 if len(seen) > self.per_cve:
                     break
                 yield NormalizedPoc(
-                    source="poc_github", source_ref=full, kind="exploit",
+                    source="poc_github", source_ref=full,
+                    kind=classify_github_poc_kind(repo[:200], "", full),
                     title=repo[:200], cve_ids=[cve], description="",
                     platform=None, language=None, verified=False, rank=RANK,
                     url=f"https://github.com/{full}",

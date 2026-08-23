@@ -95,6 +95,13 @@ class PocCatalog:
                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,datetime('now'),?)
                ON CONFLICT(source,source_ref) DO UPDATE SET
                  title=excluded.title, description=excluded.description, rank=excluded.rank,
+                 -- advisory is sticky: a writeup/hardening row must not be reset to
+                 -- exploit when a later collector (trickest) re-yields the same repo.
+                 kind=CASE
+                   WHEN excluded.kind='advisory' THEN excluded.kind
+                   WHEN poc.kind='advisory' THEN poc.kind
+                   ELSE excluded.kind
+                 END,
                  -- preserve a previously sandbox-fetched artifact when the collector re-yields
                  -- NULL (link-only sources) — re-collect must NOT wipe fetch work.
                  artifact_sha256=COALESCE(excluded.artifact_sha256, poc.artifact_sha256),

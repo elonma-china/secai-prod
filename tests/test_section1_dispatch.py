@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from secai_gateway.poc.inject import (
     _CONSOLIDATED_BANNER,
+    _FIXED_BANNER,
     _SYNTHESIS_BANNER,
     _SYNTHESIS_FOOTER_MARKER,
     _description_for,
@@ -106,6 +107,17 @@ def test_tier_consolidated_uses_light_banner_and_keeps_provenance() -> None:
     assert _SYNTHESIS_FOOTER_MARKER not in out         # no synthesis footer either
     assert "requests.get('http://TARGET/vuln')" in out  # the merged code IS Section 1
     assert "cve-2026-31431.py" in out                  # air-gap local filename
+
+
+def test_tier_fixed_uses_verified_banner_not_unverified() -> None:
+    """A fixed (lab-verified) entry must carry the verified banner, NOT the
+    'AI hợp nhất / CHƯA chạy thử' consolidated banner."""
+    fixed_evidence = [{**_CONSOLIDATED_EVIDENCE[0], "fixed": True}]
+    out, report = enforce_section1(_MODEL_REPORT, fixed_evidence, cve_id="CVE-2026-31431")
+    assert report["section1_tier"] == "real_consolidated"
+    assert _FIXED_BANNER in out
+    assert _CONSOLIDATED_BANNER not in out
+    assert "requests.get('http://TARGET/vuln')" in out
 
 
 def test_nuclei_yaml_is_not_tier1_injection() -> None:

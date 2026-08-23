@@ -17,10 +17,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from typing import Any
 
 from ..config import get_settings
+
+from .fidelity import fidelity_failure
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +94,22 @@ def _entry_language(ev: dict[str, Any]) -> str:
     return _FENCE_LANG.get(lang, lang)
 
 
-def _ordered_files(ev: dict[str, Any]) -> list[dict[str, Any]]:
-    """Entry file first, support files next, README last (it feeds run-instructions, not code)."""
-    return sorted(ev.get("source_files") or [],
-                  key=lambda f: ((f.get("role") or "") == "readme", (f.get("role") or "") != "entry"))
+def _ordered_files(ev: dict[str, Any], needed: set[str] | None = None) -> list[dict[str, Any]]:
+    """Entry file first, then support files the entry *imports* (``needed`` — a hard dependency
+    that must survive the budget cut), then the remaining support files, README last (it feeds
+    run-instructions, not code)."""
+    needed = needed or set()
+
+    def key(f: dict[str, Any]) -> tuple[int, int, int]:
+        role = f.get("role") or ""
+        name = os.path.splitext(os.path.basename(f.get("path") or ""))[0]
+        if role == "readme":
+            return (3, 0, 0)
+        if role == "entry":
+            return (0, 0, 0)
+        return (1 if name in needed else 2, 0, 0)
+
+    return sorted(ev.get("source_files") or [], key=key)
 
 
 def _entry_code(ev: dict[str, Any]) -> str:
@@ -106,20 +121,81 @@ def _entry_code(ev: dict[str, Any]) -> str:
     return str(ev.get("source_code") or "")
 
 
-def _gather_source(ev: dict[str, Any], budget: int = _MAX_SOURCE_CHARS) -> str:
+def readme_text(ev: dict[str, Any]) -> str:
+    """The README/usage text of one real-code evidence entry, if any — the author's own
+    run-instructions (setup, CLI examples, ports, prerequisites). This is the ground truth for
+    Mục 2 (Cách chạy PoC); it survives consolidation so the appendix can feed it to the model
+    verbatim instead of letting the model guess flags from code (it can't see READMEs that were
+    only used during the merge). Empty when the entry has no README file."""
+    parts: list[str] = []
+    for f in ev.get("source_files") or []:
+        if (f.get("role") or "") == "readme" and f.get("code"):
+            parts.append(str(f["code"]))
+    return "\n\n".join(parts).strip()
+
+
+def _sibling_basenames(ev: dict[str, Any]) -> set[str]:
+    """Basenames (no dir, no ext) of every NON-entry file in the PoC set — the names an entry
+    ``import``/``from … import`` could resolve to a same-repo module (mirrors slicer's sibling
+    set so the two paths agree on what counts as a local dependency)."""
+    return {
+        os.path.splitext(os.path.basename(f.get("path") or ""))[0]
+        for f in (ev.get("source_files") or []) if (f.get("role") or "") != "entry"
+    }
+
+
+def _imported_sibling_names(code: str, sibling_basenames: set[str]) -> set[str]:
+    """Which same-repo siblings the entry file actually imports (``import utils`` / ``from
+    utils.menu_functions import x`` where ``utils`` matches a sibling basename). These are hard
+    dependencies: dropping their source from the feed would make the LLM invent their contents
+    (a silent semantic drift, the CVE-2026-45504 class of bug). Package-relative imports
+    (``from . import x``) can't be resolved to one basename → return the WHOLE sibling set
+    (all support files are treated as needed)."""
+    if not code or not sibling_basenames:
+        return set()
+    import ast
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+    needed: set[str] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom):
+            if n.level and n.level > 0:
+                return set(sibling_basenames)  # `from . import x` — can't tell which file
+            if n.module and n.module.split(".")[0] in sibling_basenames:
+                needed.add(n.module.split(".")[0])
+        elif isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name.split(".")[0] in sibling_basenames:
+                    needed.add(a.name.split(".")[0])
+    return needed
+
+
+def _gather_source(ev: dict[str, Any], budget: int = _MAX_SOURCE_CHARS,
+                   needed: set[str] | None = None) -> str:
     """The full source of one real-code evidence entry as a labelled blob bounded by ``budget``
-    chars — entry file first (so if anything is dropped it's a support/README file, never the
-    entry PoC). Per non-entry file is additionally capped so one file can't eat the whole pool."""
+    chars — entry file first, then imported siblings (``needed``), then other support files.
+    Imported siblings are fed in FULL (never per-file capped): a dropped dependency is what
+    makes the merge hallucinate, so they take priority over unrelated support/README. Per
+    non-imported support file is capped so one file can't eat the whole pool."""
+    needed = needed or set()
     files = ev.get("source_files")
     parts: list[str] = []
     used = 0
     if files:
-        ordered = _ordered_files(ev)
+        ordered = _ordered_files(ev, needed)
         for i, f in enumerate(ordered):
             code = f.get("code") or ""
             if not code or used >= budget:
                 continue
-            per_file = budget - used if i == 0 else min(_MAX_FILE_CHARS, budget - used)
+            name = os.path.splitext(os.path.basename(f.get("path") or ""))[0]
+            is_entry = i == 0
+            is_needed = name in needed
+            if is_entry or is_needed:
+                per_file = budget - used  # entry + imported deps: feed full, never cap
+            else:
+                per_file = min(_MAX_FILE_CHARS, budget - used)
             take = code[:per_file]
             parts.append(f"===== FILE: {f.get('path', 'poc')} =====\n{take}")
             used += len(take)
@@ -309,31 +385,36 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
     # the budget, a truncated feed would produce a broken/partial merge — skip consolidation and
     # let the caller inject the verbatim PoC instead (that path doesn't go through the LLM).
     budget = _source_budget(get_settings())
-    entry_len = len(_entry_code(ev))
+    entry_code = _entry_code(ev)
+    entry_len = len(entry_code)
     if entry_len > budget:
         logger.info("skip consolidation for %s: entry PoC %d chars > source budget %d chars",
                     cve_id, entry_len, budget)
         return None
-    source = _gather_source(ev, budget)
+    # Hard-dependency guard: support files the entry IMPORTS must be fed in full or not at all.
+    # If entry + imported siblings can't fit the budget, dropping a dependency would make the
+    # LLM invent its contents (silent semantic drift) — skip consolidation and fall back to
+    # verbatim, exactly like the entry-over-budget case above.
+    needed = _imported_sibling_names(entry_code, _sibling_basenames(ev))
+    needed_chars = sum(len(f.get("code") or "") for f in (ev.get("source_files") or [])
+                       if os.path.splitext(os.path.basename(f.get("path") or ""))[0] in needed)
+    if entry_len + needed_chars > budget:
+        logger.info("skip consolidation for %s: entry %d + imported deps %d chars > budget %d",
+                    cve_id, entry_len, needed_chars, budget)
+        return None
+    source = _gather_source(ev, budget, needed)
     if not source.strip():
         return None
     base_prompt = build_consolidation_prompt(ev, cve_id, budget)
     settings = get_settings()
-    # Output cache: the merge is a pure function of the prompt (source bytes + CVE + language +
-    # budget-truncation) at a fixed sampling temperature, so a repeat request for the same CVE
-    # can reuse the merged file and skip the whole LLM pass — including any retry attempts. The
-    # verified-good `fixed` override in routes already short-circuits earlier; this catches
-    # every OTHER CVE. Fail-open: a miss just recomputes.
-    cache_dir = resolve_consolidated_cache_dir(settings)
-    ckey = cache_key(base_prompt, float(getattr(settings, "llm_temperature", 0.0) or 0.0))
-    cached = load_consolidated(cache_dir, cve_id or "", ckey)
-    if cached is not None:
-        logger.info("poc consolidation cache hit for %s", cve_id)
-        return cached
     timeout_s = settings.poc_consolidate_timeout_s
     max_attempts = max(1, int(getattr(settings, "poc_consolidate_max_attempts", 1) or 1))
     code = language = None
     prompt = base_prompt
+    # The original entry source — the fidelity check compares the merged output against it so a
+    # merge that renames CLI flags / drops an argparse param / hardcodes a port is rejected
+    # (see poc/fidelity.py; the CVE-2026-45504 merge did all three).
+    entry_source = _entry_code(ev)
     for attempt in range(1, max_attempts + 1):
         try:
             text, _meta = await asyncio.wait_for(
@@ -356,7 +437,9 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
             language = lang or _entry_language(ev) or ""
             reason = validation_failure(code, language, cve_id)
             if reason is None:
-                break  # merged file passes the execution-free checks — done
+                reason = fidelity_failure(code, entry_source)
+            if reason is None:
+                break  # merged file passes the execution-free + fidelity checks — done
         # Rejected. Retry with the exact defect fed back, unless this was the last attempt.
         if attempt >= max_attempts:
             logger.info("poc consolidation for %s gave up after %d attempt(s); last defect: %s",
@@ -384,6 +467,7 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
         "source_files": None,   # collapsed to ONE file — inject renders `source_code`
         "code_truncated": False,
         "sha256": ev.get("sha256"),
+        "readme_text": readme_text(ev),
         "consolidated": True,
         "consolidated_from": {
             "sha256": ev.get("sha256"),
@@ -393,6 +477,4 @@ async def consolidate_poc(runner: Any, real_evidence: list[dict[str, Any]],
         },
         "static_indicators": {"language": language or None, "consolidated": True},
     }
-    # Persist the validated merge so the next request for this CVE skips the LLM pass entirely.
-    save_consolidated(cache_dir, cve_id or "", ckey, result)
     return result

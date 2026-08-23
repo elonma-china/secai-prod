@@ -11,6 +11,7 @@ from linch.tools.function import tool
 
 from ..config import get_settings
 from .bm25 import BM25_FANOUT, BM25_VECTOR, bm25_search, rrf_merge
+from .cve_overrides import apply_cve_override
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
 from .filters import ENTITY_ID_RES, boost, build_filter, passes_filter, upper_list
 
@@ -84,7 +85,9 @@ async def _dense_search(client: httpx.AsyncClient, vector: list[float], qfilter:
         body["filter"] = qfilter
     resp = await client.post(f"{QDRANT_URL}/collections/{COLLECTION}/points/search", json=body, timeout=20)
     resp.raise_for_status()
-    return [{"id": str(r["id"]), "score": r["score"], "payload": r.get("payload") or {}} for r in resp.json().get("result", [])]
+    return [{"id": str(r["id"]), "score": r["score"],
+             "payload": apply_cve_override(r.get("payload") or {})}
+            for r in resp.json().get("result", [])]
 
 
 async def _retrieve_by_ids(client: httpx.AsyncClient, ids: list[str]) -> dict[str, dict[str, Any]]:
@@ -95,7 +98,8 @@ async def _retrieve_by_ids(client: httpx.AsyncClient, ids: list[str]) -> dict[st
         json={"ids": ids, "with_payload": True}, timeout=20,
     )
     resp.raise_for_status()
-    return {str(r["id"]): (r.get("payload") or {}) for r in resp.json().get("result", [])}
+    return {str(r["id"]): apply_cve_override(r.get("payload") or {})
+            for r in resp.json().get("result", [])}
 
 
 async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
@@ -111,7 +115,8 @@ async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[
         timeout=20,
     )
     resp.raise_for_status()
-    return {str(p["id"]): (p.get("payload") or {}) for p in resp.json().get("result", {}).get("points", [])}
+    return {str(p["id"]): apply_cve_override(p.get("payload") or {})
+            for p in resp.json().get("result", {}).get("points", [])}
 
 
 async def _qdrant_search(

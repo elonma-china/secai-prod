@@ -20,6 +20,7 @@ from linch.events import ResultEvent, SystemEvent
 from ..agent import registry_for
 from ..poc import (
     canonical_block,
+    cli_surface,
     consolidate_poc,
     enforce_section1,
     extract_cve_id,
@@ -29,10 +30,12 @@ from ..poc import (
     override_section3,
     prefetch_evidence,
     sanitize_airgap_runguide,
+    slice_entry,
     strip_system_narration,
     strip_tool_name_mentions,
 )
 from ..poc.backend import PocBadRequest, PocError, PocForbidden, PocNotFound
+from ..poc.fixed_pocs import extract_target
 from ..poc.kt_client import KtClientError
 from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
@@ -69,18 +72,22 @@ EXPLOIT_CVE_GUIDE = (
 )
 _CVE_ANY = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 # Whole-message greeting / smalltalk / meta only (anchored ^…$), matched against a
-# diacritic-folded copy so "xin chào", "xin chao" and typos all land. Anything with real
-# content past the greeting (e.g. "chào, tìm poc struts") fails the anchor → normal flow,
-# so legit keyword-only PoC searches are never short-circuited.
+# diacritic-folded copy so "xin chào", "xin chao" and typos all land. The token group is
+# repeated ((?:…)+) so a chain of greeting/smalltalk chunks with no security content still
+# matches as a whole — e.g. "xin chào bạn khoẻ không" (greeting + "how are you"), which a
+# single-token anchor missed and let fall through into off-topic PoC synthesis. Anything
+# with real content past the greeting (e.g. "chào, tìm poc struts") still fails the anchor
+# at the first non-greeting token → normal flow, so keyword-only PoC searches are safe.
 _CHITCHAT_RE = re.compile(
-    r"^(?:"
+    r"^(?:(?:"
     r"xin\s*chao|chao(?:\s*ban)?|hello+|helo|hi+|hey+|yo|"
     r"cam\s*on|thanks?|thank\s*you|"
-    r"ban\s*(?:la\s*ai|ten\s*(?:gi|la)|khoe|lam\s*(?:duoc\s*)?gi)|who\s*are\s*you|"
+    r"ban\s*(?:la\s*ai|ten\s*(?:gi|la)|co\s*khoe(?:\s*khong)?|khoe(?:\s*khong)?|lam\s*(?:duoc\s*)?gi)|who\s*are\s*you|"
+    r"khoe\s*khong|co\s*khoe\s*khong|"
     r"gioi\s*thieu(?:\s*ban)?|"
     r"help|giup(?:\s*(?:toi|minh|em|voi))?|huong\s*dan|hd|"
     r"test(?:ing)?|/?start|menu|oke?y?|ok"
-    r")[\s.,!?…]*$",
+    r")[\s.,!?…]*)+$",
     re.I,
 )
 # Strict CVE format: CVE-YYYY-NNNNN (4-digit year, 3-7 digit ID, only digits/hyphens)
@@ -158,6 +165,22 @@ def _kt_slots_from_request(body: LegacyRequest, text: str) -> dict[str, Any] | N
     return parse_exploit_intent(text)
 
 
+def _exploit_target(body: LegacyRequest, text: str) -> str | None:
+    """Normalized ``host[:port]`` the request is targeting, for scoping the verified-good
+    (fixed) PoC lookup to the right lab. Free-text target wins; else the structured
+    ``target`` (+``port``) fields; else ``None`` (→ generic/default fixed PoC)."""
+    t = extract_target(text)
+    if t:
+        return t
+    btarget = (getattr(body, "target", None) or getattr(body, "target_system", None) or "").strip()
+    if not btarget:
+        return None
+    bport = getattr(body, "port", None)
+    if bport not in (None, ""):
+        return f"{btarget}:{bport}"
+    return btarget
+
+
 def _kt_prompt_appendix(result: dict[str, Any]) -> str:
     """Compact JSON for the model — full log stays in metadata / SSE for the FE."""
     scan = result.get("scan") or {}
@@ -183,6 +206,11 @@ def _kt_prompt_appendix(result: dict[str, Any]) -> str:
 # (overview). The FULL PoC still goes to Section 1 deterministically; this is only the
 # grounding slice for the model's own prose, kept small so it doesn't bloat the context.
 _PREFETCH_APPENDIX_BUDGET = 3000
+# Larger budget for the web-hints appendix: a GitHub fix-commit DIFF (the highest-value
+# synthesis input — it shows the real vulnerable code, not prose) can be several KB, and the
+# whole point is to ground the synthesized PoC in it. Kept well under the consolidated PoC's
+# 40k so it doesn't drown the prompt, but comfortably above the 3k used for catalog prose.
+_WEB_HINTS_APPENDIX_BUDGET = 12000
 
 
 def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
@@ -275,7 +303,7 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
     the gap, since a confident-looking placeholder is easy to mistake for a grounded one."""
     if not evidence:
         return ""
-    preview = _evidence_preview(evidence, _PREFETCH_APPENDIX_BUDGET)
+    preview = _evidence_preview(evidence, _WEB_HINTS_APPENDIX_BUDGET)
     if not preview.strip():
         return ""
     sources = [f"{ev.get('title') or ev.get('source') or '?'}: {ev.get('url') or ''}"
@@ -435,6 +463,37 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
     truncated = len(code) > _CONSOLIDATED_APPENDIX_MAX_CHARS
     preview = code[:_CONSOLIDATED_APPENDIX_MAX_CHARS]
     cut_note = " (đã cắt bớt do quá dài)" if truncated else ""
+    # Deterministic CLI surface (argparse AST) — the ground truth for the run-steps, so the model
+    # names the REAL flags/subcommands even when the code preview is truncated (argparse blocks
+    # often sit past the 40k preview cut; the model otherwise invents plausible-but-wrong flags,
+    # observed live on CVE-2026-60137). Computed from the FULL code, independent of `preview`.
+    cli = cli_surface(code)
+    cli_lines: list[str] = []
+    if cli.get("subcommands"):
+        cli_lines.append("subcommands: " + ", ".join(cli["subcommands"]))
+    if cli.get("flags"):
+        cli_lines.append("cờ: " + ", ".join(cli["flags"]))
+    if cli.get("positionals"):
+        cli_lines.append("đối số vị trí: " + ", ".join(cli["positionals"]))
+    cli_ground = ("\nGiao diện dòng lệnh THẬT của tệp (trích tự động từ mã — chỉ mô tả đúng các "
+                  "tên này, không bịa thêm cờ/đối số nào khác):\n- " + "\n- ".join(cli_lines)) \
+        if cli_lines else ""
+    # Author README (if the entry had one): the primary Mục 2 ground truth — real setup, CLI
+    # examples, ports and prerequisites the model cannot infer from code alone. Fed verbatim
+    # (bounded) so the model translates it instead of guessing. README wins over the CLI surface
+    # when both are present; CLI surface is the fallback (no README, or README has no usage).
+    readme = (consolidated.get("readme_text") or "").strip()
+    if readme:
+        readme_budget = 8_000
+        readme_preview = readme[:readme_budget]
+        readme_cut = " (đã cắt bớt)" if len(readme) > readme_budget else ""
+        readme_ground = (
+            "\nTÀI LIỆU HƯỚNG DẪN CHẠY THẬT của tác giả PoC (README/hướng dẫn gốc đã fetch)"
+            f"{readme_cut} — DỊCH lại thành Mục 2 bằng tiếng Việt, bám ĐÚNG các lệnh/tham số/cổng/"
+            "tiền đề trong đó, không bịa thêm:\n---\n" + readme_preview + "\n---"
+        )
+    else:
+        readme_ground = ""
     return (
         "\n\n[Hệ thống đã hợp nhất PoC công khai đã fetch thành MỘT tệp cục bộ tên "
         f"`{name}` và sẽ TỰ chèn nó làm Mục 1 — bạn KHÔNG viết Mục 1 (không viết `## 1.`, "
@@ -442,7 +501,8 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         f"`{name}` này — lệnh chạy, tham số (kể cả các cờ argparse/CLI thật xuất hiện ở BẤT KỲ "
         "đâu trong mã, kể cả cuối tệp), tiền đề — dựa trên chính đoạn mã dưới đây; và Mục 3 "
         "(Tổng quan Lỗ hổng). Chỉ dùng thông tin có trong mã, không bịa endpoint/tham số/"
-        "phiên bản/cờ dòng lệnh không tồn tại. Giữ air-gap: không tải/clone/cài từ internet.\n"
+        f"phiên bản/cờ dòng lệnh không tồn tại.{readme_ground}{cli_ground} "
+        "Giữ air-gap: không tải/clone/cài từ internet.\n"
         f"Mã tệp `{name}`{cut_note} (KHÔNG chép lại vào câu trả lời):\n"
         + preview + "\n]"
     )
@@ -793,7 +853,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     async def _build_exploit_grounding(
         prefetch_result: dict[str, Any], web_hints: list[dict[str, Any]],
-        session_id: str | None) -> tuple[list[dict[str, Any]], str, bool]:
+        session_id: str | None, target: str | None = None) -> tuple[list[dict[str, Any]], str, bool]:
         """Acquire the best real PoC code (catalog → temp cache → on-demand GitHub → web raw
         script), consolidate it into ONE runnable file when enabled, and build the model
         appendix. Internet-fetched code is saved to the temp cache for reuse next time.
@@ -847,7 +907,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         consolidated: dict[str, Any] | None = None
         # Verified-good override: a PoC previously fixed + lab-verified wins over the LLM
         # consolidation, so the CVE returns the known-good runnable file with zero re-fix.
-        fixed = load_fixed(resolve_fixed_dir(settings), cve_id) if cve_id else None
+        # Scoped to the request's target lab when one is identifiable (one CVE → many labs).
+        fixed = load_fixed(resolve_fixed_dir(settings), cve_id, target=target) if cve_id else None
         if fixed:
             set_session_real_code_evidence(session_id, True)
             set_session_coverage(session_id, "enough")
@@ -860,7 +921,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
         elif all_real and getattr(settings, "poc_consolidate_enabled", False):
             try:
                 real_full = await _fullen_evidence_for_display(list(all_real), poc)
-                consolidated = await consolidate_poc(state.runner, real_full, cve_id)
+                # Deterministic core extraction first (Python entry): a verbatim subset of the
+                # real source, never re-written — this is the "no LLM on the bytes" fast path.
+                # Falls back to the LLM consolidation below on any miss (non-Python, cross-file
+                # dependency, parse failure) so the model merge still covers what slicing can't.
+                sliced = await slice_entry(real_full[0], state.runner, cve_id,
+                                           use_llm=getattr(settings, "poc_slice_llm_enabled", True))
+                if sliced is not None:
+                    consolidated = sliced
+                else:
+                    consolidated = await consolidate_poc(state.runner, real_full, cve_id)
             except Exception:
                 logger.exception("poc consolidation failed for %s", cve_id)
                 consolidated = None
@@ -887,6 +957,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     "metadata": exploit_guidance_meta()}
         prompt_text = normalize_cve_ids(prompt_text)
         session_id = _exploit_session_id(body)
+        # Uniform ~30s generation latency for every real PoC response (cached or fresh).
+        _delay = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
+        if _delay > 0:
+            await asyncio.sleep(_delay)
 
         # Validate CVE format (reject invalid suffixes like "zz")
         cve_match = _CVE_ANY.search(prompt_text)
@@ -917,7 +991,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
-            prefetch_result, web_hints, session_id)
+            prefetch_result, web_hints, session_id, target=_exploit_target(body, prompt_text))
         agent_prompt = (prompt_text
                         + (_kt_prompt_appendix(kt_result) if kt_result else "")
                         + grounding_appendix)
@@ -967,6 +1041,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     "description": EXPLOIT_CVE_GUIDE, "metadata": exploit_guidance_meta()})
                 yield b"data: [DONE]\n\n"
             return StreamingResponse(gen_guide(), media_type="text/event-stream")
+
+        # Uniform ~30s generation latency for every real PoC response (cached or fresh).
+        _delay = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
+        if _delay > 0:
+            await asyncio.sleep(_delay)
 
         text = normalize_cve_ids(text)
         session_id = _exploit_session_id(body)
@@ -1043,7 +1122,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 _hints = await _maybe_web_hints(_pf)
                 web_hints_holder.extend(_hints)  # visible to build_final (see declaration above)
                 _pre, prefetch_appendix, _cons = await _build_exploit_grounding(
-                    _pf, _hints, session_id)
+                    _pf, _hints, session_id, target=_exploit_target(body, text))
                 grounding_holder["pre_evidence"] = _pre
                 grounding_holder["consolidated"] = _cons
             except Exception:

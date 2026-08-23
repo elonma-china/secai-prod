@@ -16,8 +16,12 @@ def _field(body: LegacyRequest, name: str) -> Any:
 
 def translate_prompt(body: LegacyRequest) -> str:
     text = require_public_input(body.supplied_text())
-    src = _field(body, "source_lang") or _field(body, "language")
-    tgt = _field(body, "target_lang")
+    # `language` is the TARGET language in the FE contract ("dịch sang <language>"), so it
+    # falls back into `tgt` — NOT `src`. (Previously it was OR'd into `src`, which silently
+    # dropped the caller's target: e.g. English text + language="vi" hit the auto-detect
+    # branch and echoed the English back untranslated.)
+    src = _field(body, "source_lang")
+    tgt = _field(body, "target_lang") or _field(body, "language")
     if src and tgt:
         return f"Dịch văn bản sau từ {src} sang {tgt}:\n\n{text}"
     if tgt:

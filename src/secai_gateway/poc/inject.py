@@ -317,13 +317,14 @@ def _with_consolidated_banner(block: str, ev: dict[str, Any]) -> str:
     entry is an AI-merged single file (`consolidated=True`). Idempotent — a block that already
     opens with the banner is returned unchanged.
 
-    A `fixed=True` entry (poc/fixed_pocs.py) is still rendered under the SAME banner as every
-    other consolidated PoC, so the output stays uniform regardless of how the code was produced."""
+    A `fixed=True` entry (poc/fixed_pocs.py) is lab-verified, so it gets a distinct banner —
+    it must NOT be labelled "AI hợp nhất / CHƯA chạy thử" like an unverified LLM merge."""
     if not block or not ev.get("consolidated"):
         return block
-    if block.lstrip().startswith(_CONSOLIDATED_BANNER):
+    banner = _FIXED_BANNER if ev.get("fixed") else _CONSOLIDATED_BANNER
+    if block.lstrip().startswith(banner):
         return block
-    return f"{_CONSOLIDATED_BANNER}\n\n{block}"
+    return f"{banner}\n\n{block}"
 
 
 def _description_for(ev: dict[str, Any]) -> str:
@@ -387,6 +388,13 @@ _SYNTHESIS_BANNER = (
 _CONSOLIDATED_BANNER = (
     "ℹ️ Tệp dưới đây đã được AI hợp nhất/tinh gọn thành MỘT tệp duy nhất từ (các) tệp PoC gốc "
     "đã fetch — CHƯA chạy thử; nguồn gốc (URL/sha256) xem ở metadata."
+)
+# Distinct banner for the fixed (lab-verified) tier (poc/fixed_pocs.py): the copy has been
+# fetched, FIXED and verified against a lab, so it must not carry the "AI hợp nhất / CHƯA chạy
+# thử" note that the LLM-consolidated tier does. Same provenance guidance (URL/sha256).
+_FIXED_BANNER = (
+    "ℹ️ Tệp dưới đây là PoC đã được kiểm chứng trong lab (verified) — chạy lại không cần sửa; "
+    "nguồn gốc (URL/sha256) xem ở metadata."
 )
 # Distinct from _NO_POC_NOTE: evidence/CVE DID exist (see Mục 3 for real CWE/CVSS/CAPEC
 # data), only the synthesis attempt itself failed this turn — must not claim the CVE is
