@@ -32,6 +32,7 @@ import httpx
 from linch.tools.base import ToolContext, ToolResult
 from linch.tools.function import tool
 
+from ..airgap import airgap_enabled
 from ..config import get_settings
 from ..poc.tools import record_fetch_evidence
 from ..state import SqliteLedger
@@ -149,6 +150,8 @@ async def _find_ghsa_url(cve_id: str) -> str | None:
     allowlisted for fetch_reference; this is a read of a public search-results page, not an
     API call). None on any miss (no match, non-GHSA CVE, transport error) — fail-open, the
     caller just has one fewer candidate."""
+    if airgap_enabled():  # air-gap: no GitHub advisory lookup
+        return None
     try:
         payload = await fetch_reference_markdown(
             f"https://github.com/advisories?query={quote(cve_id)}")
@@ -346,6 +349,8 @@ async def _github_advisory_evidence(cve_id: str) -> list[dict[str, Any]]:
     """Fetch the CVE's GitHub advisory description + fixing commit diff and shape them as
     synthesis-input evidence (``description`` only). [] on any miss — the caller degrades to the
     existing description-only path."""
+    if airgap_enabled():  # air-gap: no api.github.com fetch
+        return []
     settings = get_settings()
     if not getattr(settings, "github_advisory_enabled", True):
         return []
@@ -384,6 +389,8 @@ async def searxng_search(query: str, *, max_results: int | None = None) -> list[
     """Query the configured SearXNG JSON API. Returns ``[{title, url, snippet}]`` ranked as
     SearXNG returned them. Fail-open: no URL configured, disabled, or any transport/parse
     error → ``[]`` (callers degrade to KB-only, never crash)."""
+    if airgap_enabled():  # air-gap: no SearXNG / web discovery
+        return []
     settings = get_settings()
     base = (settings.searxng_url or "").strip().rstrip("/")
     query = (query or "").strip()
@@ -473,6 +480,8 @@ async def gather_web_hints(cve_id: str, ledger: SqliteLedger, run_id: str) -> li
     a real patch DIFF never mentions a CVE-ID by number, so gating it on that text would
     silently discard the single most useful source this function can surface; that's only
     safe to skip once the page it came from is confirmed on-topic, never unconditionally."""
+    if airgap_enabled():  # air-gap: no NVD/GHSA/GitHub/SearXNG fetch of any kind
+        return []
     cve_id = (cve_id or "").strip().upper()
     if not cve_id:
         return []

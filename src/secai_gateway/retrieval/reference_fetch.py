@@ -22,6 +22,7 @@ import httpx
 from linch.tools.base import ToolContext, ToolResult
 from linch.tools.function import tool
 
+from ..airgap import assert_online_fetch_allowed
 from ..config import get_settings
 from ..poc.tools import record_fetch_evidence
 from ..state import SqliteLedger
@@ -81,6 +82,7 @@ async def fetch_reference_markdown(
     redirect). The read window is ``text[start_index : start_index + max_chars]`` so a
     long page can be paged with the returned ``next_start_index``.
     """
+    assert_online_fetch_allowed(url)  # air-gap backstop (config also disables the tool)
     settings = get_settings()
     allowed = reference_hosts()
     timeout = timeout_s if timeout_s is not None else float(settings.fetch_reference_timeout_s)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +15,22 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False,
     )
+
+    # ── Air-gap master switch (default ON) ─────────────────────────────────────
+    # When true, the gateway must make NO outbound request to the public internet. This
+    # is enforced two ways, so a single mis-set env var can never re-open a leak:
+    #   1. `_enforce_airgap` below hard-coerces every internet-feature flag to its off
+    #      value (so the tools are never even built / the deterministic web steps skip);
+    #   2. the low-level public-content fetchers (retrieval/http_fetch, reference_fetch,
+    #      websearch and routes.py's on-demand GitHub step) additionally call
+    #      `airgap.assert_online_fetch_allowed()` and refuse — the belt-and-suspenders
+    #      backstop for any code path (now or future) that bypasses the flags.
+    # It does NOT touch the internal service endpoints (Qdrant/Neo4j/Redis + the LLM/
+    # embedding/reranker serving): those must point at in-network hosts at deploy time —
+    # air-gap means "no internet", not "no network". Build the PoC catalog / run the
+    # nightly KB sync on an internet-connected machine with AIRGAP=false; the air-gap
+    # deployment itself keeps the default (true).
+    airgap: bool = True
 
     # ── Qdrant + hybrid retrieval ──────────────────────────────────────────────
     qdrant_url: str = "http://localhost:6333"
@@ -229,6 +246,23 @@ class Settings(BaseSettings):
     # real pipeline (prefetch + slice/consolidate + model turn) is ~5-7s, so this adds the
     # remaining headroom. 0 disables the delay.
     poc_exploit_simulate_delay_s: float = 24.0
+
+    @model_validator(mode="after")
+    def _enforce_airgap(self) -> "Settings":
+        """When air-gap is on, force every internet-touching feature flag off — regardless
+        of what the env/.env set them to. This is layer 1 of the guarantee: the tools that
+        would reach the internet are never built (runner.py gates on these flags) and the
+        deterministic web-research/on-demand-fetch steps short-circuit. Layer 2 is the
+        per-fetch `airgap.assert_online_fetch_allowed()` backstop. Internal service
+        endpoints (qdrant/neo4j/embedding/reranker/LLM) are intentionally NOT touched."""
+        if self.airgap:
+            self.web_fetch_enabled = False
+            self.fetch_reference_enabled = False
+            self.web_search_enabled = False
+            self.github_advisory_enabled = False
+            self.poc_github_ondemand_enabled = False
+            self.searxng_url = ""
+        return self
 
     @property
     def cors_origins(self) -> list[str]:
