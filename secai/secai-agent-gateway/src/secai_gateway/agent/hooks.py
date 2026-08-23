@@ -251,7 +251,30 @@ class RequireSection1SynthesisHook:
     though `exploit_output_contract` requires all three for this tier. Nothing else in the
     hook chain catches this: `RequireRunInstructionsHook` only fires on run-info evidence
     (a README file or CLI-flag signal in real source code), which a pure GHSA-description
-    synthesis never has."""
+    synthesis never has.
+
+    T1 (real fetched code) skips the "must write Section 1" requirement (Section 1 is the
+    deterministic real-code tier regardless of what the model writes — forcing a synthesis
+    attempt would be pure waste) but is NOT exempt from the Mục 2/3 completeness check:
+    those two sections are still the model's own text in T1 (only Mục 1 is system-injected),
+    and exploit_output_contract requires them there too ("Phần văn bản phải bắt đầu ngay
+    bằng `## 2. Cách chạy PoC`... Chỉ xuất đúng hai phần"). Observed via eval suite
+    (evals/, 2026-08-23): ~8% of exploit_research T1/real_consolidated answers stopped
+    right after Mục 2, dropping Mục 3 entirely — the exact same reticence-to-continue
+    failure mode as the T2/T3 case above, just previously unchecked because this hook
+    returned early before ever looking at the text for T1.
+
+    Retry feedback is phrased as "write the complete required content again", never
+    "keep what you already wrote" — `linch`'s `force_continue` (loop/terminals.py's
+    `_gate_retry_tail`) appends the feedback as a new user turn and keeps the REJECTED
+    draft in the session history for the model to see, but the run's final delivered
+    text is only ever the model's LATEST completion (not a merge across retry turns).
+    A "just add what's missing, keep the rest as-is" instruction was tried first and
+    measurably backfired: the model took it literally, emitted only the delta on retry,
+    and the previously-written section silently vanished from the delivered answer (a
+    second eval pass, same 2026-08-23 session, showed all 8 T1 retries landing exactly
+    on "Mục 2 now missing, Mục 3 now present" — the inverse of the original gap, not a
+    fix of it). The retry instruction must ask for the full section set every time."""
 
     name = "require_section1_synthesis"
 
@@ -266,25 +289,32 @@ class RequireSection1SynthesisHook:
             return None
         session_id = _session_id_of(ctx)
         run_evidence = self.ledger.evidence_for_run(ctx.run_id)
-        if get_session_real_code_evidence(session_id) or has_real_code_evidence(run_evidence):
-            return None  # T1 applies regardless of what the model wrote
-        # `run_evidence` only covers what the MODEL itself fetched this turn — the
-        # deterministic prefetch (routes.py's `exploit_prefetch`) runs concurrently under
-        # its own scratch run_id and is invisible to `ledger.evidence_for_run(ctx.run_id)`,
-        # so a session-level flag (set from prefetch's own evidence) is the only way this
-        # hook can see it. Without it, this exact retry silently never fires whenever
-        # prefetch is the ONLY reason T2 evidence exists (the model's own poc_search/fetch
-        # came up empty) — which was observed live turning a legitimate T2 case into a
-        # bare "synthesis_failed" the first time, every time.
-        if not (has_synthesis_evidence(run_evidence) or get_session_synthesis_evidence(session_id)
-                or get_session_cve_known(session_id)):
-            return None  # genuinely nothing to ground on — T4 is the correct, honest answer
-
         text = ctx.final_text or ""
-        has_s1 = section1_has_body(text)
-        missing = [n for n, rx in ((2, _H2), (3, _H3)) if has_s1 and not rx.search(text)]
-        if has_s1 and not missing:
-            return None
+        is_t1 = get_session_real_code_evidence(session_id) or has_real_code_evidence(run_evidence)
+
+        if is_t1:
+            # Mục 1 needs no check (system-injected regardless of what the model wrote) —
+            # only Mục 2/3, which the model still writes itself in this tier too.
+            has_s1 = False
+            missing = [n for n, rx in ((2, _H2), (3, _H3)) if not rx.search(text)]
+            if not missing:
+                return None
+        else:
+            # `run_evidence` only covers what the MODEL itself fetched this turn — the
+            # deterministic prefetch (routes.py's `exploit_prefetch`) runs concurrently under
+            # its own scratch run_id and is invisible to `ledger.evidence_for_run(ctx.run_id)`,
+            # so a session-level flag (set from prefetch's own evidence) is the only way this
+            # hook can see it. Without it, this exact retry silently never fires whenever
+            # prefetch is the ONLY reason T2 evidence exists (the model's own poc_search/fetch
+            # came up empty) — which was observed live turning a legitimate T2 case into a
+            # bare "synthesis_failed" the first time, every time.
+            if not (has_synthesis_evidence(run_evidence) or get_session_synthesis_evidence(session_id)
+                    or get_session_cve_known(session_id)):
+                return None  # genuinely nothing to ground on — T4 is the correct, honest answer
+            has_s1 = section1_has_body(text)
+            missing = [n for n, rx in ((2, _H2), (3, _H3)) if has_s1 and not rx.search(text)]
+            if has_s1 and not missing:
+                return None
 
         attempts = self._attempts.get(ctx.run_id, 0)
         if attempts >= self.max_retries:
@@ -292,19 +322,32 @@ class RequireSection1SynthesisHook:
         self._attempts[ctx.run_id] = attempts + 1
         self._attempts.move_to_end(ctx.run_id)
         _trim(self._attempts)
-        if not has_s1:
+        if not is_t1 and not has_s1:
             feedback = (
                 "Evidence confirms this CVE/vulnerability exists (KB match or catalog "
-                "description) even though no runnable PoC was found. Write Section 1 "
-                "(`## 1. Mã Khai thác (PoC) và Payload`) with a minimal illustrative exploit "
-                "grounded in that evidence, per section1_policy trường hợp 2 — do not leave "
-                "it out.")
-        else:
-            names = " and ".join(f"`## {n}. {'Cách chạy PoC' if n == 2 else 'Tổng quan Lỗ hổng'}`" for n in missing)
+                "description) even though no runnable PoC was found. Your previous reply is "
+                "REPLACED by this one — write the COMPLETE answer again from scratch, this "
+                "time including Section 1 (`## 1. Mã Khai thác (PoC) và Payload`, a minimal "
+                "illustrative exploit grounded in that evidence, per section1_policy trường "
+                "hợp 2) followed by `## 2. Cách chạy PoC` and `## 3. Tổng quan Lỗ hổng`. "
+                "Nothing from your previous reply carries over automatically — re-write every "
+                "section you want in the final answer, not only Section 1.")
+        elif is_t1:
             feedback = (
-                f"Section 1 is written but {names} — required by exploit_output_contract "
-                "for this tier — is missing from your answer. Add the missing section(s) "
-                "after Section 1, keeping Section 1 exactly as already written.")
+                "Your previous reply is REPLACED by this one — required sections are missing "
+                "or the reply was cut short. Write the COMPLETE answer again from scratch: "
+                "`## 2. Cách chạy PoC` followed by `## 3. Tổng quan Lỗ hổng`, both in full. "
+                "Section 1 is injected separately by the system, so do not write it yourself. "
+                "Nothing from your previous reply carries over automatically — if you keep "
+                "content from it, you must retype it in this reply.")
+        else:
+            feedback = (
+                "Your previous reply is REPLACED by this one — required sections are missing "
+                "or the reply was cut short. Write the COMPLETE answer again from scratch, in "
+                "order: `## 1. Mã Khai thác (PoC) và Payload`, `## 2. Cách chạy PoC`, "
+                "`## 3. Tổng quan Lỗ hổng` — all three, in full. Nothing from your previous "
+                "reply carries over automatically — if you keep content from it (including "
+                "Section 1), you must retype it in this reply.")
         return HookResult.force_continue(feedback, reason="section1_synthesis_missing")
 
 

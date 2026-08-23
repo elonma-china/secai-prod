@@ -1,0 +1,16 @@
+{
+  "function": "translate",
+  "total": 3,
+  "passed": 3,
+  "pass_rate": 100.0,
+  "wall_s": 1.1,
+  "by_category": {
+    "explicit_target": {
+      "total": 3,
+      "passed": 3,
+      "pass_rate": 100.0
+    }
+  },
+  "top_failure_reasons": [],
+  "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/translate_1787454247.jsonl"
+}

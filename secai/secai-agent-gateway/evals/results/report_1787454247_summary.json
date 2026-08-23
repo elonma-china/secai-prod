@@ -1,0 +1,21 @@
+{
+  "function": "report",
+  "total": 3,
+  "passed": 2,
+  "pass_rate": 66.67,
+  "wall_s": 4.4,
+  "by_category": {
+    "incident_log": {
+      "total": 3,
+      "passed": 2,
+      "pass_rate": 66.7
+    }
+  },
+  "top_failure_reasons": [
+    [
+      "thiếu section",
+      1
+    ]
+  ],
+  "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/report_1787454247.jsonl"
+}

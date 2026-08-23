@@ -1,0 +1,16 @@
+{
+  "function": "chat",
+  "total": 3,
+  "passed": 3,
+  "pass_rate": 100.0,
+  "wall_s": 14.0,
+  "by_category": {
+    "topic_qa": {
+      "total": 3,
+      "passed": 3,
+      "pass_rate": 100.0
+    }
+  },
+  "top_failure_reasons": [],
+  "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/chat_1787454247.jsonl"
+}
