@@ -32,6 +32,7 @@ from typing import Any
 
 import httpx
 
+from ..airgap import airgap_enabled
 from .backend import LocalPocBackend
 
 _CODE_EXT = (".py", ".rb", ".c", ".cpp", ".sh", ".pl", ".php", ".js", ".go", ".java",
@@ -264,6 +265,8 @@ def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
     miss (bad url, 404, no picked PoC). Never raises, never touches disk beyond the in-memory
     tarball, never executes code — same safety envelope as ``run()``. The caller turns the
     bytes into ledger evidence; nothing is persisted to the poc catalog/store."""
+    if airgap_enabled():  # air-gap: no codeload.github.com fetch (offline build sets AIRGAP=false)
+        return None
     parsed = _owner_repo(str(source_ref or ""), str(url or ""))
     if not parsed:
         return None

@@ -16,6 +16,7 @@ import httpx
 from linch.tools.base import ToolResult
 from linch.tools.function import tool
 
+from ..airgap import assert_online_fetch_allowed
 from ..config import get_settings
 
 _DEFAULT_HOSTS = (
@@ -203,6 +204,7 @@ def html_to_markdown(html: str) -> str:
 
 async def fetch_url_markdown(url: str, *, max_chars: int | None = None, timeout_s: float | None = None) -> dict[str, Any]:
     """Fetch allowlisted HTTPS URL and return markdown payload (raises ValueError on policy)."""
+    assert_online_fetch_allowed(url)  # air-gap backstop (config also disables the tool)
     settings = get_settings()
     allowed = _allowed_hosts()
     timeout = timeout_s if timeout_s is not None else float(settings.web_fetch_timeout_s)
