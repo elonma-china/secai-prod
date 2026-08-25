@@ -25,7 +25,9 @@ bughunt:
   tools:
     - bh_http_probe
     - run_recon
+    - run_parallel_hunt_wave
     - run_vuln_scan
+    - run_verify_leads
     - run_js_analysis
     - run_secret_hunt
     - run_param_discovery

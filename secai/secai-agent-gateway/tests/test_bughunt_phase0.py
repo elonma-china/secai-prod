@@ -249,10 +249,12 @@ def test_bughunt_http_stream(tmp_path, monkeypatch):
         def __init__(self):
             self.agent = _agent()
 
-        def stream_bughunt(self, *, target, scope_note="", run_id=None):
+        def stream_bughunt(self, *, target, scope_note="", run_id=None,
+                          enable_exploit=False, run_cve_sweep=True):
             return stream_bughunt_workflow(
                 self.agent, target=target, scope_note=scope_note, run_id=run_id,
                 use_llm=False, use_recon_engine=False,
+                enable_exploit=enable_exploit, run_cve_sweep=run_cve_sweep,
             )
 
     app = create_app(runner=_Stub())  # type: ignore[arg-type]
