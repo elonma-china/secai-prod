@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 import unicodedata
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -328,6 +329,18 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
     )
 
 
+async def _pad_to_floor(start: float, floor_s: float) -> None:
+    """Sleep just enough so total elapsed since ``start`` reaches ``floor_s`` — the uniform
+    exploit-latency floor (see Settings.poc_exploit_simulate_delay_s). No-op when the floor
+    is disabled (<=0) or the work already took longer. Applied AFTER the pipeline, not before
+    it, so it pads to a target instead of adding on top and never blocks a stream's first byte."""
+    if floor_s <= 0:
+        return
+    remaining = floor_s - (time.monotonic() - start)
+    if remaining > 0:
+        await asyncio.sleep(remaining)
+
+
 async def _run_kt_if_applicable(settings: Any, body: LegacyRequest, text: str,
                                 run_id: str) -> dict[str, Any] | None:
     if not getattr(settings, "poc_exploit_enabled", False):
@@ -510,10 +523,16 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
 
 def _github_evidence_from_fetch(entry_bytes: bytes, entry_rel: str,
                                 file_set: list[tuple[str, bytes]], row: dict[str, Any],
-                                cve_id: str | None) -> dict[str, Any]:
+                                cve_id: str | None,
+                                fileset_truncated: bool = False) -> dict[str, Any]:
     """Turn a request-path on-demand GitHub tarball fetch (fetch_github.fetch_repo_code) into
     the same evidence-dict shape poc_fetch produces, so consolidation + Section-1 injection
-    treat it identically to a pre-fetched catalog PoC. Full bytes (no truncation)."""
+    treat it identically to a pre-fetched catalog PoC. Full bytes (no truncation).
+
+    ``fileset_truncated`` (from ``fetch_repo_code``'s 4th return value) flags that
+    ``_pick_set``'s file-count/byte cap discarded a candidate repo file for THIS fetch — a
+    provenance signal (see 2026-08 research finding silent-dependency-drop), not a hard error:
+    the entry file itself is always complete, only a same-repo sibling may be missing."""
     from ..poc.fetch_github import _is_doc_file
     entry_text = entry_bytes.decode("utf-8", errors="replace")
     entry_sha = hashlib.sha256(entry_bytes).hexdigest()
@@ -531,7 +550,8 @@ def _github_evidence_from_fetch(entry_bytes: bytes, entry_rel: str,
         "sha256": entry_sha,
         "code_truncated": False,
         "candidate_status": "draft_not_executed",
-        "static_indicators": {"language": lang, "on_demand": True},
+        "static_indicators": {"language": lang, "on_demand": True,
+                              "fileset_truncated": bool(fileset_truncated)},
     }
     if len(file_set) > 1:
         source_files: list[dict[str, Any]] = []
@@ -579,8 +599,9 @@ async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list
             logger.info("on-demand github fetch errored for %s (%s)", cve_id, row.get("url"))
             continue
         if fetched:
-            entry_bytes, entry_rel, file_set = fetched
-            return [_github_evidence_from_fetch(entry_bytes, entry_rel, file_set, row, cve_id)]
+            entry_bytes, entry_rel, file_set, fileset_truncated = fetched
+            return [_github_evidence_from_fetch(
+                entry_bytes, entry_rel, file_set, row, cve_id, fileset_truncated)]
     return []
 
 
@@ -957,10 +978,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     "metadata": exploit_guidance_meta()}
         prompt_text = normalize_cve_ids(prompt_text)
         session_id = _exploit_session_id(body)
-        # Uniform ~30s generation latency for every real PoC response (cached or fresh).
-        _delay = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
-        if _delay > 0:
-            await asyncio.sleep(_delay)
+        # Uniform total-latency floor (anti timing-side-channel): pad to this AFTER the work,
+        # not a fixed sleep before it — see _pad_to_floor. Capture the start here so the whole
+        # pipeline counts toward the floor (a slow real pipeline is not padded on top).
+        _floor = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
+        _start = time.monotonic()
 
         # Validate CVE format (reject invalid suffixes like "zz")
         cve_match = _CVE_ANY.search(prompt_text)
@@ -1010,6 +1032,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    f"{kt_result.get('cve')}:{kt_result.get('target_ip')}",
                    {"user_id": body.user_id, "exploit_verdict": kt_result.get("exploit_verdict"),
                     "ok": kt_result.get("ok"), "error": kt_result.get("error")})
+        await _pad_to_floor(_start, _floor)  # uniform total latency (see _pad_to_floor)
         return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
@@ -1042,10 +1065,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 yield b"data: [DONE]\n\n"
             return StreamingResponse(gen_guide(), media_type="text/event-stream")
 
-        # Uniform ~30s generation latency for every real PoC response (cached or fresh).
-        _delay = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
-        if _delay > 0:
-            await asyncio.sleep(_delay)
+        # Uniform total-latency floor — pad the FINAL event to this (see _pad_to_floor),
+        # NOT a fixed sleep here: the old up-front sleep blocked the first byte for the whole
+        # delay, so the early Section-1 preview (this endpoint's whole reason to exist) never
+        # arrived early. Now the preview + tokens stream immediately and only the terminal
+        # event is held back to keep total wall-clock uniform.
+        _floor = float(getattr(state.settings, "poc_exploit_simulate_delay_s", 0) or 0)
+        _start = time.monotonic()
 
         text = normalize_cve_ids(text)
         session_id = _exploit_session_id(body)
@@ -1257,6 +1283,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         kt_result = await pending_kt
                     except Exception:
                         pass
+                # Hold the authoritative final event back to the uniform latency floor —
+                # tokens + Section-1 preview already streamed live above, so this only
+                # normalizes total wall-clock, it does not delay progressive delivery.
+                await _pad_to_floor(_start, _floor)
                 yield sse_frame("final", await build_final(final, run_id, kt_result))
             yield b"data: [DONE]\n\n"
 
