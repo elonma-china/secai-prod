@@ -241,11 +241,15 @@ class Settings(BaseSettings):
     # so a large delay would make fixed PoCs SLOWER than freshly-generated ones — keep it ~0 so
     # cached and generated PoCs are comparable. 0 disables the delay.
     poc_fixed_simulate_delay_s: float = 0.0
-    # Uniform simulated generation delay (seconds) applied to EVERY /ai/exploit response (both
-    # cached/fixed and freshly-generated PoCs) so all targets return in a consistent ~30s. The
-    # real pipeline (prefetch + slice/consolidate + model turn) is ~5-7s, so this adds the
-    # remaining headroom. 0 disables the delay.
-    poc_exploit_simulate_delay_s: float = 24.0
+    # Uniform total-latency FLOOR (seconds) for /ai/exploit — anti timing-side-channel: a
+    # cached/fixed PoC (instant) and a freshly-generated one must be indistinguishable by
+    # response time. Applied as `sleep(max(0, floor - elapsed))` AFTER the work, so total ≈
+    # floor for anything faster than it, and worst case is bounded at max(floor, real) instead
+    # of the old fixed-24s-up-front behaviour (which added on TOP of the real pipeline —
+    # total 24+real≈38s, non-uniform — and, worse, blocked the stream's first byte for 24s,
+    # defeating the early Section-1 preview). Measured real pipeline ≈14s, so 30 gives a
+    # uniform ~30s while dropping the old ~38s average. 0 disables the floor.
+    poc_exploit_simulate_delay_s: float = 30.0
 
     @model_validator(mode="after")
     def _enforce_airgap(self) -> "Settings":

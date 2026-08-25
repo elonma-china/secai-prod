@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
-from linch.events import ResultEvent
+from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
 
@@ -30,6 +30,32 @@ _VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 # doesn't map to that, and the model reliably miscalculates weekday-from-date on
 # its own, so compute the label deterministically instead of letting it guess.
 _VN_WEEKDAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ Nhật"]
+
+
+# Profiles whose output is a self-contained document (Markdown/JSON) that the caller
+# renders verbatim. If the agent loop exhausts its turn budget on tool calls WITHOUT
+# emitting that document, linch ends the run with an empty error-ResultEvent — so the
+# endpoint would return a blank body. For these profiles we fall back to one tool-less
+# synthesis turn (below) which forces the model to write the document from the context
+# it already gathered. Deliberately NOT chat/exploit_research: those carry grounding
+# hooks that require a tool call before answering, which a tool-less turn can't satisfy.
+_SALVAGE_PROFILES = frozenset({"report", "statistical_report"})
+
+# The tool-less follow-up turn: the accumulated tool results already live in the session
+# store, so the model synthesizes the final document from them without any new lookups.
+_SALVAGE_INSTRUCTION = (
+    "Bạn đã dùng hết số lượt gọi công cụ cho phép. TUYỆT ĐỐI KHÔNG gọi thêm bất kỳ công "
+    "cụ nào nữa. Chỉ dựa trên thông tin đã thu thập ở các bước trên, hãy tạo NGAY câu trả "
+    "lời cuối cùng theo ĐÚNG định dạng/hợp đồng đã nêu trong hướng dẫn hệ thống."
+)
+
+
+def _has_text(event: Any) -> bool:
+    return isinstance(event, ResultEvent) and bool((event.final_text or "").strip())
+
+
+def _is_turn_limit(event: Any) -> bool:
+    return isinstance(event, LoopGuardEvent) and getattr(event, "reason", "") == "max_turns"
 
 
 def _dated_prompt(prompt: str) -> str:
@@ -151,6 +177,14 @@ class LinchRunner:
                 run_id = session.active_run_id or run_id
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
+            if not final.strip() and profile_name in _SALVAGE_PROFILES:
+                # Loop exhausted its turns without a document → force one tool-less
+                # synthesis turn so the endpoint returns content, not a blank body.
+                session.tools_override = empty_tools()
+                async for event in session.run(_SALVAGE_INSTRUCTION):
+                    run_id = session.active_run_id or run_id
+                    if isinstance(event, ResultEvent):
+                        final = event.final_text or ""
         metadata = {"run_id": run_id, "profile": profile.name, "tool_registry": sorted(profile.tool_names)}
         if profile_name == "exploit_research":
             metadata.update(self.ledger.exploit_metadata(run_id))
@@ -165,8 +199,23 @@ class LinchRunner:
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt)
+            salvageable = profile_name in _SALVAGE_PROFILES
+            got_text = False
+            turn_limited = False
             async for event in session.run(_dated_prompt(prompt)):
+                got_text = got_text or _has_text(event)
+                if salvageable and _is_turn_limit(event):
+                    # Swallow the max_turns terminal (guard → error → empty result);
+                    # a salvage pass below produces the real final event instead.
+                    turn_limited = True
+                    continue
+                if turn_limited and isinstance(event, (ErrorEvent, ResultEvent)):
+                    continue  # swallow the TurnLimitError + empty error-ResultEvent tail
                 yield event
+            if turn_limited and not got_text:
+                session.tools_override = empty_tools()
+                async for event in session.run(_SALVAGE_INSTRUCTION):
+                    yield event
 
     def stream_bughunt(
         self,

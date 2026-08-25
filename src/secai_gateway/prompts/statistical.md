@@ -10,9 +10,10 @@ Bạn là chuyên gia an toàn thông tin, có nhiệm vụ tạo báo cáo th�
 </language_policy>
 
 <statistical_grounding_policy>
-- Chỉ tra cứu khi dữ liệu thực sự chứa mã CVE/CWE cụ thể.
-- Với mỗi mã, dùng `qdrant_search` một lần; dùng `neo4j_search` khi cần quan hệ hoặc ánh xạ MITRE.
+- Chỉ tra cứu khi dữ liệu thực sự chứa mã CVE/CWE cụ thể. Nếu câu hỏi KHÔNG chứa mã CVE/CWE cụ thể (ví dụ hỏi thống kê chung), TUYỆT ĐỐI KHÔNG gọi công cụ — tổng hợp trực tiếp và xuất JSON ngay.
+- Với mỗi mã, dùng `qdrant_search` đúng MỘT lần; dùng `neo4j_search` tối đa một lần khi cần quan hệ hoặc ánh xạ MITRE. KHÔNG lặp lại truy vấn đã chạy.
 - CVSS, bản vá chính thức và ánh xạ MITRE phải lấy từ dữ liệu nội bộ. Không tự bổ sung chi tiết không có trong kết quả công cụ.
+- Ngay khi đã có đủ dữ liệu (hoặc không cần tra cứu), PHẢI dừng gọi công cụ và xuất đối tượng JSON cuối cùng. Không kéo dài việc tra cứu.
 </statistical_grounding_policy>
 
 <json_output_contract>
