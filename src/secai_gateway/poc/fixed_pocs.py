@@ -228,7 +228,21 @@ def save_fixed(cache_dir: Path | None, cve_id: str, code: str, language: str = "
     scopes the entry to that target; ``targets`` (optional list) overrides the stored scope
     list (aliases). Without either, saves the CVE-level default file (unscoped).
 
-    Best-effort: any failure is logged and returns False."""
+    Best-effort: any failure is logged and returns False.
+
+    ``targets=`` without a paired ``target=`` is REJECTED (2026-08 research finding
+    target-scope-bypass): without a ``target``, the entry is written to the DEFAULT (unscoped)
+    file path, but carries a `"targets"` scope list — and `load_fixed` unconditionally returns
+    the default file whenever the REQUEST itself carries no target
+    (`if not scoped or host is None: return default`), regardless of that scope. A
+    default-path file that LOOKS scoped but is actually served to every target-less request is
+    exactly the mis-scoped-entry risk this guard exists to prevent before it can happen —
+    calling with only ``target=`` (the normal target-specific-variant path) is unaffected."""
+    if targets is not None and not target:
+        logger.info("fixed-poc save rejected for %s: targets= given without target= — would "
+                    "write a scoped list into the DEFAULT (unscoped) file; pass target= too, "
+                    "or omit targets= to save an unscoped default", cve_id)
+        return False
     if cache_dir is None or not cve_id or not code:
         return False
     key = cve_id.strip().upper()

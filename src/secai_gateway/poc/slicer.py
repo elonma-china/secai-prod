@@ -24,10 +24,15 @@ import ast
 import logging
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
 from .consolidate import readme_text
+
+# sys.stdlib_module_names (Python 3.10+, matches this project's pyproject.toml floor) — used
+# by _dependency_header to tell a stdlib import from a third-party one requiring `pip install`.
+_STDLIB_MODULES = getattr(sys, "stdlib_module_names", frozenset())
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +146,20 @@ def extract_graph(code: str) -> dict[str, Any]:
 
     # name -> node id, for building refs
     name_index: dict[str, str] = {}
+    # AST bodies whose Name-loads count as "used from the top level" but that are NOT a
+    # `func`-type node's own body — the `if __name__=="__main__":` guard (always kept
+    # regardless of keep_ids, so anything it calls must count as referenced) plus every
+    # var/stmt node's own subtree (a var initializer or a bare top-level call can itself
+    # reference another node's name). Scanned in a second pass below, AFTER name_index is
+    # fully built, so a forward reference still resolves. Without this, a Name-load ONLY
+    # reachable from the __main__ guard or from another var/stmt (never from inside a
+    # `func`-type body) produces no `referenced_by` edge at all — the LLM keep/drop step
+    # (decide_keep_drop) then has no signal that the node is load-bearing and can drop it,
+    # silently hollowing out the entry point while the file still compiles clean (see
+    # slicer.py module docstring / historical CVE-2026-45504-class incidents in
+    # consolidate.py). `_is_noise_node` (the deterministic safe_slice path) checks the same
+    # `referenced_by` field, so this fix also protects that path, not just the LLM one.
+    ref_source_bodies: list[ast.AST] = []
 
     for stmt in tree.body:
         rng = _node_range(stmt)
@@ -155,6 +174,7 @@ def extract_graph(code: str) -> dict[str, Any]:
                     and any(isinstance(c, ast.Constant) and c.value == "__main__"
                             for c in stmt.test.comparators)):
                 always_keep.append([rng[0], rng[1]])
+                ref_source_bodies.append(stmt)
                 continue
         if isinstance(stmt, _FUNC_TYPES):
             n = Node(id=f"fn_{stmt.name}", type="func", name=stmt.name,
@@ -166,6 +186,7 @@ def extract_graph(code: str) -> dict[str, Any]:
             n = Node(id=f"var_{nm or rng[0]}", type="var", name=nm,
                      lines=rng, summary=_summary(stmt))
             nodes.append(n)
+            ref_source_bodies.append(stmt)
             if nm:
                 name_index[nm] = n.id
         else:
@@ -173,6 +194,7 @@ def extract_graph(code: str) -> dict[str, Any]:
             n = Node(id=f"stmt_{rng[0]}", type="stmt", name="",
                      lines=rng, summary=_summary(stmt))
             nodes.append(n)
+            ref_source_bodies.append(stmt)
 
     # Build refs: for each func, scan its subtree for Name loads matching another node's name.
     node_by_id = {n.id: n for n in nodes}
@@ -193,6 +215,17 @@ def extract_graph(code: str) -> dict[str, Any]:
                 if target and target != n.id and target not in n.refs:
                     n.refs.append(target)
                     node_by_id[target].referenced_by.append(n.id)
+
+    # Second pass: refs FROM the __main__ guard and from every var/stmt node's own body — the
+    # blind spot described above. Marked with a synthetic "__toplevel__" referrer (not a real
+    # node id — only ever tested for truthiness by _is_noise_node/apply_decision, never looked
+    # up), so a stmt/var node doesn't need to appear twice or gain a fabricated self-loop.
+    for body_node in ref_source_bodies:
+        for sub in ast.walk(body_node):
+            if isinstance(sub, ast.Name) and isinstance(sub.ctx, ast.Load):
+                target = name_index.get(sub.id)
+                if target and "__toplevel__" not in node_by_id[target].referenced_by:
+                    node_by_id[target].referenced_by.append("__toplevel__")
 
     # Shebang + encoding cookie always kept (lines before the first import/code are safe to
     # preserve verbatim; the big banner comment above imports is NOT in any node range so it
@@ -271,6 +304,46 @@ def cut_code(code: str, graph: dict[str, Any], keep_ids: set[str]) -> str:
     return "\n".join(out)
 
 
+def _dependency_header(code: str) -> str:
+    """Best-effort ``# Yêu cầu môi trường: pip install X, Y`` comment for every top-level
+    import that ISN'T in the standard library — ADD-ONLY (never rewrites/removes an existing
+    line, so it structurally cannot introduce fidelity drift, unlike an LLM rewrite). Surfaces
+    a real environment-dependency gap: consolidate.md's ``<robustness>`` rules already tell the
+    LLM-merge path to comment non-stdlib deps, but ``slice_entry`` — the deterministic,
+    now-dominant path for a single-file Python PoC with no cross-file imports — never applied
+    any equivalent (2026-08 research finding environment-dependency-mismatch: "the fast-path
+    slicer that now handles most requests never invokes" the dependency-comment rule). Returns
+    ``""`` when there's nothing non-stdlib to flag, or on any parse miss (fail-open, matching
+    every other check in this module)."""
+    if not code or not code.strip():
+        return ""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return ""
+    third_party: list[str] = []
+    seen: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                top = a.name.split(".")[0]
+                if top and top not in _STDLIB_MODULES and top not in seen:
+                    seen.add(top)
+                    third_party.append(top)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                continue  # relative import — not a pip package (and slice_entry bails on this)
+            top = (node.module or "").split(".")[0]
+            if top and top not in _STDLIB_MODULES and top not in seen:
+                seen.add(top)
+                third_party.append(top)
+    if not third_party:
+        return ""
+    pkgs = ", ".join(sorted(third_party))
+    return (f"# Yêu cầu môi trường (tham khảo, KHÔNG phải bước tải/cài lúc chạy): "
+            f"pip install {pkgs}\n")
+
+
 def validate_slice(code: str, language: str, cve_id: str | None = None) -> str | None:
     """Execution-free validation of a sliced file — reuses consolidate.py's checks so a bad
     keep/drop (dropped import, undefined name, package-relative import) is caught the same way.
@@ -280,11 +353,15 @@ def validate_slice(code: str, language: str, cve_id: str | None = None) -> str |
 
 
 def imports_local_sibling(code: str, sibling_basenames: set[str]) -> bool:
-    """True when the entry file imports a module whose name matches a sibling file in the SAME
-    PoC set (e.g. ``from utils.menu_functions import ...`` while ``utils/menu_functions.py`` is
-    a support file). A slice of the entry alone cannot inline those — dropping the support files
-    would break the runnable file — so the caller must fall back to consolidation (which inlines
-    cross-file deps). Package-relative imports (``from . import x``) also count as local."""
+    """True when the entry file depends on a sibling file in the SAME PoC set — either an
+    ``import``/``from … import`` (e.g. ``from utils.menu_functions import ...`` while
+    ``utils/menu_functions.py`` is a support file; package-relative imports count as local too)
+    OR a string-literal path reference passed to ``subprocess.*``/``os.system``/``os.popen``/
+    ``open``/``exec`` (e.g. ``subprocess.run(["python3","listener.py"])``,
+    ``open("payload.json")`` — see ``consolidate._sibling_string_refs``). A slice of the entry
+    alone cannot inline (or ship alongside) those — dropping the support files would break the
+    runnable file — so the caller must fall back to consolidation (which inlines cross-file
+    Python deps) or verbatim multi-file (for anything consolidation itself can't fold in)."""
     if not code or not sibling_basenames:
         return False
     try:
@@ -301,7 +378,8 @@ def imports_local_sibling(code: str, sibling_basenames: set[str]) -> bool:
             for a in n.names:
                 if a.name.split(".")[0] in sibling_basenames:
                     return True
-    return False
+    from .consolidate import _sibling_string_refs
+    return bool(_sibling_string_refs(code, sibling_basenames))
 
 
 def safe_slice(code: str, language: str, cve_id: str | None = None) -> str | None:
@@ -451,6 +529,16 @@ async def slice_entry(ev: dict[str, Any], runner: Any | None = None,
 
     if not sliced or not sliced.strip():
         return None
+
+    header = _dependency_header(sliced)
+    if header:
+        # Insert AFTER a shebang line if present — `#!` must stay line 1 or direct execution
+        # (`./poc.py`) breaks; everything else in `sliced` is unaffected (add-only).
+        if sliced.startswith("#!"):
+            first_nl = sliced.find("\n") + 1
+            sliced = sliced[:first_nl] + header + sliced[first_nl:]
+        else:
+            sliced = header + sliced
 
     return {
         "source": ev.get("source"),

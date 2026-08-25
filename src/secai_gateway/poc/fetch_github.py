@@ -136,10 +136,19 @@ def _pick(files: Iterable[tuple[str, bytes]], cve: str) -> tuple[bytes, str] | N
         low = data[:20000].decode("utf-8", "replace").lower()
         name = rel.name.lower()
         depth = len(rel.parts) - 1
-        # Never treat docs/licenses as the authoritative PoC file — LLM needs code.
+        # Never treat docs/licenses as the authoritative PoC file — LLM needs code. This is
+        # UNCONDITIONAL (no hint-word exception): a writeup conventionally named with the
+        # CVE id (e.g. "CVE-2024-XXXXX-writeup.md") used to bypass this via the old "unless a
+        # hint word (exploit/poc/cve/...) is in the filename" carve-out below, then score
+        # +1000 for the CVE-in-name bonus — an order of magnitude above a same-repo exploit.py
+        # (~140) — and win as "the PoC" with nothing downstream able to catch prose
+        # masquerading as code (validation_failure only inspects language in ("python","py")).
+        # A doc file remains eligible as a SUPPORT/readme file via _pick_set's separate
+        # doc-inclusion logic; it just can never win the entry-file vote here (2026-08
+        # research finding wrong-entry-file-selected).
         if name.startswith(("readme", "license", "changelog", "makefile", "contributing", "code_of_conduct")):
             continue
-        if rel.suffix.lower() in {".md", ".txt", ".rst"} and not any(h in name for h in _NAME_HINTS):
+        if rel.suffix.lower() in {".md", ".txt", ".rst"}:
             continue
         score = 0.0
         if cve_l in name:
@@ -181,29 +190,65 @@ _SET_MAX_FILES = 12
 _SET_MAX_BYTES = 400_000  # total bytes stored across the set (backend re-caps at read time)
 
 
-def _pick_set(files: list[tuple[str, bytes]], entry_rel: str) -> list[tuple[str, bytes]]:
+def _pick_set(files: list[tuple[str, bytes]], entry_rel: str
+             ) -> tuple[list[tuple[str, bytes]], bool]:
     """Given all repo files and the chosen entry file, return the bounded set belonging to
-    the same PoC: the entry file first, then other code/manifest files in the entry's
-    package subtree (its top-level dir, or the repo root when the entry is at root), plus
-    repo-root dependency manifests. Repo-relative paths preserved (hierarchy). Skips
-    vendor/deps/test/doc dirs. Bounded by file count and total bytes so a big repo can't
-    blow the store or the model's context."""
+    the same PoC: the entry file first, then any sibling file the entry's own code actually
+    ``import``s / references by path (forced in BEFORE the cap can discard them — see below),
+    then other code/manifest files in the entry's package subtree (its top-level dir, or the
+    repo root when the entry is at root), plus repo-root dependency manifests. Repo-relative
+    paths preserved (hierarchy). Skips vendor/deps/test/doc dirs. Bounded by file count and
+    total bytes so a big repo can't blow the store or the model's context.
+
+    Returns ``(picked, truncated)`` — ``truncated`` is True when the cap actually discarded a
+    candidate file (provenance signal for the caller; see catalog rows / research finding
+    silent-dependency-drop). Import-aware ordering matters because ``catalog.set_files()``
+    replaces the WHOLE file set wholesale — a sibling dropped here by pure tar-iteration-order
+    luck is gone permanently; nothing downstream can resurrect it."""
     entry = PurePosixPath(entry_rel)
     pkg = entry.parts[0] if len(entry.parts) > 1 else None  # top package dir, None = repo root
     picked: list[tuple[str, bytes]] = []
     seen: set[str] = set()
     total = 0
+    truncated = False
 
     def add(rel: str, data: bytes) -> None:
-        nonlocal total
-        if rel in seen or len(picked) >= _SET_MAX_FILES or total + len(data) > _SET_MAX_BYTES:
+        nonlocal total, truncated
+        if rel in seen:
+            return
+        if len(picked) >= _SET_MAX_FILES or total + len(data) > _SET_MAX_BYTES:
+            truncated = True
             return
         seen.add(rel); picked.append((rel, data)); total += len(data)
 
+    entry_data = b""
     for rel, data in files:  # entry always first
         if rel == entry_rel:
             add(rel, data)
+            entry_data = data
             break
+
+    # Import-aware priority pass: force in whatever the entry's own code actually references
+    # (import OR a subprocess/open/exec string-literal path — see consolidate.py's
+    # _imported_sibling_names) BEFORE the generic same-package sweep below, so the
+    # file-count/byte cap can only ever discard files the entry doesn't depend on.
+    if entry_data:
+        from .consolidate import _imported_sibling_names
+        basenames_by_stem: dict[str, list[tuple[str, bytes]]] = {}
+        for rel_str, data in files:
+            if rel_str == entry_rel:
+                continue
+            stem = PurePosixPath(rel_str).stem
+            basenames_by_stem.setdefault(stem, []).append((rel_str, data))
+        try:
+            entry_text = entry_data.decode("utf-8", "replace")
+        except Exception:
+            entry_text = ""
+        needed = _imported_sibling_names(entry_text, set(basenames_by_stem.keys()))
+        for stem in needed:
+            for rel_str, data in basenames_by_stem.get(stem, []):
+                add(rel_str, data)
+
     for rel_str, data in files:
         if rel_str in seen:
             continue
@@ -217,12 +262,15 @@ def _pick_set(files: list[tuple[str, bytes]], entry_rel: str) -> list[tuple[str,
         is_root_manifest = len(rel.parts) == 1 and (name in _MANIFEST_NAMES or _is_doc_file(name))
         if in_pkg or is_root_manifest:
             add(rel_str, data)
-    return picked
+    return picked, truncated
 
 
-def _fetch_one(urls: list[str], cve: str, timeout: int) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+def _fetch_one(urls: list[str], cve: str, timeout: int
+               ) -> tuple[bytes, str, list[tuple[str, bytes]], bool] | None:
     """Try each candidate tarball URL until one downloads and yields a picked PoC. Returns
-    (entry_bytes, entry_rel, file_set) — file_set is [(rel_path, bytes)], entry first."""
+    (entry_bytes, entry_rel, file_set, truncated) — file_set is [(rel_path, bytes)], entry
+    first; truncated is True when _pick_set's file-count/byte cap discarded a candidate file
+    (provenance signal — see _pick_set)."""
     for url in urls:
         data = _download(url, timeout, _MAX_TARBALL)
         if not data:
@@ -231,7 +279,8 @@ def _fetch_one(urls: list[str], cve: str, timeout: int) -> tuple[bytes, str, lis
         picked = _pick(all_files, cve)
         if picked:
             entry_bytes, entry_rel = picked
-            return entry_bytes, entry_rel, _pick_set(all_files, entry_rel)
+            file_set, truncated = _pick_set(all_files, entry_rel)
+            return entry_bytes, entry_rel, file_set, truncated
     return None
 
 
@@ -255,16 +304,16 @@ def _owner_repo(source_ref: str, url: str = "") -> tuple[str, str] | None:
 
 def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
                     cve: str = "", timeout: int = _REPO_TIMEOUT
-                    ) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+                    ) -> tuple[bytes, str, list[tuple[str, bytes]], bool] | None:
     """On-demand, READ-ONLY code fetch for a link-only GitHub PoC — the request-path twin of
     ``run()``'s per-row body, WITHOUT any store/catalog writes.
 
     Given a catalog row's ``source_ref``/``url`` (and optionally the recorded default
     ``branch`` + the ``cve`` for entry-file picking), download the repo tarball and return
-    ``(entry_bytes, entry_rel, file_set)`` exactly like ``_fetch_one`` — or ``None`` on any
-    miss (bad url, 404, no picked PoC). Never raises, never touches disk beyond the in-memory
-    tarball, never executes code — same safety envelope as ``run()``. The caller turns the
-    bytes into ledger evidence; nothing is persisted to the poc catalog/store."""
+    ``(entry_bytes, entry_rel, file_set, truncated)`` exactly like ``_fetch_one`` — or ``None``
+    on any miss (bad url, 404, no picked PoC). Never raises, never touches disk beyond the
+    in-memory tarball, never executes code — same safety envelope as ``run()``. The caller
+    turns the bytes into ledger evidence; nothing is persisted to the poc catalog/store."""
     if airgap_enabled():  # air-gap: no codeload.github.com fetch (offline build sets AIRGAP=false)
         return None
     parsed = _owner_repo(str(source_ref or ""), str(url or ""))
@@ -275,7 +324,8 @@ def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
                       cve or repo, timeout)
 
 
-def _fetch_row(args: tuple[tuple[str, str], str, str, int]) -> tuple[bytes, str, list[tuple[str, bytes]]] | None:
+def _fetch_row(args: tuple[tuple[str, str], str, str, int]
+              ) -> tuple[bytes, str, list[tuple[str, bytes]], bool] | None:
     """Network-only half of a fetch: download + pick, no store/catalog writes. Thread-safe
     (a fresh httpx client per call) so a worker pool can run it in parallel."""
     (owner, repo), pick_hint, branch, timeout = args
@@ -326,7 +376,7 @@ def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT,
                 skip += 1
                 done += 1
                 continue
-            blob, rel_in_repo, file_set = picked
+            blob, rel_in_repo, file_set, fileset_truncated = picked
             lang = Path(rel_in_repo).suffix.lstrip(".") or None  # store name is hash-only
             sha = hashlib.sha256(blob).hexdigest()
             dst = store / sha[:2] / sha
@@ -342,6 +392,11 @@ def run(limit: int, min_stars: int, per_timeout: int = _REPO_TIMEOUT,
                 "points_to_code_file": True,
                 "fetched_bytes": len(blob),
                 "fileset_checked": 1,  # processed for a multi-file set (single-file repos too) → backfill skips next time
+                # True when _pick_set's file-count/byte cap discarded a candidate file for
+                # this repo — a durable signal to find/backfill affected rows later (2026-08
+                # research finding silent-dependency-drop: catalog.set_files() replaces the
+                # whole set wholesale, so a dropped sibling can't be recovered downstream).
+                "fileset_truncated": bool(fileset_truncated),
             })
             be.catalog.set_artifact(
                 poc_id, sha, f"{sha[:2]}/{sha}",

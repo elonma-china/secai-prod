@@ -10,12 +10,14 @@ The safety contract under test:
 from __future__ import annotations
 
 from secai_gateway.poc.slicer import (
+    _dependency_header,
     apply_decision,
     build_decision_prompt,
     cut_code,
     extract_graph,
     imports_local_sibling,
     safe_slice,
+    slice_entry,
     validate_slice,
 )
 
@@ -161,3 +163,124 @@ def test_imports_local_sibling_detection() -> None:
     assert imports_local_sibling("from . import version\n", {"x"})  # relative always local
     assert not imports_local_sibling("import requests\n", {"x", "y"})
     assert not imports_local_sibling("from Crypto.Cipher import AES\n", {"x"})
+
+
+def test_imports_local_sibling_detects_string_literal_refs() -> None:
+    """A sibling referenced by path (subprocess/open), not import, must ALSO force the
+    cross-file bail-out — same missing-file-dependency gap as consolidate.py's
+    _sibling_string_refs, exercised here through slicer's own entry point."""
+    sibs = {"listener", "payload"}
+    assert imports_local_sibling('subprocess.run(["python3", "listener.py"])\n', sibs)
+    assert imports_local_sibling('open("payload.json")\n', sibs)
+    assert not imports_local_sibling('open("unrelated.txt")\n', sibs)
+
+
+def test_main_guard_only_call_is_referenced() -> None:
+    """Regression guard for the dead-code-misclassification gap (2026-08 research pass):
+    extract_graph used to build refs ONLY from `func`-type node bodies, never scanning the
+    `if __name__=="__main__":` guard itself — so an entry function called ONLY from that
+    guard showed an EMPTY referenced_by and looked droppable to decide_keep_drop, even though
+    the guard (always kept verbatim) still calls it. Dropping just the definition then leaves
+    a call to an undefined name (caught downstream by validate_slice's undefined-name check),
+    but the real danger is the sibling case below where NOTHING catches it."""
+    code = (
+        "def exploit(target):\n"
+        "    return f'pwned {target}'\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    exploit('10.0.0.1')\n"
+    )
+    g = extract_graph(code)
+    fn = next(n for n in g["nodes"] if n["id"] == "fn_exploit")
+    assert fn["referenced_by"], "call from the __main__ guard must produce a referenced_by edge"
+    # decide_keep_drop's apply_decision must now refuse to drop it even if asked to.
+    keep = apply_decision(g, {"keep": [], "drop": ["fn_exploit"]})
+    assert "fn_exploit" in keep
+
+
+def test_bare_toplevel_call_is_referenced() -> None:
+    """Same gap, worse sub-case: an entry point invoked as a BARE top-level statement (no
+    __main__ guard at all — common in short PoC scripts) is itself a `stmt`-type node whose
+    OWN body was never scanned for refs either. Before the fix, dropping the `stmt` node AND
+    the function definition as one LLM decision left a file that compiles clean, has no
+    undefined name, and silently does nothing — undetectable by any existing check."""
+    code = (
+        "def exploit(target):\n"
+        "    return f'pwned {target}'\n"
+        "\n"
+        "exploit('10.0.0.1')\n"
+    )
+    g = extract_graph(code)
+    fn = next(n for n in g["nodes"] if n["id"] == "fn_exploit")
+    assert fn["referenced_by"], "a bare top-level call must produce a referenced_by edge"
+    keep = apply_decision(g, {"keep": [], "drop": ["fn_exploit"]})
+    assert "fn_exploit" in keep
+
+
+def test_var_referencing_another_var_is_tracked() -> None:
+    """A var initializer reading another var/name is also a top-level-only reference the old
+    code missed (var/stmt node bodies were never scanned, only func bodies)."""
+    code = (
+        "HOST = '10.0.0.1'\n"
+        "TARGET_URL = f'http://{HOST}/exploit'\n"
+    )
+    g = extract_graph(code)
+    host = next(n for n in g["nodes"] if n["id"] == "var_HOST")
+    assert host["referenced_by"]
+
+
+def test_dependency_header_flags_third_party_only() -> None:
+    """Regression guard for the environment-dependency-mismatch gap (2026-08 research pass):
+    slice_entry's deterministic path never surfaced a required `pip install` the way
+    consolidate.md's rules already do for the LLM-merge path. Stdlib imports must be silent
+    (no false-positive noise); a third-party import must be named."""
+    code = "import os\nimport requests\nimport socket\n\ndef run():\n    return requests.get('x')\n"
+    header = _dependency_header(code)
+    assert "requests" in header
+    assert "os" not in header.split("pip install")[1]  # stdlib not flagged
+    assert "socket" not in header.split("pip install")[1]
+    assert _dependency_header("import os\n") == ""  # stdlib-only → no header at all
+    assert _dependency_header("from . import x\n") == ""  # relative import → not a pip package
+
+
+async def test_slice_entry_prepends_dependency_header() -> None:
+    ev = {
+        "source": "exploitdb", "kind": "exploit", "url": "http://x/y",
+        "sha256": "a" * 64, "cve_ids": ["CVE-2021-44228"],
+        "language": "python",
+        "source_code": (
+            "import requests\n"
+            "\n"
+            "def exploit(target):\n"
+            "    return requests.get(target)\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    exploit('http://10.0.0.1')\n"
+        ),
+    }
+    out = await slice_entry(ev, runner=None, cve_id="CVE-2021-44228", use_llm=False)
+    assert out is not None
+    assert "pip install requests" in out["source_code"]
+    # add-only: every original line must still be present verbatim somewhere in the output
+    for line in ev["source_code"].splitlines():
+        assert line in out["source_code"]
+
+
+async def test_slice_entry_no_header_when_stdlib_only() -> None:
+    ev = {
+        "source": "exploitdb", "kind": "exploit", "url": "http://x/y",
+        "sha256": "b" * 64, "cve_ids": ["CVE-2021-44228"],
+        "language": "python",
+        "source_code": (
+            "import socket\n"
+            "\n"
+            "def exploit(target):\n"
+            "    return socket.gethostbyname(target)\n"
+            "\n"
+            "if __name__ == '__main__':\n"
+            "    exploit('10.0.0.1')\n"
+        ),
+    }
+    out = await slice_entry(ev, runner=None, cve_id="CVE-2021-44228", use_llm=False)
+    assert out is not None
+    assert "pip install" not in out["source_code"]

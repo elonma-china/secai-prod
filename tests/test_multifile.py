@@ -207,11 +207,12 @@ def test_pick_set_gathers_package_subtree_and_root_manifest() -> None:
         ("README.md", b"# how to run\n"),      # real usage doc → included (translated in Mục 2)
         ("LICENSE", b"MIT\n"),                 # not usage-relevant → excluded
     ]
-    got = _pick_set(files, "wp2shell/exploit.py")
+    got, truncated = _pick_set(files, "wp2shell/exploit.py")
     paths = [p for p, _ in got]
     assert paths[0] == "wp2shell/exploit.py"                 # entry first
     assert "wp2shell/sqli.py" in paths and "requirements.txt" in paths and "README.md" in paths
     assert "tests/test_x.py" not in paths and "LICENSE" not in paths
+    assert truncated is False                                # small set, cap never hit
 
 
 def test_is_doc_file_recognizes_common_doc_naming_conventions() -> None:
@@ -233,7 +234,7 @@ def test_pick_set_recognizes_doc_files_beyond_literal_readme() -> None:
         ("CVE-2026-42533/setup.sh", b"#!/bin/bash\n"),
         ("requirements.txt", b"requests\n"),  # .txt manifest — must NOT be treated as a doc
     ]
-    got = _pick_set(files, "CVE-2026-42533/poc.py")
+    got, _truncated = _pick_set(files, "CVE-2026-42533/poc.py")
     paths = [p for p, _ in got]
     assert "CVE-2026-42533/report.md" in paths
     assert "requirements.txt" in paths  # still included, just as a manifest, not misfiled as doc
@@ -244,9 +245,32 @@ def test_pick_set_root_entry_excludes_nested_dirs() -> None:
         ("exploit.py", b"# entry\n"), ("helper.py", b"# helper\n"),
         ("lib/deep.py", b"# nested\n"), ("requirements.txt", b"req\n"),
     ]
-    paths = [p for p, _ in _pick_set(files, "exploit.py")]
+    picked, _truncated = _pick_set(files, "exploit.py")
+    paths = [p for p, _ in picked]
     assert "exploit.py" in paths and "helper.py" in paths and "requirements.txt" in paths
     assert "lib/deep.py" not in paths                        # entry at root → root-level only
+
+
+def test_pick_set_prioritizes_imported_sibling_before_cap(monkeypatch) -> None:
+    """Regression guard for the silent-dependency-drop gap (2026-08 research pass, high
+    severity): a sibling the entry actually `import`s must survive the file-count cap even
+    when tar-iteration order would otherwise place it after the cap is already exhausted by
+    unrelated same-package files. catalog.set_files() replaces the whole set wholesale, so a
+    sibling dropped here is unrecoverable downstream."""
+    import secai_gateway.poc.fetch_github as FG
+
+    monkeypatch.setattr(FG, "_SET_MAX_FILES", 2)  # entry + 1 more only
+    files = [
+        ("pkg/exploit.py", b"import helper\nfrom helper import run\n"),
+        ("pkg/decoy_a.py", b"# unrelated, appears before helper in iteration order\n"),
+        ("pkg/decoy_b.py", b"# unrelated too\n"),
+        ("pkg/helper.py", b"def run():\n    pass\n"),  # entry's actual dependency, listed LAST
+    ]
+    picked, truncated = _pick_set(files, "pkg/exploit.py")
+    paths = [p for p, _ in picked]
+    assert "pkg/exploit.py" in paths
+    assert "pkg/helper.py" in paths, "the entry's real import must survive the cap"
+    assert truncated is True  # something WAS discarded (decoy_a and/or decoy_b)
 
 
 # ── ledger read-back feeds the injector ──────────────────────────────────────

@@ -100,3 +100,15 @@ def test_save_fixed_default_unscoped(tmp_path):
     ev = load_fixed(tmp_path, "CVE-2026-45504", "94.72.105.201:443")
     assert ev is not None and ev["source_code"] == "code"
     assert not ev.get("targets")
+
+
+def test_save_fixed_rejects_targets_without_target(tmp_path):
+    """Regression guard for target-scope-bypass (2026-08 research pass): targets= without a
+    paired target= would write a SCOPED targets list into the DEFAULT (unscoped) file path —
+    then load_fixed's `if not scoped or host is None: return default` serves it to EVERY
+    target-less request regardless of that scope, defeating the point of scoping it at all."""
+    assert save_fixed(tmp_path, "CVE-2026-11111", "code", targets=["1.2.3.4:80"]) is False
+    assert load_fixed(tmp_path, "CVE-2026-11111") is None  # nothing was written
+    # the normal target-specific-variant path (target= alone) is unaffected
+    assert save_fixed(tmp_path, "CVE-2026-11111", "code", target="1.2.3.4:80") is True
+    assert load_fixed(tmp_path, "CVE-2026-11111", "1.2.3.4:80") is not None

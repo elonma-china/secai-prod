@@ -104,3 +104,58 @@ class _Settings:
 
 def _settings(max_attempts: int) -> _Settings:
     return _Settings(max_attempts)
+
+
+# ── fidelity-failure retry wiring (structural gap: fidelity_failure was unit-tested in
+# isolation but never exercised through consolidate_poc's actual retry loop — 2026-08
+# research pass. A syntactically-VALID merge that silently drops a CLI flag passes
+# validation_failure cleanly; only fidelity_failure catches it, and only THIS test proves
+# that rejection actually triggers a retry with corrective feedback, not just a bool.) ──
+
+_ARGPARSE_ORIG = "print('original tiny poc')\n"  # unused directly; real orig lives in the entry file
+_FIDELITY_GOOD = (
+    "```python\nimport argparse\n\np = argparse.ArgumentParser()\n"
+    "p.add_argument('--target', required=True)\nargs = p.parse_args()\n"
+    "print(args.target)\n```"
+)
+# Syntactically valid (compiles, no undefined names, no relative import) — validation_failure
+# passes it clean. Only fidelity_failure catches the dropped --target flag.
+_FIDELITY_BAD_DROPPED_FLAG = (
+    "```python\nimport argparse\n\np = argparse.ArgumentParser()\nargs = p.parse_args()\n"
+    "print('hardcoded-target')\n```"
+)
+
+
+def _evidence_with_cli_flag() -> list[dict[str, Any]]:
+    entry = (
+        "import argparse\n\np = argparse.ArgumentParser()\n"
+        "p.add_argument('--target', required=True)\nargs = p.parse_args()\n"
+        "print(args.target)\n"
+    )
+    return [{
+        "source": "poc_github", "source_ref": "acme/poc/exploit.py",
+        "url": "https://github.com/acme/poc", "kind": "exploit",
+        "title": "demo", "cve_ids": ["CVE-2026-42533"], "language": "python",
+        "sha256": "deadbeef", "source_code": entry,
+        "source_files": [{"path": "exploit.py", "code": entry,
+                          "role": "entry", "language": "python"}],
+    }]
+
+
+def test_fidelity_failure_triggers_retry_with_feedback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(C, "get_settings", lambda: _settings(max_attempts=3))
+    runner = _ScriptedRunner([_FIDELITY_BAD_DROPPED_FLAG, _FIDELITY_GOOD])
+    res = asyncio.run(C.consolidate_poc(runner, _evidence_with_cli_flag(), "CVE-2026-42533"))
+    assert res is not None and res["consolidated"] is True
+    assert "args.target" in res["source_code"]
+    assert len(runner.prompts) == 2  # attempt 1 rejected by fidelity, attempt 2 recovers
+    assert "--target" in runner.prompts[1]  # feedback names the exact dropped flag
+    assert "SỬA LỖI" in runner.prompts[1]
+
+
+def test_fidelity_failure_gives_up_after_max_attempts(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(C, "get_settings", lambda: _settings(max_attempts=2))
+    runner = _ScriptedRunner([_FIDELITY_BAD_DROPPED_FLAG, _FIDELITY_BAD_DROPPED_FLAG])
+    res = asyncio.run(C.consolidate_poc(runner, _evidence_with_cli_flag(), "CVE-2026-42533"))
+    assert res is None  # never falls back to shipping the fidelity-broken merge
+    assert len(runner.prompts) == 2
