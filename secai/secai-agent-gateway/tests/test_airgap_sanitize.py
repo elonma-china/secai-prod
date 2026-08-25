@@ -27,9 +27,14 @@ def test_sanitizer_removes_all_reported_leaks() -> None:
     assert "https://" not in out
     assert "javascript/cves/" not in out
     assert "nuclei-templates/" not in out
-    # no internet installer
+    # no internet installer, but the note is now INFORMATIVE (not a false "already available"
+    # reassurance that erases which tool was needed — 2026-08 research finding
+    # environment-dependency-mismatch #2) — and the code-host inside the install args (a bare
+    # `github.com/...` module path, no scheme — Go convention) must be scrubbed too, not just
+    # the command verb, or the URL leak just re-enters through the replacement text itself.
     assert "go install" not in out
-    assert "air-gap" in out                       # replaced with the neutral note
+    assert "github.com" not in out
+    assert "cần có sẵn trên môi trường thực thi" in out
     # the template is now the LOCAL cve file, lowercase; the uppercase form is gone
     assert "cve-2026-39987.yaml" in out
     assert "CVE-2026-39987.yaml" not in out
@@ -60,3 +65,28 @@ def test_sanitizer_rewrites_bare_source_url_outside_nuclei() -> None:
 def test_sanitizer_noop_when_already_clean() -> None:
     clean = "## 2. Cách chạy PoC\n`python3 cve-2026-9256.py 127.0.0.1 8080`\n"
     assert sanitize_airgap_runguide(clean, "CVE-2026-9256") == clean
+
+
+def test_sanitizer_preserves_dependency_name_instead_of_erasing_it() -> None:
+    """Regression guard for environment-dependency-mismatch #2 (2026-08 research pass, high
+    severity): the OLD sanitizer replaced the WHOLE `pip install X` match with a fixed
+    'already available locally' note, silently erasing which package was needed AND asserting
+    a false all-clear — actively making an accurate model warning WORSE, in exactly the
+    scenario (an evaluator's non-air-gapped lab) where the warning mattered most."""
+    text = "Cần cài đặt: `pip install requests_ntlm pyspnego` trước khi chạy PoC."
+    out = sanitize_airgap_runguide(text, "CVE-2026-1")
+    assert "requests_ntlm" in out
+    assert "pyspnego" in out
+    assert "đã có sẵn cục bộ" not in out  # the old, now-false-in-general reassurance wording
+    assert "không tải qua mạng khi chạy" in out  # air-gap safety property still preserved
+
+
+def test_sanitizer_scrubs_bare_code_host_inside_install_args() -> None:
+    """`go install github.com/x/y@latest` has NO `https://` scheme (Go module-path
+    convention) — invisible to _URL_RE — so showing the raw install args verbatim would
+    reintroduce the exact upstream-URL leak _URL_RE exists to remove, just via a different
+    code path."""
+    text = "`go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest`"
+    out = sanitize_airgap_runguide(text, "CVE-2026-1")
+    assert "github.com" not in out
+    assert "go install" not in out

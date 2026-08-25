@@ -467,12 +467,43 @@ _CVE_FILE_RE = re.compile(r"\b(CVE-\d{4}-\d{3,})\.([A-Za-z0-9]+)", re.I)
 _DASH_T_RE = re.compile(r"(-t\s+)(\S+)")
 # Internet package/tool installers + git clone. NOT curl/wget — those may BE the PoC action
 # (an exploit request against the target), not a tooling download; rewriting them is unsafe.
+# Trailing args (package/repo names) are CAPTURED (group 1), not discarded — see _install_sub:
+# the old version replaced the WHOLE match (command + package name) with a fixed "already
+# available locally" reassurance, silently erasing which dependency was needed and, worse,
+# asserting a FALSE all-clear on the model's own accurate warning (observed: a `pip install
+# requests_ntlm` note became "already available", losing the one piece of information the
+# evaluator — whose lab is very likely NOT air-gapped — actually needed). 2026-08 research
+# finding environment-dependency-mismatch #2.
 _INSTALL_RE = re.compile(
     r"(?:sudo\s+)?(?:go\s+(?:install|get)|git\s+clone|pip[0-9]?\s+install|pipx\s+install|"
     r"python[0-9.]*\s+-m\s+pip\s+install|npm\s+(?:install|i|ci)|yarn\s+add|pnpm\s+add|"
     r"gem\s+install|cargo\s+install|apt(?:-get)?\s+install|yum\s+install|dnf\s+install|"
-    r"brew\s+install)\b[^\n`]*", re.I)
+    r"brew\s+install)\b([^\n`]*)", re.I)
 _AIRGAP_INSTALL_NOTE = "công cụ đã có sẵn cục bộ (môi trường air-gap)"
+
+
+# A code-host reference in an install command's args (e.g. `go install github.com/x/y@latest`
+# — a BARE domain/path, Go module-path convention, no `https://` scheme) would slip past
+# _URL_RE (scheme-required) and leak straight through _install_sub if the raw args were shown
+# verbatim. Optional-scheme variant of _CODE_HOST_RE + the rest of the path, scrubbed before
+# the args are embedded in the replacement note.
+_BARE_HOST_RE = re.compile(
+    r"(?:https?://)?(?:(?:raw\.|gist\.|objects\.|codeload\.)?"
+    r"(?:github|githubusercontent|gitlab|bitbucket|gitee)\.com|"
+    r"(?:www\.)?exploit-db\.com|packetstormsecurity\.com)(?:/[^\s`]*)?", re.I)
+
+
+def _install_sub(m: "re.Match[str]") -> str:
+    """Replace an install COMMAND with a 'must be present beforehand' note — preserving the
+    air-gap property (never instructs a live download as a run step) WITHOUT erasing which
+    package/repo was actually needed, unlike blindly subbing the whole match. Any code-host
+    reference inside the args is scrubbed first (see _BARE_HOST_RE) so this can never
+    reintroduce the exact upstream-URL leak the rest of this sanitizer exists to remove."""
+    args = (m.group(1) or "").strip()
+    if not args:
+        return _AIRGAP_INSTALL_NOTE
+    args = _BARE_HOST_RE.sub("(nguồn nội bộ)", args)
+    return f"gói/thành phần cần có sẵn trên môi trường thực thi (`{args}`) — không tải qua mạng khi chạy"
 
 
 def _basename_ext(path: str) -> str:
@@ -525,7 +556,7 @@ def sanitize_airgap_runguide(text: str, cve_id: str | None = None) -> str:
     text = _CVE_PATH_RE.sub(_cve_sub, text)
     text = _CVE_FILE_RE.sub(_cve_sub, text)
     text = _DASH_T_RE.sub(_dash_t_sub, text)
-    text = _INSTALL_RE.sub(_AIRGAP_INSTALL_NOTE, text)
+    text = _INSTALL_RE.sub(_install_sub, text)
     return text
 
 

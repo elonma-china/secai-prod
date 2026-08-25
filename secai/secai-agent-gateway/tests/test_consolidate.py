@@ -16,6 +16,7 @@ from secai_gateway.poc.consolidate import (
     consolidate_poc,
     extract_code_block,
     validate_runnable,
+    validation_failure,
 )
 
 _MULTIFILE_EVIDENCE = [{
@@ -55,8 +56,46 @@ def test_validate_python_syntax_ok_and_bad() -> None:
 
 
 def test_validate_non_python_passthrough_and_empty() -> None:
-    assert validate_runnable("puts 'hi'", "ruby") is True   # can't cheaply check → accept
+    # ruby isn't installed on this box (nor the prod image) → the syntax gate fails open.
+    assert validate_runnable("puts 'hi'", "ruby") is True
     assert validate_runnable("   ", "python") is False       # empty always fails
+
+
+def test_validate_non_python_unknown_language_passthrough() -> None:
+    # A language with no entry in _SYNTAX_CHECK_CMDS at all → always accepted (unchanged
+    # pre-existing behaviour for languages we have no checker for).
+    assert validate_runnable("<<< not really yaml but whatever", "yaml") is True
+
+
+def test_validate_bash_syntax_ok_and_bad() -> None:
+    # bash is present in the prod image (RUN apt-get install ... bash tini) so this is a real,
+    # live check today — not just a fail-open no-op like the other interpreters below.
+    assert validate_runnable("#!/bin/bash\necho hi\n", "bash") is True
+    reason = validation_failure("if [ 1 -eq 1 ]; then echo missing_fi\n", "bash")
+    assert reason is not None and "bash" in reason
+
+
+def test_validate_php_and_js_syntax_bad_is_rejected() -> None:
+    # php/node are present on THIS dev box but not (yet) in the prod Dockerfile — exercised
+    # here to prove the checker logic itself is correct; see _SYNTAX_CHECK_CMDS docstring for
+    # the prod-image caveat.
+    import shutil
+
+    if shutil.which("php"):
+        assert validation_failure("<?php echo 'hi';\n", "php") is None
+        assert validation_failure("<?php if (true) { echo 'no close'\n", "php") is not None
+    if shutil.which("node"):
+        assert validation_failure("console.log('hi')\n", "js") is None
+        assert validation_failure("function f( {\n", "js") is not None
+
+
+def test_validate_syntax_gate_fails_open_on_missing_interpreter(monkeypatch) -> None:
+    from secai_gateway.poc import consolidate as consolidate_mod
+
+    monkeypatch.setattr(consolidate_mod.shutil, "which", lambda _b: None)
+    # even blatantly broken bash source is accepted once the interpreter can't be found —
+    # matches this module's fail-open-on-miss philosophy everywhere else.
+    assert validation_failure("if [ 1 -eq 1 ]; then echo missing_fi\n", "bash") is None
 
 
 def test_validate_rejects_relative_import() -> None:
@@ -181,6 +220,31 @@ def test_imported_sibling_names_detects_dependencies() -> None:
     assert _imported_sibling_names("import requests\n", sibs) == set()
     # package-relative import can't be resolved to one file → all siblings treated as needed
     assert _imported_sibling_names("from . import version\n", sibs) == sibs
+
+
+def test_sibling_string_refs_detects_subprocess_and_open() -> None:
+    """Regression guard for the missing-file-dependency gap (2026-08 research pass, critical
+    severity): a sibling script/data file referenced by STRING LITERAL path — never an
+    `import` — used to be completely invisible to _imported_sibling_names. A slice/merge that
+    misses this ships a byte-perfect entry file that FileNotFoundErrors at runtime because its
+    companion script/data was never included."""
+    from secai_gateway.poc.consolidate import _imported_sibling_names, _sibling_string_refs
+
+    sibs = {"listener", "payload", "config"}
+    # subprocess.run with a list arg naming a sibling script
+    assert _sibling_string_refs('subprocess.run(["python3", "listener.py"])\n', sibs) == {"listener"}
+    # subprocess.Popen, os.system, os.popen — same class of call
+    assert _sibling_string_refs('subprocess.Popen(["listener.py"])\n', sibs) == {"listener"}
+    assert _sibling_string_refs('os.system("python3 listener.py")\n', sibs) == {"listener"}
+    assert _sibling_string_refs('os.popen("python3 listener.py")\n', sibs) == {"listener"}
+    # bare open() reading a sibling data file, incl. wrapped in exec()
+    assert _sibling_string_refs('open("payload.json")\n', sibs) == {"payload"}
+    assert _sibling_string_refs('exec(open("payload.json").read())\n', sibs) == {"payload"}
+    # a call/name that isn't in the risky set, or a literal matching nothing, must not false-positive
+    assert _sibling_string_refs('requests.get("http://x/listener.py")\n', sibs) == set()
+    assert _sibling_string_refs('open("unrelated.txt")\n', sibs) == set()
+    # unions correctly into the umbrella function callers actually use
+    assert _imported_sibling_names('subprocess.run(["python3","listener.py"])\n', sibs) == {"listener"}
 
 
 @pytest.mark.asyncio

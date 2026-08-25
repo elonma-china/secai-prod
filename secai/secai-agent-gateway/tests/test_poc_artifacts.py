@@ -171,3 +171,36 @@ def test_fullen_respects_budget_keeps_truncated(tmp_path) -> None:
 def test_fullen_none_backend_is_noop() -> None:
     evidence = [{"source_files": [{"path": "x", "sha256": "a" * 64, "code": "t", "truncated": True}]}]
     assert asyncio.run(_fullen_evidence_for_display(evidence, None)) == evidence
+
+
+def test_locate_falls_back_to_poc_github_store_on_source_root_mismatch(tmp_path) -> None:
+    """Regression guard (2026-08 research pass): `_locate`'s poc_github-store fallback is
+    real, shipped code (not a TODO) fixing a live incident — grounding a poc row with real
+    fetched bytes writes into the shared content-addressed store regardless of the row's own
+    `source`, so a `source='ghsa'` row whose bytes only exist in that shared store (not under
+    `roots['ghsa']`) used to silently "not be found on disk" even though `_allow_code`
+    permitted it (observed live: 9/44 grounded CVEs landed on a pre-existing ghsa/poc_github
+    row and fell through to T2 synthesis instead of T1 real code purely from this path
+    mismatch). No prior test exercised source_roots that actually DIFFER between the row's own
+    source and poc_github — every existing fixture built both from the SAME dir."""
+    ghsa_root = tmp_path / "ghsa_root"  # the row's OWN root — deliberately has NOTHING in it
+    ghsa_root.mkdir()
+    store = tmp_path / "store"          # the shared content-addressed store
+    store.mkdir()
+    cat = PocCatalog(tmp_path / "cat.db")
+    be = LocalPocBackend(catalog=cat, source_roots={"ghsa": ghsa_root, "poc_github": store})
+
+    cve = "CVE-2099-0099"
+    cat.upsert(NormalizedPoc(source="ghsa", source_ref="advisory/GHSA-xxxx", kind="exploit",
+                             title="advisory", cve_ids=[cve], verified=True, rank=10))
+    pid = _poc_id(cat, "advisory/GHSA-xxxx")
+    sha, storage_path = _store_blob(store, "print('grounded real poc')\n")
+    cat.set_artifact(pid, sha, storage_path)  # artifact_path recorded, bytes only in `store`
+    cat.commit()
+
+    found = be._locate(be.roots.get("ghsa"), storage_path)
+    assert found is not None, "must fall back to roots['poc_github'] when the row's own root misses"
+    assert found.read_bytes() == b"print('grounded real poc')\n"
+    # sanity: confirm the row's OWN root genuinely does NOT have it (proves this is testing
+    # the fallback, not accidentally finding it under ghsa_root itself)
+    assert not (ghsa_root / storage_path).is_file()

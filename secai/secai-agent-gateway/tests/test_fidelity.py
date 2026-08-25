@@ -151,3 +151,60 @@ def test_cli_surface_empty_on_non_python_or_no_cli() -> None:
     assert cli_surface("print('hello')\n") == {
         "subcommands": [], "flags": [], "positionals": [],
     }
+
+
+def test_detects_hardcoded_string_ip_in_bind_positional() -> None:
+    """Regression guard (2026-08 research pass): the original _hardcoded_binds only checked
+    `isinstance(elt.value, int)` — a hardcoded IP STRING in the same bind-tuple position
+    (e.g. HTTPServer(("172.17.0.1", ATTACKER_PORT), ...)) was completely invisible. Both
+    tuple positions derive from args in this fixture so ONLY the host substitution is under
+    test (the pre-existing int-literal check would independently flag a hardcoded port too)."""
+    orig = (
+        "import argparse\nfrom http.server import HTTPServer\n\n"
+        "p = argparse.ArgumentParser()\n"
+        "p.add_argument('--bind-ip', required=True)\np.add_argument('--bind-port', type=int, required=True)\n"
+        "args = p.parse_args()\n"
+        "srv = HTTPServer((args.bind_ip, args.bind_port), None)\n"
+    )
+    merged = (
+        "import argparse\nfrom http.server import HTTPServer\n\n"
+        "p = argparse.ArgumentParser()\n"
+        "p.add_argument('--bind-ip', required=True)\np.add_argument('--bind-port', type=int, required=True)\n"
+        "args = p.parse_args()\n"
+        "srv = HTTPServer(('172.17.0.1', args.bind_port), None)\n"  # host silently hardcoded
+    )
+    reason = fidelity_failure(merged, orig)
+    assert reason is not None and "172.17.0.1" in reason
+    # a benign wildcard bind must NOT be flagged
+    merged_ok = merged.replace("172.17.0.1", "0.0.0.0")
+    assert fidelity_failure(merged_ok, orig) is None
+
+
+def test_detects_hardcoded_ip_via_argparse_default() -> None:
+    """The CVE-2026-42533 class of bug: a lab-specific callback IP reintroduced through an
+    argparse `default=`, not a bind()/listen() positional literal — invisible to shape (1)
+    entirely, since it never inspects add_argument's keyword arguments."""
+    orig = (
+        "import argparse\n\np = argparse.ArgumentParser()\n"
+        "p.add_argument('--callback-ip', required=True)\n"
+        "args = p.parse_args()\nprint(args.callback_ip)\n"
+    )
+    merged = (
+        "import argparse\n\np = argparse.ArgumentParser()\n"
+        "p.add_argument('--callback-ip', default='172.17.0.1')\n"  # lab IP leaked as a default
+        "args = p.parse_args()\nprint(args.callback_ip)\n"
+    )
+    reason = fidelity_failure(merged, orig)
+    assert reason is not None
+    assert "172.17.0.1" in reason and "--callback-ip" in reason
+
+
+def test_argparse_default_ignores_unrelated_and_benign_flags() -> None:
+    orig = (
+        "import argparse\n\np = argparse.ArgumentParser()\n"
+        "p.add_argument('--host', default='0.0.0.0')\n"          # benign wildcard — not flagged
+        "p.add_argument('--target-file', default='C:/x.ini')\n"  # unrelated flag name — not flagged
+        "p.add_argument('--retries', type=int, default=3)\n"     # unrelated flag name — not flagged
+        "args = p.parse_args()\n"
+    )
+    assert fidelity_failure(orig, orig) is None

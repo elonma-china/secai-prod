@@ -15,10 +15,14 @@ NOT run it); other languages are passed through unvalidated.
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import logging
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 from typing import Any
 
 from ..config import get_settings
@@ -144,16 +148,63 @@ def _sibling_basenames(ev: dict[str, Any]) -> set[str]:
     }
 
 
-def _imported_sibling_names(code: str, sibling_basenames: set[str]) -> set[str]:
-    """Which same-repo siblings the entry file actually imports (``import utils`` / ``from
-    utils.menu_functions import x`` where ``utils`` matches a sibling basename). These are hard
-    dependencies: dropping their source from the feed would make the LLM invent their contents
-    (a silent semantic drift, the CVE-2026-45504 class of bug). Package-relative imports
-    (``from . import x``) can't be resolved to one basename → return the WHOLE sibling set
-    (all support files are treated as needed)."""
+_SIBLING_RISKY_CALLS = {
+    "run", "call", "check_call", "check_output", "Popen",  # subprocess.*
+    "system", "popen",                                     # os.*
+    "open", "exec",                                        # builtins
+}
+
+
+def _sibling_string_refs(code: str, sibling_basenames: set[str]) -> set[str]:
+    """Same-repo siblings the entry file depends on via a STRING LITERAL passed to
+    ``subprocess.*``/``os.system``/``os.popen``/``open``/``exec`` — a sibling script or data
+    file executed or read by path, not imported as a Python module. Any of these is a hard
+    dependency exactly like an ``import``: ``subprocess.run(["python3","listener.py"])``,
+    ``os.system(f"python3 {x}.py")``, ``open("payload.json")``,
+    ``exec(open("helper.py").read())``. Completely invisible to an AST-import scan, so without
+    this an entry file referencing it slices/merges as if self-contained while the sibling
+    never ships — a *guaranteed* runtime failure (FileNotFoundError / missing companion
+    process) on an otherwise byte-perfect consolidation (2026-08 research finding
+    silent-fidelity-loss/missing-file-dependency). Substring match on purpose (conservative:
+    a false positive here only costs a wider dependency net / a fallback to the slower path,
+    never a silent drop — the same fail-open-toward-safety bias as the rest of this module).
+    Only catches a DIRECT string literal, not one assembled from an f-string variable/
+    concatenation at runtime — same conservative-miss trade-off as everything else here."""
     if not code or not sibling_basenames:
         return set()
-    import ast
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+    needed: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        call_name = func.attr if isinstance(func, ast.Attribute) else (
+            func.id if isinstance(func, ast.Name) else "")
+        if call_name not in _SIBLING_RISKY_CALLS:
+            continue
+        for arg in list(node.args) + [kw.value for kw in node.keywords]:
+            for sub in ast.walk(arg):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    for base in sibling_basenames:
+                        if base and base in sub.value:
+                            needed.add(base)
+    return needed
+
+
+def _imported_sibling_names(code: str, sibling_basenames: set[str]) -> set[str]:
+    """Which same-repo siblings the entry file actually depends on — via ``import``/``from …
+    import`` (``import utils`` / ``from utils.menu_functions import x`` where ``utils``
+    matches a sibling basename) OR via a string-literal path reference (see
+    ``_sibling_string_refs``). These are hard dependencies: dropping their source from the feed
+    would make the LLM invent their contents (a silent semantic drift, the CVE-2026-45504 class
+    of bug) or, for the string-literal case, ship a file that FileNotFoundErrors at runtime.
+    Package-relative imports (``from . import x``) can't be resolved to one basename → return
+    the WHOLE sibling set (all support files are treated as needed)."""
+    if not code or not sibling_basenames:
+        return set()
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -169,6 +220,7 @@ def _imported_sibling_names(code: str, sibling_basenames: set[str]) -> set[str]:
             for a in n.names:
                 if a.name.split(".")[0] in sibling_basenames:
                     needed.add(a.name.split(".")[0])
+    needed |= _sibling_string_refs(code, sibling_basenames)
     return needed
 
 
@@ -318,6 +370,60 @@ def _undefined_names(code: str) -> set[str]:
     return {n for n in used - bound - builtins_names if not n.startswith("__")}
 
 
+# Execution-free syntax-only check (compile/parse, no `-e`/eval, nothing executed) per
+# non-Python language the pipeline can produce (source= metasploit -> ruby, ghsa/vulhub PoCs
+# -> php/js/bash/perl are all real, live sources — see tests/test_multifile.py's companion-doc
+# tests). Each entry is (interpreter binary, args to append the code file path to). Fail-open
+# by design (see the try/except in `validation_failure` below) when the interpreter binary
+# isn't installed — matching this whole module's "any check miss -> accept, never a false
+# reject" philosophy. IMPORTANT DEPLOYMENT CAVEAT: the shipped Dockerfile's runtime image
+# (python:3.12-slim, `apt-get install bash tini` only) does NOT include ruby/php/node/perl —
+# only the `bash` entry has real effect there today; the other four are genuinely inert until
+# the image is rebuilt with those interpreters installed. Left in (rather than only shipping
+# bash) so enabling the rest later is a Dockerfile change alone, no code change (2026-08
+# research finding missing-validation/non-Python).
+_SYNTAX_CHECK_CMDS: dict[str, tuple[str, ...]] = {
+    "rb": ("ruby", "-c"), "ruby": ("ruby", "-c"),
+    "php": ("php", "-l"),
+    "sh": ("bash", "-n"), "bash": ("bash", "-n"),
+    "js": ("node", "--check"),
+    "pl": ("perl", "-c"),
+}
+
+
+def _non_python_syntax_failure(code: str, language: str, cve_id: str | None) -> str | None:
+    """Best-effort syntax-only check for a non-Python language via the matching interpreter's
+    check-only flag (see ``_SYNTAX_CHECK_CMDS``) — never executes the code. Returns ``None``
+    (accepted) when the language has no known checker, the interpreter binary isn't installed,
+    or any other transport issue occurs — a miss here degrades to today's prior behaviour
+    (accept), never a false reject."""
+    cmd = _SYNTAX_CHECK_CMDS.get((language or "").strip().lower())
+    if cmd is None:
+        return None
+    binary = cmd[0]
+    if shutil.which(binary) is None:
+        return None  # interpreter not present in this image — fail-open, not a reject
+    suffix = "." + (language if language not in ("ruby",) else "rb")
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=suffix, delete=False, encoding="utf-8") as f:
+            f.write(code)
+            path = f.name
+        result = subprocess.run(
+            [*cmd, path], capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip().splitlines()
+        first_line = detail[0] if detail else f"exit code {result.returncode}"
+        return f"lỗi cú pháp {language}: {first_line}"
+    return None
+
+
 def validation_failure(code: str, language: str, cve_id: str | None = None) -> str | None:
     """The single EXECUTION-FREE check on a consolidated file. Returns ``None`` when it passes,
     else a short Vietnamese reason naming the exact defect — usable both for logging and as
@@ -326,9 +432,11 @@ def validation_failure(code: str, language: str, cve_id: str | None = None) -> s
     Python is syntax-checked with ``compile`` (compiles, never runs) PLUS an AST scan rejecting
     package-relative imports (``_has_relative_import`` — a guaranteed-crash bug ``compile()``
     can't see, the import being syntactically valid) and loaded-but-unbound names
-    (``_undefined_names`` — dropped imports / renamed constants). Other languages can't be
-    validated cheaply offline → accepted (the light banner already flags them unverified).
-    Empty code always fails."""
+    (``_undefined_names`` — dropped imports / renamed constants). Other languages get a
+    best-effort syntax-only check via the matching interpreter's check flag when available
+    (see ``_non_python_syntax_failure`` — fail-open when the interpreter isn't installed, so
+    this can only ever catch MORE than before, never reject something the old accept-everything
+    behaviour would have let through). Empty code always fails."""
     if not code or not code.strip():
         return "tệp rỗng"
     if language in ("python", "py"):
@@ -346,7 +454,8 @@ def validation_failure(code: str, language: str, cve_id: str | None = None) -> s
             return ("dùng tên chưa được định nghĩa/import trong tệp: " + ", ".join(sorted(undef))
                     + " — thường do gộp làm rớt một `import` hoặc đổi tên hằng/biến ở nơi định "
                     "nghĩa nhưng không đổi ở nơi dùng; hãy đảm bảo mọi tên đều có định nghĩa/import")
-    return None
+        return None
+    return _non_python_syntax_failure(code, language, cve_id)
 
 
 def validate_runnable(code: str, language: str, cve_id: str | None = None) -> bool:

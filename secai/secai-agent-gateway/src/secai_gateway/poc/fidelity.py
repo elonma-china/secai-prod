@@ -213,11 +213,34 @@ def _orphan_args(merged: str) -> list[Finding]:
     )]
 
 
+# Flag names suggesting a network host/callback address — deliberately NARROW (no "target",
+# "url", "server": too ambiguous, e.g. "--target-file"/"--target-path" are common, benign
+# LFI/path-traversal PoC flags with a legitimate literal default like "C:/windows/win.ini" —
+# a broader pattern false-positived on exactly that in testing). Scopes the argparse-default
+# check below to flags where a hardcoded value is plausibly a lab-specific callback IP
+# silently reintroduced, not every flag that happens to have a default.
+_CALLBACK_FLAG_NAME_RE = re.compile(r"\bhost\b|\bip\b|\baddr(?:ess)?\b|\bcallback\b|\blisten\b", re.I)
+# Common, legitimate wildcard/loopback defaults — never the lab-specific leak this check exists
+# to catch, so exempted even when the flag name matches _CALLBACK_FLAG_NAME_RE.
+_BENIGN_DEFAULT_VALUES = {"", "0.0.0.0", "::", "localhost", "127.0.0.1"}
+
+
 def _hardcoded_binds(orig: str, merged: str) -> list[Finding]:
-    """Detect a literal that replaced an argparse-derived value: a numeric/host literal used in
-    a bind/listen/socket position in the merged output where the original derived it from
-    ``args.*``. Heuristic and conservative — only flags the clearest case (a literal port in a
-    socket/HTTPServer bind where the original used an ``args.*``-derived variable)."""
+    """Detect a literal that replaced an argparse-derived value — two distinct shapes:
+
+    1. A numeric/string literal used in a bind/listen/socket POSITIONAL position in the
+       merged output where the original derived it from ``args.*`` (e.g. ``HTTPServer(("0.0.
+       0.0", ATTACKER_PORT), ...)`` merged into ``HTTPServer(("172.17.0.1", 8780), ...)``).
+       Both int (port) and str (host/IP) constants are checked — the original int-only scope
+       missed a hardcoded IP STRING entirely.
+    2. An ``add_argument(..., default=<literal>)`` KEYWORD argument on a callback/host/target-
+       like flag (see ``_CALLBACK_FLAG_NAME_RE``) — the CVE-2026-42533 class of bug: a
+       lab-specific IP reintroduced through the argparse DEFAULT, which shape (1) never sees
+       because it only inspects positional args to bind/listen/HTTPServer/socket calls, not
+       ``add_argument``'s keyword arguments.
+
+    Heuristic and conservative by design — false negatives are expected on anything not
+    matching these shapes; a false positive here just costs a wasted consolidation retry."""
     findings: list[Finding] = []
 
     # Where the original binds using an args-derived variable (e.g. HTTPServer(("0.0.0.0",
@@ -234,23 +257,53 @@ def _hardcoded_binds(orig: str, merged: str) -> list[Finding]:
     for node in ast.walk(mtree):
         if not isinstance(node, ast.Call):
             continue
-        # HTTPServer((host, port), ...) / socket bind / listen
+        # Shape 1: HTTPServer((host, port), ...) / socket bind / listen — positional literal.
         is_bind = (
             (isinstance(node.func, ast.Name) and node.func.id in ("HTTPServer", "socket"))
             or (isinstance(node.func, ast.Attribute) and node.func.attr in ("bind", "listen"))
         )
-        if not is_bind or not node.args:
-            continue
-        # find a literal port/host argument that is a constant
-        for a in node.args:
-            if isinstance(a, ast.Tuple):
-                for elt in a.elts:
-                    if isinstance(elt, ast.Constant) and isinstance(elt.value, int):
-                        findings.append(Finding(
-                            "hardcoded_bind",
-                            f"cổng/địa chỉ bị chai cứng thành literal {elt.value!r} ở vị trí "
-                            "bind/listen — phải lấy từ tham số CLI như PoC gốc, không hardcode",
-                        ))
+        if is_bind and node.args:
+            for a in node.args:
+                if isinstance(a, ast.Tuple):
+                    for elt in a.elts:
+                        if not isinstance(elt, ast.Constant):
+                            continue
+                        if isinstance(elt.value, bool):
+                            continue  # bool is an int subclass — not a port/host
+                        if isinstance(elt.value, int):
+                            findings.append(Finding(
+                                "hardcoded_bind",
+                                f"cổng bị chai cứng thành literal {elt.value!r} ở vị trí "
+                                "bind/listen — phải lấy từ tham số CLI như PoC gốc, không hardcode",
+                            ))
+                        elif isinstance(elt.value, str) and elt.value not in _BENIGN_DEFAULT_VALUES:
+                            findings.append(Finding(
+                                "hardcoded_bind",
+                                f"địa chỉ bị chai cứng thành literal {elt.value!r} ở vị trí "
+                                "bind/listen — phải lấy từ tham số CLI như PoC gốc, không hardcode",
+                            ))
+        # Shape 2: add_argument(..., default=<literal>) on a callback/host/target-like flag.
+        if (isinstance(node.func, ast.Attribute) and node.func.attr == "add_argument"
+                and node.args):
+            flag_literal = _flatten_str_const(node.args[0])
+            if not _CALLBACK_FLAG_NAME_RE.search(flag_literal):
+                continue
+            for kw in node.keywords:
+                if kw.arg != "default" or not isinstance(kw.value, ast.Constant):
+                    continue
+                val = kw.value.value
+                if isinstance(val, bool) or val in (None, ""):
+                    continue
+                if isinstance(val, str) and val in _BENIGN_DEFAULT_VALUES:
+                    continue
+                if not isinstance(val, (int, str)):
+                    continue
+                findings.append(Finding(
+                    "hardcoded_bind",
+                    f"tham số CLI `{flag_literal.strip()}` có default bị chai cứng thành "
+                    f"{val!r} — nghi là giá trị của lab/tác giả gốc lọt vào bản hợp nhất; "
+                    "tham số host/callback/target không nên có default cụ thể",
+                ))
     return findings
 
 
