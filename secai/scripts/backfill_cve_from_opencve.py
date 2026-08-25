@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import sys
 import time
 import uuid
 import urllib.error
@@ -21,6 +22,15 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
+
+_GW_SRC = Path("/home/ict/AIEngines/secai/secai-agent-gateway/src")
+if str(_GW_SRC) not in sys.path:
+    sys.path.insert(0, str(_GW_SRC))
+try:
+    from secai_gateway.retrieval.cve_overrides import apply_cve_override
+except ImportError:  # pragma: no cover — script still ingests without the overlay
+    def apply_cve_override(payload: dict[str, Any] | None) -> dict[str, Any]:
+        return payload or {}
 
 OPENCVE = "http://103.216.117.216:8899"
 OPENCVE_AUTH = ("opencve", "opencve")
@@ -120,6 +130,9 @@ def products_from(detail: dict) -> list[str]:
         if p and p not in seen:
             seen.add(p)
             uniq.append(p)
+    # .NET/ASP.NET CPEs include a Linux *platform*; OpenCVE maps that to linux_kernel.
+    if any(p in {".net", "asp.net", "aspnet"} or p.startswith(".net") for p in uniq):
+        uniq = [p for p in uniq if p != "linux_kernel"]
     return uniq[:20]
 
 
@@ -258,7 +271,7 @@ def ingest_details(details: list[dict], *, dry_run: bool, do_neo4j: bool) -> int
     all_chunks: list[dict] = []
     owners: list[dict] = []
     for d in details:
-        chunks = build_chunks(d)
+        chunks = [apply_cve_override(c) for c in build_chunks(d)]
         all_chunks.extend(chunks)
         owners.append(d)
     if dry_run:

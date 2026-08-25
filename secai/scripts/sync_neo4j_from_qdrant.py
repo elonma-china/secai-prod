@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import sys
 import time
 import urllib.request
 from pathlib import Path
@@ -24,6 +25,15 @@ COLLECTION = "cve_kb"
 NEO4J_HTTP = "http://localhost:7474/db/neo4j/tx/commit"
 NEO4J_AUTH = ("neo4j", "secai2026")
 STATE = Path("/home/ict/AIEngines/secai/secai-data/_state/neo4j_sync_from_qdrant.json")
+
+_GW_SRC = Path("/home/ict/AIEngines/secai/secai-agent-gateway/src")
+if str(_GW_SRC) not in sys.path:
+    sys.path.insert(0, str(_GW_SRC))
+try:
+    from secai_gateway.retrieval.cve_overrides import apply_cve_override
+except ImportError:  # pragma: no cover
+    def apply_cve_override(payload: dict | None) -> dict:
+        return payload or {}
 
 
 def _basic(user: str, password: str) -> str:
@@ -82,6 +92,7 @@ def scroll_batch(flt: dict, offset: Any, limit: int) -> tuple[list[dict], Any]:
 
 
 def payload_to_row(pl: dict) -> dict | None:
+    pl = apply_cve_override(pl)
     cve = (pl.get("cve_id") or "").upper()
     if not cve.startswith("CVE-"):
         return None
