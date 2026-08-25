@@ -3,6 +3,7 @@ collection, RRF-fused and reranked, with exact entity-ID grounding.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import httpx
@@ -102,6 +103,22 @@ async def _retrieve_by_ids(client: httpx.AsyncClient, ids: list[str]) -> dict[st
             for r in resp.json().get("result", [])}
 
 
+async def _scroll_by_filter(client: httpx.AsyncClient, qfilter: dict[str, Any] | None,
+                            limit: int) -> list[tuple[str, dict[str, Any]]]:
+    """Fetch payloads matching ``qfilter`` directly (no vector, no rerank) — the exact-lookup
+    fast path. Returns ``[(point_id, payload)]`` in scroll order."""
+    if not qfilter:
+        return []
+    resp = await client.post(
+        f"{QDRANT_URL}/collections/{COLLECTION}/points/scroll",
+        json={"filter": qfilter, "limit": limit, "with_payload": True, "with_vector": False},
+        timeout=20,
+    )
+    resp.raise_for_status()
+    return [(str(p["id"]), apply_cve_override(p.get("payload") or {}))
+            for p in resp.json().get("result", {}).get("points", [])]
+
+
 async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
     """Directly fetch the CWE/CAPEC/ATT&CK *definition* nodes for the named ids, matched
     on each node's own id field. Needed because a single definition node is easily crowded
@@ -170,21 +187,45 @@ async def _qdrant_search(
     top_k = min(top_k or DEFAULT_TOP_K, CANDIDATE_LIMIT)
     qfilter = build_filter(params)
 
-    async with httpx.AsyncClient() as client:
-        # 1. Dense retrieval (optional — skipped when no embedding endpoint is configured).
-        dense_hits: list[dict[str, Any]] = []
-        if EMBEDDING_URL:
-            try:
-                vector = await embed(client, query)
-                dense_hits = await _dense_search(client, vector, qfilter, CANDIDATE_LIMIT)
-            except Exception as exc:
-                return ToolResult(content=f"KB dense search failed: {exc}", summary=f"qdrant_search({query}) error", is_error=True)
-
-        # 2. BM25 lexical retrieval (fan out wider when filtering, then post-filter).
+    # EXACT-CVE FAST PATH. A pinned cve_id makes the filter a hard `must` on that exact
+    # record, so the full pipeline can only ever return that CVE's own chunk(s) anyway —
+    # the dense embedding + rerank (two network round-trips, ~1.5s to a remote serving)
+    # merely reorder a handful of same-CVE docs, pure waste. Fetch them directly via a
+    # filtered scroll (~40ms). Scoped to cve_id ONLY: a cwe/capec/technique filter matches
+    # the definition node AND the thousands of CVEs referencing it, where semantic ranking
+    # genuinely decides which to surface — those keep the full hybrid pipeline below.
+    # Fail-open: any scroll error falls through to the hybrid path.
+    if cve_id and qfilter:
         try:
-            bm25_raw = await bm25_search(query, BM25_FANOUT * 3 if qfilter else BM25_FANOUT)
+            async with httpx.AsyncClient() as client:
+                rows = await _scroll_by_filter(client, qfilter, max(top_k, 8))
+            if rows:
+                final = rows[:top_k]
+                output = "\n\n---\n\n".join(
+                    _format_hit(i, boost(pl, 1.0), pl, None) for i, (_pid, pl) in enumerate(final))
+                return ToolResult(content=output,
+                                  summary=f"qdrant_search({query}) {len(final)} hits [cve-exact]")
         except Exception:
-            bm25_raw = []
+            pass  # fall through to the full hybrid pipeline
+
+    async with httpx.AsyncClient() as client:
+        # 1+2. Dense (embed→search, network) and BM25 (local sparse + Qdrant) are independent
+        # until RRF fusion — run them CONCURRENTLY so the total is max(dense, bm25), not the
+        # sum. Dense is optional (skipped when no embedding endpoint is configured).
+        async def _dense_path() -> list[dict[str, Any]]:
+            if not EMBEDDING_URL:
+                return []
+            vector = await embed(client, query)
+            return await _dense_search(client, vector, qfilter, CANDIDATE_LIMIT)
+
+        bm25_fanout = BM25_FANOUT * 3 if qfilter else BM25_FANOUT
+        dense_res, bm25_res = await asyncio.gather(
+            _dense_path(), bm25_search(query, bm25_fanout), return_exceptions=True)
+        if isinstance(dense_res, Exception):
+            return ToolResult(content=f"KB dense search failed: {dense_res}",
+                              summary=f"qdrant_search({query}) error", is_error=True)
+        dense_hits: list[dict[str, Any]] = dense_res
+        bm25_raw = [] if isinstance(bm25_res, Exception) else bm25_res
         bm25_used = bool(bm25_raw)
 
         payloads: dict[str, dict[str, Any]] = {h["id"]: h["payload"] for h in dense_hits}
