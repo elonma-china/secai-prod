@@ -42,7 +42,8 @@ from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
-from ..security import require_public_input, sanitize_output_language
+from ..sanitize import classify_input, decide
+from ..security import neutralize_active_content, require_public_input, sanitize_output_language
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
     BughuntRequest,
@@ -615,6 +616,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = prompt_override
         else:
             prompt = require_public_input(body.supplied_text())
+            if profile == "chat":
+                gated = await _chat_gate(prompt)
+                if gated is not None:  # model classifier short-circuited (injection/off-topic)
+                    return gated
         try:
             text, metadata = await state.runner.complete(profile, prompt, session_id)
         except HTTPException:
@@ -668,6 +673,59 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
+    async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
+        """Model-based input sanitization for the chat path (runs BEFORE the agent).
+
+        Embeds the prompt with the deployed sec-embedding model and applies the numpy head
+        (secai_gateway.sanitize) to classify intent + risk. Returns a short-circuit
+        ``(refusal_text, metadata)`` when the classifier blocks (injection / off-topic), or
+        ``None`` to let the agent answer. FAIL-OPEN: any classifier error/unavailability, or
+        the feature being disabled, returns ``None`` (pass through)."""
+        if not getattr(state.settings, "input_classifier_enabled", True):
+            return None
+        try:
+            verdict = await classify_input(prompt, settings=state.settings,
+                                           client=getattr(state, "http_client", None))
+            decision = decide(verdict, state.settings)
+        except Exception:  # a guard must never break chat
+            logger.exception("input classifier failed → fail-open")
+            return None
+
+        run_id = uuid4().hex
+        classification = {
+            "label": decision.label,
+            "action": decision.action.value,
+            "blocked": decision.short_circuit,
+            "pii": decision.pii,
+            "scores": {k: round(v, 4) for k, v in verdict.scores.items()},
+            "latency_ms": round(verdict.latency_ms, 1),
+        }
+        logger.info("input-sanitize run_id=%s verdict=%s action=%s latency_ms=%.1f",
+                    run_id, verdict.summary(), decision.action.value, verdict.latency_ms)
+        # Persist an audit line (digest, not plaintext) for any block or PII hit.
+        if decision.short_circuit or decision.pii:
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": decision.label, "action": decision.action.value, "pii": decision.pii})
+
+        if not decision.short_circuit:
+            return None
+        metadata = {
+            "run_id": run_id, "profile": "chat",
+            "tool_registry": sorted(registry_for("chat")),
+            "input_classification": classification, "short_circuit": True,
+        }
+        return decision.message, metadata
+
+    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+        """SSE response for a classifier short-circuit: one token + one final, then DONE
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        async def gen() -> AsyncIterator[bytes]:
+            yield sse_frame("token", {"delta": message})
+            yield sse_frame("final", {"content": message, "answer": message,
+                                      "message": message, "metadata": metadata})
+            yield b"data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
     @app.post("/chat_no_stream")
     @app.post("/ai/chat")
     async def chat(body: LegacyRequest) -> dict[str, Any]:
@@ -677,6 +735,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
     @app.post("/ai/chat/stream")
     async def chat_stream(body: LegacyRequest) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
+        gated = await _chat_gate(text)
+        if gated is not None:  # model classifier short-circuited before the agent runs
+            return _short_circuit_stream(gated[0], gated[1])
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -1033,7 +1094,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    {"user_id": body.user_id, "exploit_verdict": kt_result.get("exploit_verdict"),
                     "ok": kt_result.get("ok"), "error": kt_result.get("error")})
         await _pad_to_floor(_start, _floor)  # uniform total latency (see _pad_to_floor)
-        return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
+        safe = neutralize_active_content(text or no_poc)  # defang XSS in the injected PoC too
+        return {"description": safe, "exploit_guide": safe, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
     async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
@@ -1127,8 +1189,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(injected)
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
-            return {"content": final or no_poc, "exploit_guide": final or no_poc,
-                    "description": final or no_poc, "metadata": meta}
+            safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
+            return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
 
         async def gen() -> AsyncIterator[bytes]:
             final = ""
@@ -1248,7 +1310,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             preview_body = canonical_block(fullened, _pfres.get("cve_id"))
                             if preview_body:
                                 section1_sent = True
-                                yield sse_frame("section1", {"body": preview_body, "preview": True})
+                                yield sse_frame("section1",
+                                                {"body": neutralize_active_content(preview_body),
+                                                 "preview": True})
 
                     if model_next in done:
                         try:
