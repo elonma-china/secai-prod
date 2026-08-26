@@ -77,6 +77,29 @@ prompt through — the classifier can only *add* a block, never take chat down. 
 via `INPUT_CLASSIFIER_*` env vars (enable, per-action block flags, per-label thresholds, embed
 timeout); flip a `BLOCK_*` flag off for shadow/log-only.
 
+_Model_ — `sec-embedding` (bge-m3 fine-tune, 1024-d) → **mixed** numpy head: intent = 1-hidden
+MLP (128 units, softmax-3), injection/pii = class-balanced logistic (sigmoid). Inference is a
+few matmuls, sub-ms; head is ~0.5 MB, no torch at serving.
+
+_Train_ — 1005 bilingual (VI/EN) prompts embedded via `sec-embedding`; `C` chosen by 4-fold CV
+on train only; intent oversampled to balance chitchat. Deterministic dataset (`SEED`) covering
+9 injection techniques, VN PII formats, no-diacritics/teencode, pasted code/logs, and
+security↔offtopic hard-negatives.
+
+_Eval_ — held-out **383** samples, split **by template skeleton** so test phrasings are unseen
+(train↔test skeleton overlap = 0); metrics independently reproduced to 4 decimals.
+
+| class | precision | recall | **F1** |
+|---|---|---|---|
+| security  | 0.992 | 0.988 | 0.990 |
+| chitchat  | 1.000 | 0.966 | 0.983 |
+| offtopic  | 0.973 | 0.991 | 0.982 |
+| injection | 0.967 | **1.000** | 0.983 |
+| pii       | 0.988 | **1.000** | 0.994 |
+
+intent accuracy **0.987** · macro-F1 **0.986** · every class F1 ≥ 0.98 · train↔test overfit gap
+0.013. Full report: `sanitize/assets/metrics.json`.
+
 **Output — language + anti-XSS.** `sanitize_output_language` (`security.py`) runs on every
 answer: it drops leaked reasoning/meta-planning and internal tool-call echoes, strips CJK
 (VI/EN-only), then **defangs active content** (`neutralize_active_content`) so a frontend that
