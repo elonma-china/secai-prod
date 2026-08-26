@@ -120,3 +120,57 @@ def test_new_prompt_sections_present_and_wellformed() -> None:
     chat_prompt = compose_system_prompt(PROFILES["chat"])
     assert "<output_integrity" in chat_prompt           # anti CoT-leak (base)
     assert "<memory_and_summary_policy>" in chat_prompt  # anti context-poisoning (chat)
+
+
+# ── Output XSS neutralization (anti-XSS defense-in-depth) ─────────────────────
+from secai_gateway.security import neutralize_active_content, sanitize_output_language  # noqa: E402
+
+ZW = "​"
+
+
+def test_xss_markdown_javascript_link_defanged():
+    # The exact vector observed live: a markdown link with a javascript: URI.
+    out = neutralize_active_content("Xem [📅 Click me](javascript:alert(1)) nhé")
+    assert "](javascript:alert" not in out          # scheme no longer parses as javascript:
+    assert f"javascript{ZW}:" in out                # readable but broken
+    assert "Click me" in out                        # payload stays visible/educational
+
+
+def test_xss_raw_img_onerror_escaped():
+    out = neutralize_active_content('<img src=x onerror=alert(1)>')
+    assert "<img" not in out and "&lt;img" in out   # tag can't build a live element
+    assert "onerror=" not in out                    # handler '=' broken as belt-and-suspenders
+
+
+def test_xss_script_tag_escaped():
+    out = neutralize_active_content("<script>alert(document.cookie)</script>")
+    assert "<script" not in out and "&lt;script&gt;" in out
+    assert "alert(document.cookie)" in out          # inner text remains visible
+
+
+def test_xss_anchor_javascript_href_escaped_and_defanged():
+    out = neutralize_active_content('<a href="javascript:alert(1)">Click me</a>')
+    assert "<a " not in out and "&lt;a" in out
+    assert "\"javascript:alert" not in out
+
+
+def test_xss_svg_onload_and_vbscript():
+    assert "<svg" not in neutralize_active_content("<svg onload=alert(1)>")
+    assert f"vbscript{ZW}:" in neutralize_active_content("vbscript:msgbox(1)")
+
+
+def test_xss_data_image_preserved_but_data_html_defanged():
+    # keep legit inline images working; only defang executable data: URIs
+    assert "data:image/png" in neutralize_active_content("data:image/png;base64,AAAA")
+    assert f"data{ZW}:" in neutralize_active_content("data:text/html,<script>alert(1)</script>")
+
+
+def test_xss_benign_text_and_math_unchanged():
+    assert neutralize_active_content("So sánh a < b và c > d, 3 < 5.") == "So sánh a < b và c > d, 3 < 5."
+    assert neutralize_active_content("Chào bạn, đây là câu trả lời bình thường.") \
+        == "Chào bạn, đây là câu trả lời bình thường."
+
+
+def test_sanitize_output_language_includes_xss_defang():
+    out = sanitize_output_language('Payload: <img src=x onerror=alert(1)> và [x](javascript:alert(1))')
+    assert "<img" not in out and "onerror=" not in out and "](javascript:alert" not in out

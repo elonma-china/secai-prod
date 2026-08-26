@@ -17,3 +17,10 @@ def hermetic_env(monkeypatch):
     """
     monkeypatch.setenv("REDIS_URL", "")
     monkeypatch.setenv("AIRGAP", "false")
+    # The chat input-sanitization classifier embeds via the sec-embedding endpoint. Since
+    # .env now points EMBEDDING_MODEL at the shipped head's model, an un-mocked /ai/chat in a
+    # unit test would make a real network embed call. Point the head at a nonexistent dir so
+    # load_head() returns None → the classifier fails open (no network) for tests that don't
+    # mock it. The dedicated test_input_classifier suite monkeypatches classify_input/load_head
+    # directly, so it is unaffected. Production is unchanged (it never sets this var).
+    monkeypatch.setenv("INPUT_CLASSIFIER_WEIGHTS_PATH", "/nonexistent/hermetic-sanitize-head")
