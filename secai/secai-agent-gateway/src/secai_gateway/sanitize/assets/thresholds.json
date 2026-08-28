@@ -1,5 +1,6 @@
 {
-  "injection": 0.25,
+  "injection": 0.6,
   "pii": 0.35,
-  "offtopic": 0.533
+  "offtopic": 0.533,
+  "_note_injection": "Raised from 0.25 to 0.6 on 2026-08-27 after finding a ~40% false-positive rate on benign, instruction-style CVE-detail questions (e.g. numbered '(1)...(2)...(3)' report templates, imperative SAST/audit phrasing) scoring 0.25-0.41. Verified via offline replay against src/secai_gateway/sanitize/classifier.py: real injection/jailbreak prompts (ignore-instructions, DAN jailbreak, prompt extraction, tool abuse, delimiter escape) scored 0.868-0.9997 — wide margin above the highest observed false positive (0.4138). metrics.json's own reported precision/recall for injection@0.25 (0.9667/1.0 on n=383 held-out) reflects the training distribution, not the templated/instructional phrasing that triggered the false positives seen in production — this threshold change is a mitigation, not a full fix; the head likely needs retraining with more diverse benign instructional/imperative examples to fully close the generalization gap."
 }

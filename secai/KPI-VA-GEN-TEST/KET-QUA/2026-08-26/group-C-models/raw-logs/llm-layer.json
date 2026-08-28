@@ -1,0 +1,18 @@
+{
+  "layer": "inference (vLLM endpoint)",
+  "ccu": 30,
+  "total": 70,
+  "ok": 70,
+  "errors": 0,
+  "wall_s": 18.6,
+  "aggregate_tok_s": 1929.9,
+  "rps": 3.769,
+  "tokens_per_req_mean": 512,
+  "ttft_ms_p50": 754,
+  "ttft_ms_p95": 796,
+  "ttft_in_900_1500_pct": 0.0,
+  "tps_per_stream_p50": 88.5,
+  "tps_per_stream_mean": 90.2,
+  "tps_in_20_35_pct": 0.0,
+  "err_samples": []
+}

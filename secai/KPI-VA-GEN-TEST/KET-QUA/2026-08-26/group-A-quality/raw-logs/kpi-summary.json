@@ -1,0 +1,79 @@
+{
+  "R-KPI-EMB96": {
+    "name": "Embedding Hit Rate@10",
+    "unit": "%",
+    "thr": "> 96",
+    "value": 100.0,
+    "pass": true
+  },
+  "R-KPI-RERANK90": {
+    "name": "Reranking Precision@1",
+    "unit": "%",
+    "thr": "> 90",
+    "value": 99.41,
+    "pass": true
+  },
+  "R-KPI-FAITH98": {
+    "name": "Faithfulness (RAGAS)",
+    "unit": "%",
+    "thr": "> 98",
+    "value": 96.71,
+    "pass": false
+  },
+  "R-KPI-RELEV90": {
+    "name": "Answer Relevance (LLM-judge)",
+    "unit": "%",
+    "thr": "> 90",
+    "value": 91.12,
+    "pass": true
+  },
+  "R-KPI-ENTITY100": {
+    "name": "Entity Precision CVE/CWE",
+    "unit": "%",
+    "thr": "= 100",
+    "value": 100.0,
+    "pass": true
+  },
+  "R-KPI-HALLU2": {
+    "name": "Hallucination Rate",
+    "unit": "%",
+    "thr": "< 2",
+    "value": 0.0,
+    "pass": true
+  },
+  "R-LLM-SAST85": {
+    "name": "SAST accuracy",
+    "unit": "%",
+    "thr": "≥ 85",
+    "value": 85.0,
+    "pass": true
+  },
+  "R-LLM-EXPLOIT85": {
+    "name": "Exploit Explanation",
+    "unit": "%",
+    "thr": "≥ 85",
+    "value": 94.12,
+    "pass": true
+  },
+  "R-LLM-REMED60": {
+    "name": "Auto-remediation",
+    "unit": "%",
+    "thr": "≥ 60",
+    "value": 83.33,
+    "pass": true
+  },
+  "R-SEC-PII": {
+    "name": "Sanitization PII/Secret F1",
+    "unit": "%",
+    "thr": "> 90",
+    "value": 98.11,
+    "pass": true
+  },
+  "R-KPI-RADAR90": {
+    "name": "Radar coverage area",
+    "unit": "%",
+    "thr": "> 90",
+    "value": 97.9,
+    "pass": true
+  }
+}

@@ -11,6 +11,14 @@ from fastapi.responses import JSONResponse
 def route_limit(path: str) -> int:
     if path.endswith("/stream"):
         path = path[: -len("/stream")]  # rate-limit /ai/x/stream as /ai/x
+    if path == "/ai/chat":
+        # Raised 2026-08-27 from the shared default of 15: the contracted chatflow perf targets
+        # (R-PERF-CCU ~30 concurrent threads, R-PERF-RPS ~0.6 RPS = 36 req/min) structurally exceed
+        # 15 req/60s regardless of concurrency — no client-side tuning can satisfy both a 15/60s cap
+        # and a 36/min target from one source IP. 90/60s gives ~2.5x headroom over the RPS target
+        # while still bounding abuse; other routes are untouched. See KPI-VA-GEN-TEST/KET-QUA/ for
+        # the benchmark that surfaced this.
+        return 90
     if path == "/ai/exploit" or path == "/ai/exploit/run":
         return 20
     if path == "/admin/refresh-models":

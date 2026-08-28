@@ -1,0 +1,140 @@
+{
+  "kpi": "sanitization",
+  "n_samples": 500,
+  "per_type": {
+    "email": {
+      "recall": 100.0,
+      "precision": 100.0,
+      "f1": 100.0,
+      "tp": 252,
+      "fp": 0,
+      "fn": 0,
+      "pass": true
+    },
+    "ip": {
+      "recall": 100.0,
+      "precision": 100.0,
+      "f1": 100.0,
+      "tp": 180,
+      "fp": 0,
+      "fn": 0,
+      "pass": true
+    },
+    "phone": {
+      "recall": 100.0,
+      "precision": 100.0,
+      "f1": 100.0,
+      "tp": 108,
+      "fp": 0,
+      "fn": 0,
+      "pass": true
+    },
+    "api_key": {
+      "recall": 100.0,
+      "precision": 100.0,
+      "f1": 100.0,
+      "tp": 216,
+      "fp": 0,
+      "fn": 0,
+      "pass": true
+    },
+    "password": {
+      "recall": 83.33,
+      "precision": 100.0,
+      "f1": 90.91,
+      "tp": 180,
+      "fp": 0,
+      "fn": 36,
+      "pass": true
+    }
+  },
+  "overall": {
+    "recall": 96.3,
+    "precision": 100.0,
+    "f1": 98.11,
+    "tp": 936,
+    "fp": 0,
+    "fn": 36,
+    "f1_pass": true
+  },
+  "confusion": {
+    "email": {
+      "tp": 252,
+      "fp": 0,
+      "fn": 0
+    },
+    "ip": {
+      "tp": 180,
+      "fp": 0,
+      "fn": 0
+    },
+    "phone": {
+      "tp": 108,
+      "fp": 0,
+      "fn": 0
+    },
+    "api_key": {
+      "tp": 216,
+      "fp": 0,
+      "fn": 0
+    },
+    "password": {
+      "tp": 180,
+      "fp": 0,
+      "fn": 36
+    }
+  },
+  "false_positives": {},
+  "false_negatives": {
+    "password": [
+      {
+        "id": "pii_pos_0085",
+        "value": "Adm1n6#3114"
+      },
+      {
+        "id": "pii_pos_0195",
+        "value": "Qwerty520$"
+      },
+      {
+        "id": "pii_pos_0055",
+        "value": "P@ss@#05@225"
+      },
+      {
+        "id": "pii_pos_0175",
+        "value": "Sup3r#384265"
+      },
+      {
+        "id": "pii_pos_0205",
+        "value": "P@ss28$4282%"
+      },
+      {
+        "id": "pii_pos_0225",
+        "value": "Vault23%3078"
+      },
+      {
+        "id": "pii_pos_0315",
+        "value": "Adm1n!@6%3927"
+      },
+      {
+        "id": "pii_pos_0295",
+        "value": "Secr3t1@%@"
+      },
+      {
+        "id": "pii_pos_0185",
+        "value": "Secr3t0725@%##"
+      },
+      {
+        "id": "pii_pos_0105",
+        "value": "P@ss932!@%1"
+      },
+      {
+        "id": "pii_pos_0035",
+        "value": "Qwerty360143%2"
+      },
+      {
+        "id": "pii_pos_0135",
+        "value": "Sup3r!260!"
+      }
+    ]
+  }
+}

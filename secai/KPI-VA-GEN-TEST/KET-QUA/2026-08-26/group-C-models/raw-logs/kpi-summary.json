@@ -1,0 +1,26 @@
+{
+  "R-MODEL-EMB1200": {
+    "name": "Embedding throughput",
+    "unit": " emb/s",
+    "thr": "≥ 1200",
+    "value": 366.9,
+    "pass": false,
+    "note": "peak @conc 32"
+  },
+  "R-MODEL-RERANK180": {
+    "name": "Reranker throughput",
+    "unit": " docs/s",
+    "thr": "≥ 180",
+    "value": 1640.1,
+    "pass": true,
+    "note": "peak @conc 32"
+  },
+  "R-LLM-TPS28": {
+    "name": "LLM throughput (lớp suy luận)",
+    "unit": " tok/s",
+    "thr": "≥ 28",
+    "value": 88.5,
+    "pass": true,
+    "note": "TTFT 754ms"
+  }
+}
