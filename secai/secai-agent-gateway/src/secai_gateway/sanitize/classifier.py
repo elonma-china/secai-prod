@@ -210,6 +210,53 @@ def reset_cache() -> None:
         _state["path"] = None
 
 
+# ── fail-open observability (ops hardening) ──────────────────────────────────
+# The guard fails open by design, which is safe but SILENT: a misconfig (e.g. serving loads a
+# different embedding model than EMBEDDING_MODEL) disables the guard on every request while
+# /health still says ok (real incident, CLAUDE.md 2026-08-23). These two helpers make that
+# visible: a boot-time self-check and a process-wide unknown-rate counter.
+_stats_lock = threading.Lock()
+_verdict_stats: dict[str, int] = {"total": 0, "unknown": 0}
+
+
+def note_verdict(ok: bool) -> None:
+    """Record one classification outcome for the fail-open rate metric."""
+    with _stats_lock:
+        _verdict_stats["total"] += 1
+        if not ok:
+            _verdict_stats["unknown"] += 1
+
+
+def verdict_stats() -> dict[str, float]:
+    """Return {total, unknown, unknown_rate}. A spiking unknown_rate = silent fail-open."""
+    with _stats_lock:
+        t, u = _verdict_stats["total"], _verdict_stats["unknown"]
+    return {"total": t, "unknown": u, "unknown_rate": (u / t) if t else 0.0}
+
+
+def reset_stats() -> None:
+    with _stats_lock:
+        _verdict_stats["total"] = 0
+        _verdict_stats["unknown"] = 0
+
+
+def startup_head_check(head: "_Head | None", embedding_model: str) -> str | None:
+    """Return a loud warning string if the classifier will silently fail open, else ``None``.
+
+    Called at app startup so an operator sees the misconfiguration at boot instead of discovering
+    (much later) that every chat request quietly bypassed the guard. Pure/sync — unit-testable.
+    """
+    if head is None:
+        return "input-classifier: no trained head packaged → guard is OFF (fail-open every request)"
+    if not head.trained:
+        return "input-classifier: head present but trained=false → guard is OFF (fail-open)"
+    rt = str(embedding_model or "")
+    if head.embed_model and rt and head.embed_model != rt:
+        return (f"input-classifier: EMBED-MODEL MISMATCH head={head.embed_model!r} != "
+                f"EMBEDDING_MODEL={rt!r} → guard fails open on EVERY request (see CLAUDE.md)")
+    return None
+
+
 def _softmax(v: np.ndarray) -> np.ndarray:
     m = float(np.max(v))
     e = np.exp(v - m)

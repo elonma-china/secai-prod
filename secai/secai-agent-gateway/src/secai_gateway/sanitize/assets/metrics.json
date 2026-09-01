@@ -2,35 +2,35 @@
   "embed_model": "DuyTa/sec-embedding",
   "dim": 1024,
   "backend": "st",
-  "n_train": 1005,
-  "n_test": 383,
+  "n_train": 1253,
+  "n_test": 459,
   "intent": {
     "security": {
-      "precision": 0.9918,
-      "recall": 0.9878,
-      "f1": 0.9898,
-      "tp": 242,
-      "fp": 2,
+      "precision": 1.0,
+      "recall": 0.9909,
+      "f1": 0.9954,
+      "tp": 325,
+      "fp": 0,
       "fn": 3
     },
     "chitchat": {
       "precision": 1.0,
-      "recall": 0.9655,
-      "f1": 0.9825,
-      "tp": 28,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 26,
       "fp": 0,
-      "fn": 1
+      "fn": 0
     },
     "offtopic": {
-      "precision": 0.973,
-      "recall": 0.9908,
-      "f1": 0.9818,
-      "tp": 108,
+      "precision": 0.9722,
+      "recall": 1.0,
+      "f1": 0.9859,
+      "tp": 105,
       "fp": 3,
-      "fn": 1
+      "fn": 0
     }
   },
-  "intent_accuracy": 0.9869,
+  "intent_accuracy": 0.9935,
   "intent_confusion": {
     "labels": [
       "security",
@@ -39,28 +39,28 @@
     ],
     "matrix": [
       [
-        242,
+        325,
         0,
         3
       ],
       [
-        1,
-        28,
+        0,
+        26,
         0
       ],
       [
-        1,
         0,
-        108
+        0,
+        105
       ]
     ]
   },
   "injection": {
-    "precision": 0.9667,
+    "precision": 0.9839,
     "recall": 1.0,
-    "f1": 0.9831,
-    "tp": 58,
-    "fp": 2,
+    "f1": 0.9919,
+    "tp": 61,
+    "fp": 1,
     "fn": 0
   },
   "pii": {
@@ -72,24 +72,24 @@
     "fn": 0
   },
   "offtopic_decision": {
-    "precision": 0.9818,
-    "recall": 0.9908,
-    "f1": 0.9863,
-    "tp": 108,
-    "fp": 2,
-    "fn": 1
+    "precision": 0.9722,
+    "recall": 1.0,
+    "f1": 0.9859,
+    "tp": 105,
+    "fp": 3,
+    "fn": 0
   },
-  "macro_f1": 0.9862,
+  "macro_f1": 0.9934,
   "thresholds": {
     "injection": 0.25,
-    "pii": 0.35,
-    "offtopic": 0.533
+    "pii": 0.4,
+    "offtopic": 0.34
   },
   "head_apply_latency_ms": {
-    "mean": 0.0454,
-    "p95": 0.0502
+    "mean": 0.1009,
+    "p95": 0.0932
   },
-  "train_intent_accuracy": 1.0,
+  "train_intent_accuracy": 0.9968,
   "head": "mixed",
-  "overfit_gap_intent_acc": 0.0131
+  "overfit_gap_intent_acc": 0.0033
 }

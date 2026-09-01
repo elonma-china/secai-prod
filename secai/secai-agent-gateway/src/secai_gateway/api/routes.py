@@ -43,6 +43,7 @@ from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..sanitize import classify_input, decide
+from ..sanitize.classifier import note_verdict, verdict_stats
 from ..security import neutralize_active_content, require_public_input, sanitize_output_language
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
@@ -700,6 +701,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             "scores": {k: round(v, 4) for k, v in verdict.scores.items()},
             "latency_ms": round(verdict.latency_ms, 1),
         }
+        # Fail-open observability: a verdict that is not ``ok`` means the guard was bypassed
+        # (embed down / embed-model mismatch / timeout). That is safe but SILENT, so surface it
+        # at WARNING with the running unknown-rate rather than only INFO (see CLAUDE.md incident).
+        note_verdict(verdict.ok)
+        if not verdict.ok:
+            st = verdict_stats()
+            logger.warning("input-sanitize FAIL-OPEN run_id=%s reason=%s unknown_rate=%.3f (%d/%d)",
+                           run_id, verdict.reason, st["unknown_rate"], st["unknown"], st["total"])
         logger.info("input-sanitize run_id=%s verdict=%s action=%s latency_ms=%.1f",
                     run_id, verdict.summary(), decision.action.value, verdict.latency_ms)
         # Persist an audit line (digest, not plaintext) for any block or PII hit.

@@ -227,3 +227,28 @@ async def test_route_chat_passes_when_classifier_unknown(monkeypatch) -> None:
     assert r.status_code == 200
     assert r.json()["response"].startswith("chat:")              # agent ran normally
     assert fake.calls and fake.calls[0][0] == "chat"
+
+
+# ── fail-open observability (ops hardening) ──────────────────────────────────
+def test_startup_head_check_detects_embed_model_mismatch() -> None:
+    head = _head()  # embed_model="test-embed"
+    msg = C.startup_head_check(head, "OTHER/embedding")
+    assert msg is not None and "MISMATCH" in msg
+
+
+def test_startup_head_check_ok_when_models_match() -> None:
+    assert C.startup_head_check(_head(), "test-embed") is None
+
+
+def test_startup_head_check_warns_when_head_missing() -> None:
+    assert "OFF" in (C.startup_head_check(None, "test-embed") or "")
+
+
+def test_verdict_stats_tracks_unknown_rate() -> None:
+    C.reset_stats()
+    for ok in (True, True, False, False):   # 2 of 4 failed open
+        C.note_verdict(ok)
+    st = C.verdict_stats()
+    assert st["total"] == 4 and st["unknown"] == 2
+    assert abs(st["unknown_rate"] - 0.5) < 1e-9
+    C.reset_stats()
