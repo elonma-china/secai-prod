@@ -54,6 +54,26 @@ def test_ignores_tool_not_in_untrusted_set():
     assert _run(hook.on_post_tool_use(ctx)) is None
 
 
+def test_bughunt_scan_tools_are_wrapped():
+    """Bughunt tools share the same gateway Agent (LinchRunner merges build_bughunt_tools()
+    into the one shared self.tools/self.agent) — probe/scan output from a user-specified,
+    potentially hostile target must be spotlighted just like web_fetch/qdrant_search."""
+    from secai_gateway.bughunt.tools import AGENT_TOOL_NAMES
+
+    hook = SanitizeToolResultHook()
+    for tool in ("bh_http_probe", "run_recon", "run_vuln_scan", "run_verify_leads",
+                 "run_sqlmap_targeted", "read_recon_summary", "read_findings_summary"):
+        ctx = _post(tool, "reflected payload from the live target")
+        result = _run(hook.on_post_tool_use(ctx))
+        assert result is not None and result.action == "mutate", tool
+
+    # update_working_memory/finish only echo the MODEL's own input, never target content.
+    for tool in ("update_working_memory", "finish"):
+        ctx = _post(tool, "model-authored text")
+        assert _run(hook.on_post_tool_use(ctx)) is None, tool
+        assert tool in AGENT_TOOL_NAMES  # sanity: tool name is real, not a typo
+
+
 def test_poc_search_excluded_json_stays_parseable():
     """RequireSearchBeforeAnswerHook.on_post_tool_use does json.loads(ctx.result.content) for
     poc_search — wrapping it in a delimiter would break that parse for any hook dispatched

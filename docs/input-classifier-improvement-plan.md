@@ -146,6 +146,26 @@ vẫn là kiến trúc **CaMeL** (tách kênh instruction/data triệt để) [5
 cấu trúc hơn [6] — spotlighting là phòng thủ theo lớp (defense-in-depth) rẻ, không phải giải pháp triệt
 để (mô hình vẫn đọc chung 1 chuỗi token, delimiter là tín hiệu mềm).
 
+### Vá gap: bughunt tools (cùng ngày, sau khi rà lại)
+
+`bughunt/tools.py` (`build_bughunt_tools()`) được merge thẳng vào `self.tools` của CÙNG
+`LinchRunner`/`self.agent` (không phải agent riêng) — nên `SanitizeToolResultHook` lẽ ra đã phủ tự
+động, nhưng đợt đầu quên đưa 20 tool bughunt vào `UNTRUSTED_CONTENT_TOOLS`. Đây là content nguy hiểm
+đúng loại báo cáo khảo sát ban đầu cảnh báo: response body/header/reflected-payload từ **target sống
+do user chỉ định** (có thể là server độc hại).
+
+Đã rà từng tool và bổ sung **18/20**: mọi tool probe/scan/fuzz trực tiếp lên target (`bh_http_probe`,
+`run_recon`, `run_vuln_scan`, `run_parallel_hunt_wave`, `run_verify_leads`, `run_js_analysis`,
+`run_secret_hunt`, `run_param_discovery`, `run_post_param_discovery`, `run_api_fuzz`,
+`run_cors_check`, `run_cms_exploit`, `run_rce_scan`, `run_sqlmap_targeted`, `run_sqlmap_on_file`,
+`run_jwt_audit`) — **cộng cả** `read_recon_summary`/`read_findings_summary`: phát hiện thêm 1 lỗ hổng
+tinh vi, hai tool này re-surface lại evidence/findings đã capture từ probe trước đó (vd
+`run_verify_leads` lưu `evidence` snippet phản chiếu từ target) trong 1 `ToolResult` MỚI ở turn sau —
+nếu không bọc, nội dung độc từng bị chặn ở lần probe đầu sẽ lọt qua không dấu khi đọc lại summary.
+Loại trừ đúng 2 tool: `update_working_memory`/`finish` — cả hai chỉ echo lại input của chính model
+(note/verdict), không có nội dung ngoại lai. Test mới `test_bughunt_scan_tools_are_wrapped` +
+`test_bughunt_phase0.py` xanh (60/60 phạm vi liên quan).
+
 ## 5. Ghi chú kiến trúc
 
 Không thay kiến trúc: **Prompt Guard 2** (mDeBERTa 86M) [7] không hỗ trợ tiếng Việt chính thức + cần
