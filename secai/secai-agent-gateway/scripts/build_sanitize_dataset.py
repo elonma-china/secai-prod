@@ -437,11 +437,18 @@ def _fake_secret(rng: random.Random) -> str:
 
 
 # ── row assembly ─────────────────────────────────────────────────────────────
-def build_rows() -> list[dict]:
+def build_rows(exclude_groups: frozenset[str] = frozenset()) -> list[dict]:
+    """``exclude_groups`` (group-prefix set, e.g. ``{"hnreport"}``) drops every row of those
+    families ENTIRELY — not just from train, from the whole dataset — for a genuine
+    Leave-One-(family)-Out robustness check (Ư3): does removing one hard-negative family cause
+    its corresponding held-out over-defense category to regress, or does the fix generalize
+    from the OTHER families? See scripts/eval_lodo_family_holdout.py."""
     rng = random.Random(SEED)
     rows: list[dict] = []
 
     def add(text, intent, injection, pii, lang, group):
+        if group.split(":")[0] in exclude_groups:
+            return
         rows.append({"text": text.strip(), "intent": intent, "injection": injection,
                      "pii": pii, "lang": lang, "group": group})
 
@@ -639,8 +646,12 @@ def build_rows() -> list[dict]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="evals/sanitize/dataset.jsonl")
+    ap.add_argument("--exclude-groups", default="",
+                    help="comma-separated group prefixes to drop entirely (Ư3 LODO check), "
+                         "e.g. hnreport,hnaudit")
     args = ap.parse_args()
-    rows = build_rows()
+    exclude = frozenset(g.strip() for g in args.exclude_groups.split(",") if g.strip())
+    rows = build_rows(exclude_groups=exclude)
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as f:
         for r in rows:
