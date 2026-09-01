@@ -8,6 +8,7 @@ import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
@@ -42,7 +43,7 @@ from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
-from ..sanitize import classify_input, decide
+from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
 from ..security import (
     neutralize_active_content, require_public_input, sanitize_output_language,
@@ -692,15 +693,35 @@ def register_routes(app: FastAPI, state: Any) -> None:
         the feature being disabled, returns ``None`` (pass through)."""
         if not getattr(state.settings, "input_classifier_enabled", True):
             return None
+        run_id = uuid4().hex
         try:
             verdict = await classify_input(prompt, settings=state.settings,
                                            client=getattr(state, "http_client", None))
+            # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
+            # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
+            # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
+            # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
+            # straight back to the classifier's own threshold decision — never a new failure
+            # mode. See sanitize/cascade.py.
+            if (verdict.ok and verdict.injection_uncertain
+                    and getattr(state.settings, "injection_cascade_enabled", False)):
+                # Prefer the calibrated score (the one band-membership was actually decided on)
+                # if shipped; falls back to the raw score for display when it isn't.
+                cascade_score = verdict.scores.get("injection_calibrated",
+                                                   verdict.scores.get("injection", 0.0))
+                judge_verdict = await judge_injection(
+                    state.runner, prompt, cascade_score,
+                    timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                if judge_verdict is not None:
+                    logger.info(
+                        "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
+                        "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
+                    verdict = replace(verdict, injection=judge_verdict)
             decision = decide(verdict, state.settings)
         except Exception:  # a guard must never break chat
             logger.exception("input classifier failed → fail-open")
             return None
 
-        run_id = uuid4().hex
         classification = {
             "label": decision.label,
             "action": decision.action.value,
