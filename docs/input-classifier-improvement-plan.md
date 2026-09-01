@@ -84,16 +84,17 @@ quan — lỗi XML sẵn có trong `prompts/`, không nằm trong diff của đ�
   head để lộ trigger token còn bias, bổ sung counter-example (có thể dùng Cyber-F1 sinh thêm). Xây bộ
   **NotInject VI/EN** làm eval over-defense cố định (đã có `overdefense.jsonl` làm nền).
 - **Ư2 — Calibration + cascade "uncertain band"** [3]: ĐÃ TRIỂN KHAI (2026-09-01), xem chi tiết ở
-  §6 bên dưới. Cảnh báo *confident miscalibration* [3] (head tuyến tính sai-mà-tự-tin trên OOD, lọt
+  §5 bên dưới. Cảnh báo *confident miscalibration* [3] (head tuyến tính sai-mà-tự-tin trên OOD, lọt
   qua band) vẫn là giới hạn chưa giải quyết — band chỉ bắt được điểm rơi vào vùng biết trước.
-- **Ư3 — Eval theo distribution shift** [2]: chuyển sang giữ nguyên cả nguồn khi eval (LODO); coi số
-  in-distribution là cận trên lạc quan; đưa `overdefense.jsonl` + traffic log thật + benchmark ngoài
-  (NotInject/LLMail-Inject) vào CI.
-- **Ư4 — Ops** (đã làm phần lõi): thêm expose `verdict_stats()` qua `/health` hoặc metric để alert khi
-  `unknown_rate` vọt.
-- **Ư5 — PII hybrid** [4]: nếu cần nâng chất lượng, cân nhắc Presidio (regex, precision) + GLiNER
-  (neural, recall). Lưu ý GLiNER cần torch → không hợp runtime numpy-only air-gap; trước mắt giữ
-  `require_public_input` + đo đúng qua harness.
+- **Ư3 — Eval theo distribution shift** [2]: phần LODO (leave-one-family-out) ĐÃ TRIỂN KHAI
+  (2026-09-01), xem §6. Còn lại chưa làm: traffic log thật (không có trong phiên offline này) +
+  benchmark ngoài (NotInject/LLMail-Inject) vào CI.
+- **Ư4 — Ops**: ĐÃ XONG (2026-09-01) — `verdict_stats()` giờ lộ qua `/health` (`input_sanitize` +
+  `status=degraded` khi `unknown_rate>0.5` trên mẫu đủ lớn), tách `_health_status()` pure/testable.
+- **Ư5 — PII hybrid** [4]: đã khảo sát thực nghiệm (2026-09-01, xem §7) — GLiNER offline, không cần
+  vast. Kết quả: recall tăng thật (32%→76%) nhưng false-trip 15% ở threshold mặc định — **KHÔNG**
+  khuyến nghị thay `require_public_input` bằng GLiNER làm hard-block ngay; cần thiết kế lại label
+  trước. Vẫn giữ nguyên vấn đề kiến trúc: GLiNER cần torch → không hợp runtime numpy-only air-gap.
 
 ## 4. Indirect prompt injection — spotlighting đã triển khai (2026-09-01)
 
@@ -229,7 +230,79 @@ lớp lỗi này, chỉ literature [3] gọi đây là giới hạn cố hữu c
 live**: mọi số liệu trên chạy offline (`--embed st`); cần `--embed endpoint` + bật
 `injection_cascade_enabled=true` khi vast lên để xác nhận judge thật hoạt động đúng như mock.
 
-## 6. Ghi chú kiến trúc
+## 6. Ư3 — Leave-one-family-out robustness check (2026-09-01)
+
+`metrics.json` chỉ đo in-distribution; ngay cả bộ held-out `overdefense.jsonl`/`attacks.jsonl` cũng
+không tự trả lời được: kỹ thuật MOF hard-negative có **generalize** giữa các họ phrasing, hay model
+chỉ học thuộc template riêng từng họ? Làm 1 bài kiểm LODO đúng nghĩa (arXiv:2602.14161 áp dụng ở mức
+nhỏ nhất khả dụng): loại **HẲN** 1 họ hard-negative khỏi training (không chỉ vài skeleton), retrain,
+đo FP trên đúng category held-out tương ứng.
+
+- **`scripts/build_sanitize_dataset.py --exclude-groups <prefix>`** (mới): loại toàn bộ 1 (hoặc nhiều)
+  group-prefix khỏi dataset trước khi split. Không đổi hành vi mặc định (verified byte-identical khi
+  không truyền flag). Phát hiện phụ: loại 1 họ gây **hiệu ứng dây chuyền** lên train/test split và
+  biến thể no-diacritics của MỌI category khác (do `rng` dùng chung, thứ tự dict `by_cat_group` dịch
+  pha) — vẫn deterministic cho 1 lần exclude cố định, không ảnh hưởng tính đúng của thí nghiệm.
+- **`scripts/eval_lodo_family_holdout.py`** (mới): với mỗi họ trong {hnreport, hnaudit, hncve,
+  hnpentest}, build dataset loại họ đó → retrain offline → đo FP trên category held-out tương ứng, so
+  với baseline (head đang ship). Không đụng assets đã ship (mọi retrain ghi vào temp dir).
+
+**Kết quả** (`evals/sanitize/report-lodo-2026-09-01.md`):
+
+| họ loại bỏ | category | FP baseline | FP khi loại | Kết luận |
+|---|---|---:|---:|---|
+| hnreport | report-numbered | 0/32 | 0/32 | **generalize** từ họ khác |
+| hnaudit | audit-imperative | 0/36 | **1/36** | **CẦN THIẾT** — không họ nào thay thế được |
+| hncve | cve-detail | 0/40 | 0/40 | **generalize** từ họ khác |
+| hnpentest | pentest-writeup | 0/40 | 0/40 | **generalize** từ họ khác |
+
+**3/4 họ generalize thật** — bằng chứng thực nghiệm (không chỉ giả định từ literature) rằng kỹ thuật
+MOF dạy được tín hiệu "trigger word ≠ injection" có tính CHUYỂN GIAO, không chỉ khớp mẫu theo từng
+họ. **`hnaudit` là ngoại lệ** — khớp đúng với phát hiện thực nghiệm ở round 1→2 (toàn bộ 6 FP còn lại
+sau round 1 đều rơi vào đúng category này, cần template riêng ở round 2) — xác nhận: nếu category này
+tái xuất hiện regression trong tương lai, phải mở rộng đúng `hnaudit`, không phải họ khác.
+
+Còn lại của Ư3 (chưa làm, không thể làm offline hoàn toàn): traffic log thật (cần production/live
+traffic, không có trong phiên này) + tích hợp benchmark ngoài công khai (NotInject/LLMail-Inject) vào
+CI (cần thời gian tải/tích hợp riêng, chưa ưu tiên đợt này).
+
+## 7. Ư5 — PII hybrid: khảo sát GLiNER thực nghiệm (2026-09-01)
+
+Offline hoàn toàn, không cần vast — GLiNER là model NER nhỏ tải độc lập từ HuggingFace
+(`urchade/gliner_multi_pii-v1`), không liên quan tới Cyber-F1/sec-embedding trên vast.
+`scripts/eval_pii_hybrid.py` so `require_public_input` (regex hard-gate hiện tại) với GLiNER
+zero-shot trên đúng ground-truth `dataset.jsonl` (`pii=1`/`pii=0`).
+
+**Số liệu (threshold=0.5, mặc định thư viện):**
+
+| method | recall | false-trip |
+|---|---:|---:|
+| regex gate hiện tại | 32.1% (61/190) | **0.0%** (0/200) |
+| GLiNER zero-shot | **75.8%** (144/190) | **15.0%** (30/200) |
+| hybrid (OR) | 82.6% (157/190) | 15.0% (30/200) |
+
+Xác nhận đúng tuyên bố literature (hybrid > riêng lẻ về recall) — nhưng **false-trip 15% là chi
+phí thật**, chưa từng được định lượng trước đây cho traffic shape cụ thể của dự án này.
+
+**Nguyên nhân false-trip — CÙNG lớp lỗi với over-defense injection đã fix cả phiên nay**: soi 30
+case sai thấy GLiNER khớp nhầm **từ khái niệm** ("password", "JWT", "email") trong câu hỏi lý
+thuyết ("how do I hash passwords") thành thực thể PII thật, vì label GLiNER là từ trần trụi
+("password") — không phân biệt được "nhắc tới khái niệm" với "có giá trị thật trong text". Đúng
+bài học "concept ≠ instance" đã học được từ MOF hard-negatives, áp dụng vào 1 subsystem khác.
+
+**Sweep threshold**: không có ngưỡng nào cho cả recall cao lẫn FP thấp cùng lúc — ở 0.85 FP về
+gần 0 (1/200) nhưng recall (34.2%) đã tụt về NGANG regex gate (32.1%), tức không còn lợi ích gì.
+Nút thắt là THIẾT KẾ LABEL (từ khái niệm trần trụi), không phải chỉ chỉnh threshold.
+
+**Khuyến nghị**: KHÔNG thay `require_public_input` bằng GLiNER làm hard-block ngay ở dạng hiện
+tại. Nếu theo tiếp: (a) thiết kế lại label GLiNER (few-shot hướng về "có giá trị cụ thể", không
+chỉ từ khái niệm) rồi chạy lại harness; (b) threshold riêng theo từng label thay vì 1 ngưỡng
+chung. Lựa chọn rủi ro thấp hơn trước mắt: dùng GLiNER như **soft signal** (giống `pii` flag của
+classifier — chỉ log/audit, không chặn) ở threshold vừa (~0.6–0.7), không cần giải quyết vấn đề
+label trước. Vấn đề kiến trúc (torch trong runtime numpy-only air-gap) vẫn treo, độc lập với kết
+quả accuracy này. Chi tiết đầy đủ: `evals/sanitize/report-pii-hybrid-2026-09-01.md`.
+
+## 8. Ghi chú kiến trúc
 
 Không thay kiến trúc: **Prompt Guard 2** (mDeBERTa 86M) [7] không hỗ trợ tiếng Việt chính thức + cần
 torch trong serving (trái ràng buộc numpy-only air-gap). Embedding + numpy head song ngữ hiện tại là
