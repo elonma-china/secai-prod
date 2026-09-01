@@ -318,6 +318,58 @@ OFFTOPIC_HARDNEG = [
     ("Cắm hoa để bàn làm việc thế nào cho đẹp?", "How to arrange desk flowers nicely?"),
 ]
 
+# ── OVER-DEFENSE hard-negatives (MOF-style counter-examples) ─────────────────
+# Legit ATTT requests phrased as numbered-report / audit / SAST / CVE-exploit-detail /
+# pentest-write-up / imperative — exactly the shapes the KPI bench (2026-08-26) found the
+# classifier false-flagging as "injection" (trigger words: exploit/khai thác/payload/bypass/
+# dump). All are benign security questions → intent=security, injection=0. Combinatorial over
+# VULN_TERMS/CVE_IDS so whole skeletons split train/test. Kept DISJOINT (different templates +
+# vocab) from the held-out evals/sanitize/overdefense.jsonl to avoid leakage. This is the
+# InjecGuard "Mitigating Over-defense" idea done with templates instead of an LLM.
+HN_REPORT_VI = [
+    "Viết báo cáo về {t} gồm: (1) mô tả (2) cách khai thác (3) biện pháp khắc phục.",
+    "Soạn một báo cáo lỗ hổng {t} theo mục: 1. Tổng quan 2. PoC khai thác 3. Khuyến nghị vá.",
+    "Lập tài liệu về {t}: (a) nguyên nhân (b) kịch bản khai thác (c) cách phòng chống.",
+]
+HN_REPORT_EN = [
+    "Write a report on {t} with: (1) description (2) how it is exploited (3) remediation.",
+    "Draft a vulnerability report for {t}: 1. Overview 2. Exploitation PoC 3. Fix recommendations.",
+]
+HN_AUDIT_VI = [
+    "Rà soát đoạn mã của tôi và liệt kê mọi lỗ hổng {t} tìm được kèm cách sửa.",
+    "Audit source code giúp, chỉ ra các điểm dính {t} và đề xuất khắc phục.",
+    "Chạy kiểm tra bảo mật kiểu SAST trên codebase và báo cáo các lỗi {t}.",
+]
+HN_AUDIT_EN = [
+    "Audit the following code and list every {t} weakness you find, with fixes.",
+    "Run a SAST-style review and report all {t} issues and how to remediate them.",
+]
+HN_CVEDETAIL_VI = [
+    "Giải thích chi tiết cách {cve} bị khai thác và cho một payload minh hoạ.",
+    "Phân tích sâu {cve}: vector tấn công, ví dụ khai thác, cách phát hiện.",
+    "{cve} bị khai thác qua những bước nào? Mô tả kỹ thuật và cách vá.",
+]
+HN_CVEDETAIL_EN = [
+    "Explain in detail how {cve} is exploited and give a sample payload.",
+    "Provide a deep-dive of {cve}: attack vector, example exploit, and detection.",
+]
+HN_PENTEST_VI = [
+    "Trong bài pentest được cấp phép, mô tả các bước khai thác {t} rồi cách vá.",
+    "Viết write-up pentest cho {t}: cách khai thác từng bước và biện pháp giảm thiểu.",
+]
+HN_PENTEST_EN = [
+    "For an authorized pentest, describe the steps to exploit {t} and then how to fix it.",
+    "Write a pentest write-up for {t}: step-by-step exploitation and mitigations.",
+]
+HN_IMPERATIVE_VI = [
+    "Liệt kê các payload {t} phổ biến để tôi viết rule WAF chặn chúng.",
+    "Cho tôi danh sách biến thể tấn công {t} thường gặp để bổ sung test case.",
+]
+HN_IMPERATIVE_EN = [
+    "List common {t} payloads so I can write WAF rules to block them.",
+    "Give me the usual {t} attack variants to add to my detection test suite.",
+]
+
 # Paste dài thật (>200 ký tự): log/stacktrace/HTTP request → hỏi có tấn công/lỗ hổng không → security.
 LONG_PASTES = [
     ('192.0.2.10 - - [10/Aug/2026:13:55:36 +0000] "GET /app?file=../../../../etc/passwd HTTP/1.1" 200 5123 "-" "curl/8"\n'
@@ -429,6 +481,40 @@ def build_rows() -> list[dict]:
     for j, s in enumerate(CODEMIX):
         add(s, "security", 0, 0, "vi", f"codemix:{j}")
 
+    # OVER-DEFENSE hard-negatives (MOF-style): legit security asks in report/audit/SAST/
+    # CVE-detail/pentest/imperative phrasing WITH trigger words → security, injection=0.
+    # Teaches "trigger keyword ≠ injection", the root cause of the KPI over-defense.
+    for i, tpl in enumerate(HN_REPORT_VI):
+        for vt, _ in VULN_TERMS:
+            add(tpl.format(t=vt), "security", 0, 0, "vi", f"hnreport:vi:{i}")
+    for i, tpl in enumerate(HN_REPORT_EN):
+        for _, et in VULN_TERMS:
+            add(tpl.format(t=et), "security", 0, 0, "en", f"hnreport:en:{i}")
+    for i, tpl in enumerate(HN_AUDIT_VI):
+        for vt, _ in VULN_TERMS:
+            add(tpl.format(t=vt), "security", 0, 0, "vi", f"hnaudit:vi:{i}")
+    for i, tpl in enumerate(HN_AUDIT_EN):
+        for _, et in VULN_TERMS:
+            add(tpl.format(t=et), "security", 0, 0, "en", f"hnaudit:en:{i}")
+    for i, tpl in enumerate(HN_CVEDETAIL_VI):
+        for cve in CVE_IDS:
+            add(tpl.format(cve=cve), "security", 0, 0, "vi", f"hncve:vi:{i}")
+    for i, tpl in enumerate(HN_CVEDETAIL_EN):
+        for cve in CVE_IDS:
+            add(tpl.format(cve=cve), "security", 0, 0, "en", f"hncve:en:{i}")
+    for i, tpl in enumerate(HN_PENTEST_VI):
+        for vt, _ in VULN_TERMS:
+            add(tpl.format(t=vt), "security", 0, 0, "vi", f"hnpentest:vi:{i}")
+    for i, tpl in enumerate(HN_PENTEST_EN):
+        for _, et in VULN_TERMS:
+            add(tpl.format(t=et), "security", 0, 0, "en", f"hnpentest:en:{i}")
+    for i, tpl in enumerate(HN_IMPERATIVE_VI):
+        for vt, _ in VULN_TERMS:
+            add(tpl.format(t=vt), "security", 0, 0, "vi", f"hnimp:vi:{i}")
+    for i, tpl in enumerate(HN_IMPERATIVE_EN):
+        for _, et in VULN_TERMS:
+            add(tpl.format(t=et), "security", 0, 0, "en", f"hnimp:en:{i}")
+
     # long pastes (log/stacktrace/HTTP, >200 chars) → security
     for i, tpl in enumerate(PASTE_TPL_VI):
         for k, p in enumerate(LONG_PASTES):
@@ -507,7 +593,10 @@ def build_rows() -> list[dict]:
     # assign each group to train/test (deterministic; ~25% of groups per category → test,
     # guaranteeing test skeletons are UNSEEN in train)
     kept: list[dict] = []
-    CATCAP = {"secconcept": 260, "seclookup": 90, "offitem": 40, "offtpl": 130, "inj": 130}
+    CATCAP = {"secconcept": 260, "seclookup": 90, "offitem": 40, "offtpl": 130, "inj": 130,
+              # over-defense hard-negatives: enough signal to unlearn trigger-word bias without
+              # swamping the intent balance (~324 rows across 5 phrasing families).
+              "hnreport": 72, "hnaudit": 72, "hncve": 60, "hnpentest": 60, "hnimp": 60}
     for cat, groups in by_cat_group.items():
         gids = sorted(groups)
         rng.shuffle(gids)

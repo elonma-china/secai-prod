@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import asynccontextmanager
 
@@ -9,7 +10,10 @@ from fastapi import FastAPI
 from .agent import CompletionRunner, LinchRunner
 from .api import configure_middleware, register_routes
 from .config import Settings, get_settings
+from .sanitize.classifier import load_head, startup_head_check
 from .state import FixedWindowRateLimiter
+
+logger = logging.getLogger(__name__)
 
 
 class GatewayState:
@@ -35,6 +39,14 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.gateway = state
+        # Boot-time self-check: warn loudly if the input classifier will silently fail open
+        # (missing/untrained head, or head trained on a different embedding model than the one
+        # this deployment sends). Otherwise the guard is quietly OFF while /health says ok.
+        if getattr(state.settings, "input_classifier_enabled", True):
+            warn = startup_head_check(load_head(state.settings),
+                                      getattr(state.settings, "embedding_model", ""))
+            if warn:
+                logger.warning(warn)
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(30.0),
             limits=httpx.Limits(max_keepalive_connections=32, keepalive_expiry=60.0),
