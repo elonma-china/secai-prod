@@ -220,6 +220,15 @@ _PREFETCH_APPENDIX_BUDGET = 3000
 _WEB_HINTS_APPENDIX_BUDGET = 12000
 
 
+def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
+    """Pure decision for /health's ``status`` field. Degraded when the LLM is unreachable OR
+    the input classifier has been failing open on more than half its calls over a real sample
+    (``total>=20`` — a small/cold-start sample shouldn't flip status on one or two unlucky
+    calls). Separate function so this can be unit-tested without a live LLM/httpx round trip."""
+    sanitize_degraded = sanitize_stats.get("total", 0) >= 20 and sanitize_stats.get("unknown_rate", 0.0) > 0.5
+    return "ok" if (qwen_ok and not sanitize_degraded) else "degraded"
+
+
 def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
     """Truncated, path-labelled dump of the fetched PoC bytes (README/entry first) — enough
     for the model to write Mục 2/3, not the whole repo (that is Section 1's job)."""
@@ -1643,7 +1652,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
             redis_status = "connected" if await store.ping() else "unreachable"
         else:
             redis_status = "memory-dev"
-        return {"status": "ok" if qwen_ok else "degraded", "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit}
+        # Ư4: surface the input-classifier fail-open rate here too, not just as a WARNING log
+        # line — this is exactly the CLAUDE.md-documented failure mode (guard silently disabled,
+        # /health said ok) that fail-open observability was built to catch. A high unknown_rate
+        # over a real sample means the guard is bypassed on most requests right now.
+        sanitize_stats = verdict_stats()
+        status = _health_status(qwen_ok, sanitize_stats)
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:
