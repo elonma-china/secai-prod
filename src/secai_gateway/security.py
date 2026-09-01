@@ -224,3 +224,36 @@ def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
     """
     return neutralize_active_content(remove_chinese_content(
         strip_meta_narration(strip_tool_call_echoes(strip_reasoning_leak(text)))))
+
+
+# ── Untrusted-content spotlighting (indirect prompt-injection defense) ──────────
+# Retrieved/fetched text (KB search hits, web/GitHub fetches, PoC source/README, evidence
+# appendices) can carry adversarial instructions riding along as data — "indirect" prompt
+# injection, since it never appears in the user's own message (the pre-agent chat gate in
+# sanitize/ never sees it). Wrapping it in an explicit delimiter tag — paired with
+# <untrusted_content_policy> in prompts/base_system.md — gives the model a structural
+# boundary between trusted instructions and untrusted data instead of relying on prose
+# framing alone. Used by agent/hooks.py (tool-call results) and api/routes.py (the
+# deterministic prefetch/web-hints/consolidated prompt appendices).
+UNTRUSTED_CONTENT_TAG = "untrusted_retrieved_content"
+_FORGED_DELIM_RE = re.compile(r"</?" + UNTRUSTED_CONTENT_TAG + r"(?:\s[^>]*)?>", re.IGNORECASE)
+
+
+def _xml_attr(value: str) -> str:
+    return (value.replace("&", "&amp;").replace('"', "&quot;")
+            .replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def wrap_untrusted_content(text: str, *, source: str) -> str:
+    """Wrap externally-sourced text in an explicit untrusted-content delimiter.
+
+    Any literal occurrence of the delimiter tag ALREADY inside ``text`` is neutralized first
+    (angle-escaped) so attacker-controlled content cannot forge a closing tag and "escape" the
+    boundary — a known weakness of naive delimiter-only spotlighting. No-op on empty text.
+    """
+    if not text:
+        return text
+    neutralized = _FORGED_DELIM_RE.sub(
+        lambda m: m.group(0).replace("<", "&lt;").replace(">", "&gt;"), text)
+    return (f'<{UNTRUSTED_CONTENT_TAG} source="{_xml_attr(source)}">\n{neutralized}\n'
+            f'</{UNTRUSTED_CONTENT_TAG}>')

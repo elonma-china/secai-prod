@@ -14,13 +14,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
-from linch.hooks.types import HookResult
+from linch.hooks.types import HookResult, ToolResult
 
 from ..poc.inject import has_real_code_evidence, has_synthesis_evidence, section1_has_body
 from ..poc.prefetch import (
     COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known,
     get_session_real_code_evidence, get_session_synthesis_evidence,
 )
+from ..security import wrap_untrusted_content
 
 _MAX_TRACKED_RUNS = 20000
 # Numbered-heading match for Mục 2/Mục 3, mirroring poc/inject.py's own `_H1` pattern
@@ -591,3 +592,60 @@ class RequireChatGroundingHook:
             )
             reason = "chat_kb_required"
         return HookResult.force_continue(feedback, reason=reason)
+
+
+# Tools whose result content is externally-sourced (KB text ingested from public feeds, live
+# web/GitHub fetches, PoC catalog source/README, scan output from a user-specified target) and
+# must therefore be spotlighted as untrusted before it reaches the model — see
+# security.wrap_untrusted_content and <untrusted_content_policy> in prompts/base_system.md.
+#
+# NOTE: ``poc_search`` is deliberately EXCLUDED even though its catalog hits are externally-
+# sourced metadata: RequireSearchBeforeAnswerHook.on_post_tool_use (above) does
+# ``json.loads(ctx.result.content)`` on that exact tool's result to check for a non-empty
+# ``hits`` list. Wrapping it in a delimiter would break that json.loads for any post_tool_use
+# hook dispatched after this one (currently safe only because this hook is registered LAST in
+# agent/factory.py — an ordering an unrelated future change could easily invalidate). The
+# higher-value target — actual PoC source/README bytes — is ``poc_fetch``, which no hook
+# re-parses as JSON, so it stays wrapped.
+UNTRUSTED_CONTENT_TOOLS = (
+    "qdrant_search", "neo4j_search", "web_fetch", "fetch_reference", "web_search", "poc_fetch",
+)
+
+
+class SanitizeToolResultHook:
+    """Wrap untrusted-tool results in an explicit delimiter (indirect prompt-injection defense).
+
+    Retrieved/fetched content can carry adversarial instructions riding along as data — this
+    never touches the pre-agent chat gate (``sanitize/``), which only ever sees the user's own
+    message. Mutating the tool result post-execution is the one place that reaches every
+    profile/endpoint sharing the gateway's single Agent (see agent/factory.py), without
+    touching the tool functions themselves (so their own unit tests, which assert on the raw
+    formatted shape, are unaffected).
+
+    Skips error results (system-generated feedback, not attacker-controlled content) and empty
+    content. Idempotent in effect: re-wrapping already-wrapped content is only cosmetically
+    redundant, never a correctness issue.
+    """
+
+    name = "sanitize_tool_result"
+
+    async def on_post_tool_use(self, ctx: PostToolUseContext) -> HookResult | None:
+        if ctx.tool_name not in UNTRUSTED_CONTENT_TOOLS:
+            return None
+        result = ctx.result
+        if result is None or result.is_error or not result.content:
+            return None
+        wrapped = wrap_untrusted_content(result.content, source=ctx.tool_name)
+        if wrapped == result.content:
+            return None
+        return HookResult.mutate(tool_result=ToolResult(
+            content=wrapped,
+            summary=result.summary,
+            is_error=result.is_error,
+            metadata=result.metadata,
+            citations=result.citations,
+            attachments=result.attachments,
+            duration_ms=result.duration_ms,
+            truncated=result.truncated,
+            recovery_hint=result.recovery_hint,
+        ))

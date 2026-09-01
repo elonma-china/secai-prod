@@ -16,6 +16,7 @@ from .hooks import (
     RequireRunInstructionsHook,
     RequireSearchBeforeAnswerHook,
     RequireSection1SynthesisHook,
+    SanitizeToolResultHook,
     ToolCallBudgetHook,
 )
 from .profiles import compose_system_prompt
@@ -57,6 +58,7 @@ def make_gateway_agent(
             RequireSection1SynthesisHook(ledger=ledger, profile="exploit_research"),
             RequireRunInstructionsHook(ledger=ledger, profile="exploit_research"),
             RequireChatGroundingHook(profile="chat"),
+            SanitizeToolResultHook(),
         ],
         compaction_ladder=CompactionLadder(),
         max_turns=s.step_cap,
