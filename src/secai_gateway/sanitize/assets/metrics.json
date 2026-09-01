@@ -1,0 +1,95 @@
+{
+  "embed_model": "DuyTa/sec-embedding",
+  "dim": 1024,
+  "backend": "st",
+  "n_train": 1262,
+  "n_test": 508,
+  "intent": {
+    "security": {
+      "precision": 1.0,
+      "recall": 0.9787,
+      "f1": 0.9892,
+      "tp": 367,
+      "fp": 0,
+      "fn": 8
+    },
+    "chitchat": {
+      "precision": 0.9286,
+      "recall": 1.0,
+      "f1": 0.963,
+      "tp": 26,
+      "fp": 2,
+      "fn": 0
+    },
+    "offtopic": {
+      "precision": 0.9292,
+      "recall": 0.9813,
+      "f1": 0.9545,
+      "tp": 105,
+      "fp": 8,
+      "fn": 2
+    }
+  },
+  "intent_accuracy": 0.9803,
+  "intent_confusion": {
+    "labels": [
+      "security",
+      "chitchat",
+      "offtopic"
+    ],
+    "matrix": [
+      [
+        367,
+        0,
+        8
+      ],
+      [
+        0,
+        26,
+        0
+      ],
+      [
+        0,
+        2,
+        105
+      ]
+    ]
+  },
+  "injection": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 60,
+    "fp": 0,
+    "fn": 0
+  },
+  "pii": {
+    "precision": 0.9817,
+    "recall": 0.964,
+    "f1": 0.9727,
+    "tp": 107,
+    "fp": 2,
+    "fn": 4
+  },
+  "offtopic_decision": {
+    "precision": 0.9904,
+    "recall": 0.9626,
+    "f1": 0.9763,
+    "tp": 103,
+    "fp": 1,
+    "fn": 4
+  },
+  "macro_f1": 0.9759,
+  "thresholds": {
+    "injection": 0.7,
+    "pii": 0.2,
+    "offtopic": 0.661
+  },
+  "head_apply_latency_ms": {
+    "mean": 0.0465,
+    "p95": 0.0534
+  },
+  "train_intent_accuracy": 0.9992,
+  "head": "mixed",
+  "overfit_gap_intent_acc": 0.0189
+}
