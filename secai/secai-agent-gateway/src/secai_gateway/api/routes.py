@@ -44,7 +44,10 @@ from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..sanitize import classify_input, decide
 from ..sanitize.classifier import note_verdict, verdict_stats
-from ..security import neutralize_active_content, require_public_input, sanitize_output_language
+from ..security import (
+    neutralize_active_content, require_public_input, sanitize_output_language,
+    wrap_untrusted_content,
+)
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
     BughuntRequest,
@@ -264,7 +267,10 @@ def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
     sources = [f"{ev.get('source') or '?'}: {ev.get('url') or ev.get('source_ref') or ''}"
                for ev in evidence]
     sources_line = "Nguồn: " + " ; ".join(sources) + "\n"
-    body = "Nội dung (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+    # Externally-sourced (fetched PoC/advisory) bytes — spotlight as untrusted data, never
+    # instructions (indirect prompt-injection defense; see <untrusted_content_policy>).
+    body = ("Nội dung (đã cắt bớt theo giới hạn):\n"
+            + wrap_untrusted_content(preview, source="poc_prefetch") + "\n]")
     if has_real_code_evidence(evidence):
         return (
             "\n\n[Hệ thống đã tìm thấy PoC khai thác công khai đã xác thực cho lỗ hổng này qua "
@@ -327,7 +333,8 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
         "được PoC thật. Một đoạn phân tích trung thực còn hữu ích hơn một đoạn code trông giống "
         "thật nhưng không dựa trên gì cả.\n"
         "Nguồn tham khảo:\n- " + "\n- ".join(sources) + "\n"
-        "Nội dung trang tham khảo (đã cắt bớt):\n" + preview + "\n]"
+        "Nội dung trang tham khảo (đã cắt bớt):\n"
+        + wrap_untrusted_content(preview, source="web_hints") + "\n]"
     )
 
 
@@ -505,7 +512,8 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         readme_ground = (
             "\nTÀI LIỆU HƯỚNG DẪN CHẠY THẬT của tác giả PoC (README/hướng dẫn gốc đã fetch)"
             f"{readme_cut} — DỊCH lại thành Mục 2 bằng tiếng Việt, bám ĐÚNG các lệnh/tham số/cổng/"
-            "tiền đề trong đó, không bịa thêm:\n---\n" + readme_preview + "\n---"
+            "tiền đề trong đó, không bịa thêm:\n---\n"
+            + wrap_untrusted_content(readme_preview, source="consolidated_poc_readme") + "\n---"
         )
     else:
         readme_ground = ""
@@ -519,7 +527,7 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         f"phiên bản/cờ dòng lệnh không tồn tại.{readme_ground}{cli_ground} "
         "Giữ air-gap: không tải/clone/cài từ internet.\n"
         f"Mã tệp `{name}`{cut_note} (KHÔNG chép lại vào câu trả lời):\n"
-        + preview + "\n]"
+        + wrap_untrusted_content(preview, source="consolidated_poc") + "\n]"
     )
 
 

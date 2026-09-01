@@ -96,12 +96,55 @@ quan — lỗi XML sẵn có trong `prompts/`, không nằm trong diff của đ�
   (neural, recall). Lưu ý GLiNER cần torch → không hợp runtime numpy-only air-gap; trước mắt giữ
   `require_public_input` + đo đúng qua harness.
 
-## 4. Gap chưa cover: indirect prompt injection
+## 4. Indirect prompt injection — spotlighting đã triển khai (2026-09-01)
 
-Classifier chỉ gác **input user**. Payload nhúng trong **doc KB / output tool** (RAG) không đi qua nó —
-severity cao hơn (1 doc độc ảnh hưởng nhiều user, bypass input defense) [5][6]. Hướng trung hạn:
-spotlighting/delimiter cho nội dung retrieve, **tool-result parsing** [6], hoặc kiến trúc **CaMeL**
-(tách kênh instruction/data) [5]. `indirect.jsonl` theo dõi gap này (hệ hiện tại dự kiến miss).
+Classifier chỉ gác **input user**; payload nhúng trong **doc KB / output tool** (RAG) không đi qua nó —
+severity cao hơn (1 doc độc ảnh hưởng nhiều user, bypass input defense) [5][6]. Khảo sát kiến trúc
+(agent dùng chung 1 `linch.Agent` cho cả 5 endpoint) tìm ra **2 đường** nội dung không tin cậy vào
+context LLM, không chỉ 1:
+
+- **(A) Tool-call loop**: `qdrant_search`/`neo4j_search`/`web_fetch`/`fetch_reference`/`web_search`/
+  `poc_fetch` — `linch` không sanitize gì, string thô đi thẳng vào lịch sử hội thoại.
+- **(B) Prompt-splicing riêng trong `routes.py`**: `_prefetch_prompt_appendix`/
+  `_web_hints_prompt_appendix`/`_consolidated_prompt_appendix` nối **trực tiếp vào user prompt
+  string** trước khi agent chạy, bypass hoàn toàn tool loop — đường mang raw GitHub PoC/README, theo
+  khảo sát là điểm chạm nguy hiểm nhất, và (A) không che được đường này.
+
+**Đã triển khai — spotlighting (A+B+C), không dùng lại classifier** (rủi ro over-defense mới vì nội
+dung KB/PoC vốn chứa đầy từ khóa exploit/payload):
+
+- `security.wrap_untrusted_content()`: bọc nội dung ngoại lai trong thẻ
+  `<untrusted_retrieved_content source="...">...</untrusted_retrieved_content>`; tự neutralize (angle-
+  escape) mọi thẻ delimiter giả mạo bên trong content trước khi bọc — chặn kiểu tấn công "forge closing
+  tag để thoát khỏi boundary" (điểm yếu kinh điển của spotlighting thuần delimiter).
+- **(A)** `agent.hooks.SanitizeToolResultHook` — hook `on_post_tool_use` mới, đăng ký cuối danh sách
+  hook trong `agent/factory.py` (áp dụng tự động cho cả 5 endpoint qua 1 Agent dùng chung, không sửa
+  từng tool function nên test hiện có của các tool không bị ảnh hưởng). **Loại trừ `poc_search`**: nó
+  trả JSON được `RequireSearchBeforeAnswerHook` `json.loads()` lại để check `hits` — bọc sẽ phá parse
+  đó cho bất kỳ hook nào chạy sau (an toàn hôm nay chỉ vì hook mới đặt cuối list, một ràng buộc thứ tự
+  dễ vỡ) — giữ `poc_fetch` (mang source/README PoC thật, mục tiêu giá trị cao hơn).
+- **(B)** wrap trực tiếp tại 4 điểm nối nội dung ngoại lai trong `routes.py`: `_prefetch_prompt_appendix`
+  (`source="poc_prefetch"`), `_web_hints_prompt_appendix` (`source="web_hints"`),
+  `_consolidated_prompt_appendix` (2 chỗ: `source="consolidated_poc"` cho code,
+  `source="consolidated_poc_readme"` cho README) — khung chỉ thị hệ thống (Vietnamese, "KHÔNG viết Mục
+  1"...) vẫn nằm NGOÀI thẻ, chỉ bytes ngoại lai bị bọc.
+- **(C)** `<untrusted_content_policy priority="highest">` mới trong `prompts/base_system.md` (sau
+  `<grounding_policy>`): dạy model coi nội dung trong thẻ là DATA, không bao giờ là chỉ thị, kể cả khi
+  tự xưng "hệ thống"/"developer".
+
+Test mới: `tests/test_sanitize_tool_result_hook.py` (hook, theo pattern
+`test_chat_grounding_hook.py`), `tests/test_security.py` (wrap function + neutralize forged tag),
+`tests/test_gateway.py`/`tests/test_websearch.py` (appendix wrapping, xác nhận nội dung ngoại lai nằm
+đúng trong cặp thẻ còn khung chỉ thị nằm ngoài). Regression: test tool-formatting hiện có
+(`test_qdrant_fastpath.py`, `test_web_fetch.py`, `test_fetch_reference.py`, `test_fetch_tarball.py`,
+`test_github_kind.py`) xanh nguyên vẹn — vì hook chỉ mutate ở tầng dispatch của `linch`, không sửa các
+tool function mà những test đó gọi trực tiếp.
+
+`indirect.jsonl` (trong bộ eval classifier) tiếp tục là gap-tracker cho việc XÁC MINH phòng thủ này có
+hiệu quả không (chưa có harness đo end-to-end qua agent thật — hướng tiếp theo nếu cần). Hướng xa hơn
+vẫn là kiến trúc **CaMeL** (tách kênh instruction/data triệt để) [5] hoặc **tool-result parsing** có
+cấu trúc hơn [6] — spotlighting là phòng thủ theo lớp (defense-in-depth) rẻ, không phải giải pháp triệt
+để (mô hình vẫn đọc chung 1 chuỗi token, delimiter là tín hiệu mềm).
 
 ## 5. Ghi chú kiến trúc
 
