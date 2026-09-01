@@ -5,7 +5,9 @@ import re
 from collections import OrderedDict
 
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
-from linch.hooks.types import HookResult
+from linch.hooks.types import HookResult, ToolResult
+
+from ..security import wrap_untrusted_content
 
 _MAX_TRACKED_RUNS = 20000  # evict oldest (run_id, tool_name) counters once exceeded
 
@@ -226,3 +228,64 @@ class RequireRunInstructionsHook:
                      "tham số dòng lệnh trong mã nguồn) nhưng câu trả lời chưa có phần \"Cách chạy "
                      "PoC\". Hãy bổ sung, dịch/tóm tắt đúng nội dung thật đã có trong bằng chứng — "
                      "không suy đoán thêm bước hay tham số không có căn cứ.")
+
+
+# Tools whose result content is externally-sourced (KB text ingested from public feeds, PoC
+# catalog source/README) and must therefore be spotlighted as untrusted before it reaches the
+# model — see security.wrap_untrusted_content and <untrusted_content_policy> in
+# prompts/base_system.md.
+#
+# Scoped to what this deployment's tool registry (agent/runner.py::LinchRunner.__init__)
+# actually wires up today: qdrant_search, neo4j_search, poc_fetch. If web_fetch/fetch_reference/
+# web_search or a bughunt tool surface are ever added here, add their tool names to this tuple
+# too — a prior pass on a sibling branch shipped this hook without bughunt coverage at first and
+# had to patch it in as a follow-up fix; don't repeat that gap.
+#
+# NOTE: ``poc_search`` is deliberately EXCLUDED even though its catalog hits are externally-
+# sourced metadata: RequireSearchBeforeAnswerHook.on_post_tool_use (above) does
+# ``json.loads(ctx.result.content)`` on that exact tool's result to check for a non-empty
+# ``hits`` list. Wrapping it in a delimiter would break that json.loads for any post_tool_use
+# hook dispatched after this one (currently safe only because this hook is registered LAST in
+# agent/factory.py — an ordering an unrelated future change could easily invalidate). The
+# higher-value target — actual PoC source/README bytes — is ``poc_fetch``, which no hook
+# re-parses as JSON, so it stays wrapped.
+UNTRUSTED_CONTENT_TOOLS = ("qdrant_search", "neo4j_search", "poc_fetch")
+
+
+class SanitizeToolResultHook:
+    """Wrap untrusted-tool results in an explicit delimiter (indirect prompt-injection defense).
+
+    Retrieved/fetched content can carry adversarial instructions riding along as data — this
+    never touches the pre-agent chat gate (``sanitize/``), which only ever sees the user's own
+    message. Mutating the tool result post-execution is the one place that reaches every
+    profile/endpoint sharing the gateway's single Agent (see agent/factory.py), without
+    touching the tool functions themselves (so their own unit tests, which assert on the raw
+    formatted shape, are unaffected).
+
+    Skips error results (system-generated feedback, not attacker-controlled content) and empty
+    content. Idempotent in effect: re-wrapping already-wrapped content is only cosmetically
+    redundant, never a correctness issue.
+    """
+
+    name = "sanitize_tool_result"
+
+    async def on_post_tool_use(self, ctx: PostToolUseContext) -> HookResult | None:
+        if ctx.tool_name not in UNTRUSTED_CONTENT_TOOLS:
+            return None
+        result = ctx.result
+        if result is None or result.is_error or not result.content:
+            return None
+        wrapped = wrap_untrusted_content(result.content, source=ctx.tool_name)
+        if wrapped == result.content:
+            return None
+        return HookResult.mutate(tool_result=ToolResult(
+            content=wrapped,
+            summary=result.summary,
+            is_error=result.is_error,
+            metadata=result.metadata,
+            citations=result.citations,
+            attachments=result.attachments,
+            duration_ms=result.duration_ms,
+            truncated=result.truncated,
+            recovery_hint=result.recovery_hint,
+        ))

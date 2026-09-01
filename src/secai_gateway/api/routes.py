@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import logging
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import Annotated, Any
 from uuid import uuid4
 
@@ -21,6 +22,8 @@ from ..poc import (
     prefetch_evidence,
     strip_system_narration,
 )
+from ..sanitize import classify_input, decide, judge_injection
+from ..sanitize.classifier import note_verdict, verdict_stats
 from ..security import require_public_input, sanitize_output_language
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import LegacyRequest
@@ -34,6 +37,15 @@ logger = logging.getLogger(__name__)
 STREAM_ERROR_MESSAGE = (
     "Xin lỗi, trợ lý đang gặp sự cố tạm thời nên chưa thể trả lời. Vui lòng thử lại sau giây lát."
 )
+
+
+def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
+    """Pure decision for /health's ``status`` field. Degraded when the LLM is unreachable OR
+    the input classifier has been failing open on more than half its calls over a real sample
+    (``total>=20`` — a small/cold-start sample shouldn't flip status on one or two unlucky
+    calls). Separate function so this can be unit-tested without a live LLM/httpx round trip."""
+    sanitize_degraded = sanitize_stats.get("total", 0) >= 20 and sanitize_stats.get("unknown_rate", 0.0) > 0.5
+    return "ok" if (qwen_ok and not sanitize_degraded) else "degraded"
 
 
 def _chat_session_id(body: LegacyRequest) -> str:
@@ -105,15 +117,127 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
+    def _audit(run_id: str, tool_name: str, key_material: str, meta: dict[str, Any]) -> None:
+        """Audit line for the input-sanitize gate — parallel to ledger.audit_once's use
+        elsewhere, so any block/PII hit leaves a who/when/what trail. Fail-open — audit
+        failures must never break the request."""
+        ledger = getattr(state.runner, "ledger", None)
+        if ledger is None:
+            return
+        try:
+            ledger.audit_once(f"{run_id}:audit", run_id, tool_name,
+                              hashlib.sha256(key_material.encode()).hexdigest(), meta)
+        except Exception:
+            logger.exception("audit log failed run_id=%s tool=%s", run_id, tool_name)
+
+    async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
+        """Model-based input sanitization for the chat path (runs BEFORE the agent).
+
+        Embeds the prompt with the deployed sec-embedding model and applies the numpy head
+        (secai_gateway.sanitize) to classify intent + risk. Returns a short-circuit
+        ``(refusal_text, metadata)`` when the classifier blocks (injection / off-topic), or
+        ``None`` to let the agent answer. FAIL-OPEN: any classifier error/unavailability, or
+        the feature being disabled, returns ``None`` (pass through). Scoped to /ai/chat only —
+        translate/report/exploit have their own (different) input shapes and are not gated
+        here by design."""
+        if not getattr(state.settings, "input_classifier_enabled", True):
+            return None
+        run_id = uuid4().hex
+        try:
+            verdict = await classify_input(prompt, settings=state.settings,
+                                           client=getattr(state, "http_client", None))
+            # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
+            # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
+            # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
+            # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
+            # straight back to the classifier's own threshold decision — never a new failure
+            # mode. See sanitize/cascade.py.
+            if (verdict.ok and verdict.injection_uncertain
+                    and getattr(state.settings, "injection_cascade_enabled", False)):
+                # Prefer the calibrated score (the one band-membership was actually decided on)
+                # if shipped; falls back to the raw score for display when it isn't.
+                cascade_score = verdict.scores.get("injection_calibrated",
+                                                   verdict.scores.get("injection", 0.0))
+                judge_verdict = await judge_injection(
+                    state.runner, prompt, cascade_score,
+                    timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                if judge_verdict is not None:
+                    logger.info(
+                        "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
+                        "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
+                    verdict = replace(verdict, injection=judge_verdict)
+            decision = decide(verdict, state.settings)
+        except Exception:  # a guard must never break chat
+            logger.exception("input classifier failed → fail-open")
+            return None
+
+        classification = {
+            "label": decision.label,
+            "action": decision.action.value,
+            "blocked": decision.short_circuit,
+            "pii": decision.pii,
+            "scores": {k: round(v, 4) for k, v in verdict.scores.items()},
+            "latency_ms": round(verdict.latency_ms, 1),
+        }
+        # Fail-open observability: a verdict that is not ``ok`` means the guard was bypassed
+        # (embed down / embed-model mismatch / timeout). That is safe but SILENT, so surface it
+        # at WARNING with the running unknown-rate rather than only INFO (see CLAUDE.md incident).
+        note_verdict(verdict.ok)
+        if not verdict.ok:
+            st = verdict_stats()
+            logger.warning("input-sanitize FAIL-OPEN run_id=%s reason=%s unknown_rate=%.3f (%d/%d)",
+                           run_id, verdict.reason, st["unknown_rate"], st["unknown"], st["total"])
+        logger.info("input-sanitize run_id=%s verdict=%s action=%s latency_ms=%.1f",
+                    run_id, verdict.summary(), decision.action.value, verdict.latency_ms)
+        # Persist an audit line (digest, not plaintext) for any block or PII hit.
+        if decision.short_circuit or decision.pii:
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": decision.label, "action": decision.action.value, "pii": decision.pii})
+
+        if not decision.short_circuit:
+            return None
+        metadata = {
+            "run_id": run_id, "profile": "chat",
+            "tool_registry": sorted(registry_for("chat")),
+            "input_classification": classification, "short_circuit": True,
+        }
+        return decision.message, metadata
+
+    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+        """SSE response for a classifier short-circuit: one token + one final, then DONE
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        async def gen() -> AsyncIterator[bytes]:
+            yield sse_frame("token", {"delta": message})
+            yield sse_frame("final", {"content": message, "answer": message,
+                                      "message": message, "metadata": metadata})
+            yield b"data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
     @app.post("/chat_no_stream")
     @app.post("/ai/chat")
     async def chat(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await complete("chat", body, chat=True)
+        prompt = require_public_input(body.supplied_text())
+        gated = await _chat_gate(prompt)
+        if gated:
+            message, metadata = gated
+            return {"response": message, "answer": message, "message": message, "metadata": metadata}
+        session_id = _chat_session_id(body)
+        try:
+            text, metadata = await state.runner.complete("chat", prompt, session_id)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
+        text = sanitize_output_language(text)
         return {"response": text, "answer": text, "message": text, "metadata": metadata}
 
     @app.post("/ai/chat/stream")
     async def chat_stream(body: LegacyRequest) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
+        gated = await _chat_gate(text)
+        if gated:
+            message, metadata = gated
+            return _short_circuit_stream(message, metadata)
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -269,7 +393,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
             redis_status = "connected" if await store.ping() else "unreachable"
         else:
             redis_status = "memory-dev"
-        return {"status": "ok" if qwen_ok else "degraded", "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit}
+        # Ư4: surface the input-classifier fail-open rate here too, not just as a WARNING log
+        # line — this is exactly the CLAUDE.md-documented failure mode (guard silently disabled,
+        # /health said ok) that fail-open observability was built to catch.
+        sanitize_stats = verdict_stats()
+        status = _health_status(qwen_ok, sanitize_stats)
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:

@@ -1,4 +1,8 @@
-"""SanitizeToolResultHook — indirect prompt-injection defense (spotlight untrusted tool results)."""
+"""SanitizeToolResultHook — indirect prompt-injection defense (spotlight untrusted tool results).
+
+Scoped to what this deployment actually has: UNTRUSTED_CONTENT_TOOLS here is
+(qdrant_search, neo4j_search, poc_fetch) only — no bughunt/, web_fetch, or fetch_reference on
+this branch (see agent/hooks.py's own note on where to extend the tuple if those land later)."""
 from __future__ import annotations
 
 import asyncio
@@ -54,26 +58,6 @@ def test_ignores_tool_not_in_untrusted_set():
     assert _run(hook.on_post_tool_use(ctx)) is None
 
 
-def test_bughunt_scan_tools_are_wrapped():
-    """Bughunt tools share the same gateway Agent (LinchRunner merges build_bughunt_tools()
-    into the one shared self.tools/self.agent) — probe/scan output from a user-specified,
-    potentially hostile target must be spotlighted just like web_fetch/qdrant_search."""
-    from secai_gateway.bughunt.tools import AGENT_TOOL_NAMES
-
-    hook = SanitizeToolResultHook()
-    for tool in ("bh_http_probe", "run_recon", "run_vuln_scan", "run_verify_leads",
-                 "run_sqlmap_targeted", "read_recon_summary", "read_findings_summary"):
-        ctx = _post(tool, "reflected payload from the live target")
-        result = _run(hook.on_post_tool_use(ctx))
-        assert result is not None and result.action == "mutate", tool
-
-    # update_working_memory/finish only echo the MODEL's own input, never target content.
-    for tool in ("update_working_memory", "finish"):
-        ctx = _post(tool, "model-authored text")
-        assert _run(hook.on_post_tool_use(ctx)) is None, tool
-        assert tool in AGENT_TOOL_NAMES  # sanity: tool name is real, not a typo
-
-
 def test_poc_search_excluded_json_stays_parseable():
     """RequireSearchBeforeAnswerHook.on_post_tool_use does json.loads(ctx.result.content) for
     poc_search — wrapping it in a delimiter would break that parse for any hook dispatched
@@ -91,7 +75,7 @@ def test_poc_search_excluded_json_stays_parseable():
 
 def test_skips_error_results():
     hook = SanitizeToolResultHook()
-    ctx = _post("web_fetch", "fetch failed: timeout", is_error=True)
+    ctx = _post("qdrant_search", "fetch failed: timeout", is_error=True)
     assert _run(hook.on_post_tool_use(ctx)) is None
 
 
@@ -105,7 +89,7 @@ def test_preserves_other_tool_result_fields():
     hook = SanitizeToolResultHook()
     ctx = PostToolUseContext(
         session=_FakeSession(meta={"profile": "chat"}),
-        run_id="r1", turn_index=0, tool_name="fetch_reference",
+        run_id="r1", turn_index=0, tool_name="qdrant_search",
         result=ToolResult(content="text", summary="my summary", is_error=False,
                           metadata={"k": "v"}, duration_ms=42, truncated=True,
                           recovery_hint="hint"),

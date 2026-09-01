@@ -10,7 +10,12 @@ from linch.loop_guard import LoopGuard
 
 from ..config import get_settings
 from ..poc.backend import _MAX_FETCH_PER_RUN
-from .hooks import RequireRunInstructionsHook, RequireSearchBeforeAnswerHook, ToolCallBudgetHook
+from .hooks import (
+    RequireRunInstructionsHook,
+    RequireSearchBeforeAnswerHook,
+    SanitizeToolResultHook,
+    ToolCallBudgetHook,
+)
 from .profiles import compose_system_prompt
 
 
@@ -59,6 +64,10 @@ def make_gateway_agent(
             RequireSearchBeforeAnswerHook(search_tool="poc_search", fetch_tool="poc_fetch",
                                           profile="exploit_research"),
             RequireRunInstructionsHook(ledger=ledger, profile="exploit_research"),
+            # Indirect prompt-injection defense: spotlight untrusted retrieved/tool content
+            # (see hooks.py::SanitizeToolResultHook + security.wrap_untrusted_content). Applies
+            # to every profile automatically since they share this one Agent.
+            SanitizeToolResultHook(),
         ],
         compaction_ladder=CompactionLadder(),
         max_turns=s.step_cap,

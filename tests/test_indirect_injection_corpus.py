@@ -2,13 +2,16 @@
 
 Runs a curated corpus of injection payloads (evals/indirect_injection/payloads.jsonl —
 override attempts, forged delimiters, roleplay/jailbreak framing, extraction, tool-abuse,
-encoded/obfuscated variants, conversation-forge, and edge cases) through BOTH untrusted-content
-paths this session's work added:
+encoded/obfuscated variants, conversation-forge, and edge cases) through the tool-call loop
+(SanitizeToolResultHook.on_post_tool_use) that spotlights untrusted retrieved/tool content.
 
-  (A) the tool-call loop — SanitizeToolResultHook.on_post_tool_use
-  (B) the routes.py prompt-splicing appendices — _prefetch_prompt_appendix
+NOTE: the sibling monorepo branch this was ported from also has a second untrusted-content path
+— routes.py's deterministic PoC-evidence prompt-splicing appendices (_prefetch_prompt_appendix
+et al.) — but that machinery (poc/prefetch.py's evidence gathering, Section-1 injection) isn't
+part of this port's scope; this deployment's routes.py doesn't have it at all yet. Only the
+tool-call-loop path is exercised here.
 
-for every payload, and asserts the MECHANISM holds: exactly one real delimiter pair survives
+For every payload, this asserts the MECHANISM holds: exactly one real delimiter pair survives
 (no forged tag inside the payload can escape the boundary), the payload's own text is still
 present (spotlighting must not silently drop content — the model needs to see and analyze it,
 just not obey it), and the trusted system framing around it stays outside the tag.
@@ -30,7 +33,6 @@ from linch.hooks.contexts import PostToolUseContext
 from linch.hooks.types import ToolResult
 
 from secai_gateway.agent.hooks import SanitizeToolResultHook, UNTRUSTED_CONTENT_TOOLS
-from secai_gateway.api.routes import _prefetch_prompt_appendix
 from secai_gateway.security import UNTRUSTED_CONTENT_TAG, wrap_untrusted_content
 
 CORPUS_PATH = Path(__file__).resolve().parents[1] / "evals" / "indirect_injection" / "payloads.jsonl"
@@ -92,21 +94,6 @@ def test_tool_result_hook_wraps_every_payload(row: dict) -> None:
         assert result is not None and result.action == "mutate", (row["id"], tool)
         content = result.tool_result.content
         assert content.count(OPEN_TAG) == 1 and content.count(CLOSE_TAG) == 1, (row["id"], tool)
-
-
-@pytest.mark.parametrize("row", [r for r in CORPUS if r["text"]], ids=lambda r: r["id"] if isinstance(r, dict) else "")
-def test_prefetch_appendix_wraps_every_payload_path_b(row: dict) -> None:
-    """Path (B): every payload, as fetched PoC/evidence source_code, gets wrapped — the trusted
-    system framing ("KHÔNG viết Mục 1" etc.) stays OUTSIDE the tag either way."""
-    ev = [{"source": "exploitdb", "kind": "exploit", "url": "https://exploit-db.com/1",
-          "source_code": row["text"], "static_indicators": {"language": "py"}}]
-    appendix = _prefetch_prompt_appendix({"evidence": ev})
-    assert appendix.count(OPEN_TAG) == 1, row["id"]
-    assert appendix.count(CLOSE_TAG) == 1, row["id"]
-    open_i = appendix.index(OPEN_TAG)
-    close_i = appendix.rindex(CLOSE_TAG)
-    assert "Mục 1" in appendix
-    assert appendix.index("Mục 1") < open_i, row["id"]   # trusted framing precedes the tag
 
 
 def test_long_payload_still_wraps_cleanly() -> None:

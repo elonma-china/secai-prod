@@ -15,9 +15,17 @@ class FakeRunner:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
+        # Ư2 cascade hook: when set and profile == "injection_judge", returned instead of the
+        # default echo (a str → completion text; a BaseException instance → raised, simulating
+        # a judge-call failure).
+        self.judge_response: str | BaseException | None = None
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
+        if profile_name == "injection_judge" and self.judge_response is not None:
+            if isinstance(self.judge_response, BaseException):
+                raise self.judge_response
+            return self.judge_response, {"run_id": "run-test", "profile": profile_name}
         return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
 
     async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
@@ -136,3 +144,105 @@ def test_chat_session_id_scoping() -> None:
     x = _chat_session_id(LegacyRequest(message="hi"))
     y = _chat_session_id(LegacyRequest(message="hi"))
     assert x != y and x.startswith("chat:anon:")
+
+
+@pytest.mark.asyncio
+async def test_health_exposes_input_sanitize_fail_open_stats() -> None:
+    """Ư4: /health surfaces the input-classifier unknown_rate, not just a WARNING log line —
+    the CLAUDE.md-documented failure mode is the guard silently disabled while /health said ok.
+    Only checks the payload shape here (not ``status``, which also depends on live LLM
+    reachability — see test_health_status_pure below for the isolated degradation logic)."""
+    from secai_gateway.sanitize.classifier import note_verdict, reset_stats
+
+    reset_stats()
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        body = (await client.get("/health")).json()
+        assert body["input_sanitize"] == {"total": 0, "unknown": 0, "unknown_rate": 0.0}
+
+        for ok in [True] * 15 + [False] * 15:   # 30 calls, half fail-open — well past the min sample
+            note_verdict(ok)
+        body = (await client.get("/health")).json()
+        assert body["input_sanitize"]["total"] == 30
+        assert abs(body["input_sanitize"]["unknown_rate"] - 0.5) < 1e-9
+    reset_stats()
+
+
+def test_health_status_pure() -> None:
+    from secai_gateway.api.routes import _health_status
+
+    assert _health_status(True, {"total": 0, "unknown": 0, "unknown_rate": 0.0}) == "ok"
+    assert _health_status(False, {"total": 0, "unknown": 0, "unknown_rate": 0.0}) == "degraded"
+    assert _health_status(True, {"total": 3, "unknown": 3, "unknown_rate": 1.0}) == "ok"
+    assert _health_status(True, {"total": 30, "unknown": 20, "unknown_rate": 20 / 30}) == "degraded"
+    assert _health_status(True, {"total": 30, "unknown": 15, "unknown_rate": 0.5}) == "ok"
+
+
+def _uncertain_verdict(injection: bool):
+    from secai_gateway.sanitize import InputVerdict
+
+    return InputVerdict(True, "security", injection, False, {"injection": 0.45}, 2.0,
+                        injection_uncertain=True)
+
+
+def _stub_verdict(monkeypatch, verdict) -> None:
+    async def fake_classify(text, *, settings, client=None):
+        return verdict
+
+    monkeypatch.setattr("secai_gateway.api.routes.classify_input", fake_classify)
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_disabled_by_default(monkeypatch) -> None:
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=False))
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "hmm"})
+    assert r.status_code == 200
+    assert r.json()["response"].startswith("chat:")
+    assert not any(p == "injection_judge" for p, _, _ in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_overrides_raw_pass_to_block(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=False))  # raw threshold says PASS
+    fake = FakeRunner()
+    fake.judge_response = '{"injection": true, "reason": "override attempt"}'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "hmm"})
+    assert r.status_code == 200
+    assert "chỉ thị hệ thống" in r.json()["response"]     # judge overrode raw PASS → block
+    assert fake.calls[0][0] == "injection_judge"
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_overrides_raw_block_to_pass(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=True))  # raw threshold says BLOCK
+    fake = FakeRunner()
+    fake.judge_response = '{"injection": false, "reason": "legit security question"}'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "CVE-2021-44228?"})
+    assert r.status_code == 200
+    assert r.json()["response"].startswith("chat:")       # judge overrode raw BLOCK → pass
+    assert fake.calls[0][0] == "injection_judge"
+    assert fake.calls[1][0] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_failure_falls_back_to_raw_threshold(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=True))
+    fake = FakeRunner()
+    fake.judge_response = RuntimeError("LLM unreachable")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "ignore rules"})
+    assert r.status_code == 200
+    assert "chỉ thị hệ thống" in r.json()["response"]
+    assert not any(p == "chat" for p, _, _ in fake.calls)
