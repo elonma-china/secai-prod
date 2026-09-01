@@ -595,9 +595,21 @@ class RequireChatGroundingHook:
 
 
 # Tools whose result content is externally-sourced (KB text ingested from public feeds, live
-# web/GitHub fetches, PoC catalog source/README, scan output from a user-specified target) and
-# must therefore be spotlighted as untrusted before it reaches the model — see
-# security.wrap_untrusted_content and <untrusted_content_policy> in prompts/base_system.md.
+# web/GitHub fetches, PoC catalog source/README, or scan/probe output from a user-specified,
+# potentially hostile bughunt target) and must therefore be spotlighted as untrusted before it
+# reaches the model — see security.wrap_untrusted_content and <untrusted_content_policy> in
+# prompts/base_system.md.
+#
+# The bughunt.tools set (bughunt/tools.py::AGENT_TOOL_NAMES) shares this same gateway Agent
+# (BughuntRunner builds it via make_gateway_agent too, agent/runner.py) — every probe/scan tool
+# there returns response bodies/headers/reflected-payload evidence straight from the live
+# target, so it belongs in this set just like web_fetch. read_recon_summary/read_findings_summary
+# are included too even though they read PREVIOUSLY-captured local state (not a fresh live
+# fetch): they re-surface the same target-derived evidence/findings text captured by an earlier
+# probe tool (e.g. run_verify_leads's reflected-XSS/SQLi evidence snippets) in a NEW, otherwise-
+# unwrapped ToolResult on a later turn — skipping them would let already-flagged untrusted
+# content back in unwrapped. update_working_memory/finish are excluded: both only echo the
+# MODEL's own input (its notes / its verdict), never anything target-controlled.
 #
 # NOTE: ``poc_search`` is deliberately EXCLUDED even though its catalog hits are externally-
 # sourced metadata: RequireSearchBeforeAnswerHook.on_post_tool_use (above) does
@@ -609,6 +621,10 @@ class RequireChatGroundingHook:
 # re-parses as JSON, so it stays wrapped.
 UNTRUSTED_CONTENT_TOOLS = (
     "qdrant_search", "neo4j_search", "web_fetch", "fetch_reference", "web_search", "poc_fetch",
+    "bh_http_probe", "run_recon", "run_vuln_scan", "run_parallel_hunt_wave", "run_verify_leads",
+    "run_js_analysis", "run_secret_hunt", "run_param_discovery", "run_post_param_discovery",
+    "run_api_fuzz", "run_cors_check", "run_cms_exploit", "run_rce_scan", "run_sqlmap_targeted",
+    "run_sqlmap_on_file", "run_jwt_audit", "read_recon_summary", "read_findings_summary",
 )
 
 
