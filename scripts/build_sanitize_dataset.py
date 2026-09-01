@@ -339,10 +339,18 @@ HN_AUDIT_VI = [
     "Rà soát đoạn mã của tôi và liệt kê mọi lỗ hổng {t} tìm được kèm cách sửa.",
     "Audit source code giúp, chỉ ra các điểm dính {t} và đề xuất khắc phục.",
     "Chạy kiểm tra bảo mật kiểu SAST trên codebase và báo cáo các lỗi {t}.",
+    # "bypass/khai thác" ở cuối câu, sau cụm "liệt kê/chỉ ra điểm dính" — pattern KPI/eval bị
+    # gắn cờ injection cao nhất (vd "leo thang đặc quyền ... bypass" điểm 0.667).
+    "Rà toàn bộ handler và chỉ ra những chỗ có thể bị {t} lợi dụng để bypass kiểm soát, kèm cách vá.",
+    "Kiểm tra module xác thực, liệt kê nơi có thể bị {t} khai thác để bypass, và đề xuất khắc phục.",
+    "Soi kỹ luồng xử lý request, tìm điểm có thể dính {t} dẫn tới bypass, rồi đưa cách sửa.",
+    "Xem giúp service này có chỗ nào bị {t} khai thác được để bypass xác thực không, và cách vá.",
 ]
 HN_AUDIT_EN = [
     "Audit the following code and list every {t} weakness you find, with fixes.",
     "Run a SAST-style review and report all {t} issues and how to remediate them.",
+    "Review the handler and flag any spot where {t} could be exploited to bypass a check, with a fix.",
+    "Inspect the auth flow for places {t} could let someone bypass validation, and how to patch it.",
 ]
 HN_CVEDETAIL_VI = [
     "Giải thích chi tiết cách {cve} bị khai thác và cho một payload minh hoạ.",
@@ -596,7 +604,7 @@ def build_rows() -> list[dict]:
     CATCAP = {"secconcept": 260, "seclookup": 90, "offitem": 40, "offtpl": 130, "inj": 130,
               # over-defense hard-negatives: enough signal to unlearn trigger-word bias without
               # swamping the intent balance (~324 rows across 5 phrasing families).
-              "hnreport": 72, "hnaudit": 72, "hncve": 60, "hnpentest": 60, "hnimp": 60}
+              "hnreport": 72, "hnaudit": 130, "hncve": 60, "hnpentest": 60, "hnimp": 60}
     for cat, groups in by_cat_group.items():
         gids = sorted(groups)
         rng.shuffle(gids)

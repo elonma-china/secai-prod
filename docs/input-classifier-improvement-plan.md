@@ -60,6 +60,24 @@ min-attack-score = 0.398). Lệnh tái lập: `HF_HUB_OFFLINE=1 python scripts/t
 --embed st --model DuyTa/sec-embedding --head mixed`. Khi có serving thật, `--embed endpoint` để
 đối chứng (kỳ vọng khớp).
 
+### Round 2 (cùng ngày) — đóng nốt 6 FP còn lại
+
+6 FP sau round 1 dồn hết vào 1 pattern cụ thể: câu mệnh lệnh "liệt kê/chỉ ra các điểm dính {vuln} ...
+bypass/khai thác" (điểm cao nhất 0.667, với "leo thang đặc quyền"). Thêm 8 template hard-negative
+nhắm đúng pattern này (`HN_AUDIT_VI/EN`, +58 dòng) → regen dataset (1788 dòng) → retrain offline lần 2.
+
+| | Round 1 (thr 0.35) | **Round 2 (thr 0.45)** |
+|---|---|---|
+| Over-defense FP | 6/211 = 2.8% | **0/211 = 0%** |
+| Injection recall | 36/36 = 100% | **36/36 = 100%** |
+| Margin (min-attack vs max-benign) | — | **0.600 vs 0.362 (Δ0.24)** |
+
+Threshold `injection` **0.35 → 0.45** (giữa margin mới, an toàn cả hai phía). `offtopic` threshold
+đổi theo auto-tune của trainer (0.34→0.661, in-distribution, chưa có bộ held-out riêng cho offtopic) —
+`offtopic_decision` precision/recall trên test split vẫn tốt (0.99/0.96), không tệ hơn head cũ.
+56/56 test phạm vi liên quan xanh; 338/340 toàn bộ suite xanh (2 fail ở `test_prompts.py`, không liên
+quan — lỗi XML sẵn có trong `prompts/`, không nằm trong diff của đợt này).
+
 ## 3. Roadmap Ư1–Ư5 (trung hạn)
 
 - **Ư1 — Hard-negative mining (MOF)** [1]: đã khởi động bằng template. Nâng cấp: token-wise recheck
