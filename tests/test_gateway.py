@@ -46,6 +46,42 @@ async def test_legacy_contract_paths_and_profiles() -> None:
 
 
 @pytest.mark.asyncio
+async def test_health_exposes_input_sanitize_fail_open_stats() -> None:
+    """Ư4: /health surfaces the input-classifier unknown_rate, not just a WARNING log line —
+    the CLAUDE.md-documented failure mode is the guard silently disabled while /health said ok.
+    Only checks the payload shape here (not ``status``, which also depends on live LLM
+    reachability — see test_health_status_pure below for the isolated degradation logic)."""
+    from secai_gateway.sanitize.classifier import note_verdict, reset_stats
+
+    reset_stats()
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        body = (await client.get("/health")).json()
+        assert body["input_sanitize"] == {"total": 0, "unknown": 0, "unknown_rate": 0.0}
+
+        for ok in [True] * 15 + [False] * 15:   # 30 calls, half fail-open — well past the min sample
+            note_verdict(ok)
+        body = (await client.get("/health")).json()
+        assert body["input_sanitize"]["total"] == 30
+        assert abs(body["input_sanitize"]["unknown_rate"] - 0.5) < 1e-9
+    reset_stats()
+
+
+def test_health_status_pure() -> None:
+    from secai_gateway.api.routes import _health_status
+
+    assert _health_status(True, {"total": 0, "unknown": 0, "unknown_rate": 0.0}) == "ok"
+    assert _health_status(False, {"total": 0, "unknown": 0, "unknown_rate": 0.0}) == "degraded"
+    # High unknown_rate but too small a sample → not yet degraded (avoid cold-start false alarm).
+    assert _health_status(True, {"total": 3, "unknown": 3, "unknown_rate": 1.0}) == "ok"
+    # Same rate, real sample size → degraded.
+    assert _health_status(True, {"total": 30, "unknown": 20, "unknown_rate": 20 / 30}) == "degraded"
+    # Exactly at the 50% boundary (not >) with a real sample → still ok.
+    assert _health_status(True, {"total": 30, "unknown": 15, "unknown_rate": 0.5}) == "ok"
+
+
+@pytest.mark.asyncio
 async def test_streaming_endpoints() -> None:
     fake = FakeRunner()
     stream_paths = {
