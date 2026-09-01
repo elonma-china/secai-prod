@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     input_classifier_offtopic_threshold: float = 0.0
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
+    # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
+    # the LLM judge instead of a binary threshold call. OFF by default — opt in once verified
+    # against a live serving endpoint (calibration was fit/verified offline; vast was down when
+    # this was built). No-op regardless of this flag when assets/calibration.json is absent
+    # (InputVerdict.injection_uncertain then never sets True), so enabling it is inert until a
+    # calibrated head is shipped.
+    injection_cascade_enabled: bool = False
+    injection_cascade_timeout_s: float = 8.0
 
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

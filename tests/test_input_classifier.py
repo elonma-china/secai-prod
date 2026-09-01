@@ -13,6 +13,7 @@ from linch.events import PartialAssistantEvent
 from secai_gateway.app import create_app
 from secai_gateway.sanitize import Action, InputVerdict, classify_input, decide
 from secai_gateway.sanitize import classifier as C
+from secai_gateway.sanitize.cascade import build_judge_prompt
 from secai_gateway.sanitize.classifier import _Head, decode
 
 
@@ -68,6 +69,71 @@ def test_decode_pii_flag() -> None:
 def test_decode_dim_mismatch_fails_open() -> None:
     v = decode([1, 2, 3], _head(dim=4), _Settings)
     assert not v.ok and "dim-mismatch" in v.reason
+
+
+# ── Ư2 calibration + uncertain-band cascade (decode()) ───────────────────────
+def _calibrated_head(band_low: float = 0.3, band_high: float = 0.7,
+                     platt_a: float = 1.0, platt_b: float = 0.0, dim: int = 4) -> _Head:
+    h = _head(dim=dim)
+    from dataclasses import replace as _replace
+
+    return _replace(h, calibration={"platt_a": platt_a, "platt_b": platt_b,
+                                    "band_low": band_low, "band_high": band_high})
+
+
+def test_decode_no_calibration_never_sets_uncertain() -> None:
+    # _head() ships no calibration dict (None) — injection_uncertain must always be False,
+    # regardless of how ambiguous the raw score is (backward compat: cascade is fully opt-in).
+    v = decode([0.5, 0, 0, 0], _head(), _Settings)
+    assert v.ok and not v.injection_uncertain
+
+
+def test_decode_calibration_never_overwrites_raw_threshold_score() -> None:
+    # scores["injection"] (which drives the threshold decision) must be identical whether or
+    # not calibration is shipped/non-trivial — only a NEW scores["injection_calibrated"] key
+    # (used for band membership) may differ. Guards the exact bug this design avoids: silently
+    # re-scaling the already-tuned/verified threshold comparison.
+    raw = decode([1, 0, 0, 0], _head(), _Settings).scores["injection"]
+    v = decode([1, 0, 0, 0], _calibrated_head(platt_a=0.5, platt_b=1.0), _Settings)
+    assert abs(raw - v.scores["injection"]) < 1e-9
+    assert "injection_calibrated" in v.scores
+
+
+def test_decode_identity_calibration_matches_raw_sigmoid() -> None:
+    # platt_a=1, platt_b=0 → the CALIBRATED score must equal the uncalibrated sigmoid exactly.
+    raw = decode([1, 0, 0, 0], _head(), _Settings).scores["injection"]
+    calibrated = decode([1, 0, 0, 0], _calibrated_head(), _Settings).scores["injection_calibrated"]
+    assert abs(raw - calibrated) < 1e-6
+
+
+def test_decode_calibration_rescales_score() -> None:
+    # platt_a=0.5 halves the raw logit before the sigmoid — a non-trivial score change,
+    # visible ONLY in the calibrated field.
+    raw = decode([1, 0, 0, 0], _head(), _Settings).scores["injection"]
+    calibrated = decode([1, 0, 0, 0], _calibrated_head(platt_a=0.5),
+                        _Settings).scores["injection_calibrated"]
+    assert abs(raw - calibrated) > 0.05
+
+
+def test_decode_no_calibration_has_no_calibrated_score_key() -> None:
+    v = decode([1, 0, 0, 0], _head(), _Settings)
+    assert "injection_calibrated" not in v.scores
+
+
+def test_decode_uncertain_band_membership() -> None:
+    # dim=5: column 4 is unused by any head weight row (see _head()'s W[row, col] for
+    # col in {0,1,2,3} only) — a 5th raw component only changes the L2-norm decode()
+    # applies, letting x0 land at a CHOSEN fraction after normalization (decode()
+    # normalizes direction only, so [1,0,0,0] and [0.5,0,0,0] are otherwise identical).
+    head = _calibrated_head(band_low=0.3, band_high=0.7, dim=5)
+    # raw=[1,0,0,0,sqrt(3)] → norm=2 → normalized x0=0.5 → logit=8*0.5-4=0 → sigmoid=0.5.
+    mid = decode([1, 0, 0, 0, 3 ** 0.5], head, _Settings)
+    assert mid.ok and mid.injection_uncertain
+    # x0=0 / x0=1 (raw norm already 1) → confidently benign/malicious → outside the band.
+    lo = decode([0, 0, 0, 0, 0], head, _Settings)
+    hi = decode([1, 0, 0, 0, 0], head, _Settings)
+    assert not lo.injection_uncertain and not hi.injection_uncertain
+    assert not lo.injection and hi.injection
 
 
 def _mixed_head(dim: int = 4) -> _Head:
@@ -170,9 +236,17 @@ class _FakeRunner:
 
     def __init__(self) -> None:
         self.calls: list = []
+        # Ư2 cascade hook: when set and profile == "injection_judge", returned instead of the
+        # default echo (a str → completion text; a BaseException instance → raised, simulating
+        # a judge-call failure).
+        self.judge_response: str | BaseException | None = None
 
     async def complete(self, profile, prompt, session_id=None):
         self.calls.append((profile, prompt))
+        if profile == "injection_judge" and self.judge_response is not None:
+            if isinstance(self.judge_response, BaseException):
+                raise self.judge_response
+            return self.judge_response, {"run_id": "r", "profile": profile}
         return f"{profile}: {prompt}", {"run_id": "r", "profile": profile}
 
     async def stream(self, profile, prompt, session_id=None):
@@ -252,3 +326,91 @@ def test_verdict_stats_tracks_unknown_rate() -> None:
     assert st["total"] == 4 and st["unknown"] == 2
     assert abs(st["unknown_rate"] - 0.5) < 1e-9
     C.reset_stats()
+
+
+# ── Ư2 uncertain-band cascade (route-level, mocked judge) ────────────────────
+def _uncertain_verdict(injection: bool) -> InputVerdict:
+    return InputVerdict(True, "security", injection, False, {"injection": 0.45}, 2.0,
+                        injection_uncertain=True)
+
+
+def _stub_verdict(monkeypatch, verdict: InputVerdict) -> None:
+    async def fake_classify(text, *, settings, client=None):
+        return verdict
+
+    monkeypatch.setattr("secai_gateway.api.routes.classify_input", fake_classify)
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_disabled_by_default(monkeypatch) -> None:
+    # injection_cascade_enabled defaults False — the judge must never be called even when the
+    # verdict says uncertain; the raw threshold decision (injection=False here) stands.
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=False))
+    fake = _FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "hmm"})
+    assert r.status_code == 200
+    assert r.json()["response"].startswith("chat:")
+    assert not any(p == "injection_judge" for p, _ in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_overrides_raw_pass_to_block(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=False))  # raw threshold says PASS
+    fake = _FakeRunner()
+    fake.judge_response = '{"injection": true, "reason": "override attempt"}'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "hmm"})
+    assert r.status_code == 200
+    assert "chỉ thị hệ thống" in r.json()["response"]     # judge overrode raw PASS → block
+    assert fake.calls == [("injection_judge", build_judge_prompt("hmm", 0.45))]
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_overrides_raw_block_to_pass(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=True))  # raw threshold says BLOCK
+    fake = _FakeRunner()
+    fake.judge_response = '{"injection": false, "reason": "legit security question"}'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "CVE-2021-44228?"})
+    assert r.status_code == 200
+    assert r.json()["response"].startswith("chat:")       # judge overrode raw BLOCK → pass
+    assert fake.calls[0][0] == "injection_judge"
+    assert fake.calls[1][0] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_judge_failure_falls_back_to_raw_threshold(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    _stub_verdict(monkeypatch, _uncertain_verdict(injection=True))  # raw threshold says BLOCK
+    fake = _FakeRunner()
+    fake.judge_response = RuntimeError("LLM unreachable")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "ignore rules"})
+    assert r.status_code == 200
+    # judge failed → falls back to the raw threshold decision (BLOCK), never breaks chat.
+    assert "chỉ thị hệ thống" in r.json()["response"]
+    assert not any(p == "chat" for p, _ in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_route_cascade_not_triggered_when_not_uncertain(monkeypatch) -> None:
+    monkeypatch.setenv("INJECTION_CASCADE_ENABLED", "true")
+    # injection_uncertain=False (confident verdict) — cascade must not fire even when enabled.
+    verdict = InputVerdict(True, "security", False, False, {"injection": 0.02}, 2.0,
+                           injection_uncertain=False)
+    _stub_verdict(monkeypatch, verdict)
+    fake = _FakeRunner()
+    fake.judge_response = '{"injection": true, "reason": "should never be read"}'
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        r = await client.post("/ai/chat", json={"user_id": "u", "message": "hmm"})
+    assert r.status_code == 200
+    assert r.json()["response"].startswith("chat:")
+    assert not any(p == "injection_judge" for p, _ in fake.calls)

@@ -83,10 +83,9 @@ quan — lỗi XML sẵn có trong `prompts/`, không nằm trong diff của đ�
 - **Ư1 — Hard-negative mining (MOF)** [1]: đã khởi động bằng template. Nâng cấp: token-wise recheck
   head để lộ trigger token còn bias, bổ sung counter-example (có thể dùng Cyber-F1 sinh thêm). Xây bộ
   **NotInject VI/EN** làm eval over-defense cố định (đã có `overdefense.jsonl` làm nền).
-- **Ư2 — Calibration + cascade "uncertain band"** [3]: thay hard-threshold bằng calibrated score
-  (Platt/temperature) + vùng xám (vd 0.35–0.65) **escalate lên LLM judge (Cyber-F1)** thay vì chặn
-  nhị phân. Cảnh báo *confident miscalibration* [3]: head tuyến tính hay sai-mà-tự-tin trên OOD →
-  cascade cần kèm tín hiệu OOD, không chỉ tin score.
+- **Ư2 — Calibration + cascade "uncertain band"** [3]: ĐÃ TRIỂN KHAI (2026-09-01), xem chi tiết ở
+  §6 bên dưới. Cảnh báo *confident miscalibration* [3] (head tuyến tính sai-mà-tự-tin trên OOD, lọt
+  qua band) vẫn là giới hạn chưa giải quyết — band chỉ bắt được điểm rơi vào vùng biết trước.
 - **Ư3 — Eval theo distribution shift** [2]: chuyển sang giữ nguyên cả nguồn khi eval (LODO); coi số
   in-distribution là cận trên lạc quan; đưa `overdefense.jsonl` + traffic log thật + benchmark ngoài
   (NotInject/LLMail-Inject) vào CI.
@@ -166,7 +165,71 @@ Loại trừ đúng 2 tool: `update_working_memory`/`finish` — cả hai chỉ 
 (note/verdict), không có nội dung ngoại lai. Test mới `test_bughunt_scan_tools_are_wrapped` +
 `test_bughunt_phase0.py` xanh (60/60 phạm vi liên quan).
 
-## 5. Ghi chú kiến trúc
+## 5. Ư2 — calibration + cascade "vùng xám" (2026-09-01)
+
+**Vấn đề:** threshold nhị phân (0.45) coi mọi điểm rơi vào 1 phía là quyết định cuối, kể cả điểm sát
+ranh giới không có bằng chứng held-out trực tiếp nào cả hai phía. Ư2 thêm 1 "ý kiến thứ hai" — LLM
+judge — cho đúng những điểm đó, thay vì tin tuyệt đối vào 1 con số.
+
+**Kiến trúc (tôn trọng ràng buộc sẵn có):** `gate.py::decide()` là **pure/sync theo thiết kế**
+("Pure logic — no I/O, easy to unit-test" — ghi rõ trong docstring gốc). Việc gọi LLM judge là I/O
+nên **không** đặt trong `decide()` — đặt ở tầng orchestration `_chat_gate()` (routes.py), *giữa*
+`classify_input()` và `decide()`. `gate.py` không đổi 1 dòng nào.
+
+- **`sanitize/cascade.py`** (mới): `judge_injection(runner, text, score, timeout_s)` — gọi
+  `runner.complete("injection_judge", prompt)`, đúng pattern one-off completion sẵn có
+  (`poc/slicer.py::decide_keep_drop` gọi `runner.complete("poc_slice", prompt)`, không qua full
+  agent loop, không tool). Parse JSON `{"injection": bool, "reason": str}`, chịu được code-fence.
+  **FAIL-SAFE, không phải fail-open**: bất kỳ lỗi nào (timeout/unreachable/JSON hỏng) → trả `None`
+  → caller **bắt buộc** fallback về quyết định threshold gốc — cascade chỉ có thể THÊM ý kiến khi
+  judge sống, judge chết = y hệt hành vi trước khi có cascade, không phải failure mode mới.
+- **`prompts/injection_judge.md`** + `profiles.yaml` (`tools: [], base: false, max_turns: 2`) —
+  profile mới, không tool, JSON-only, dạy phân biệt "ra lệnh cho chính trợ lý ngay bây giờ" (injection
+  thật) vs "hỏi/báo cáo VỀ chủ đề bảo mật" (hợp lệ dù chứa exploit/payload) — đúng bài học rút ra từ
+  round 1-2 over-defense. Nghiêng về KHÔNG PHẢI injection khi không chắc.
+- **`classifier.py`**: `_Head` + `decode()` thêm calibration **TÁCH BIỆT khỏi quyết định chính**.
+  Điểm calibrated (Platt scaling) chỉ dùng để tính `injection_uncertain` (band membership) — **KHÔNG**
+  ghi đè `scores["injection"]`/so sánh threshold, vốn đã tune và verify kỹ trên thang RAW (0.45,
+  FP=0%/recall=100%). Lộ thêm `scores["injection_calibrated"]` khi có calibration, để observability
+  mà không đổi hành vi production khi ship. Phát hiện + sửa 1 bug thiết kế giữa chừng: bản đầu lỡ ghi
+  đè điểm raw bằng điểm calibrated, sẽ âm thầm đổi thang so sánh của threshold đã verify — sửa trước
+  khi ship.
+- **`scripts/calibrate_injection_cascade.py`**: fit Platt scaling trên **held-out**
+  (`overdefense.jsonl`+`attacks.jsonl`, không phải training set) → `sanitize/assets/calibration.json`
+  (asset MỚI, tách biệt, không đụng `head.npz`/`thresholds.json`). **Phát hiện + sửa 1 pathology
+  kinh điển**: fit MLE thường (sklearn `LogisticRegression`, data tách biệt hoàn hảo) → hệ số phân kỳ
+  → sigmoid dốc đứng → band rộng 0.977 (gần vô nghĩa, gần như luôn escalate). Sửa bằng đúng kỹ thuật
+  smoothing của paper gốc Platt (1999): fit target mềm `t+ = (N+ +1)/(N+ +2)`, `t- = 1/(N- +2)` thay
+  vì nhãn cứng 0/1, qua Nelder-Mead — kết quả band hợp lý `[0.186, 0.452]` (rộng 0.266, cùng bậc với
+  margin raw 0.24).
+- **Cascade OFF theo mặc định**: `config.injection_cascade_enabled: bool = False` — chưa verify với
+  judge thật (vast down khi build đợt này) nên chưa bật mặc định; asset `calibration.json` VẪN được
+  ship (đã verify additive, không regression) vì cascade còn bị chặn kép bởi cả asset lẫn flag.
+
+**Kết quả xác nhận:**
+- Ship `calibration.json` là **hoàn toàn additive** — chạy lại `eval_sanitize.py` trước/sau: FP
+  0/211, recall 36/36 y hệt không đổi.
+- Trên chính bộ held-out, chỉ **1/247 điểm** rơi vào band (đúng điểm benign sát biên nhất, "leo thang
+  đặc quyền... bypass", điểm calibrated 0.1857 == band_low) — khớp đúng thiết kế: band = vùng
+  KHÔNG có bằng chứng, nên hầu như trống trên chính data đã dùng để fit nó.
+- **Thành thật về giá trị đo được**: hệ thống hiện đã 0 lỗi trên held-out (sau round 1-2), nên cascade
+  **không sửa lỗi nào đang đo được hôm nay** — đây là đầu tư robustness hướng tới traffic/OOD tương
+  lai chưa thấy trong bộ held-out, không phải fix cho khủng hoảng hiện tại.
+- Test: `tests/test_sanitize_cascade.py` (9, module cascade độc lập, mock runner: verdict true/false,
+  code-fence, JSON hỏng, thiếu field, exception, timeout), test calibration trong
+  `test_input_classifier.py` (band membership, không ghi đè raw score, no-calibration backward-compat),
+  test cascade ở tầng route (disabled-by-default, judge override cả 2 chiều, judge failure fallback,
+  không trigger khi không uncertain). 91/91 phạm vi liên quan xanh; full suite không regression (2 fail
+  cũ `test_prompts.py`/`chat.md` không đổi).
+
+**Giới hạn chưa giải quyết** (đúng cảnh báo *confident miscalibration* [3]): band chỉ bắt điểm rơi vào
+vùng ĐÃ BIẾT là mơ hồ từ held-out hiện tại. Một input hoàn toàn mới (OOD thật) có thể khiến head tuyến
+tính chấm điểm SAI MÀ TỰ TIN, rơi ngoài band, không bao giờ được escalate — cascade không giải quyết
+lớp lỗi này, chỉ literature [3] gọi đây là giới hạn cố hữu của cascade dựa trên score. **Chưa verify
+live**: mọi số liệu trên chạy offline (`--embed st`); cần `--embed endpoint` + bật
+`injection_cascade_enabled=true` khi vast lên để xác nhận judge thật hoạt động đúng như mock.
+
+## 6. Ghi chú kiến trúc
 
 Không thay kiến trúc: **Prompt Guard 2** (mDeBERTa 86M) [7] không hỗ trợ tiếng Việt chính thức + cần
 torch trong serving (trái ràng buộc numpy-only air-gap). Embedding + numpy head song ngữ hiện tại là

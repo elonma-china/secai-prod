@@ -17,6 +17,7 @@ treats as PASS. The classifier can only ever ADD a block, never take chat down.
 """
 from __future__ import annotations
 
+from .cascade import judge_injection
 from .classifier import (
     ALL_LABELS,
     INTENT_LABELS,
@@ -34,6 +35,7 @@ __all__ = [
     "InputVerdict",
     "classify_input",
     "load_head",
+    "judge_injection",
     "Action",
     "Decision",
     "decide",

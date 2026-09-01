@@ -53,6 +53,11 @@ class InputVerdict:
     scores: dict[str, float]
     latency_ms: float
     reason: str = ""       # why the verdict is unknown (for logs); "" on success
+    # True when the (calibrated) injection score falls in the shipped uncertain band
+    # (assets/calibration.json) — the caller (api/routes.py::_chat_gate) may escalate to the
+    # LLM judge (sanitize/cascade.py) instead of trusting ``injection`` at face value. Always
+    # False when no calibration asset is shipped (cascade is fully opt-in by asset presence).
+    injection_uncertain: bool = False
 
     @classmethod
     def unknown(cls, reason: str, latency_ms: float = 0.0) -> "InputVerdict":
@@ -88,6 +93,11 @@ class _Head:
     W: np.ndarray | None = None            # legacy 5-row linear
     b: np.ndarray | None = None
     subheads: dict[str, tuple] | None = None
+    # Optional Platt-scaling + uncertain-band params for the injection score, from
+    # assets/calibration.json ({"platt_a","platt_b","band_low","band_high"}). None (the default,
+    # and always when the asset is absent) → decode() uses the raw sigmoid and never sets
+    # injection_uncertain, i.e. today's exact pre-cascade behavior.
+    calibration: dict[str, float] | None = None
 
 
 _lock = threading.Lock()
@@ -127,6 +137,9 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
 
     meta = _read_json_asset("head.json", override_dir)
     thresholds = {**_DEFAULT_THRESHOLDS, **_read_json_asset("thresholds.json", override_dir)}
+    # Optional; absent (default) → {} → calibration=None below → decode() skips calibration
+    # entirely (raw sigmoid, injection_uncertain always False — fully backward compatible).
+    calibration = _read_json_asset("calibration.json", override_dir) or None
 
     try:
         if override_dir is not None:
@@ -168,7 +181,8 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
             dim = int(meta.get("dim") or (s0[1].shape[0] if k0 == "mlp" else s0[1].shape[1]))
             kind = str(meta.get("kind") or "mixed")
             return _Head(dim=dim, embed_model=embed_model, trained=trained,
-                         thresholds=thresholds, kind=kind, subheads=subheads)
+                         thresholds=thresholds, kind=kind, subheads=subheads,
+                         calibration=calibration)
         # Legacy 5-row linear.
         W = np.asarray(data["W"], dtype=np.float32)
         b = np.asarray(data["b"], dtype=np.float32)
@@ -184,7 +198,7 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
     if W.shape[1] != dim:
         dim = int(W.shape[1])
     return _Head(dim=dim, embed_model=embed_model, trained=trained, thresholds=thresholds,
-                 kind="linear", W=W, b=b)
+                 kind="linear", W=W, b=b, calibration=calibration)
 
 
 def load_head(settings: Any | None = None, *, force_reload: bool = False) -> _Head | None:
@@ -305,6 +319,26 @@ def decode(vec: Any, head: _Head, settings: Any | None = None) -> InputVerdict:
     p_pii = _sigmoid(pii_logit)
     intent_idx = int(np.argmax(p_intent))
 
+    # Ư2 cascade (docs/input-classifier-improvement-plan.md): compute a SEPARATE, Platt-
+    # calibrated injection score (on the RAW LOGIT, not the already-sigmoided score) purely to
+    # decide whether this falls in the shipped uncertain band — it does NOT feed the primary
+    # ``injection`` threshold decision below, which stays on the raw sigmoid exactly as before.
+    # Deliberately decoupled: ``thresholds.json``'s injection cut (0.45) was tuned and verified
+    # against the RAW scale (evals/sanitize/report-2026-09-01.md, FP=0/recall=100%) — silently
+    # re-comparing it against a differently-scaled calibrated score would risk changing
+    # production block/pass behaviour without re-validating it. Both are no-ops (calibrated
+    # score absent, injection_uncertain always False) when assets/calibration.json is absent.
+    injection_uncertain = False
+    p_inj_calibrated: float | None = None
+    cal = head.calibration
+    if cal:
+        platt_a, platt_b = cal.get("platt_a"), cal.get("platt_b")
+        if platt_a is not None and platt_b is not None:
+            p_inj_calibrated = _sigmoid(float(platt_a) * inj_logit + float(platt_b))
+        band_low, band_high = cal.get("band_low"), cal.get("band_high")
+        if band_low is not None and band_high is not None and p_inj_calibrated is not None:
+            injection_uncertain = float(band_low) <= p_inj_calibrated <= float(band_high)
+
     thr = dict(head.thresholds)
     if settings is not None:
         for lbl in ("injection", "pii", "offtopic"):
@@ -313,8 +347,10 @@ def decode(vec: Any, head: _Head, settings: Any | None = None) -> InputVerdict:
                 thr[lbl] = float(ov)
 
     scores = {INTENT_LABELS[i]: float(p_intent[i]) for i in range(3)}
-    scores["injection"] = p_inj
+    scores["injection"] = p_inj                     # raw sigmoid — drives the threshold decision
     scores["pii"] = p_pii
+    if p_inj_calibrated is not None:
+        scores["injection_calibrated"] = p_inj_calibrated   # Ư2 band signal only, see above
     return InputVerdict(
         ok=True,
         intent=INTENT_LABELS[intent_idx],
@@ -322,6 +358,7 @@ def decode(vec: Any, head: _Head, settings: Any | None = None) -> InputVerdict:
         pii=p_pii >= thr["pii"],
         scores=scores,
         latency_ms=0.0,
+        injection_uncertain=injection_uncertain,
     )
 
 
@@ -373,4 +410,5 @@ async def classify_input(
         pii=verdict.pii,
         scores=verdict.scores,
         latency_ms=latency,
+        injection_uncertain=verdict.injection_uncertain,
     )
