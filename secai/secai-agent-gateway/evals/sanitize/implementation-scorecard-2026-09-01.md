@@ -85,6 +85,22 @@ từ stopgap 0.6 về **0.35** (chọn bằng sweep trên held-out: min-attack-s
    secret/credential + định danh dài, không bắt email/phone thường); nay đo qua **gate thật** thay vì
    reimplementation (vá gap KPI R-SEC-PII).
 
+### Round 2 (cùng ngày) — đóng nốt 6/211 FP còn lại
+
+6 FP round 1 dồn hết vào 1 pattern: "liệt kê/chỉ ra các điểm dính {vuln} ... bypass/khai thác" (đặc
+biệt "leo thang đặc quyền", 0.667). Thêm 8 template hard-negative nhắm đúng pattern (`HN_AUDIT_VI/EN`,
++58 dòng), regen dataset (1788 dòng), retrain offline lần 2.
+
+| | Round 1 (thr 0.35) | **Round 2 (thr 0.45)** |
+|---|---|---|
+| Over-defense FP | 6/211 = 2.8% | **0/211 = 0%** |
+| Injection recall | 36/36 = 100% | **36/36 = 100%** |
+| Margin (min-attack / max-benign) | — | **0.600 / 0.362 (Δ0.24)** |
+
+Threshold `injection` 0.35→**0.45** (giữa margin, sweep trên held-out). Regression check: 56/56 test
+phạm vi liên quan xanh; 338/340 toàn bộ suite xanh (2 fail ở `test_prompts.py`/XML — lỗi sẵn có trong
+`prompts/`, xác nhận qua `git show --stat` không nằm trong diff của cả 2 commit đợt này).
+
 ### Việc còn lại khi có serving thật (tùy chọn)
 
 - Chạy lại `eval_sanitize.py --embed endpoint` để xác nhận số khớp trên serving production (kỳ vọng

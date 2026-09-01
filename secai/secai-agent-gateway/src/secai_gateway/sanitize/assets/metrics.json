@@ -2,35 +2,35 @@
   "embed_model": "DuyTa/sec-embedding",
   "dim": 1024,
   "backend": "st",
-  "n_train": 1253,
-  "n_test": 459,
+  "n_train": 1262,
+  "n_test": 508,
   "intent": {
     "security": {
       "precision": 1.0,
-      "recall": 0.9909,
-      "f1": 0.9954,
-      "tp": 325,
+      "recall": 0.9787,
+      "f1": 0.9892,
+      "tp": 367,
       "fp": 0,
-      "fn": 3
+      "fn": 8
     },
     "chitchat": {
-      "precision": 1.0,
+      "precision": 0.9286,
       "recall": 1.0,
-      "f1": 1.0,
+      "f1": 0.963,
       "tp": 26,
-      "fp": 0,
+      "fp": 2,
       "fn": 0
     },
     "offtopic": {
-      "precision": 0.9722,
-      "recall": 1.0,
-      "f1": 0.9859,
+      "precision": 0.9292,
+      "recall": 0.9813,
+      "f1": 0.9545,
       "tp": 105,
-      "fp": 3,
-      "fn": 0
+      "fp": 8,
+      "fn": 2
     }
   },
-  "intent_accuracy": 0.9935,
+  "intent_accuracy": 0.9803,
   "intent_confusion": {
     "labels": [
       "security",
@@ -39,9 +39,9 @@
     ],
     "matrix": [
       [
-        325,
+        367,
         0,
-        3
+        8
       ],
       [
         0,
@@ -50,46 +50,46 @@
       ],
       [
         0,
-        0,
+        2,
         105
       ]
     ]
   },
   "injection": {
-    "precision": 0.9839,
+    "precision": 1.0,
     "recall": 1.0,
-    "f1": 0.9919,
-    "tp": 61,
-    "fp": 1,
+    "f1": 1.0,
+    "tp": 60,
+    "fp": 0,
     "fn": 0
   },
   "pii": {
-    "precision": 0.9875,
-    "recall": 1.0,
-    "f1": 0.9937,
-    "tp": 79,
-    "fp": 1,
-    "fn": 0
+    "precision": 0.9817,
+    "recall": 0.964,
+    "f1": 0.9727,
+    "tp": 107,
+    "fp": 2,
+    "fn": 4
   },
   "offtopic_decision": {
-    "precision": 0.9722,
-    "recall": 1.0,
-    "f1": 0.9859,
-    "tp": 105,
-    "fp": 3,
-    "fn": 0
+    "precision": 0.9904,
+    "recall": 0.9626,
+    "f1": 0.9763,
+    "tp": 103,
+    "fp": 1,
+    "fn": 4
   },
-  "macro_f1": 0.9934,
+  "macro_f1": 0.9759,
   "thresholds": {
-    "injection": 0.25,
-    "pii": 0.4,
-    "offtopic": 0.34
+    "injection": 0.7,
+    "pii": 0.2,
+    "offtopic": 0.661
   },
   "head_apply_latency_ms": {
-    "mean": 0.1009,
-    "p95": 0.0932
+    "mean": 0.0465,
+    "p95": 0.0534
   },
-  "train_intent_accuracy": 0.9968,
+  "train_intent_accuracy": 0.9992,
   "head": "mixed",
-  "overfit_gap_intent_acc": 0.0033
+  "overfit_gap_intent_acc": 0.0189
 }
