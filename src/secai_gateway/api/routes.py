@@ -25,7 +25,12 @@ from ..poc import (
 )
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
-from ..security import require_public_input, sanitize_output_language
+from ..security import (
+    UNSUPPORTED_LANGUAGE_MSG,
+    is_unsupported_language,
+    require_public_input,
+    sanitize_output_language,
+)
 from ..state.conversations import derive_title
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
@@ -197,6 +202,24 @@ def register_routes(app: FastAPI, state: Any) -> None:
         the feature being disabled, returns ``None`` (pass through). Scoped to /ai/chat only —
         translate/report/exploit have their own (different) input shapes and are not gated
         here by design."""
+        # Language gate (runs first, no embedding needed): the classifier head was trained on
+        # vi/en only, so a message predominantly in a non-Latin script (CJK/kana/Hangul/
+        # Cyrillic/…) is refused with a bilingual ask to use Vietnamese or English. Latin-script
+        # languages pass through to the classifier. Independent of input_classifier_enabled.
+        if getattr(state.settings, "language_gate_enabled", True) and is_unsupported_language(
+                prompt, ratio=getattr(state.settings, "language_gate_nonlatin_ratio", 0.5)):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=refuse_language", run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "unsupported_language", "action": "refuse_language", "pii": False})
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": {"label": "unsupported_language",
+                                         "action": "refuse_language", "blocked": True, "pii": False},
+                "short_circuit": True,
+            }
+            return UNSUPPORTED_LANGUAGE_MSG, metadata
         if not getattr(state.settings, "input_classifier_enabled", True):
             return None
         run_id = uuid4().hex
