@@ -45,9 +45,11 @@ from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
+from ..sanitize.gate import REFUSE_INJECTION_MSG
 from ..security import (
-    UNSUPPORTED_LANGUAGE_MSG, is_unsupported_language, neutralize_active_content,
-    require_public_input, sanitize_output_language, wrap_untrusted_content,
+    UNSUPPORTED_LANGUAGE_MSG, has_hidden_smuggling, is_unsupported_language,
+    neutralize_active_content, require_public_input, sanitize_output_language,
+    wrap_untrusted_content,
 )
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
@@ -718,6 +720,25 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "short_circuit": True,
             }
             return UNSUPPORTED_LANGUAGE_MSG, metadata
+        # Unicode-smuggling injection gate (loop iter 4, FT-A): a prompt-injection payload hidden
+        # in non-rendering codepoints (TAG block / variation selectors / zero-width / interlinear)
+        # is invisible to the sec-embedding model, so the classifier head cannot see it. Catch it
+        # deterministically BEFORE embedding and refuse as an injection. High-precision — legit
+        # emoji / ZWJ / flag-tag sequences never trip it (see security.has_hidden_smuggling).
+        if getattr(state.settings, "input_classifier_enabled", True) and has_hidden_smuggling(prompt):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=block_injection reason=unicode_smuggling",
+                        run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "injection", "action": "block_injection", "pii": False})
+            classification = {"label": "injection", "action": "block_injection",
+                              "blocked": True, "pii": False, "reason": "unicode_smuggling"}
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": classification, "short_circuit": True,
+            }
+            return REFUSE_INJECTION_MSG, metadata
         if not getattr(state.settings, "input_classifier_enabled", True):
             return None
         run_id = uuid4().hex
