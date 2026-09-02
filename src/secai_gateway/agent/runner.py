@@ -58,17 +58,25 @@ class LinchRunner:
             run_store=self.run_store, ledger=self.ledger,
         )
 
-    def _apply_profile(self, session: Any, profile_name: str) -> None:
+    def _apply_profile(self, session: Any, profile_name: str, prompt: str = "") -> None:
         # Override both runnable registry and system context per session. The exploit tools
         # are absent from chat, rather than merely hidden from model instructions.
         profile = PROFILES[profile_name]
         session.tools_override = empty_tools(*(self.tools[name] for name in profile.tool_names))
         session.system_blocks_override = [SystemBlock(text=compose_system_prompt(profile))]
+        # RequireChatGroundingHook reads last_user_prompt from session.meta to decide whether
+        # THIS turn's question needs a forced KB lookup (independent of the model's own tool
+        # calls, which the hook observes separately via on_post_tool_use).
+        meta = dict(getattr(session, "meta", None) or {})
+        meta["profile"] = profile.name
+        if prompt:
+            meta["last_user_prompt"] = prompt
+        session.meta = meta
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         profile = PROFILES[profile_name]
         session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name)
+        self._apply_profile(session, profile_name, prompt)
         final = ""
         run_id = None
         async for event in session.run(prompt):
@@ -87,6 +95,6 @@ class LinchRunner:
         the enforcement boundary is identical whether streaming or not."""
         profile = PROFILES[profile_name]
         session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-        self._apply_profile(session, profile_name)
+        self._apply_profile(session, profile_name, prompt)
         async for event in session.run(prompt):
             yield event
