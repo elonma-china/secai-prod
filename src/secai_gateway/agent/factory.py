@@ -85,6 +85,7 @@ def make_gateway_agent(
         ],
         compaction_ladder=CompactionLadder(),
         max_turns=s.step_cap,
+        max_output_tokens=getattr(s, "llm_max_output_tokens", 8192),
         tool_timeout_ms=s.tool_timeout_ms,
         include_partial_messages=True,  # emit PartialAssistantEvent → token-by-token SSE
     )
