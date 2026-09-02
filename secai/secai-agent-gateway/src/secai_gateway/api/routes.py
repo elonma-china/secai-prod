@@ -57,6 +57,7 @@ from .schemas import (
     ExecRequest,
     ExploitRunRequest,
     LegacyRequest,
+    RenameConversationRequest,
     ToolRequest,
     VerifyRequest,
 )
@@ -70,6 +71,22 @@ logger = logging.getLogger(__name__)
 STREAM_ERROR_MESSAGE = (
     "Xin lỗi, trợ lý đang gặp sự cố tạm thời nên chưa thể trả lời. Vui lòng thử lại sau giây lát."
 )
+
+# Manual rename (PATCH) cap — generous vs. the 60-char auto-derived/auto-title fallback, since a
+# user typing their own title may reasonably want more room.
+_RENAME_TITLE_MAX = 120
+
+# Fire-and-forget background tasks (the auto-title LLM call) must keep a live reference or
+# asyncio may garbage-collect them mid-flight — a well-known footgun for create_task() calls
+# whose result nothing awaits. This module-level set is that reference; entries are dropped via
+# add_done_callback once each task finishes (success or failure), so it never grows unbounded.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro: Any) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 # The exploit endpoint expects a CVE id. When the caller instead sends a bare greeting /
 # smalltalk (no CVE, no keyword), the normal pipeline still forces a "## 1. Mã Khai thác …
@@ -885,22 +902,64 @@ def register_routes(app: FastAPI, state: Any) -> None:
             logger.exception("conversation rehydrate failed (fail-open)")
 
     def _persist_turn(owner_hash: str, conversation_id: str, session_id: str,
-                      user_text: str, assistant_text: str) -> None:
+                      user_text: str, assistant_text: str) -> bool:
         """Durably record one user+assistant turn in SQLite (create-if-first). Fail-open: a
         store error must never break a chat reply that already succeeded. Skips a cross-owner
-        conversation_id collision (owns() re-checked after create)."""
+        conversation_id collision (owns() re-checked after create).
+
+        Returns whether this call is the conversation's FIRST turn (i.e. it just created the
+        row) — the caller uses that to fire the background auto-title generation exactly once,
+        right after the model's first real answer exists to summarize."""
         conversations = getattr(state.runner, "conversations", None)
         if conversations is None or not owner_hash:
-            return
+            return False
+        first_use = False
         try:
             now = int(time.time())
             if not conversations.owns(owner_hash, conversation_id):
                 conversations.create(owner_hash, conversation_id, session_id, "", now)
+                first_use = True
             if conversations.owns(owner_hash, conversation_id):
                 conversations.append_turn(
                     conversation_id, _strip_date_prefix(user_text), assistant_text, now)
         except Exception:
             logger.exception("durable conversation persist failed (fail-open)")
+        return first_use
+
+    def _build_title_prompt(user_text: str, assistant_text: str) -> str:
+        u = (user_text or "").strip()[:500]
+        a = (assistant_text or "").strip()[:500]
+        return f'Hỏi: "{u}"\nĐáp (rút gọn): "{a}"\n\nTiêu đề:'
+
+    def _clean_title(raw: str) -> str:
+        """First non-empty line of the model's reply, stripped of wrapping quotes/punctuation
+        the model sometimes adds despite the prompt, capped generously as a backstop (the model
+        is asked for ≤6 words; this is not the primary length control)."""
+        line = next((l.strip() for l in (raw or "").splitlines() if l.strip()), "")
+        line = line.strip(" \"'“”.–-")
+        return line[:_RENAME_TITLE_MAX]
+
+    async def _maybe_autotitle(owner_hash: str, conversation_id: str,
+                               user_text: str, assistant_text: str) -> None:
+        """Background, non-blocking: replace the interim (first-line-of-question) title with a
+        short LLM-generated one summarizing the first Q&A pair. Fires exactly once per
+        conversation (only on its first turn — see _persist_turn's `first_use`). Fail-open and
+        fully decoupled from the request/response cycle: any failure just leaves the interim
+        title in place, never surfaces to the caller, and never delays the chat reply (this
+        coroutine is scheduled via `_fire_and_forget`, not awaited)."""
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None:
+            return
+        try:
+            prompt = _build_title_prompt(user_text, assistant_text)
+            raw, _meta = await asyncio.wait_for(
+                state.runner.complete("conversation_title", prompt), timeout=15.0)
+            title = _clean_title(raw)
+            if title:
+                await asyncio.to_thread(conversations.rename, conversation_id, title, int(time.time()))
+        except Exception:
+            logger.warning("auto-title generation failed (fail-open, keeping interim title)",
+                           exc_info=True)
 
     def _new_cid(supplied: str | None) -> str:
         cid = (supplied or "").strip()
@@ -917,8 +976,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         metadata = {**metadata, "conversation_id": conversation_id}
         if owner_hash and not metadata.get("short_circuit"):
             # Offload the sync SQLite write to a worker thread so it never blocks the event loop.
-            await asyncio.to_thread(
+            first_use = await asyncio.to_thread(
                 _persist_turn, owner_hash, conversation_id, session_id, body.supplied_text(), text)
+            if first_use:
+                _fire_and_forget(_maybe_autotitle(owner_hash, conversation_id, body.supplied_text(), text))
         return {"response": text, "answer": text, "message": text,
                 "metadata": metadata, "conversation_id": conversation_id}
 
@@ -954,8 +1015,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if holder["compaction"]:
                 md["compaction"] = holder["compaction"]
             if owner_hash and final and final != STREAM_ERROR_MESSAGE:
-                await asyncio.to_thread(
+                first_use = await asyncio.to_thread(
                     _persist_turn, owner_hash, conversation_id, session_id, user_text, final)
+                if first_use:
+                    _fire_and_forget(_maybe_autotitle(owner_hash, conversation_id, user_text, final))
             return {"content": final, "answer": final, "message": final,
                     "metadata": md, "conversation_id": conversation_id}
 
@@ -1009,6 +1072,30 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "created_at": row.get("created_at"), "updated_at": row.get("updated_at"),
                 "message_count": row.get("message_count", total), "messages": messages,
                 "total": total, "limit": limit, "offset": offset}
+
+    @app.patch("/ai/conversations/{conversation_id}")
+    async def rename_conversation(conversation_id: str, body: RenameConversationRequest) -> dict[str, Any]:
+        """User-driven rename — sets an explicit title, overriding whatever the auto-title
+        (interim first-line, or the background LLM title) produced. Idempotent; no effect on
+        the transcript or the live session."""
+        owner_hash = _conv_owner_hash(body.user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để đổi tên hội thoại.")
+        title = (body.title or "").strip()
+        if not title:
+            raise HTTPException(400, "title không được để trống.")
+        title = title[:_RENAME_TITLE_MAX]
+        conversations = getattr(state.runner, "conversations", None)
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
+            raise HTTPException(404, "Không tìm thấy hội thoại.")
+        now = int(time.time())
+        await asyncio.to_thread(conversations.rename, conversation_id, title, now)
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        return {"conversation_id": conversation_id, "title": title,
+                "created_at": row.get("created_at"), "updated_at": now,
+                "message_count": row.get("message_count", 0)}
 
     @app.delete("/ai/conversations/{conversation_id}")
     async def delete_conversation(conversation_id: str,
