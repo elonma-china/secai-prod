@@ -133,6 +133,26 @@ class Settings(BaseSettings):
     admin_api_key: str = ""
     allowed_origins: str = ""
 
+    # ── Chat history / multi-conversation (new /ai/conversations/* endpoints) ────
+    # Live-memory window in the linch Redis session store, refreshed on every write.
+    # Default = the legacy 24h so old /ai/chat behavior is untouched. Durable history
+    # (conversation index + full transcript) is a separate SQLite store that never expires,
+    # so widening this only affects how long the *live* compacted context survives idle.
+    session_ttl_seconds: int = 86400
+    # Master flag for the durable multi-conversation feature (endpoints stay registered;
+    # this gates the durable-store bookkeeping and rehydrate). Fail-open when off.
+    chat_history_enabled: bool = True
+    # When a conversation is reopened after its Redis live window expired, seed the linch
+    # session with this many of the most recent durable transcript messages before running
+    # (0 = disable rehydrate). linch compacts further if the seed is large.
+    chat_history_rehydrate_turns: int = 12
+    # Surface a `compaction` object in the NEW stream endpoint's final metadata (and an
+    # additive `compaction` SSE frame) when linch compacts mid-run. Observational only.
+    conversation_compaction_meta: bool = True
+    # Optional/eval-gated: use linch's domain-neutral GENERAL_SUMMARY_PROMPT for LLM
+    # compaction summaries instead of the coding-flavored default (agent/factory.py).
+    chat_general_summary_prompt: bool = False
+
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào
     # target" gated ở đây; gỡ tính năng = để flag false. Xem docs/poc-verify-architecture.md.

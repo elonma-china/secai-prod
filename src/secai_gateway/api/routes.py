@@ -52,6 +52,8 @@ from ..security import (
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
     BughuntRequest,
+    ConversationChatRequest,
+    CreateConversationRequest,
     ExecRequest,
     ExploitRunRequest,
     LegacyRequest,
@@ -153,6 +155,37 @@ def _exploit_session_id(body: LegacyRequest) -> str:
     if not user_id or user_id == "anonymous":
         return f"exploit:anon:{uuid4().hex}"
     return f"exploit:{hashlib.sha256(user_id.encode()).hexdigest()}"
+
+
+# ── Multi-conversation (durable chat history) helpers ────────────────────────────
+# The NEW /ai/conversations/* endpoints layer a client-supplied conversation_id on the same
+# chat pipeline. owner_hash = sha256(user_id) is folded into the linch session id, so user B
+# can only ever address `chat:conv:{sha256(B)}:{id}` — a different, empty session. Cross-user
+# access is structurally impossible; the SQLite owner_hash column is the second, explicit gate.
+_CONV_DATE_PREFIX_RE = re.compile(r"^\[Hôm nay là [^\]]*\]\n")
+
+
+def _strip_date_prefix(text: str) -> str:
+    """Drop the ``[Hôm nay là …]\\n`` prefix ``runner._dated_prompt`` prepends to a user turn,
+    so the durable transcript stores the user's own words (defensive — the route stores the
+    pre-dated ``supplied_text`` anyway, this only matters if a dated prompt ever reaches here)."""
+    return _CONV_DATE_PREFIX_RE.sub("", text or "", count=1)
+
+
+def _conv_owner_hash(user_id: Any) -> str | None:
+    """sha256 of a real user_id, or None for anonymous/blank (mirrors _chat_session_id)."""
+    uid = str(user_id or "").strip()
+    if not uid or uid == "anonymous":
+        return None
+    return hashlib.sha256(uid.encode()).hexdigest()
+
+
+def _conv_session_id(owner_hash: str | None, conversation_id: str) -> str:
+    """linch session id for a conversation. Real owner → deterministic, owner-scoped id;
+    anonymous → a fresh ephemeral id per request (never indexed, no cross-user readback)."""
+    if not owner_hash:
+        return f"chat:conv:anon:{uuid4().hex}"
+    return f"chat:conv:{owner_hash}:{conversation_id}"
 
 
 def _kt_slots_from_request(body: LegacyRequest, text: str) -> dict[str, Any] | None:
@@ -652,10 +685,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
         return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
 
-    def stream(profile: str, prompt: str, session_id: str | None, build_final) -> StreamingResponse:
+    def stream(profile: str, prompt: str, session_id: str | None, build_final, *,
+               prelude=None, observe=None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
         endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
+
+        ``prelude`` (list of pre-encoded SSE frames) is emitted before the run starts and
+        ``observe(event) -> bytes|None`` may emit an extra additive frame per run event —
+        both default to nothing, so the pre-existing call-sites are byte-identical. The
+        conversation endpoints use them for a leading ``conversation`` frame and an optional
+        ``compaction`` frame WITHOUT touching event_to_sse (old streams gain no new frames).
 
         A ``regenerate`` event (see api/sse.py) can arrive mid-stream when a hook forces
         the model to redo its answer (e.g. it answered before calling required tools) —
@@ -665,6 +705,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         authoritative text regardless — only the raw `token` stream is affected."""
 
         async def gen() -> AsyncIterator[bytes]:
+            for pf in (prelude or []):   # additive leading frames; empty for legacy callers
+                yield pf
             final = ""
             run_id = None
             failed = False
@@ -674,6 +716,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         run_id = getattr(event, "run_id", None) or run_id
                     if isinstance(event, ResultEvent):
                         final = sanitize_output_language(event.final_text or "")
+                    if observe is not None:   # additive side-frames (e.g. compaction); None for legacy
+                        extra = observe(event)
+                        if extra:
+                            yield extra
                     frame = event_to_sse(event)
                     if frame:
                         yield frame
@@ -763,13 +809,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
         }
         return decision.message, metadata
 
-    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+    def _short_circuit_stream(message: str, metadata: dict[str, Any], *,
+                              prelude=None, top_level=None) -> StreamingResponse:
         """SSE response for a classifier short-circuit: one token + one final, then DONE
-        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it).
+
+        ``prelude``/``top_level`` are additive (leading frames; extra final-frame keys) and
+        default to nothing → the legacy call-site is byte-identical."""
         async def gen() -> AsyncIterator[bytes]:
+            for pf in (prelude or []):
+                yield pf
             yield sse_frame("token", {"delta": message})
-            yield sse_frame("final", {"content": message, "answer": message,
-                                      "message": message, "metadata": metadata})
+            final_payload = {"content": message, "answer": message,
+                             "message": message, "metadata": metadata}
+            if top_level:
+                final_payload.update(top_level)
+            yield sse_frame("final", final_payload)
             yield b"data: [DONE]\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -792,6 +847,182 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, session_id, build_final)
+
+    # ── Multi-conversation chat (durable history) — NEW, additive endpoints ─────────
+    # Same chat pipeline (_chat_gate + complete/stream) scoped by a conversation_id. The old
+    # /ai/chat endpoints are untouched. Chat output is a strict SUPERSET of the old shape
+    # (adds conversation_id). Durable index+transcript in SQLite (runner.conversations); the
+    # linch Redis store stays the live, auto-compacted working memory.
+
+    async def _maybe_rehydrate(session_id: str, conversation_id: str) -> None:
+        """Reopen-after-expiry: if the linch session has no live messages but the durable
+        transcript does, seed the session with the last N turns so context survives the 24h
+        Redis window. Fail-open — any error just means older context isn't reloaded."""
+        conversations = getattr(state.runner, "conversations", None)
+        store = getattr(state.runner, "session_store", None)
+        n = int(getattr(state.settings, "chat_history_rehydrate_turns", 0) or 0)
+        if conversations is None or store is None or n <= 0:
+            return
+        try:
+            existing = await store.load_messages(session_id)
+            if existing:
+                return  # live memory still present — nothing to rehydrate
+            turns = conversations.recent_turns(conversation_id, n)
+            if not turns:
+                return
+            from linch.types import Message, TextBlock
+            msgs = [Message(role=t["role"], content=[TextBlock(text=t["content"])])
+                    for t in turns
+                    if (t.get("content") or "").strip() and t.get("role") in ("user", "assistant")]
+            if not msgs:
+                return
+            try:
+                await store.create(id=session_id)
+            except Exception:
+                pass
+            await store.append_messages(session_id, msgs)
+        except Exception:
+            logger.exception("conversation rehydrate failed (fail-open)")
+
+    def _persist_turn(owner_hash: str, conversation_id: str, session_id: str,
+                      user_text: str, assistant_text: str) -> None:
+        """Durably record one user+assistant turn in SQLite (create-if-first). Fail-open: a
+        store error must never break a chat reply that already succeeded. Skips a cross-owner
+        conversation_id collision (owns() re-checked after create)."""
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None or not owner_hash:
+            return
+        try:
+            now = int(time.time())
+            if not conversations.owns(owner_hash, conversation_id):
+                conversations.create(owner_hash, conversation_id, session_id, "", now)
+            if conversations.owns(owner_hash, conversation_id):
+                conversations.append_turn(
+                    conversation_id, _strip_date_prefix(user_text), assistant_text, now)
+        except Exception:
+            logger.exception("durable conversation persist failed (fail-open)")
+
+    def _new_cid(supplied: str | None) -> str:
+        cid = (supplied or "").strip()
+        return cid or uuid4().hex
+
+    @app.post("/ai/conversations/chat")
+    async def conversations_chat(body: ConversationChatRequest) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(body.user_id)
+        conversation_id = _new_cid(body.conversation_id)
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        if owner_hash:
+            await _maybe_rehydrate(session_id, conversation_id)
+        text, metadata = await complete("chat", body, session_id=session_id)
+        metadata = {**metadata, "conversation_id": conversation_id}
+        if owner_hash and not metadata.get("short_circuit"):
+            _persist_turn(owner_hash, conversation_id, session_id, body.supplied_text(), text)
+        return {"response": text, "answer": text, "message": text,
+                "metadata": metadata, "conversation_id": conversation_id}
+
+    @app.post("/ai/conversations/chat/stream")
+    async def conversations_chat_stream(body: ConversationChatRequest) -> StreamingResponse:
+        text = require_public_input(body.supplied_text())
+        owner_hash = _conv_owner_hash(body.user_id)
+        conversation_id = _new_cid(body.conversation_id)
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        conv_frame = sse_frame("conversation", {"conversation_id": conversation_id})
+        gated = await _chat_gate(text)
+        if gated is not None:  # classifier short-circuit before the agent runs (not persisted)
+            md = {**gated[1], "conversation_id": conversation_id}
+            return _short_circuit_stream(gated[0], md, prelude=[conv_frame],
+                                         top_level={"conversation_id": conversation_id})
+        if owner_hash:
+            await _maybe_rehydrate(session_id, conversation_id)
+        user_text = body.supplied_text()
+        holder: dict[str, Any] = {"compaction": None}
+
+        def observe(event: Any) -> bytes | None:
+            if (getattr(state.settings, "conversation_compaction_meta", True)
+                    and type(event).__name__ == "CompactionEvent"):
+                info = {k: getattr(event, k, None) for k in
+                        ("strategy", "tokens_before", "tokens_after",
+                         "messages_before", "messages_after")}
+                holder["compaction"] = info
+                return sse_frame("compaction", info)
+            return None
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            md = {**base_meta("chat", run_id), "conversation_id": conversation_id}
+            if holder["compaction"]:
+                md["compaction"] = holder["compaction"]
+            if owner_hash and final and final != STREAM_ERROR_MESSAGE:
+                _persist_turn(owner_hash, conversation_id, session_id, user_text, final)
+            return {"content": final, "answer": final, "message": final,
+                    "metadata": md, "conversation_id": conversation_id}
+
+        return stream("chat", text, session_id, build_final,
+                      prelude=[conv_frame], observe=observe)
+
+    @app.post("/ai/conversations")
+    async def create_conversation(body: CreateConversationRequest) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(body.user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để tạo hội thoại có lịch sử.")
+        conversation_id = uuid4().hex
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        now = int(time.time())
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is not None:
+            try:
+                conversations.create(owner_hash, conversation_id, session_id, (body.title or ""), now)
+            except Exception:
+                logger.exception("create_conversation persist failed")
+        return {"conversation_id": conversation_id, "title": body.title or "",
+                "created_at": now, "updated_at": now, "message_count": 0}
+
+    @app.get("/ai/conversations")
+    async def list_conversations(user_id: str | None = None, limit: int = 20,
+                                 offset: int = 0) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để liệt kê hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None:
+            return {"conversations": [], "total": 0, "limit": limit, "offset": offset}
+        rows, total = conversations.list_for_owner(owner_hash, limit, offset)
+        return {"conversations": rows, "total": total, "limit": limit, "offset": offset}
+
+    @app.get("/ai/conversations/{conversation_id}")
+    async def get_conversation(conversation_id: str, user_id: str | None = None,
+                               limit: int = 200, offset: int = 0) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để đọc hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None or not conversations.owns(owner_hash, conversation_id):
+            raise HTTPException(404, "Không tìm thấy hội thoại.")   # 404, không xác nhận tồn tại
+        row = conversations.get(conversation_id) or {}
+        messages, total = conversations.messages(conversation_id, limit, offset)
+        return {"conversation_id": conversation_id, "title": row.get("title", ""),
+                "created_at": row.get("created_at"), "updated_at": row.get("updated_at"),
+                "message_count": row.get("message_count", total), "messages": messages,
+                "total": total, "limit": limit, "offset": offset}
+
+    @app.delete("/ai/conversations/{conversation_id}")
+    async def delete_conversation(conversation_id: str,
+                                  user_id: str | None = None) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để xoá hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None or not conversations.owns(owner_hash, conversation_id):
+            raise HTTPException(404, "Không tìm thấy hội thoại.")
+        row = conversations.get(conversation_id) or {}
+        conversations.soft_delete(conversation_id)
+        store = getattr(state.runner, "session_store", None)
+        sid = row.get("session_id")
+        if store is not None and sid:
+            try:
+                await store.delete(sid)
+            except Exception:
+                logger.exception("session delete failed for %s", sid)
+        return {"deleted": True, "conversation_id": conversation_id}
 
     @app.post("/ai/translate")
     async def translate(body: LegacyRequest) -> dict[str, Any]:

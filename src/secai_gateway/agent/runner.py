@@ -16,7 +16,7 @@ from linch.types import SystemBlock
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
 from ..retrieval import build_reference_tools, neo4j_search, qdrant_search, web_fetch, web_search
-from ..state import RedisSessionStore, SqliteLedger
+from ..state import ConversationStore, RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
 from .factory import make_gateway_agent
@@ -89,6 +89,10 @@ class LinchRunner:
         root = Path(database_path).parent
         root.mkdir(parents=True, exist_ok=True)
         self.ledger = SqliteLedger(database_path)
+        # Durable multi-conversation index + transcript (shares the same sqlite file as the
+        # ledger). System of record for the /ai/conversations/* endpoints; the linch session
+        # store below stays the LIVE working memory (24h + compaction).
+        self.conversations = ConversationStore(database_path)
         # PoC (searchsploit/Exploit-DB) runs in-process as a plain tool.
         self.poc = LocalPocBackend()
         self.tools: dict[str, Any] = {
@@ -109,7 +113,10 @@ class LinchRunner:
         # compaction snapshots). No Redis configured → in-memory (dev/test). The run-event
         # trace is not persisted (prod: traces not retained) — the run store is telemetry-only.
         redis_url = get_settings().redis_url
-        self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
+        self.session_store = (
+            RedisSessionStore(redis_url, ttl_seconds=get_settings().session_ttl_seconds)
+            if redis_url else InMemorySessionStore()
+        )
         # InMemory is enough for Phase 0 journal; durable SQLite can land with Phase 4 resume.
         self.run_store = InMemoryRunStore()
         # linch's Session is single-flight (Session.run() raises ConfigError if a run is

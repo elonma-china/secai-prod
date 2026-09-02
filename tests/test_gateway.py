@@ -335,6 +335,28 @@ async def test_exploit_stream_failure_is_visible_not_silent() -> None:
     assert "session not found" not in body
 
 
+@pytest.mark.asyncio
+async def test_old_chat_contract_shape_locked() -> None:
+    """Regression fence: the new multi-conversation feature must NOT alter the old chat
+    contract the Japanese system depends on — exact top-level keys, no leaked conversation_id,
+    and no new SSE frame types on the old /ai/chat/stream."""
+    import json as _json
+
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        body = (await client.post("/ai/chat", json={"user_id": "u1", "message": "hi"})).json()
+        assert set(body.keys()) == {"response", "answer", "message", "metadata"}
+        assert "conversation_id" not in body           # old endpoint must not gain the new field
+
+        stream = await client.post("/ai/chat/stream", json={"user_id": "u1", "message": "hi", "text": "hi"})
+        text = stream.text
+        assert "event: conversation" not in text        # no new frame leaked onto the old stream
+        assert "event: compaction" not in text
+        final_line = [ln for ln in text.splitlines() if ln.startswith("data: ") and '"content"' in ln][-1]
+        payload = _json.loads(final_line[len("data: "):])
+        assert set(payload.keys()) == {"content", "answer", "message", "metadata"}
+
+
 def test_chat_session_id_scoping() -> None:
     from secai_gateway.api.routes import _chat_session_id
     from secai_gateway.api.schemas import LegacyRequest
