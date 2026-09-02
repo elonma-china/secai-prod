@@ -30,11 +30,16 @@ Base URL: `http://<gateway>:8131` (production hiện tại).
 | 3 | GET | `/ai/conversations` | Liệt kê hội thoại | **bắt buộc** |
 | 4 | GET | `/ai/conversations/{id}` | Đọc transcript | **bắt buộc** |
 | 5 | POST | `/ai/conversations` | Tạo hội thoại rỗng | **bắt buộc** |
-| 6 | DELETE | `/ai/conversations/{id}` | Xoá hội thoại | **bắt buộc** |
+| 6 | PATCH | `/ai/conversations/{id}` | Đổi tên hội thoại | **bắt buộc** |
+| 7 | DELETE | `/ai/conversations/{id}` | Xoá hội thoại | **bắt buộc** |
 
 \* Không có `user_id` vẫn chat được (giống `/ai/chat` cũ) nhưng hội thoại **không lưu lại** — không liệt kê/mở lại được. Luôn gửi `user_id` nếu muốn dùng lịch sử.
 
-**Rate limit:** endpoint 1–2 dùng chung hạn ngạch với `/ai/chat` (90 req/60s/IP). Endpoint 3–6: 15 req/60s/IP.
+**Rate limit:** endpoint 1–2 dùng chung hạn ngạch với `/ai/chat` (90 req/60s/IP). Endpoint 3–7: 15 req/60s/IP.
+
+**Đặt tên hội thoại — 2 lớp:**
+1. **Tự động (không cần gọi gì)** — vài giây sau lượt đầu tiên, một tiến trình nền tóm tắt cặp hỏi-đáp thành tiêu đề ngắn (xem mục 6.1).
+2. **Thủ công** — endpoint 6 (`PATCH`), khi người dùng tự đổi tên. **Luôn thắng**, kể cả khi tự động đang chạy song song.
 
 ---
 
@@ -162,7 +167,7 @@ GET /ai/conversations?user_id=user-42&limit=20&offset=0
   "total": 1, "limit": 20, "offset": 0
 }
 ```
-Mới cập nhật gần nhất xếp trước. `title` tự lấy từ tin nhắn đầu tiên.
+Mới cập nhật gần nhất xếp trước. `title` ban đầu là dòng đầu câu hỏi (cắt ở 60 ký tự); vài giây sau được thay bằng tiêu đề LLM ngắn gọn hơn — xem mục 6.1. FE nên coi `title` là **có thể đổi** sau khi hội thoại đã tạo (poll lại `GET` hoặc list nếu cần cập nhật UI ngay khi mở lại danh sách).
 
 ---
 
@@ -184,6 +189,14 @@ GET /ai/conversations/{conversation_id}?user_id=user-42
 ```
 Luôn đọc từ **bộ nhớ bền** — đầy đủ kể cả sau khi cửa sổ sống Redis (24h) đã hết hạn.
 
+### 6.1. Tiêu đề tự động (không phải endpoint — chạy nền)
+
+Sau lượt hỏi-đáp **đầu tiên** của một hội thoại có `user_id` thật (không ẩn danh), gateway tự chạy một lệnh LLM nhỏ tóm tắt cặp hỏi-đáp thành tiêu đề ngắn (≤6 từ), thay cho tiêu đề tạm (dòng đầu câu hỏi). FE **không cần gọi gì** — chỉ cần đọc lại `title` qua mục 3/4 sau vài giây nếu muốn hiển thị đúng.
+
+**Đo thực tế (2026-09-02, 9 hội thoại thật):** 100% có tiêu đề mới trong vòng 20s; bước sinh tiêu đề tự nó dưới ~2s (phần lớn thời gian là chờ câu trả lời chat, không phải chờ tiêu đề). Ví dụ thật: `"Phân tích CVE-2024-3400"`, `"CWE-79: XSS"`, `"XXE, SSRF và IDOR"`, `"Trò chuyện mới"` (khi chỉ chào hỏi). Không đảm bảo tuyệt đối đúng ≤6 từ trong mọi trường hợp (LLM đôi khi vượt nhẹ) — coi đây là gợi ý hiển thị, không phải hợp đồng cứng.
+
+Nếu người dùng **đổi tên thủ công** (mục 7.1) trong lúc tiêu đề tự động vẫn đang chạy, **tên thủ công luôn thắng** — tiến trình nền chỉ ghi khi tiêu đề vẫn còn là bản tạm ban đầu, không bao giờ ghi đè một cái tên đã được đặt.
+
 ---
 
 ## 7. Tạo hội thoại rỗng (tuỳ chọn)
@@ -196,6 +209,24 @@ POST /ai/conversations
 { "conversation_id": "b21f...", "title": "Câu hỏi về CVE-2026-xxxx", "created_at": 1798..., "updated_at": 1798..., "message_count": 0 }
 ```
 Dùng khi cần nút "**+ Cuộc trò chuyện mới**" hiện ngay trước khi người dùng gõ gì. Có thể bỏ qua bước này — cứ gửi tin ở mục 3/4 mà không kèm `conversation_id`, server tự tạo.
+
+### 7.1. Đổi tên hội thoại
+
+```
+PATCH /ai/conversations/{conversation_id}
+{ "user_id": "user-42", "title": "Tên tôi tự đặt" }
+```
+```json
+{ "conversation_id": "a397e7...", "title": "Tên tôi tự đặt", "created_at": 1798..., "updated_at": 1798..., "message_count": 4 }
+```
+Dùng khi người dùng tự sửa tên hiển thị. **Luôn ghi đè** — kể cả khi tiêu đề tự động (mục 6.1) chưa kịp chạy xong, kết quả cuối cùng vẫn là tên người dùng đặt (đã kiểm chứng bằng test tái hiện đúng thứ tự và chạy live với model thật). Title rỗng/toàn khoảng trắng → `400`; quá dài bị cắt còn 120 ký tự (không báo lỗi); không đổi `message_count`/`created_at`/transcript, chỉ đổi `title`+`updated_at`. Không đúng chủ hoặc không tồn tại → `404`.
+
+**Ví dụ chạy được:**
+```bash
+curl -X PATCH http://<gateway>:8131/ai/conversations/a397e7...b690 \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user-42", "title": "Câu hỏi về CVE-2026-1234"}'
+```
 
 ---
 
@@ -215,12 +246,14 @@ Soft-delete — ẩn khỏi danh sách, không hiện lại.
 
 | Mã | Khi nào | Body |
 |---|---|---|
-| `400` | Thiếu `user_id` ở endpoint quản lý (3, 5, 6, 8) | `{"detail": "user_id là bắt buộc để ..."}` |
+| `400` | Thiếu `user_id` ở endpoint quản lý (3, 5, 6, 7, 8); hoặc `title` rỗng ở endpoint 6 | `{"detail": "user_id là bắt buộc để ..."}` / `{"detail": "title không được để trống."}` |
 | `404` | `conversation_id` không tồn tại **hoặc** không thuộc `user_id` này | `{"detail": "Không tìm thấy hội thoại."}` |
 | `429` | Vượt rate limit | `{"detail": "rate limit exceeded"}` |
-| `503` | Model tạm thời không phản hồi (endpoint 3/4 only) | `{"detail": "AI service unavailable: ..."}` |
+| `503` | Model tạm thời không phản hồi (endpoint 1/2 only) | `{"detail": "AI service unavailable: ..."}` |
 
 `404` dùng cho cả "không tồn tại" lẫn "sai chủ" — để không lộ thông tin có hội thoại đó tồn tại hay không.
+
+**Lưu ý nhỏ:** nếu tin nhắn đầu tiên bị bộ lọc đầu vào chặn (injection/ngoài phạm vi — `metadata.short_circuit=true`), endpoint 1/2 vẫn trả về một `conversation_id` trong response, nhưng hội thoại đó **không được lưu bền** (không tự tạo). Gọi `GET`/`PATCH` trên id đó sẽ nhận `404` như một hội thoại không tồn tại. FE không nên coi `conversation_id` của một lượt bị chặn là dùng lại được cho lượt sau — hãy kiểm tra `metadata.short_circuit` trước khi lưu id.
 
 ---
 
@@ -235,6 +268,10 @@ Mở app  ──▶  GET /ai/conversations?user_id=       (danh sách bên trái
               │
               └─ "+ Cuộc mới"  ──▶  POST /ai/conversations/chat/stream (không kèm id)
                                      → lưu conversation_id từ frame đầu tiên
+                                     → tiêu đề tự cập nhật sau vài giây (mục 6.1)
+
+Người dùng đổi tên  ──▶  PATCH /ai/conversations/{id}   (luôn thắng, kể cả tự động chưa xong)
+Người dùng xoá      ──▶  DELETE /ai/conversations/{id}
 ```
 
 ---
