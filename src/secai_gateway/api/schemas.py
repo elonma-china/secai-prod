@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class VerifyRequest(BaseModel):
@@ -59,6 +59,31 @@ class ExploitRunRequest(BaseModel):
     command: str | None = "id"
     use_proxy: bool = True
     user_id: str | int | None = None
+
+
+class ExploitAdvanceRequest(BaseModel):
+    """POST /ai/exploit-advance[/stream] — khai thác ĐA-BƯỚC một CVE vào TARGET thật, có vòng
+    verify→sửa và stream tiến trình. Chỉ hoạt động khi ops bật POC_EXPLOIT_ENABLED + target thuộc
+    allowlist (VERIFY_ALLOWED_TARGETS / VERIFY_ALLOW_ALL). Mọi field optional có mô tả để FE dựng form
+    (đọc qua /openapi.json hoặc GET /ai/exploit-advance/fields)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    # ── Bắt buộc ──
+    cve: str = Field(description="Mã CVE cần khai thác, ví dụ CVE-2017-5638.")
+    target: str = Field(description="Target: host | host:port | URL (vd 10.0.0.5, 10.0.0.5:8080, http://10.0.0.5:8080).")
+    # ── Optional (đều có mặc định; FE nên hiển thị rõ) ──
+    port: str | int | None = Field(default=None, description="Cổng target (nếu không suy ra được từ `target`).")
+    command: str = Field(default="id", description="Lệnh chứng minh RCE khi khai thác thành công (vd `id`, `cat /flag`).")
+    auth: dict[str, Any] | None = Field(default=None, description="Xác thực cho target cần đăng nhập: {headers?, cookies?, token?}.")
+    scope_note: str | None = Field(default=None, description="Ghi chú phạm vi/uỷ quyền (audit).")
+    max_steps: int = Field(default=5, ge=1, le=20, description="Số vòng exploit→verify→sửa tối đa.")
+    step_timeout_s: int = Field(default=180, ge=10, le=1800, description="Timeout mỗi bước (giây).")
+    total_timeout_s: int = Field(default=900, ge=30, le=7200, description="Timeout toàn cục (giây).")
+    use_proxy: bool = Field(default=True, description="Định tuyến qua proxy khai thác nội bộ (kt).")
+    extra: dict[str, Any] | None = Field(default=None, description="Tham số phụ (rport/path/payload override) cho engine.")
+    user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
+    run_id: str | None = Field(default=None, description="Gán run_id cố định để truy vết; bỏ trống sẽ tự sinh.")
 
 
 class BughuntRequest(BaseModel):
