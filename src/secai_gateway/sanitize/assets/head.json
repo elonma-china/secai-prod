@@ -4,7 +4,7 @@
   "trained": true,
   "backend": "endpoint",
   "kind": "mixed",
-  "trained_at": "2026-09-02T08:07:06+00:00",
+  "trained_at": "2026-09-02T09:05:09+00:00",
   "labels": [
     "security",
     "chitchat",

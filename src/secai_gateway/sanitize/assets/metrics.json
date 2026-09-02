@@ -2,35 +2,35 @@
   "embed_model": "DuyTa/sec-embedding",
   "dim": 1024,
   "backend": "endpoint",
-  "n_train": 1476,
-  "n_test": 572,
+  "n_train": 1669,
+  "n_test": 604,
   "intent": {
     "security": {
-      "precision": 0.9975,
-      "recall": 0.9825,
-      "f1": 0.9899,
-      "tp": 393,
-      "fp": 1,
+      "precision": 0.9951,
+      "recall": 0.9832,
+      "f1": 0.9891,
+      "tp": 409,
+      "fp": 2,
       "fn": 7
     },
     "chitchat": {
-      "precision": 0.9286,
-      "recall": 0.9512,
-      "f1": 0.9398,
-      "tp": 39,
-      "fp": 3,
-      "fn": 2
+      "precision": 0.9737,
+      "recall": 1.0,
+      "f1": 0.9867,
+      "tp": 37,
+      "fp": 1,
+      "fn": 0
     },
     "offtopic": {
-      "precision": 0.9338,
-      "recall": 0.9695,
-      "f1": 0.9513,
-      "tp": 127,
-      "fp": 9,
-      "fn": 4
+      "precision": 0.9548,
+      "recall": 0.9801,
+      "f1": 0.9673,
+      "tp": 148,
+      "fp": 7,
+      "fn": 3
     }
   },
-  "intent_accuracy": 0.9773,
+  "intent_accuracy": 0.9834,
   "intent_confusion": {
     "labels": [
       "security",
@@ -39,57 +39,57 @@
     ],
     "matrix": [
       [
-        393,
+        409,
         0,
         7
       ],
       [
         0,
-        39,
-        2
+        37,
+        0
       ],
       [
+        2,
         1,
-        3,
-        127
+        148
       ]
     ]
   },
   "injection": {
-    "precision": 1.0,
-    "recall": 0.96,
-    "f1": 0.9796,
-    "tp": 72,
-    "fp": 0,
-    "fn": 3
-  },
-  "pii": {
-    "precision": 0.9904,
-    "recall": 0.981,
-    "f1": 0.9856,
-    "tp": 103,
-    "fp": 1,
-    "fn": 2
-  },
-  "offtopic_decision": {
-    "precision": 0.9338,
-    "recall": 0.9695,
-    "f1": 0.9513,
-    "tp": 127,
-    "fp": 9,
+    "precision": 0.9783,
+    "recall": 0.9574,
+    "f1": 0.9677,
+    "tp": 90,
+    "fp": 2,
     "fn": 4
   },
-  "macro_f1": 0.9692,
+  "pii": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 79,
+    "fp": 0,
+    "fn": 0
+  },
+  "offtopic_decision": {
+    "precision": 0.9548,
+    "recall": 0.9801,
+    "f1": 0.9673,
+    "tp": 148,
+    "fp": 7,
+    "fn": 3
+  },
+  "macro_f1": 0.9822,
   "thresholds": {
-    "injection": 0.75,
+    "injection": 0.6,
     "pii": 0.2,
     "offtopic": 0.34
   },
   "head_apply_latency_ms": {
-    "mean": 0.0467,
-    "p95": 0.0535
+    "mean": 0.0458,
+    "p95": 0.0549
   },
-  "train_intent_accuracy": 0.9993,
+  "train_intent_accuracy": 0.9958,
   "head": "mixed",
-  "overfit_gap_intent_acc": 0.022
+  "overfit_gap_intent_acc": 0.0124
 }
