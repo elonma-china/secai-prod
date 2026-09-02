@@ -97,6 +97,10 @@ class LegacyRequest(BaseModel):
     cve: str | None = None
     port: str | int | None = None
     command: str | None = None
+    # Per-request PoC strategy override for /ai/exploit A/B: "prune" (new, keep multi-file
+    # structure) | "consolidate" (legacy LLM merge) | "auto". None → Settings.poc_strategy.
+    # Lets ONE gateway serve both the new and old paths for side-by-side comparison.
+    poc_strategy: str | None = None
 
     def supplied_text(self) -> str:
         """Return the first non-empty user text across legacy request shapes."""

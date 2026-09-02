@@ -167,6 +167,19 @@ def _kt_slots_from_request(body: LegacyRequest, text: str) -> dict[str, Any] | N
     return parse_exploit_intent(text)
 
 
+_VALID_POC_STRATEGIES = {"prune", "consolidate", "auto"}
+
+
+def _resolve_poc_strategy(override: str | None, settings: Any) -> str:
+    """Effective PoC strategy: a valid per-request override wins (A/B on one gateway), else
+    Settings.poc_strategy, else 'prune'. Junk overrides are ignored (not trusted from clients)."""
+    o = str(override or "").strip().lower()
+    if o in _VALID_POC_STRATEGIES:
+        return o
+    d = str(getattr(settings, "poc_strategy", "prune") or "prune").lower()
+    return d if d in _VALID_POC_STRATEGIES else "prune"
+
+
 def _exploit_target(body: LegacyRequest, text: str) -> str | None:
     """Normalized ``host[:port]`` the request is targeting, for scoping the verified-good
     (fixed) PoC lookup to the right lab. Free-text target wins; else the structured
@@ -884,7 +897,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     async def _build_exploit_grounding(
         prefetch_result: dict[str, Any], web_hints: list[dict[str, Any]],
-        session_id: str | None, target: str | None = None) -> tuple[list[dict[str, Any]], str, bool]:
+        session_id: str | None, target: str | None = None,
+        strategy_override: str | None = None) -> tuple[list[dict[str, Any]], str, bool]:
         """Acquire the best real PoC code (catalog → temp cache → on-demand GitHub → web raw
         script), consolidate it into ONE runnable file when enabled, and build the model
         appendix. Internet-fetched code is saved to the temp cache for reuse next time.
@@ -950,11 +964,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 await asyncio.sleep(delay)
             consolidated = fixed
         elif all_real and (getattr(settings, "poc_consolidate_enabled", False)
-                           or str(getattr(settings, "poc_strategy", "prune")).lower() in ("prune", "auto")):
+                           or _resolve_poc_strategy(strategy_override, settings) in ("prune", "auto")):
             try:
                 real_full = await _fullen_evidence_for_display(list(all_real), poc)
                 entry_ev = real_full[0]
-                strategy = str(getattr(settings, "poc_strategy", "prune") or "prune").lower()
+                strategy = _resolve_poc_strategy(strategy_override, settings)
                 can_consolidate = getattr(settings, "poc_consolidate_enabled", False)
                 use_llm = getattr(settings, "poc_slice_llm_enabled", True)
                 # Multi-file iff the entry carries a >1 non-readme file set.
@@ -979,7 +993,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         consolidated = await consolidate_poc(state.runner, real_full, cve_id)
             except Exception:
                 logger.exception("poc grounding (strategy=%s) failed for %s",
-                                 getattr(settings, "poc_strategy", "prune"), cve_id)
+                                 _resolve_poc_strategy(strategy_override, settings), cve_id)
                 consolidated = None
 
         if consolidated:
@@ -1039,7 +1053,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
-            prefetch_result, web_hints, session_id, target=_exploit_target(body, prompt_text))
+            prefetch_result, web_hints, session_id, target=_exploit_target(body, prompt_text),
+            strategy_override=getattr(body, "poc_strategy", None))
         agent_prompt = (prompt_text
                         + (_kt_prompt_appendix(kt_result) if kt_result else "")
                         + grounding_appendix)
@@ -1052,6 +1067,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
         metadata.update(injected)
+        metadata["poc_strategy"] = _resolve_poc_strategy(getattr(body, "poc_strategy", None), state.settings)
         if kt_result is not None:
             metadata["poc_kt_exploit"] = kt_result
             _audit(kt_run_id, "poc_kt_exploit_http",
@@ -1174,7 +1190,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 _hints = await _maybe_web_hints(_pf)
                 web_hints_holder.extend(_hints)  # visible to build_final (see declaration above)
                 _pre, prefetch_appendix, _cons = await _build_exploit_grounding(
-                    _pf, _hints, session_id, target=_exploit_target(body, text))
+                    _pf, _hints, session_id, target=_exploit_target(body, text),
+                    strategy_override=getattr(body, "poc_strategy", None))
                 grounding_holder["pre_evidence"] = _pre
                 grounding_holder["consolidated"] = _cons
             except Exception:
