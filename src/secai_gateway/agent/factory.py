@@ -11,6 +11,7 @@ from linch.loop_guard import LoopGuard
 from ..config import get_settings
 from ..poc.backend import _MAX_FETCH_PER_RUN
 from .hooks import (
+    RequireChatGroundingHook,
     RequireRunInstructionsHook,
     RequireSearchBeforeAnswerHook,
     SanitizeToolResultHook,
@@ -64,6 +65,11 @@ def make_gateway_agent(
             RequireSearchBeforeAnswerHook(search_tool="poc_search", fetch_tool="poc_fetch",
                                           profile="exploit_research"),
             RequireRunInstructionsHook(ledger=ledger, profile="exploit_research"),
+            # Air-gap-safe KB grounding for chat: force qdrant_search/neo4j_search (internal
+            # only, no internet) before answering a CVE/CWE/CAPEC/ATT&CK question — see
+            # hooks.py::RequireChatGroundingHook for why this is needed on top of the
+            # <grounding_policy> prompt instructions alone.
+            RequireChatGroundingHook(profile="chat"),
             # Indirect prompt-injection defense: spotlight untrusted retrieved/tool content
             # (see hooks.py::SanitizeToolResultHook + security.wrap_untrusted_content). Applies
             # to every profile automatically since they share this one Agent.

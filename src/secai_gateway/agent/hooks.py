@@ -252,6 +252,114 @@ class RequireRunInstructionsHook:
 UNTRUSTED_CONTENT_TOOLS = ("qdrant_search", "neo4j_search", "poc_fetch")
 
 
+# ── Chat KB-grounding (internal only — no web/internet dependency) ─────────────────────────
+# Air-gapped deployment: the chat profile has no web_fetch/fetch_reference tool at all (see
+# agent/runner.py's tool registry), so this only ever requires an INTERNAL knowledge-base
+# lookup (qdrant_search/neo4j_search) — never the internet. Mirrors
+# RequireSearchBeforeAnswerHook's rationale: prompt wording alone ("hãy tra KB trước khi trả
+# lời" in base_system.md's grounding_policy) is advisory, not enforced — a small model can
+# skip the lookup and answer a CVE/CWE-specific question from parametric memory instead,
+# risking a fabricated CVSS score, affected version, or technical detail for a CVE it never
+# saw during training. This hook makes that lookup non-optional for the questions that need
+# it, same pattern as the ceiling/floor relationship ToolCallBudgetHook/
+# RequireSearchBeforeAnswerHook already establish for exploit_research.
+#
+# Deliberately narrower than a sibling dev-branch version of this hook: that one also
+# enforces a `web_fetch` requirement for OWASP/CWE Top-N questions. This deployment never
+# wires web_fetch into chat's tools — requiring it here would nag the model to call a tool
+# it doesn't have, burning retries for nothing. Only the internal-KB half is implemented.
+_ENTITY_ID_RE = re.compile(r"\b(?:CVE|CWE|CAPEC)-\d{1,7}(?:-\d+)?\b|\bT\d{4}(?:\.\d{3})?\b", re.I)
+_ID_LOOKUP_RE = re.compile(
+    r"(?:"
+    r"mã\s+(?:CWE|CVE)"
+    r"|(?:CWE|CVE)\s*(?:nào|gì)"
+    r"|(?:CWE|CVE).{0,24}mã\s+nào"
+    r"|mã\s+nào.{0,24}(?:CWE|CVE)"
+    r"|which\s+(?:CWE|CVE)"
+    r"|(?:CVE|CWE)\s+liên\s*quan"
+    r"|liên\s*quan\s+(?:đến\s+)?(?:các\s+)?(?:CVE|CWE)"
+    r"|CVE\s+nào"
+    r"|CWE\s+nào"
+    r"|thuộc\s+CWE\s+nào"
+    r")",
+    re.I | re.S,
+)
+
+
+def _chat_needs_kb(prompt: str) -> bool:
+    text = (prompt or "").strip()
+    if not text:
+        return False
+    return bool(_ENTITY_ID_RE.search(text) or _ID_LOOKUP_RE.search(text))
+
+
+class RequireChatGroundingHook:
+    """Force the chat profile to call qdrant_search/neo4j_search before answering a question
+    that names a CVE/CWE/CAPEC/ATT&CK id, or asks "CVE nào"/"CWE nào" style. Concept
+    questions (no id, no id-lookup phrasing) are unaffected — answered directly, no forced
+    tool call. Bounded (`max_retries`): if the model still skips the lookup after being
+    nudged, the answer is allowed through — this widens evidence coverage, it does not gate
+    correctness (the model's own <grounding_policy>/<not_found_policy> instructions are the
+    correctness backstop)."""
+
+    name = "require_chat_grounding"
+
+    def __init__(self, profile: str = "chat", max_retries: int = 3) -> None:
+        self.profile = profile
+        self.max_retries = max_retries
+        self._kb: "OrderedDict[str, bool]" = OrderedDict()
+        self._attempts: "OrderedDict[str, int]" = OrderedDict()
+
+    def _profile_of(self, ctx: BeforeFinalAnswerContext) -> str | None:
+        session = getattr(ctx, "session", None)
+        meta = getattr(session, "meta", None) or {}
+        return meta.get("profile")
+
+    def _prompt_of(self, ctx: BeforeFinalAnswerContext) -> str:
+        session = getattr(ctx, "session", None)
+        meta = getattr(session, "meta", None) or {}
+        return str(meta.get("last_user_prompt") or "")
+
+    def _mark(self, store: "OrderedDict[str, bool]", run_id: str) -> None:
+        store[run_id] = True
+        store.move_to_end(run_id)
+        while len(store) > _MAX_TRACKED_RUNS:
+            store.popitem(last=False)
+
+    async def on_post_tool_use(self, ctx: PostToolUseContext) -> HookResult | None:
+        # No profile check here, matching RequireSearchBeforeAnswerHook's own
+        # on_post_tool_use above: PostToolUseContext isn't guaranteed to carry a populated
+        # session, and marking a run_id as "KB searched" for a tool call that only exists in
+        # the chat profile's own tool registry is harmless even without re-checking profile —
+        # on_before_final_answer (below) is the one that actually gates by profile.
+        if ctx.result is not None and ctx.result.is_error:
+            return None
+        if ctx.tool_name in ("qdrant_search", "neo4j_search"):
+            self._mark(self._kb, ctx.run_id or "")
+        return None
+
+    async def on_before_final_answer(self, ctx: BeforeFinalAnswerContext) -> HookResult | None:
+        if self._profile_of(ctx) != self.profile:
+            return None
+        if not _chat_needs_kb(self._prompt_of(ctx)):
+            return None
+        run_id = ctx.run_id or ""
+        if self._kb.get(run_id, False):
+            return None
+        attempts = self._attempts.get(run_id, 0)
+        if attempts >= self.max_retries:
+            return None
+        self._attempts[run_id] = attempts + 1
+        self._attempts.move_to_end(run_id)
+        while len(self._attempts) > _MAX_TRACKED_RUNS:
+            self._attempts.popitem(last=False)
+        return HookResult.force_continue(
+            reason="chat_kb_required",
+            feedback="Câu hỏi có nhắc mã CVE/CWE/CAPEC/ATT&CK hoặc hỏi tìm mã — hãy gọi "
+                     "qdrant_search (hoặc neo4j_search khi cần quan hệ ATT&CK/CAPEC) tra "
+                     "dữ liệu nội bộ trước khi trả lời. Không tự bịa mã hay chi tiết kỹ thuật.")
+
+
 class SanitizeToolResultHook:
     """Wrap untrusted-tool results in an explicit delimiter (indirect prompt-injection defense).
 
