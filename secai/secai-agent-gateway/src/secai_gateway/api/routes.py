@@ -48,6 +48,7 @@ from .messages import parse_statistical, report_prompt, statistical_prompt, tran
 from .schemas import (
     BughuntRequest,
     ExecRequest,
+    ExploitAdvanceRequest,
     ExploitRunRequest,
     LegacyRequest,
     ToolRequest,
@@ -1499,6 +1500,104 @@ def register_routes(app: FastAPI, state: Any) -> None:
                "port": body.port, "exploit_verdict": result.get("exploit_verdict"),
                "ok": result.get("ok")})
         return result
+
+    def _advance_authz(target: str) -> str:
+        """Fail-closed authz cho exploit-advance (tấn công target thật): engine bật + target trong
+        allowlist. Trả host đã parse."""
+        from ..poc.advance import parse_target
+        from ..poc.verify import target_allowed
+        settings = state.settings
+        if not settings.poc_exploit_enabled or not (settings.poc_exploit_api_url or "").strip():
+            raise HTTPException(404, "exploit-advance disabled (POC_EXPLOIT_ENABLED + POC_EXPLOIT_API_URL)")
+        host, _ = parse_target(target)
+        if not host:
+            raise HTTPException(422, "target không hợp lệ")
+        if not target_allowed(settings, target) and not getattr(settings, "verify_allow_all", False):
+            raise HTTPException(403, f"Target '{target}' ngoài allowlist (VERIFY_ALLOWED_TARGETS/VERIFY_ALLOW_ALL)")
+        return host
+
+    @app.get("/ai/exploit-advance/fields")
+    async def exploit_advance_fields() -> dict[str, Any]:
+        """Spec field cho FE dựng form: name/type/required/default/description (đọc từ schema)."""
+        schema = ExploitAdvanceRequest.model_json_schema()
+        props = schema.get("properties", {})
+        required = set(schema.get("required", []))
+
+        def _ftype(p: dict[str, Any]) -> str:
+            if p.get("type"):
+                return p["type"]
+            for t in p.get("anyOf", []):
+                if t.get("type") and t["type"] != "null":
+                    return t["type"]
+            return "string"
+
+        fields = [{"name": n, "type": _ftype(p), "required": n in required,
+                   "default": p.get("default"), "description": p.get("description", "")}
+                  for n, p in props.items()]
+        return {"endpoint": "/ai/exploit-advance/stream", "fields": fields}
+
+    @app.post("/ai/exploit-advance/stream")
+    async def exploit_advance_stream(body: ExploitAdvanceRequest) -> StreamingResponse:
+        """Khai thác ĐA-BƯỚC một CVE vào TARGET thật; stream tiến trình (event `step`/`log`/`final`)
+        cho FE — user thấy đang ở bước nào + kết quả. Gated: POC_EXPLOIT_ENABLED + allowlist."""
+        _advance_authz(body.target)
+        from ..poc.advance import run_exploit_advance
+        run_id = (body.run_id or "").strip() or f"adv:{uuid4().hex}"
+        _audit(run_id, "exploit_advance_http", f"{body.cve}:{body.target}",
+               {"user_id": body.user_id, "target": body.target, "cve": body.cve,
+                "scope_note": body.scope_note})
+
+        async def gen() -> AsyncIterator[bytes]:
+            final_seen = False
+            try:
+                async for ev in run_exploit_advance(state.settings, state.runner, body, run_id=run_id):
+                    et = ev.get("type")
+                    if et == "final":
+                        final_seen = True
+                        yield sse_frame("final", {k: ev.get(k) for k in
+                                                  ("ok", "verdict", "content", "result", "metadata")})
+                    elif et == "step":
+                        yield sse_frame("step", {k: ev.get(k) for k in
+                                                 ("index", "name", "status", "detail", "verdict")})
+                    elif et == "log":
+                        yield sse_frame("log", {"stream": ev.get("stream", "stdout"),
+                                                "line": ev.get("line", ""), "run_id": run_id})
+                    await asyncio.sleep(0)  # flush từng event cho FE console
+            except Exception:
+                logger.exception("exploit-advance stream failed target=%s cve=%s", body.target, body.cve)
+                yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
+                if not final_seen:
+                    yield sse_frame("final", {"ok": False, "verdict": "error",
+                                              "content": STREAM_ERROR_MESSAGE, "result": {},
+                                              "metadata": {"run_id": run_id, "profile": "exploit_advance"}})
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive",
+                     "X-Accel-Buffering": "no"})
+
+    @app.post("/ai/exploit-advance")
+    async def exploit_advance(body: ExploitAdvanceRequest) -> dict[str, Any]:
+        """Bản không-SSE của exploit-advance: chạy pipeline, gom các bước + kết quả cuối trả JSON."""
+        _advance_authz(body.target)
+        from ..poc.advance import run_exploit_advance
+        run_id = (body.run_id or "").strip() or f"adv:{uuid4().hex}"
+        _audit(run_id, "exploit_advance_http", f"{body.cve}:{body.target}",
+               {"user_id": body.user_id, "target": body.target, "cve": body.cve,
+                "scope_note": body.scope_note})
+        steps: list[dict[str, Any]] = []
+        final_ev: dict[str, Any] | None = None
+        try:
+            async for ev in run_exploit_advance(state.settings, state.runner, body, run_id=run_id):
+                if ev.get("type") == "step":
+                    steps.append({k: ev.get(k) for k in ("index", "name", "status", "detail", "verdict")})
+                elif ev.get("type") == "final":
+                    final_ev = ev
+        except Exception as exc:
+            logger.exception("exploit-advance failed target=%s cve=%s", body.target, body.cve)
+            raise HTTPException(503, f"exploit-advance runtime error: {exc}") from exc
+        out = final_ev or {"ok": False, "verdict": "error", "result": {}, "metadata": {"run_id": run_id}}
+        return {**{k: out.get(k) for k in ("ok", "verdict", "content", "result", "metadata")}, "steps": steps}
 
     @app.post("/ai/tool")
     async def tool(body: ToolRequest) -> dict[str, Any]:
