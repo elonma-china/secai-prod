@@ -11,6 +11,12 @@ from fastapi.responses import JSONResponse
 def route_limit(path: str) -> int:
     if path.endswith("/stream"):
         path = path[: -len("/stream")]  # rate-limit /ai/x/stream as /ai/x
+    if path == "/ai/conversations/chat":
+        # Same chatflow as /ai/chat, just multi-conversation — give it the same generous
+        # headroom the monorepo dev branch already uses for /ai/chat. NOT touching /ai/chat's
+        # own limit here (stays at main's existing default below) to keep the old endpoint's
+        # behavior byte-identical.
+        return 90
     if path == "/ai/exploit":
         return 20
     if path == "/admin/refresh-models":

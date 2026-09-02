@@ -12,7 +12,7 @@ from linch.types import SystemBlock
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
 from ..retrieval import neo4j_search, qdrant_search
-from ..state import RedisSessionStore, SqliteLedger
+from ..state import ConversationStore, RedisSessionStore, SqliteLedger
 from .factory import make_gateway_agent
 from .profiles import PROFILES, compose_system_prompt
 from .providers import build_llm_provider
@@ -30,6 +30,10 @@ class LinchRunner:
         root = Path(database_path).parent
         root.mkdir(parents=True, exist_ok=True)
         self.ledger = SqliteLedger(database_path)
+        # Durable multi-conversation index + transcript (shares the same sqlite file as the
+        # ledger). System of record for the /ai/conversations/* endpoints; the linch session
+        # store below stays the LIVE working memory (24h + compaction).
+        self.conversations = ConversationStore(database_path)
         # PoC (searchsploit/Exploit-DB) runs in-process as a plain tool.
         self.poc = LocalPocBackend()
         self.tools: dict[str, Any] = {
@@ -40,8 +44,12 @@ class LinchRunner:
         # Conversation memory is unified in Redis via linch's own session store (messages +
         # compaction snapshots). No Redis configured → in-memory (dev/test). The run-event
         # trace is not persisted (prod: traces not retained) — the run store is telemetry-only.
-        redis_url = get_settings().redis_url
-        self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
+        s = get_settings()
+        redis_url = s.redis_url
+        self.session_store = (
+            RedisSessionStore(redis_url, ttl_seconds=s.session_ttl_seconds)
+            if redis_url else InMemorySessionStore()
+        )
         self.run_store = InMemoryRunStore()
         provider, model = build_llm_provider()
         self.agent = make_gateway_agent(
