@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse
 from linch.events import ResultEvent, SystemEvent
 
 from ..agent import registry_for
+from ..state.conversations import derive_title
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -946,17 +947,26 @@ def register_routes(app: FastAPI, state: Any) -> None:
         conversation (only on its first turn — see _persist_turn's `first_use`). Fail-open and
         fully decoupled from the request/response cycle: any failure just leaves the interim
         title in place, never surfaces to the caller, and never delays the chat reply (this
-        coroutine is scheduled via `_fire_and_forget`, not awaited)."""
+        coroutine is scheduled via `_fire_and_forget`, not awaited).
+
+        Uses `rename_if_matches` (NOT the unconditional `rename`) so a manual PATCH rename
+        that lands while this LLM call is still in flight always wins, never the other way
+        around — this job only writes when the title still equals the exact interim value
+        `_persist_turn`'s own fallback set, i.e. nothing has renamed it since (a real race
+        observed live 2026-09-02: the unconditional `rename` let this job silently clobber a
+        manual rename that happened ~1-2s earlier, the opposite of the intended precedence)."""
         conversations = getattr(state.runner, "conversations", None)
         if conversations is None:
             return
         try:
+            expected_interim = derive_title(_strip_date_prefix(user_text))
             prompt = _build_title_prompt(user_text, assistant_text)
             raw, _meta = await asyncio.wait_for(
                 state.runner.complete("conversation_title", prompt), timeout=15.0)
             title = _clean_title(raw)
             if title:
-                await asyncio.to_thread(conversations.rename, conversation_id, title, int(time.time()))
+                await asyncio.to_thread(conversations.rename_if_matches,
+                                        conversation_id, expected_interim, title, int(time.time()))
         except Exception:
             logger.warning("auto-title generation failed (fail-open, keeping interim title)",
                            exc_info=True)

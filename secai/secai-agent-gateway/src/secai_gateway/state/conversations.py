@@ -33,8 +33,10 @@ from typing import Any
 _TITLE_MAX = 60
 
 
-def _derive_title(text: str) -> str:
-    """First non-empty line of the user's message, whitespace-collapsed, truncated."""
+def derive_title(text: str) -> str:
+    """First non-empty line of the user's message, whitespace-collapsed, truncated. Public
+    (not module-private) because api/routes.py's background auto-title job needs to recompute
+    the exact interim value it is racing against — see ConversationStore.rename_if_matches."""
     line = " ".join((text or "").strip().split())
     return line[:_TITLE_MAX]
 
@@ -130,14 +132,36 @@ class ConversationStore:
         return [dict(r) for r in rows], int(total)
 
     def rename(self, conversation_id: str, title: str, ts: int) -> None:
-        """Overwrite the title unconditionally — used by both a user-driven rename (manual
-        PATCH) and the background auto-title generator (which replaces the interim
-        first-line-of-question fallback once the LLM-generated title is ready)."""
+        """Overwrite the title unconditionally — the user-driven PATCH rename. Always wins,
+        regardless of what the background auto-title job is doing (see rename_if_matches,
+        which is what THAT job uses instead, precisely so it never uses this unconditional
+        path and can't clobber a manual rename)."""
         with self._lock, self._conn:
             self._conn.execute(
                 "update conversations set title = ?, updated_at = ? where conversation_id = ?",
                 (title, ts, conversation_id),
             )
+
+    def rename_if_matches(self, conversation_id: str, expected_title: str,
+                          new_title: str, ts: int) -> bool:
+        """Conditional rename: writes ``new_title`` only when the CURRENT title still equals
+        ``expected_title``. Used exclusively by the background auto-title job (api/routes.py::
+        _maybe_autotitle) to avoid a race with a manual PATCH rename: the job computes what the
+        interim (first-line-of-question) title WOULD still be if nobody has renamed the
+        conversation since, and only applies its LLM-generated title when that holds. If a
+        manual rename landed first, the current title no longer matches and this is a no-op —
+        the manual rename wins, matching rename()'s own docstring ("always wins"). The
+        WHERE-clause match is evaluated inside the same locked write, so there is no separate
+        read-then-write window for a concurrent call to land in between.
+
+        Returns whether the write happened (mainly useful for tests/logging)."""
+        with self._lock, self._conn:
+            cur = self._conn.execute(
+                "update conversations set title = ?, updated_at = ? "
+                "where conversation_id = ? and title = ?",
+                (new_title, ts, conversation_id, expected_title),
+            )
+            return cur.rowcount > 0
 
     def soft_delete(self, conversation_id: str) -> None:
         with self._lock, self._conn:
@@ -168,7 +192,7 @@ class ConversationStore:
                 "update conversations set message_count = message_count + 2, updated_at = ?, "
                 "title = case when title = '' or title is null then ? else title end "
                 "where conversation_id = ?",
-                (ts, _derive_title(user_text), conversation_id),
+                (ts, derive_title(user_text), conversation_id),
             )
 
     def messages(self, conversation_id: str, limit: int = 200,

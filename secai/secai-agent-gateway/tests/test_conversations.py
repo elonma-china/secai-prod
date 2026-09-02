@@ -309,10 +309,9 @@ async def test_autotitle_only_fires_once_per_conversation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_autotitle_manual_rename_wins_if_llm_slower(monkeypatch) -> None:
-    """A user-driven PATCH after the background title lands must NOT be clobbered by a
-    late-arriving auto-title (there is none once the background task has been drained, but
-    this documents the intended precedence: rename() always overwrites, last-write-wins)."""
+async def test_autotitle_manual_rename_wins_if_llm_slower() -> None:
+    """A manual PATCH landing AFTER the auto-title has already landed must still hold —
+    trivial precedence check (nothing left to race)."""
     fake = ConvFakeRunner(title_reply="Tiêu đề LLM")
     async with _client(fake) as client:
         resp = await client.post("/ai/conversations/chat",
@@ -324,6 +323,42 @@ async def test_autotitle_manual_rename_wins_if_llm_slower(monkeypatch) -> None:
         assert renamed.status_code == 200
         got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
         assert got["title"] == "Tên tôi tự đặt"
+
+
+@pytest.mark.asyncio
+async def test_autotitle_never_clobbers_a_manual_rename_that_landed_first(monkeypatch) -> None:
+    """Regression for a real race found by live evaluation (2026-09-02): a manual PATCH that
+    COMPLETES before the background auto-title job's write must always win (live repro timing:
+    PATCH at t=0.03s, auto-title write at t=2.04s — manual genuinely landed first). The naive
+    fix (unconditional `ConversationStore.rename`) let the LLM job silently overwrite it — the
+    opposite of the intended precedence. The actual fix is `rename_if_matches`: the background
+    job only writes when the title still equals the exact interim value it started from.
+
+    With a FakeRunner that replies instantly, the real HTTP call sequence does NOT reliably
+    reproduce "PATCH completes before auto-title runs" — asyncio may run the already-scheduled
+    background task during ANY subsequent await (including inside the PATCH call itself), so
+    naively doing `post → patch → drain` is not deterministic. This test instead intercepts
+    `_fire_and_forget` to CAPTURE the auto-title coroutine without scheduling it, so the test
+    controls exactly when it runs — deterministically reproducing "manual PATCH lands, THEN a
+    late-arriving auto-title job tries to write"."""
+    captured: list = []
+    monkeypatch.setattr(routes_module, "_fire_and_forget", lambda coro: captured.append(coro))
+
+    fake = ConvFakeRunner(title_reply="Tiêu đề LLM")
+    async with _client(fake) as client:
+        resp = await client.post("/ai/conversations/chat",
+                                 json={"user_id": "u1", "message": "SQL injection là gì?"})
+        cid = resp.json()["conversation_id"]
+        assert len(captured) == 1  # auto-title job scheduled but intentionally NOT yet run
+
+        renamed = await client.patch(f"/ai/conversations/{cid}",
+                                     json={"user_id": "u1", "title": "Tên tôi tự đặt"})
+        assert renamed.status_code == 200
+
+        await captured[0]  # now let the late-arriving auto-title job run
+
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        assert got["title"] == "Tên tôi tự đặt"  # manual rename must win, NOT "Tiêu đề LLM"
 
 
 @pytest.mark.asyncio
