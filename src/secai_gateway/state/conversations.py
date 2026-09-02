@@ -129,6 +129,16 @@ class ConversationStore:
             ).fetchall()
         return [dict(r) for r in rows], int(total)
 
+    def rename(self, conversation_id: str, title: str, ts: int) -> None:
+        """Overwrite the title unconditionally — used by both a user-driven rename (manual
+        PATCH) and the background auto-title generator (which replaces the interim
+        first-line-of-question fallback once the LLM-generated title is ready)."""
+        with self._lock, self._conn:
+            self._conn.execute(
+                "update conversations set title = ?, updated_at = ? where conversation_id = ?",
+                (title, ts, conversation_id),
+            )
+
     def soft_delete(self, conversation_id: str) -> None:
         with self._lock, self._conn:
             self._conn.execute(

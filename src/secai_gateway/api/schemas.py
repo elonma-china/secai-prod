@@ -145,3 +145,12 @@ class CreateConversationRequest(BaseModel):
 
     user_id: str | int | None = None
     title: str | None = None
+
+
+class RenameConversationRequest(BaseModel):
+    """PATCH /ai/conversations/{id} — set a user-chosen title, overriding the auto-title."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | int | None = None
+    title: str | None = None

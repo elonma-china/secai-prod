@@ -2,11 +2,13 @@
 
 The OLD /ai/chat endpoints stay byte-identical (see tests/test_gateway.py guard); these
 cover the additive conversation-scoped surface: minting/echoing conversation_id, owner
-isolation, ownership spoofing → 404, durable transcript, anonymous parity, and that a
-classifier-blocked turn is never persisted.
+isolation, ownership spoofing → 404, durable transcript, anonymous parity, that a
+classifier-blocked turn is never persisted, manual rename (PATCH), and the background
+LLM auto-title fired on a conversation's first turn.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import tempfile
 
@@ -16,6 +18,7 @@ import pytest
 from linch import InMemorySessionStore
 from linch.events import PartialAssistantEvent
 
+from secai_gateway.api import routes as routes_module
 from secai_gateway.app import create_app
 from secai_gateway.state import ConversationStore
 
@@ -28,20 +31,34 @@ class ConvFakeRunner:
     """FakeRunner + the two attributes the conversation endpoints read off the runner:
     a linch InMemorySessionStore and a real (tmp) ConversationStore."""
 
-    def __init__(self, reply: str | None = None) -> None:
+    def __init__(self, reply: str | None = None, title_reply: str | None = None) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
         self.session_store = InMemorySessionStore()
         self.conversations = ConversationStore(tempfile.mktemp(suffix=".db"))
         self._reply = reply
+        self._title_reply = title_reply  # canned answer for the "conversation_title" profile
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
-        text = self._reply if self._reply is not None else f"{profile_name}: {prompt}"
+        if profile_name == "conversation_title" and self._title_reply is not None:
+            text = self._title_reply
+        else:
+            text = self._reply if self._reply is not None else f"{profile_name}: {prompt}"
         return text, {"run_id": "run-test", "profile": profile_name}
 
     async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
+
+
+async def _drain_background_tasks() -> None:
+    """Auto-title runs via `_fire_and_forget` (asyncio.create_task, never awaited by the
+    request handler) so its own task lands in the module-level registry synchronously before
+    the endpoint returns. Awaiting whatever is there right after a request lets a test observe
+    its effect deterministically instead of racing a bare `asyncio.sleep(0)`."""
+    pending = [t for t in routes_module._BACKGROUND_TASKS if not t.done()]
+    if pending:
+        await asyncio.gather(*pending)
 
 
 def _client(runner):
@@ -61,8 +78,11 @@ async def test_chat_mints_and_echoes_conversation_id() -> None:
         assert body["response"].startswith("chat:")
         cid = body["conversation_id"]
         assert cid and body["metadata"]["conversation_id"] == cid
-        # Session id is owner-scoped and deterministic.
-        assert fake.calls[-1][2] == f"chat:conv:{_oh('u1')}:{cid}"
+        # Session id is owner-scoped and deterministic. Filter to the "chat" profile call —
+        # the background auto-title call (profile "conversation_title", no session_id) can
+        # race ahead and land in `fake.calls` too since ConvFakeRunner replies instantly.
+        chat_calls = [c for c in fake.calls if c[0] == "chat"]
+        assert chat_calls[-1][2] == f"chat:conv:{_oh('u1')}:{cid}"
         # Durably persisted.
         rows, total = fake.conversations.list_for_owner(_oh("u1"), 20, 0)
         assert total == 1 and rows[0]["conversation_id"] == cid
@@ -76,7 +96,8 @@ async def test_same_conversation_id_continues_one_session() -> None:
         cid = first.json()["conversation_id"]
         await client.post("/ai/conversations/chat",
                           json={"user_id": "u1", "conversation_id": cid, "message": "b"})
-    sids = [c[2] for c in fake.calls]
+    # Same filter rationale as test_chat_mints_and_echoes_conversation_id above.
+    sids = [c[2] for c in fake.calls if c[0] == "chat"]
     assert sids[0] == sids[1] == f"chat:conv:{_oh('u1')}:{cid}"
     # Two turns → 4 durable messages.
     assert fake.conversations.get(cid)["message_count"] == 4
@@ -192,3 +213,136 @@ async def test_blocked_message_is_not_persisted(monkeypatch) -> None:
     # A blocked turn ran no agent and must leave NO durable trace.
     assert fake.calls == []
     assert fake.conversations.list_for_owner(_oh("u1"), 20, 0)[1] == 0
+
+
+# ── Rename (PATCH) ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_rename_sets_title() -> None:
+    fake = ConvFakeRunner()
+    async with _client(fake) as client:
+        created = (await client.post("/ai/conversations", json={"user_id": "u1"})).json()
+        cid = created["conversation_id"]
+        resp = await client.patch(f"/ai/conversations/{cid}",
+                                  json={"user_id": "u1", "title": "  Phòng chống SQL Injection  "})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["conversation_id"] == cid
+        assert body["title"] == "Phòng chống SQL Injection"  # trimmed
+        # Persisted — a fresh GET/list sees the new title.
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        assert got["title"] == "Phòng chống SQL Injection"
+        listed = (await client.get("/ai/conversations", params={"user_id": "u1"})).json()
+        assert listed["conversations"][0]["title"] == "Phòng chống SQL Injection"
+
+
+@pytest.mark.asyncio
+async def test_rename_requires_user_id() -> None:
+    fake = ConvFakeRunner()
+    async with _client(fake) as client:
+        cid = (await client.post("/ai/conversations", json={"user_id": "u1"})).json()["conversation_id"]
+        resp = await client.patch(f"/ai/conversations/{cid}", json={"title": "x"})
+        assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_rename_rejects_empty_title() -> None:
+    fake = ConvFakeRunner()
+    async with _client(fake) as client:
+        cid = (await client.post("/ai/conversations", json={"user_id": "u1"})).json()["conversation_id"]
+        resp = await client.patch(f"/ai/conversations/{cid}", json={"user_id": "u1", "title": "   "})
+        assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_rename_wrong_owner_returns_404() -> None:
+    fake = ConvFakeRunner()
+    async with _client(fake) as client:
+        cid = (await client.post("/ai/conversations", json={"user_id": "u1"})).json()["conversation_id"]
+        resp = await client.patch(f"/ai/conversations/{cid}", json={"user_id": "u2", "title": "hijack"})
+        assert resp.status_code == 404
+        # Original owner's title is untouched.
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        assert got["title"] != "hijack"
+
+
+@pytest.mark.asyncio
+async def test_rename_nonexistent_returns_404() -> None:
+    fake = ConvFakeRunner()
+    async with _client(fake) as client:
+        resp = await client.patch("/ai/conversations/does-not-exist", json={"user_id": "u1", "title": "x"})
+        assert resp.status_code == 404
+
+
+# ── Auto-title (background LLM, first turn only) ────────────────────────────
+
+@pytest.mark.asyncio
+async def test_autotitle_fires_on_first_turn() -> None:
+    fake = ConvFakeRunner(title_reply="Phòng chống SQL Injection")
+    async with _client(fake) as client:
+        resp = await client.post("/ai/conversations/chat",
+                                 json={"user_id": "u1", "message": "SQL injection là gì?"})
+        cid = resp.json()["conversation_id"]
+        await _drain_background_tasks()
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        assert got["title"] == "Phòng chống SQL Injection"
+        # The background call used the dedicated title profile, not "chat".
+        assert any(c[0] == "conversation_title" for c in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_autotitle_only_fires_once_per_conversation() -> None:
+    fake = ConvFakeRunner(title_reply="Tiêu đề LLM")
+    async with _client(fake) as client:
+        first = await client.post("/ai/conversations/chat",
+                                  json={"user_id": "u1", "message": "SQL injection là gì?"})
+        cid = first.json()["conversation_id"]
+        await _drain_background_tasks()
+        title_calls_after_first = sum(1 for c in fake.calls if c[0] == "conversation_title")
+        assert title_calls_after_first == 1
+
+        await client.post("/ai/conversations/chat",
+                          json={"user_id": "u1", "conversation_id": cid, "message": "Còn XSS thì sao?"})
+        await _drain_background_tasks()
+        title_calls_after_second = sum(1 for c in fake.calls if c[0] == "conversation_title")
+        assert title_calls_after_second == 1  # unchanged — only the FIRST turn triggers it
+
+
+@pytest.mark.asyncio
+async def test_autotitle_manual_rename_wins_if_llm_slower(monkeypatch) -> None:
+    """A user-driven PATCH after the background title lands must NOT be clobbered by a
+    late-arriving auto-title (there is none once the background task has been drained, but
+    this documents the intended precedence: rename() always overwrites, last-write-wins)."""
+    fake = ConvFakeRunner(title_reply="Tiêu đề LLM")
+    async with _client(fake) as client:
+        resp = await client.post("/ai/conversations/chat",
+                                 json={"user_id": "u1", "message": "SQL injection là gì?"})
+        cid = resp.json()["conversation_id"]
+        await _drain_background_tasks()  # auto-title lands first
+        renamed = await client.patch(f"/ai/conversations/{cid}",
+                                     json={"user_id": "u1", "title": "Tên tôi tự đặt"})
+        assert renamed.status_code == 200
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        assert got["title"] == "Tên tôi tự đặt"
+
+
+@pytest.mark.asyncio
+async def test_autotitle_llm_failure_keeps_interim_title() -> None:
+    """Fail-open: if the title-generation call raises, the interim (first-line) title from
+    conversation creation stays — the chat reply itself must never be affected."""
+    class FailingTitleRunner(ConvFakeRunner):
+        async def complete(self, profile_name, prompt, session_id=None):
+            if profile_name == "conversation_title":
+                raise RuntimeError("boom")
+            return await super().complete(profile_name, prompt, session_id)
+
+    fake = FailingTitleRunner()
+    async with _client(fake) as client:
+        resp = await client.post("/ai/conversations/chat",
+                                 json={"user_id": "u1", "message": "SQL injection là gì?"})
+        assert resp.status_code == 200  # the chat reply itself must succeed regardless
+        cid = resp.json()["conversation_id"]
+        await _drain_background_tasks()
+        got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
+        # Interim title from append_turn's own fallback (first line of the question) — not empty.
+        assert got["title"]
