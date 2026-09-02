@@ -633,6 +633,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
         ledger = getattr(state.runner, "ledger", None)
         if poc is None or ledger is None:
             return []
+        # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt (no CVE
+        # id) that maps to no sufficiently-relevant KB entry returns no evidence, so the
+        # exploit path yields the canonical "no PoC" result instead of building one from a
+        # weak keyword match (the "nhập linh tinh vẫn ra PoC" gap). Inert by default; a
+        # named CVE is never gated; fail-open (None → not gated).
+        from ..poc.prefetch import _CVE, exploit_relevance_ok
+        if not _CVE.search(prompt or "") and await exploit_relevance_ok(prompt) is False:
+            logger.info("exploit prefetch gated: low KB relevance for free-text prompt")
+            return []
         run_id = f"prefetch:{uuid4().hex}"
         try:
             await prefetch_evidence(poc, ledger, prompt, run_id)
