@@ -149,8 +149,13 @@ class Settings(BaseSettings):
     # Surface a `compaction` object in the NEW stream endpoint's final metadata (and an
     # additive `compaction` SSE frame) when linch compacts mid-run. Observational only.
     conversation_compaction_meta: bool = True
-    # Optional/eval-gated: use linch's domain-neutral GENERAL_SUMMARY_PROMPT for LLM
-    # compaction summaries instead of the coding-flavored default (agent/factory.py).
+    # Swap linch's coding-flavored ENGLISH compaction summary for a fact-preserving Vietnamese
+    # one (agent/factory.py::CHAT_SUMMARY_PROMPT_VI). Default OFF (conservative — the Agent is
+    # shared by every profile). Live-test (2026-09-02) note: enabling it makes summaries VI and
+    # asks to keep user facts, but the small summarizer (Cyber-F1) still does NOT reliably retain
+    # an out-of-domain early fact across compaction — the durable SQLite transcript + rehydrate
+    # are the real safety net, and in production (32k window) compaction only fires on very long
+    # threads. Flag is now functional (it was previously inert — factory never read it).
     chat_general_summary_prompt: bool = False
 
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
