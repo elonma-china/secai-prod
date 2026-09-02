@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
 from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent
+from linch.session import RunOptions
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
 
@@ -173,14 +174,24 @@ class LinchRunner:
             if self._session_locks.get(session_id) is lock:
                 del self._session_locks[session_id]
 
+    def _run_opts(self, profile_name: str) -> RunOptions:
+        """Per-turn GENERATION cap (RunOptions.max_output_tokens), decoupled from the agent-level
+        compaction reserve. Generous per profile so nothing is truncated — exploit_research gets
+        the largest budget because a synthesized PoC can be long. See config.py for the values."""
+        s = get_settings()
+        cap = (s.llm_exploit_max_output_tokens if profile_name == "exploit_research"
+               else s.llm_max_output_tokens)
+        return RunOptions(max_output_tokens=cap)
+
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt)
+            opts = self._run_opts(profile_name)
             final = ""
             run_id = None
-            async for event in session.run(_dated_prompt(prompt)):
+            async for event in session.run(_dated_prompt(prompt), opts):
                 run_id = session.active_run_id or run_id
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
@@ -188,7 +199,7 @@ class LinchRunner:
                 # Loop exhausted its turns without a document → force one tool-less
                 # synthesis turn so the endpoint returns content, not a blank body.
                 session.tools_override = empty_tools()
-                async for event in session.run(_SALVAGE_INSTRUCTION):
+                async for event in session.run(_SALVAGE_INSTRUCTION, opts):
                     run_id = session.active_run_id or run_id
                     if isinstance(event, ResultEvent):
                         final = event.final_text or ""
@@ -206,10 +217,11 @@ class LinchRunner:
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt)
+            opts = self._run_opts(profile_name)
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
             turn_limited = False
-            async for event in session.run(_dated_prompt(prompt)):
+            async for event in session.run(_dated_prompt(prompt), opts):
                 got_text = got_text or _has_text(event)
                 if salvageable and _is_turn_limit(event):
                     # Swallow the max_turns terminal (guard → error → empty result);
@@ -221,7 +233,7 @@ class LinchRunner:
                 yield event
             if turn_limited and not got_text:
                 session.tools_override = empty_tools()
-                async for event in session.run(_SALVAGE_INSTRUCTION):
+                async for event in session.run(_SALVAGE_INSTRUCTION, opts):
                     yield event
 
     def stream_bughunt(

@@ -126,16 +126,24 @@ class Settings(BaseSettings):
     # simple queries to 1-2 turns. Override per-deploy via STEP_CAP.
     step_cap: int = 16
     tool_timeout_ms: int = 30000
-    # Max tokens the LLM may generate per turn. ALSO used by linch as the compaction "reserve":
-    # compaction fires when est(context)+reserve >= 0.8*context_window. Left as None (linch's
-    # 32768 default) this made the trigger fire EVERY turn whenever the context window is small
-    # (<= ~41k), e.g. the qwen_context_window=32768 default with no .env override → 0.8*32768 <
-    # 32768 → threshold always met → rolling re-summarization every turn erodes early user facts
-    # (measured 2026-09-02). A fixed, modest cap keeps compaction rare + one big fact-preserving
-    # pass at any window, and bounds runaway generation. 8192 tokens (~32KB) is ample for chat/
-    # report/exploit narration (the big consolidated PoC is injected deterministically, not
-    # generated). Raise per-deploy via LLM_MAX_OUTPUT_TOKENS if a profile needs longer output.
-    llm_max_output_tokens: int = 8192
+    # ── LLM output budgets — DECOUPLED into two independent knobs ────────────────────────────
+    # In linch a single value is overloaded: the GENERATION cap (max tokens a turn may emit) is
+    # `RunOptions.max_output_tokens or agent.max_output_tokens`, while the COMPACTION reserve is
+    # `agent.max_output_tokens` only (compaction fires when est(context)+reserve >= 0.8*window).
+    # Coupling them was dangerous: a reserve small enough to keep compaction healthy at any window
+    # ALSO capped generation → an exploit PoC could be truncated. So we split them: agent-level
+    # holds only the (small) compaction reserve, and each run passes its own generous per-profile
+    # generation cap via RunOptions (agent/runner.py).
+    #
+    # Compaction reserve (agent-level). Small → compaction fires rarely + as one big fact-
+    # preserving pass at ANY context window (fixes the qwen_context_window=32768 default which,
+    # with the old ~32768 reserve, made compaction re-fire every turn and erode early facts —
+    # measured 2026-09-02). Never used as a generation cap (every run overrides that below).
+    llm_compaction_reserve_tokens: int = 4096
+    # Per-turn GENERATION cap, per profile (RunOptions.max_output_tokens). Generous so nothing is
+    # truncated. exploit_research gets the largest budget because a synthesized PoC can be long.
+    llm_max_output_tokens: int = 16384          # chat/translate/report/statistical/bughunt (~64KB)
+    llm_exploit_max_output_tokens: int = 32768  # exploit_research — long PoC headroom (~128KB)
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     gateway_db_path: str = "./data/gateway.db"
