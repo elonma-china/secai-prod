@@ -287,3 +287,33 @@ async def test_old_chat_contract_unchanged_by_conversation_history_feature() -> 
         assert "event: token" in body
         assert "event: final" in body
         assert "data: [DONE]" in body
+
+
+class _RegeneratingRunner(FakeRunner):
+    """stream() yields a rejected draft, a HookEventRecord force_continue, then the real
+    answer — mirrors what linch emits when a hook (e.g. RequireChatGroundingHook) rejects the
+    model's first attempt and forces a redo. Regression fence for the `regenerate` SSE frame
+    (api/sse.py) reaching the actual HTTP response, not just the event_to_sse() mapping."""
+
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+        from linch.events import HookEventRecord
+        self.calls.append((profile_name, prompt, session_id))
+        yield PartialAssistantEvent(delta={"kind": "text", "text": "rejected draft"})
+        yield HookEventRecord(event="on_before_final_answer", hook="require_chat_grounding",
+                              action="force_continue", reason="chat_kb_required")
+        yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
+
+
+@pytest.mark.asyncio
+async def test_stream_surfaces_regenerate_frame_on_hook_force_continue() -> None:
+    fake = _RegeneratingRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        resp = await client.post("/ai/chat/stream", json={"user_id": "u1", "message": "hello"})
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: regenerate" in body
+    assert '"hook": "require_chat_grounding"' in body
+    assert '"reason": "chat_kb_required"' in body
+    # regenerate must land BETWEEN the rejected draft's tokens and the corrected ones.
+    assert body.index("rejected draft") < body.index("event: regenerate") < body.index("chat: hello")
