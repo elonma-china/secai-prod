@@ -4,12 +4,13 @@
 # PoC source is exploitdb, a subset the gateway's git-collector catalog already covers.
 # Modeled on /home/ict/Downloads/CVE-DB/run_sync.sh.
 #
-# Guard: the KB step needs LIVE embed vectors (dense(bge-m3/sec-embedding)+sparse(bm25))
-# to write into Qdrant. If the embed endpoint from the gateway .env is unreachable, we must
-# NOT ingest CVEs without vectors (they'd sit in Qdrant unsearchable via dense retrieval and
-# silently degrade the RAG path to BM25-only, exactly the kind of failure noted in
-# CLAUDE.md's fine-tuned-serving-variant warning). So we probe it first: down -> SKIP the KB
-# step with a clear WARNING logged. (The PoC step is off by default anyway — see Step 2.)
+# Guard: the KB step preflights BOTH (a) the AutoScan source API (a real authenticated GET)
+# and (b) the embed endpoint (a real POST /v1/embeddings — /health can be green while the
+# model name 404s, per CLAUDE.md). Either down -> SKIP the ingest with a loud WARNING and a
+# NON-ZERO exit (so cron/monitoring sees the failure) rather than write CVEs without vectors
+# (which would degrade RAG to BM25-only) or half-ingest from a dead source. The Python script
+# also fetches all candidates before any write, so a mid-run API failure aborts clean too.
+# (The PoC step is off by default anyway — see Step 2.)
 #
 # Both underlying python scripts are independently safe to re-run (incremental watermark +
 # idempotent upserts) — this wrapper adds no extra state of its own beyond the log file.
@@ -78,19 +79,43 @@ embed_reachable() {
     [ "$code" = "200" ]
 }
 
+# AutoScan source API (env var wins over .env). NOTE (D1): prefer a STABLE DNS NAME for
+# AUTOSCAN_API over a raw GCP IP — the IP is volatile (already moved 34.50.74.39->34.50.65.146),
+# and a move should be a DNS change, not a code/.env edit (same lesson as CLAUDE.md's vast
+# serving-IP note). The NVD pipeline in run_sync.sh stays a HOT STANDBY (not deleted at cutover).
+AUTOSCAN_API="${AUTOSCAN_API:-$(env_val AUTOSCAN_API)}"
+AUTOSCAN_USER="${AUTOSCAN_USER:-$(env_val AUTOSCAN_USER)}"
+AUTOSCAN_PASS="${AUTOSCAN_PASS:-$(env_val AUTOSCAN_PASS)}"
+
+# Preflight the source API (abort-before-any-write): a real authenticated GET of one CVE.
+# Down/moved host -> skip the ingest loudly rather than let the KB silently go stale.
+autoscan_api_reachable() {
+    [ -n "$AUTOSCAN_API" ] || return 1
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 \
+        -u "${AUTOSCAN_USER}:${AUTOSCAN_PASS}" \
+        "${AUTOSCAN_API%/}/api/cve?page_size=1" 2>>"$LOG_FILE")
+    [ "$code" = "200" ]
+}
+
 log "========================================"
 log "Starting autoscan daily sync (python=$PY)"
 log "========================================"
 
-# ── Step 1: CVE -> KB, only when the embed endpoint is actually up ─────────────
-if embed_reachable; then
-    log "embed endpoint OK ($EMBEDDING_API_URL) -- running sync_autoscan_to_kb.py"
+# ── Step 1: CVE -> KB — only when BOTH the AutoScan API and the embed endpoint are up ──
+# Preflight both before any write. A skip sets a NON-ZERO exit (D1) so the failure is visible
+# to cron/monitoring — the real risk is the KB silently going stale, not a loud failure.
+if ! autoscan_api_reachable; then
+    kb_exit=1
+    log "ERROR: AutoScan API unreachable ('$AUTOSCAN_API') -- SKIPPING KB ingest. Source host may be down or its IP moved; check AUTOSCAN_API in .env. KB left unchanged (no partial write). NVD pipeline (run_sync.sh) remains available as a standby."
+elif ! embed_reachable; then
+    kb_exit=1
+    log "ERROR: embed endpoint unreachable ('$EMBEDDING_API_URL') -- SKIPPING KB ingest. Ingesting CVEs without dense vectors would degrade RAG to BM25-only. Fix the serving endpoint / .env, then re-run."
+else
+    log "AutoScan API + embed endpoint OK -- running sync_autoscan_to_kb.py"
     "$PY" "$SCRIPT_DIR/sync_autoscan_to_kb.py" >> "$LOG_FILE" 2>&1
     kb_exit=$?
     log "sync_autoscan_to_kb.py exit=$kb_exit"
-else
-    kb_exit=0
-    log "WARNING: embed endpoint unreachable (EMBEDDING_API_URL='$EMBEDDING_API_URL') -- SKIPPING sync_autoscan_to_kb.py. Ingesting CVEs without dense vectors would silently degrade RAG retrieval to BM25-only, so the KB step is skipped entirely rather than run degraded. Fix the serving endpoint / .env, then re-run this wrapper."
 fi
 
 # ── Step 2: PoC catalog — DISABLED by default ──────────────────────────────────

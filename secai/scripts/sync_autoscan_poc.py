@@ -257,12 +257,11 @@ def fetch_candidates(watermark: str, page_size: int, max_pages: int, *,
             r["_wm"] = wm_of(r)
 
         if watermark:
-            fresh = [r for r in merged if r["_wm"] > watermark]
-            out.extend(fresh)
-            # descending order → once the last (oldest) row on the page is <= watermark,
-            # every later page is older too.
+            # L4: >= (not >) — same-second boundary rows must not be skipped; the
+            # skip-existing / refresh-if-newer gate makes re-processing the boundary idempotent.
+            out.extend(r for r in merged if r["_wm"] >= watermark)
             oldest = min((r["_wm"] for r in merged), default="")
-            if oldest and oldest <= watermark:
+            if oldest and oldest < watermark:
                 break
         else:
             out.extend(merged)
@@ -365,6 +364,14 @@ def main() -> int:
     watermark = "" if args.full else state.get("watermark", "")
     fetch_detail = not args.no_detail
 
+    # L2: a missing/empty watermark must NOT silently become a full-API walk on the default
+    # path. A full scan has to be explicit via --full.
+    if not args.full and not watermark:
+        print(f"[autoscan->poc] FATAL: no watermark — state file ({STATE}) missing or empty. "
+              "Refusing a full-API scan on the default path. Pass --full to intentionally run a "
+              "full backfill, or restore/seed the watermark file.", flush=True)
+        return 2
+
     t0 = time.time()
     cands = fetch_candidates(watermark, args.page_size, args.max_pages,
                              fetch_detail=fetch_detail, workers=args.workers)
@@ -398,7 +405,7 @@ def main() -> int:
     existing = load_existing(db_path)
     catalog = PocCatalog(db_path)
 
-    added = updated = skipped = 0
+    added = updated = skipped = errors = 0
     for poc in pocs:
         prior = existing.get(poc.source_ref)
         # Default REFRESH-IF-NEWER: write a new row; refresh one the source has updated;
@@ -410,31 +417,37 @@ def main() -> int:
                 prior, src_lu, bool(poc.cve_ids), no_refresh=args.no_refresh):
             skipped += 1
             continue
-        catalog.upsert(poc)
+        try:
+            catalog.upsert(poc)
+        except Exception as exc:  # noqa: BLE001 — one bad row must not lose the whole run
+            errors += 1
+            print(f"  upsert FAIL {poc.source_ref}: {exc}", flush=True)
+            continue
         if prior is None:
             added += 1
         else:
             updated += 1
     catalog.commit()
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t0))
-    catalog.log_run(SOURCE, started, added=added, updated=updated, errors=0, note=f"skipped={skipped}")
-    print(f"[autoscan->poc] added={added} updated={updated} skipped={skipped} "
+    catalog.log_run(SOURCE, started, added=added, updated=updated, errors=errors, note=f"skipped={skipped}")
+    print(f"[autoscan->poc] added={added} updated={updated} skipped={skipped} errors={errors} "
           f"(catalog now {catalog.count()} rows)", flush=True)
 
-    # Advance the watermark only on a full-window incremental scan (no page cap). A
-    # bounded --max-pages run is a manual slice and must not move the watermark, or the
-    # unscanned older rows would be skipped forever.
+    # L5: advance the watermark ONLY on a zero-error full-window run — a failed upsert must not
+    # let the watermark jump past rows that were never written. --max-pages never advances.
+    # Counters are per-run (not cumulative) for a readable nightly health signal.
+    summary = {"added": added, "updated": updated, "skipped": skipped, "errors": errors}
     if args.max_pages:
-        print(f"[autoscan->poc] --max-pages set: watermark left at '{state.get('watermark','')}' "
-              f"(manual slice)", flush=True)
+        print(f"[autoscan->poc] --max-pages: watermark left at '{state.get('watermark','')}' "
+              f"(manual slice) {json.dumps(summary)}", flush=True)
+    elif errors:
+        save_state({"watermark": state.get("watermark", ""), **summary})
+        print(f"[autoscan->poc] {errors} error(s) — watermark NOT advanced "
+              f"(left '{state.get('watermark','')}'); rerun to retry. {json.dumps(summary)}", flush=True)
     else:
-        state["watermark"] = max_wm
-        state["added"] = int(state.get("added", 0)) + added
-        state["updated"] = int(state.get("updated", 0)) + updated
-        state["skipped"] = int(state.get("skipped", 0)) + skipped
-        save_state(state)
-        print(f"[autoscan->poc] DONE watermark->{max_wm} {json.dumps(state)}", flush=True)
-    return 0
+        save_state({"watermark": max_wm, **summary})
+        print(f"[autoscan->poc] DONE watermark->{max_wm} {json.dumps(summary)}", flush=True)
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":
