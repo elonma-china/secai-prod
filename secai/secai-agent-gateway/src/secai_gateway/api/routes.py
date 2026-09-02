@@ -30,6 +30,7 @@ from ..poc import (
     normalize_cve_ids,
     override_section3,
     prefetch_evidence,
+    prune_evidence,
     sanitize_airgap_runguide,
     slice_entry,
     strip_system_narration,
@@ -387,10 +388,11 @@ async def _fullen_evidence_for_display(evidence: list[dict[str, Any]], poc: Any,
         return evidence
     total = 0
     for ev in evidence or []:
-        # A consolidated (AI-merged) entry has no bytes in the store — its `sha256` is the
-        # ORIGINAL artifact's, so re-reading by it would overwrite the merged code with the
-        # verbatim source. Leave it exactly as produced by poc/consolidate.py.
-        if ev.get("consolidated"):
+        # A consolidated (AI-merged) OR pruned (poc/slicer.py:prune_evidence) entry no longer
+        # matches its stored bytes — `sha256` is the ORIGINAL artifact's, so re-reading by it
+        # would overwrite the merged/pruned code with the untouched verbatim source (un-doing the
+        # whole prune). Leave both exactly as produced.
+        if ev.get("consolidated") or ev.get("pruned"):
             continue
         files = ev.get("source_files")
         if files:
@@ -473,6 +475,14 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
     argparse/CLI blocks that often sit near the end, not just the first few KB."""
     name = _consolidated_local_name(consolidated, cve_id)
     code = consolidated.get("source_code") or ""
+    if not code:
+        # Pruned MULTI-FILE entry (poc/slicer.py:prune_evidence) has no single `source_code` —
+        # ground the run-steps/CLI surface on its ENTRY file so the model still targets the real
+        # main script (the full file set is what gets injected as Mục 1 via render_files).
+        _files = consolidated.get("source_files") or []
+        _entry = next((f for f in _files if (f.get("role") or "") == "entry"),
+                      _files[0] if _files else None)
+        code = (_entry.get("code") if _entry else "") or ""
     truncated = len(code) > _CONSOLIDATED_APPENDIX_MAX_CHARS
     preview = code[:_CONSOLIDATED_APPENDIX_MAX_CHARS]
     cut_note = " (đã cắt bớt do quá dài)" if truncated else ""
@@ -939,21 +949,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if delay > 0:
                 await asyncio.sleep(delay)
             consolidated = fixed
-        elif all_real and getattr(settings, "poc_consolidate_enabled", False):
+        elif all_real and (getattr(settings, "poc_consolidate_enabled", False)
+                           or str(getattr(settings, "poc_strategy", "prune")).lower() in ("prune", "auto")):
             try:
                 real_full = await _fullen_evidence_for_display(list(all_real), poc)
-                # Deterministic core extraction first (Python entry): a verbatim subset of the
-                # real source, never re-written — this is the "no LLM on the bytes" fast path.
-                # Falls back to the LLM consolidation below on any miss (non-Python, cross-file
-                # dependency, parse failure) so the model merge still covers what slicing can't.
-                sliced = await slice_entry(real_full[0], state.runner, cve_id,
-                                           use_llm=getattr(settings, "poc_slice_llm_enabled", True))
-                if sliced is not None:
-                    consolidated = sliced
+                entry_ev = real_full[0]
+                strategy = str(getattr(settings, "poc_strategy", "prune") or "prune").lower()
+                can_consolidate = getattr(settings, "poc_consolidate_enabled", False)
+                use_llm = getattr(settings, "poc_slice_llm_enabled", True)
+                # Multi-file iff the entry carries a >1 non-readme file set.
+                _sf = entry_ev.get("source_files") or []
+                is_multifile = len([f for f in _sf if (f.get("role") or "") != "readme"]) > 1
+                if strategy == "consolidate":
+                    # Legacy path, unchanged: deterministic verbatim slice first (no LLM on the
+                    # bytes), else the LLM merge fills what slicing can't (cross-file, non-Python).
+                    sliced = await slice_entry(entry_ev, state.runner, cve_id, use_llm=use_llm)
+                    consolidated = sliced if sliced is not None else (
+                        await consolidate_poc(state.runner, real_full, cve_id) if can_consolidate else None)
                 else:
-                    consolidated = await consolidate_poc(state.runner, real_full, cve_id)
+                    # "prune" (default) / "auto": keep the ORIGINAL multi-file structure and remove
+                    # only unnecessary parts (higher fidelity, air-gap-verifiable — no LLM rewrite);
+                    # a single-file PoC still takes the deterministic verbatim slice.
+                    if is_multifile:
+                        consolidated = await prune_evidence(entry_ev, state.runner, cve_id, use_llm=use_llm)
+                    else:
+                        consolidated = await slice_entry(entry_ev, state.runner, cve_id, use_llm=use_llm)
+                    # LLM merge is the LAST resort — only if prune/slice produced nothing and it's on.
+                    if consolidated is None and can_consolidate:
+                        consolidated = await consolidate_poc(state.runner, real_full, cve_id)
             except Exception:
-                logger.exception("poc consolidation failed for %s", cve_id)
+                logger.exception("poc grounding (strategy=%s) failed for %s",
+                                 getattr(settings, "poc_strategy", "prune"), cve_id)
                 consolidated = None
 
         if consolidated:

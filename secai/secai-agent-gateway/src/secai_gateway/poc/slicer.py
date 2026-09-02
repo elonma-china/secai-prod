@@ -304,7 +304,7 @@ def cut_code(code: str, graph: dict[str, Any], keep_ids: set[str]) -> str:
     return "\n".join(out)
 
 
-def _dependency_header(code: str) -> str:
+def _dependency_header(code: str, exclude: set[str] | None = None) -> str:
     """Best-effort ``# Yêu cầu môi trường: pip install X, Y`` comment for every top-level
     import that ISN'T in the standard library — ADD-ONLY (never rewrites/removes an existing
     line, so it structurally cannot introduce fidelity drift, unlike an LLM rewrite). Surfaces
@@ -317,6 +317,9 @@ def _dependency_header(code: str) -> str:
     every other check in this module)."""
     if not code or not code.strip():
         return ""
+    # `exclude`: same-repo sibling module basenames (the prune path ships them alongside the
+    # entry, so they are NOT pip packages — listing them as `pip install helper` would be wrong).
+    exclude = exclude or set()
     try:
         tree = ast.parse(code)
     except SyntaxError:
@@ -327,14 +330,14 @@ def _dependency_header(code: str) -> str:
         if isinstance(node, ast.Import):
             for a in node.names:
                 top = a.name.split(".")[0]
-                if top and top not in _STDLIB_MODULES and top not in seen:
+                if top and top not in _STDLIB_MODULES and top not in exclude and top not in seen:
                     seen.add(top)
                     third_party.append(top)
         elif isinstance(node, ast.ImportFrom):
             if node.level and node.level > 0:
                 continue  # relative import — not a pip package (and slice_entry bails on this)
             top = (node.module or "").split(".")[0]
-            if top and top not in _STDLIB_MODULES and top not in seen:
+            if top and top not in _STDLIB_MODULES and top not in exclude and top not in seen:
                 seen.add(top)
                 third_party.append(top)
     if not third_party:
@@ -564,4 +567,198 @@ async def slice_entry(ev: dict[str, Any], runner: Any | None = None,
             "source": ev.get("source"),
         },
         "static_indicators": {"language": lang, "extracted": True},
+    }
+
+
+# ── language sniffing (exploitdb stores real code as .txt) ───────────────────
+_EXT_LANG = {
+    ".py": "python", ".rb": "ruby", ".php": "php", ".pl": "perl", ".pm": "perl",
+    ".sh": "bash", ".bash": "bash", ".js": "javascript", ".ps1": "powershell",
+    ".c": "c", ".h": "c", ".cpp": "cpp", ".cc": "cpp", ".cxx": "cpp",
+    ".go": "go", ".rs": "rust", ".java": "java",
+}
+_SHEBANG_LANG = (
+    ("python", ("python",)), ("ruby", ("ruby",)), ("perl", ("perl",)),
+    ("php", ("php",)), ("node", ("node",)), ("bash", ("bash", "/sh", " sh", "zsh")),
+)
+_LANG_CANON = {"py": "python", "python3": "python", "rb": "ruby", "js": "javascript",
+               "node": "javascript", "sh": "bash", "shell": "bash", "c++": "cpp",
+               "golang": "go", "ps1": "powershell"}
+
+
+def sniff_language(code: str, path: str = "", declared: str = "") -> str:
+    """Best-effort TRUE language of a PoC blob. exploitdb keeps real python/ruby/perl exploits
+    with a ``.txt`` extension and ``language=txt`` — so a downstream syntax-check / runner keyed
+    on the declared field picks the wrong tool. Order: real extension → shebang → content
+    signals → declared (unless it is the ambiguous txt/plain). Returns a canonical lang string
+    or ``""``. Pure inspection, never executes; fail-open (``""`` on any miss)."""
+    ext = os.path.splitext(path or "")[1].lower()
+    if ext in _EXT_LANG:
+        return _EXT_LANG[ext]
+    stripped = (code or "").lstrip()
+    first = stripped.splitlines()[0] if stripped else ""
+    if first.startswith("#!"):
+        low = first.lower()
+        for lang, needles in _SHEBANG_LANG:
+            if any(n in low for n in needles):
+                return lang
+    head = (code or "")[:4000]
+    low = head.lower()
+    if "<?php" in low:
+        return "php"
+    if re.search(r"^\s*(?:import\s+\w|from\s+[\w.]+\s+import|def\s+\w+\s*\(|print\()", head, re.M):
+        return "python"
+    if re.search(r"\buse\s+strict\b|\bmy\s+\$\w", head):
+        return "perl"
+    if re.search(r"\brequire\s+['\"]|\bputs\b|\bend\b", head) and re.search(r"\bdef\s+\w+\b|=>", head):
+        return "ruby"
+    if re.search(r"^\s*(?:function\s+\w+\s*\(\)|curl\s|wget\s|apt-get\s)", head, re.M):
+        return "bash"
+    d = (declared or "").strip().lower()
+    if d and d not in ("txt", "text", "plain", "plaintext", ""):
+        return _LANG_CANON.get(d, d)
+    return ""
+
+
+# ── prune-in-place: keep multi-file structure, drop only the unnecessary ─────
+# Manifests are kept as the environment/build hint (pip install / cmake), never dropped.
+_MANIFEST_BASENAMES = {"requirements.txt", "setup.py", "pyproject.toml", "package.json",
+                       "go.mod", "cargo.toml", "gemfile", "composer.json", "makefile",
+                       "cmakelists.txt", "build.gradle", "pom.xml"}
+# Calls that defeat STATIC reachability — if a file uses any, its intra-file slice is skipped
+# (kept verbatim) so a dynamically-referenced node is never cut. Same fail-open-toward-safety
+# bias as the rest of this module.
+_DYNAMIC_DISPATCH_MARKERS = ("__import__", "importlib", "getattr(", "eval(", "exec(",
+                             "entry_points", "pkgutil", "globals()", "locals()")
+
+
+def _has_dynamic_dispatch(code: str) -> bool:
+    return any(m in (code or "") for m in _DYNAMIC_DISPATCH_MARKERS)
+
+
+def _is_manifest_name(path: str) -> bool:
+    return os.path.basename(path or "").lower() in _MANIFEST_BASENAMES
+
+
+def _file_stem(f: dict[str, Any]) -> str:
+    return os.path.splitext(os.path.basename(f.get("path") or ""))[0]
+
+
+def _entry_file(source_files: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for f in source_files:
+        if (f.get("role") or "") == "entry":
+            return f
+    return source_files[0] if source_files else None
+
+
+async def prune_evidence(ev: dict[str, Any], runner: Any | None = None,
+                         cve_id: str | None = None, use_llm: bool = True) -> dict[str, Any] | None:
+    """Prune-in-place: KEEP the PoC's multi-file structure and only remove the parts that don't
+    matter — never rewrite a byte, never flatten to one file. The higher-fidelity alternative to
+    ``consolidate_poc`` for a genuinely multi-file PoC (an imported helper, a data file the entry
+    reads, or source that must be compiled), where an LLM merge risks the CVE-2026-45504 drift
+    class and can't be live-verified in air-gap. Returns a NEW evidence dict (``pruned=True``,
+    ``source_files`` PRESERVED) or ``None`` to fall back (single-file / no entry / all-empty).
+
+    Two prunes, both fail-open toward keeping more:
+    * FILE-level: keep the entry, its transitive load-bearing siblings (``_imported_sibling_names``
+      closure — imports AND string-literal path refs), every README and manifest; drop only
+      support files nothing references (another CVE's exploit, leftovers).
+    * INTRA-file (entry only, Python only, skipped on dynamic dispatch): the conservative
+      ``safe_slice`` — drop unreferenced noise-named nodes (banner/logo/author). Support files
+      are kept 100% verbatim (their functions are called cross-file, so within-file reachability
+      can't judge them safely). ``use_llm`` is reserved; the LLM keep/drop is intentionally NOT
+      run here to keep the multi-file path purely deterministic."""
+    source_files = ev.get("source_files")
+    if not source_files or len(source_files) <= 1:
+        return None  # single-file → caller uses slice_entry / verbatim
+    entry = _entry_file(source_files)
+    if entry is None:
+        return None
+    entry_code = entry.get("code") or ""
+    if not entry_code.strip():
+        return None
+    entry_lang = sniff_language(entry_code, entry.get("path") or "",
+                                entry.get("language") or ev.get("language") or "")
+
+    from .consolidate import _imported_sibling_names
+    non_entry = [f for f in source_files if f is not entry]
+    support_by_stem: dict[str, list[dict[str, Any]]] = {}
+    all_stems: set[str] = set()
+    for f in non_entry:
+        s = _file_stem(f)
+        if s:
+            all_stems.add(s)
+            support_by_stem.setdefault(s, []).append(f)
+
+    # Transitive closure of siblings actually depended on (entry → siblings → their siblings…).
+    reached = _imported_sibling_names(entry_code, all_stems)
+    frontier = set(reached)
+    while frontier:
+        nxt: set[str] = set()
+        for s in frontier:
+            for f in support_by_stem.get(s, []):
+                nxt |= (_imported_sibling_names(f.get("code") or "", all_stems) - reached)
+        reached |= nxt
+        frontier = nxt
+
+    kept: list[dict[str, Any]] = []
+    dropped: list[str] = []
+    for f in source_files:
+        role = f.get("role") or ""
+        if f is entry or role in ("entry", "readme") or _is_manifest_name(f.get("path") or ""):
+            kept.append(f)
+        elif _file_stem(f) in reached:
+            kept.append(f)
+        else:
+            dropped.append(f.get("path") or "")
+    if not kept:
+        return None
+
+    pruned_files: list[dict[str, Any]] = []
+    for f in kept:
+        nf = dict(f)
+        is_entry = f is entry or (f.get("role") or "") == "entry"
+        code = nf.get("code") or ""
+        # Intra-file slice ONLY the entry (support files stay verbatim — safe re cross-file use).
+        if is_entry and code.strip() and not _has_dynamic_dispatch(code):
+            flang = sniff_language(code, nf.get("path") or "", nf.get("language") or "")
+            if flang == "python":
+                sliced = safe_slice(code, "python", cve_id)
+                if sliced and sliced.strip():
+                    code = sliced
+            # Exclude same-repo siblings from the pip hint — they ship alongside, not from PyPI.
+            header = _dependency_header(code, exclude=all_stems)
+            if header:
+                if code.startswith("#!"):
+                    i = code.find("\n") + 1
+                    code = code[:i] + header + code[i:]
+                else:
+                    code = header + code
+            nf["code"] = code
+        pruned_files.append(nf)
+
+    return {
+        "source": ev.get("source"),
+        "source_ref": ev.get("source_ref"),
+        "url": ev.get("url"),
+        "kind": ev.get("kind") or "exploit",
+        "title": ev.get("title") or f"PoC {(cve_id or '').upper()}".strip(),
+        "cve_ids": ev.get("cve_ids") or ([cve_id.upper()] if cve_id else []),
+        "language": entry_lang,
+        "source_code": None,
+        "source_files": pruned_files,
+        "code_truncated": False,
+        "sha256": ev.get("sha256"),
+        "readme_text": readme_text(ev),
+        "companion_doc_only": ev.get("companion_doc_only", False),
+        # NOT consolidated (no LLM rewrite) — renders under the distinct "giữ nguyên cấu trúc" banner.
+        "consolidated": False,
+        "extracted": True,
+        "pruned": True,
+        "extracted_from": {"sha256": ev.get("sha256"), "url": ev.get("url"),
+                           "source": ev.get("source")},
+        "static_indicators": {"language": entry_lang, "pruned": True,
+                              "files_in": len(source_files), "files_kept": len(pruned_files),
+                              "files_dropped": dropped},
     }

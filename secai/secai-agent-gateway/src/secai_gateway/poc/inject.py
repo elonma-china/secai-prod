@@ -313,15 +313,26 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
 
 
 def _with_consolidated_banner(block: str, ev: dict[str, Any]) -> str:
-    """Prepend the light consolidated-tier banner to a rendered code block when the evidence
-    entry is an AI-merged single file (`consolidated=True`). Idempotent — a block that already
-    opens with the banner is returned unchanged.
+    """Prepend the right provenance banner to a rendered code block. Three mutually-exclusive
+    tiers, decided by measured flags on the evidence entry (never by anything the model said):
 
-    A `fixed=True` entry (poc/fixed_pocs.py) is lab-verified, so it gets a distinct banner —
-    it must NOT be labelled "AI hợp nhất / CHƯA chạy thử" like an unverified LLM merge."""
-    if not block or not ev.get("consolidated"):
+    * `fixed=True` (poc/fixed_pocs.py) → lab-verified, runs as-is → `_FIXED_BANNER`.
+    * `consolidated=True` (poc/consolidate.py) → AI-merged single file → `_CONSOLIDATED_BANNER`.
+    * `pruned=True` (poc/slicer.py:prune_evidence) → original structure, only unnecessary parts
+      removed, no byte rewritten → `_EXTRACTED_BANNER`.
+
+    Idempotent — a block already opening with its banner is returned unchanged. A plain verbatim
+    T1 entry (none of the flags) gets no banner, as before."""
+    if not block:
         return block
-    banner = _FIXED_BANNER if ev.get("fixed") else _CONSOLIDATED_BANNER
+    if ev.get("fixed"):
+        banner = _FIXED_BANNER
+    elif ev.get("consolidated"):
+        banner = _CONSOLIDATED_BANNER
+    elif ev.get("pruned"):
+        banner = _EXTRACTED_BANNER
+    else:
+        return block
     if block.lstrip().startswith(banner):
         return block
     return f"{banner}\n\n{block}"
@@ -395,6 +406,13 @@ _CONSOLIDATED_BANNER = (
 _FIXED_BANNER = (
     "ℹ️ Tệp dưới đây là PoC đã được kiểm chứng trong lab (verified) — chạy lại không cần sửa; "
     "nguồn gốc (URL/sha256) xem ở metadata."
+)
+# Distinct banner for the prune-in-place tier (poc/slicer.py:prune_evidence): the PoC is kept in
+# its ORIGINAL structure (multi-file), only the parts nothing references were removed — NO byte
+# was rewritten by an LLM (unlike _CONSOLIDATED_BANNER). Still unverified → "CHƯA chạy thử".
+_EXTRACTED_BANNER = (
+    "ℹ️ PoC dưới đây là mã GỐC (giữ nguyên cấu trúc tệp), chỉ lược bỏ phần không liên quan — "
+    "KHÔNG viết lại; xem `pip install`/cách chạy ở đầu tệp. CHƯA chạy thử; nguồn gốc (URL/sha256) ở metadata."
 )
 # Distinct from _NO_POC_NOTE: evidence/CVE DID exist (see Mục 3 for real CWE/CVSS/CAPEC
 # data), only the synthesis attempt itself failed this turn — must not claim the CVE is
@@ -691,11 +709,17 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
         # Consolidated tier: the injected code is a real fetched PoC merged into one runnable
         # file (poc/consolidate.py), shown with the LIGHT banner (not SYNTHESIZED). Provenance
         # (sha256/url) already sits in `report`; flag it so the FE/metadata can label it.
-        consolidated = any(
-            e.get("consolidated") for e in (evidence or []) if _blocks_for(e))
-        report["section1_tier"] = "real_consolidated" if consolidated else "real"
+        injected_real = [e for e in (evidence or []) if _blocks_for(e)]
+        consolidated = any(e.get("consolidated") for e in injected_real)
+        pruned = any(e.get("pruned") for e in injected_real)
         if consolidated:
+            report["section1_tier"] = "real_consolidated"
             report["consolidated"] = True
+        elif pruned:
+            report["section1_tier"] = "real_pruned"
+            report["pruned"] = True
+        else:
+            report["section1_tier"] = "real"
         return text, report
 
     readme_refs = [e for e in (evidence or []) if _description_for(e)]

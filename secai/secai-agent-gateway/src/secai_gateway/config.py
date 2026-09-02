@@ -251,6 +251,17 @@ class Settings(BaseSettings):
     # uniform ~30s while dropping the old ~38s average. 0 disables the floor.
     poc_exploit_simulate_delay_s: float = 30.0
 
+    # PoC Section-1 strategy for a genuinely MULTI-FILE fetched PoC (single-file PoCs always take
+    # the deterministic verbatim slice regardless):
+    #   "prune"       — default. Keep the ORIGINAL multi-file structure, remove only the parts
+    #                   nothing references (poc/slicer.py:prune_evidence). No LLM rewrite, no
+    #                   flatten — the higher-fidelity, air-gap-verifiable path. Falls back to
+    #                   consolidate only if prune fails AND poc_consolidate_enabled.
+    #   "consolidate" — legacy: LLM-merge the whole set into ONE runnable file (poc/consolidate.py).
+    #   "auto"        — prune when the multi-file set has load-bearing companions, else consolidate.
+    # Consolidation itself is unchanged and still gated by poc_consolidate_enabled.
+    poc_strategy: str = "prune"
+
     @model_validator(mode="after")
     def _enforce_airgap(self) -> "Settings":
         """When air-gap is on, force every internet-touching feature flag off — regardless
