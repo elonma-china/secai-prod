@@ -80,25 +80,35 @@ Chạy trên một gateway **riêng biệt** (cổng 8132, DB + Redis-db 1 tách
 
 ---
 
-## 5. Xác minh nén ngữ cảnh (live, 2026-09-02)
+## 5. Xác minh nén ngữ cảnh (live, 2026-09-02) — kiểm chứng kỹ
 
-Chạy hội thoại dài thật (seed dữ kiện "FALCON-7788" ở lượt 1 → 13 lượt hỏi bảo mật → lượt probe hỏi lại), gateway nhánh feature + model thật, hạ `QWEN_CONTEXT_WINDOW=6000` để ép nén nổ nhanh.
+Kịch bản: seed dữ kiện bí mật "FALCON-7788" ở lượt 1 → nhiều lượt hỏi bảo mật khác chủ đề → probe hỏi lại. Gateway nhánh feature + model thật. Đo qua **nhiều context-window** + **1 test tóm tắt cô lập** để tách bạch nguyên nhân.
 
-**Kết quả:**
-| Hạng mục | Kết quả |
-|---|---|
-| Nén tự kích hoạt | ✅ Nổ ở **lượt 11** (khi vượt `keep_recent_turns=10`), lặp ở 12–14 |
-| Quan sát được | ✅ Frame SSE `compaction` + `final.metadata.compaction` với dữ liệu thật (`strategy=default-keep-recent-10`, `tokens_before/after`, `messages 23→21`) |
-| Giữ context bounded | ✅ ~4.0–4.8k token thay vì phình vô hạn (giữ 10 lượt cuối + 1 bản tóm tắt) |
-| Transcript bền | ✅ SQLite giữ đủ **30/30** dòng dù đã nén |
-| Recall khi **chưa** nén (window 32k, chat thường) | ✅ Nhớ **chính xác** "FALCON-7788" |
-| Recall dữ kiện SỚM **sau** nén | ⚠️ **Không đảm bảo** — soi snapshot Redis: bản `<summary>` KHÔNG chứa "FALCON-7788" |
+**Cơ chế nén — HOẠT ĐỘNG ĐÚNG & quan sát được:**
+- Tự nổ quanh **lượt 11** (khi provider_view ~4.1k token), qua frame SSE `compaction` + `final.metadata.compaction` (dữ liệu thật: `strategy=default-keep-recent-10`, `tokens_before/after`, `messages 23→21`).
+- Giữ context sống **bounded** (~4–5k token) thay vì phình vô hạn.
+- **Transcript bền SQLite giữ đủ 30/30 dòng** dù đã nén — dữ kiện KHÔNG BAO GIỜ mất ở tầng lưu trữ.
 
-**Kết luận:** cơ chế nén (giảm token, giữ context sống bounded, quan sát được, không mất transcript bền) **hoạt động đúng**. Giới hạn duy nhất: **model summarizer nhỏ (Cyber-F1) không giữ chắc dữ kiện NGOÀI chủ đề của người dùng khi tóm tắt** — kể cả sau khi thử prompt tóm tắt tiếng Việt yêu cầu giữ nguyên dữ kiện (đã nối cờ `chat_general_summary_prompt`, mặc định OFF). Đây là **giới hạn năng lực model, không phải lỗi hệ thống**.
+**Recall dữ kiện sớm — kết quả đo thật:**
 
-**Lưới an toàn thực tế:**
-- **Transcript bền SQLite** luôn có đủ dữ kiện (đọc lại qua `GET /ai/conversations/{cid}`), không bao giờ mất.
-- **Rehydrate** nạp lại N lượt gần nhất từ SQLite.
-- Trong **production (window 32k)** nén chỉ nổ với hội thoại **rất dài (~65+ lượt)** — hiếm gặp.
+| Cấu hình | Nén nổ | Recall "FALCON-7788" |
+|---|---|---|
+| Chat thường (chưa đủ dài để nén) | 0 lần | ✅ **Chính xác** |
+| Long chat, window 6000 / 8000 / 16000 | mỗi lượt (rolling) | ❌ Mất |
+| Long chat, **window 32768 (production thật)** | mỗi lượt (rolling) | ❌ Mất |
+| **Tóm tắt cô lập MỘT lần** (default / GENERAL / VI / chỉ-fact) | 1 lần | ✅ **Giữ, cả 4 prompt** |
 
-**Nếu cần recall dữ kiện sớm chắc chắn hơn** (follow-up, ngoài phạm vi): (a) bật `CHAT_GENERAL_SUMMARY_PROMPT=true` (tóm tắt tiếng Việt, cải thiện nhẹ); (b) tăng `keep_recent_turns`; (c) cơ chế "ghim dữ kiện" (pinned-facts/entity memory) — thay đổi lớn, nên cân nhắc riêng.
+**Chẩn đoán (đã sửa lại sau khi đo kỹ — kết luận vội trước đó là SAI):**
+Không phải "model không tóm tắt được fact" (test cô lập chứng minh tóm tắt MỘT lần giữ fact với mọi prompt, kể cả default). Nguyên nhân thật: khi chat vượt ~11 lượt có nội dung, mỗi lượt `keep_recent_turns=10` giữ lại ~4–5k token — **xấp xỉ ngưỡng kích hoạt** — nên nén **nổ LẠI mỗi lượt**, mỗi lần chỉ tóm tắt 1–3 lượt cũ nhất và **re-summarize chính bản tóm tắt trước**. Qua ~10–15 vòng lặp, dữ kiện cũ nhất (lượt 1) bị **bào mòn dần** rồi mất. **Đây là hành vi thật ở production (đã xác nhận ở window 32768), không phải artefact do test.**
+
+**Ảnh hưởng thực tế:**
+- Chat ngắn/vừa (< ~11–15 lượt có nội dung): **không nén → recall hoàn hảo.**
+- Chat dài (> ~15 lượt): dữ kiện nêu ở đầu **có thể mất khỏi ngữ cảnh sống** sau ~10–15 lượt kế.
+- **Lưới an toàn:** transcript bền SQLite luôn còn đủ (`GET /ai/conversations/{cid}`); rehydrate nạp lại N lượt gần nhất.
+
+**Hướng khắc phục (follow-up có chủ đích, ngoài phạm vi bản cập nhật này):**
+- **(khuyến nghị) Chỉnh `max_output_tokens` (reserve) của Agent về giá trị cố định hợp lý** trong `agent/factory.py`: hiện reserve lớn khiến ngưỡng nén thấp → nổ mỗi lượt. Giảm reserve ⇒ nén chỉ nổ khi thật sự gần đầy (một pass LỚN, giữ fact) và không re-fire mỗi lượt. Đánh đổi: `max_output_tokens` cũng chặn độ dài sinh ra ⇒ cần cân nhắc theo profile (PoC exploit có thể dài) — nên làm + đo riêng.
+- Tăng `keep_recent_turns`; hoặc cơ chế "ghim dữ kiện" (pinned-facts/entity memory) — thay đổi lớn.
+- (nhẹ) Bật `CHAT_GENERAL_SUMMARY_PROMPT=true` (tóm tắt tiếng Việt) — cải thiện chất lượng tóm tắt nhưng KHÔNG tự giải quyết được bào mòn do lặp.
+
+**Tự đánh giá:** trong quá trình kiểm chứng, kết luận trung gian của tôi đã sai 2 lần (đổ cho "giới hạn model", rồi "artefact window nhỏ") trước khi đo ở window production thật và chốt đúng nguyên nhân (re-summarize lặp mỗi lượt). Bảng số liệu trên là kết quả đo trực tiếp.
