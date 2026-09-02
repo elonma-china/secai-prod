@@ -1,0 +1,365 @@
+{
+  "n": 2448,
+  "overall_accuracy": 0.8926,
+  "correct": 2185,
+  "by_expected_action": {
+    "block_injection": {
+      "total": 806,
+      "correct": 564,
+      "acc": 0.6998
+    },
+    "pass": {
+      "total": 1007,
+      "correct": 997,
+      "acc": 0.9901
+    },
+    "pii_block": {
+      "total": 202,
+      "correct": 195,
+      "acc": 0.9653
+    },
+    "refuse_language": {
+      "total": 187,
+      "correct": 187,
+      "acc": 1.0
+    },
+    "refuse_offtopic": {
+      "total": 246,
+      "correct": 242,
+      "acc": 0.9837
+    }
+  },
+  "by_function": {
+    "borderline": {
+      "total": 116,
+      "correct": 99,
+      "acc": 0.8534
+    },
+    "injection": {
+      "total": 776,
+      "correct": 543,
+      "acc": 0.6997
+    },
+    "intent_chitchat": {
+      "total": 159,
+      "correct": 157,
+      "acc": 0.9874
+    },
+    "intent_offtopic": {
+      "total": 246,
+      "correct": 242,
+      "acc": 0.9837
+    },
+    "intent_security": {
+      "total": 386,
+      "correct": 386,
+      "acc": 1.0
+    },
+    "language_latin_boundary": {
+      "total": 69,
+      "correct": 69,
+      "acc": 1.0
+    },
+    "language_nonlatin": {
+      "total": 187,
+      "correct": 187,
+      "acc": 1.0
+    },
+    "overdefense": {
+      "total": 217,
+      "correct": 217,
+      "acc": 1.0
+    },
+    "pii_concept": {
+      "total": 90,
+      "correct": 90,
+      "acc": 1.0
+    },
+    "pii_secret": {
+      "total": 202,
+      "correct": 195,
+      "acc": 0.9653
+    }
+  },
+  "by_lang": {
+    "am": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "ar": {
+      "total": 14,
+      "correct": 14,
+      "acc": 1.0
+    },
+    "bn": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "ca": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "cs": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "da": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "de": {
+      "total": 14,
+      "correct": 14,
+      "acc": 1.0
+    },
+    "el": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "en": {
+      "total": 1404,
+      "correct": 1211,
+      "acc": 0.8625
+    },
+    "es": {
+      "total": 15,
+      "correct": 15,
+      "acc": 1.0
+    },
+    "et": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "fa": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "fi": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "fr": {
+      "total": 13,
+      "correct": 13,
+      "acc": 1.0
+    },
+    "gu": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "he": {
+      "total": 11,
+      "correct": 11,
+      "acc": 1.0
+    },
+    "hi": {
+      "total": 12,
+      "correct": 12,
+      "acc": 1.0
+    },
+    "hr": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "hu": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "hy": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "id": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "it": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "ja": {
+      "total": 15,
+      "correct": 15,
+      "acc": 1.0
+    },
+    "ka": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "km": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "kn": {
+      "total": 4,
+      "correct": 4,
+      "acc": 1.0
+    },
+    "ko": {
+      "total": 14,
+      "correct": 14,
+      "acc": 1.0
+    },
+    "lo": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "ml": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "my": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "ne": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "nl": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "no": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "or": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "pa": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "pl": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "pt": {
+      "total": 8,
+      "correct": 8,
+      "acc": 1.0
+    },
+    "ro": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "ru": {
+      "total": 14,
+      "correct": 14,
+      "acc": 1.0
+    },
+    "si": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "sk": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "sl": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "sv": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "sw": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "ta": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "te": {
+      "total": 4,
+      "correct": 4,
+      "acc": 1.0
+    },
+    "th": {
+      "total": 12,
+      "correct": 12,
+      "acc": 1.0
+    },
+    "tr": {
+      "total": 6,
+      "correct": 6,
+      "acc": 1.0
+    },
+    "ur": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "vi": {
+      "total": 768,
+      "correct": 698,
+      "acc": 0.9089
+    },
+    "zh": {
+      "total": 16,
+      "correct": 16,
+      "acc": 1.0
+    }
+  },
+  "gate_source_counts": {
+    "pii_block": 195,
+    "refuse_language": 193,
+    "classifier": 2060
+  },
+  "embed_stats": {
+    "batches": 39,
+    "batch_retries": 0,
+    "failed_rows": 0
+  },
+  "fail_open_rows": 0,
+  "timestamp": "2026-09-02T11:27:54.741192+00:00",
+  "embed_backend": "endpoint",
+  "cascade": "off",
+  "head": {
+    "embed_model": "DuyTa/sec-embedding",
+    "dim": 1024,
+    "kind": "mixed",
+    "thresholds": {
+      "injection": 0.5,
+      "pii": 0.2,
+      "offtopic": 0.468
+    }
+  }
+}

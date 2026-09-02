@@ -1,5 +1,5 @@
 {
-  "injection": 0.5,
-  "pii": 0.2,
-  "offtopic": 0.468
+  "injection": 0.65,
+  "pii": 0.35,
+  "offtopic": 0.34
 }
