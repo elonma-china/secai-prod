@@ -12,8 +12,37 @@ _SECRET_PATTERNS = (
     re.compile(r"\b(?:sk|pk|api)[_-]?[A-Za-z0-9]{16,}\b", re.I),
     re.compile(r"\b(?:password|passwd|authorization|bearer)\s*[:=]\s*\S+", re.I),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    # ── Vendor secret/credential formats (loop iter 3, FT3-PII-REGEX) ──
+    # The generic ``(?:sk|pk|api)[_-]?[A-Za-z0-9]{16,}`` rule allows only ONE separator then a
+    # contiguous alnum run, so any token with a 2nd separator or a distinctive vendor prefix
+    # slips past (sk_live_…, api_key=…, ghp_…). These add the concrete high-signal shapes; each
+    # keeps a distinctive vendor prefix + a long random tail so benign code/hashes don't trip.
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),                        # GitHub PAT/oauth
+    re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}\b"),                          # GitLab PAT
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),                      # Slack token
+    re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b"),       # Stripe secret/restricted
+    re.compile(r"\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b"),        # SendGrid
+    re.compile(r"\bnpm_[A-Za-z0-9]{36,}\b"),                              # npm
+    re.compile(r"\bdop_v1_[0-9a-f]{64}\b"),                               # DigitalOcean
+    re.compile(r"\bhf_[A-Za-z0-9]{34,}\b"),                               # HuggingFace
+    re.compile(r"\bCFPAT-[A-Za-z0-9_-]{40,}\b"),                          # Cloudflare
+    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),                            # Google API key
+    re.compile(r"\bAC[0-9a-f]{32}\b"),                                    # Twilio Account SID
+    re.compile(r"\bAccountKey=[A-Za-z0-9+/=]{40,}"),                      # Azure storage key
+    # Discord bot token: base64(snowflake).timestamp.hmac — first segment starts M/N/O.
+    re.compile(r"\b[MNO][A-Za-z0-9_-]{22,}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}\b"),
+    # Telegram bot token: <numeric bot id>:<35-char secret>.
+    re.compile(r"\b\d{6,10}:[A-Za-z0-9_-]{30,}\b"),
+    # DB / broker URIs carrying inline user:password@ credentials.
+    re.compile(r"\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|rediss|amqp|amqps)"
+               r"://[^:@/\s]+:[^@/\s]+@", re.I),
+    # Generic ``api_key = <value>`` / ``api-key: <value>`` assignment with a key-shaped value.
+    re.compile(r"\bapi[_-]?key\s*[:=]\s*[\"']?[A-Za-z0-9._\-]{16,}", re.I),
 )
-_SENSITIVE_IDENTIFIERS = re.compile(r"\b(?:\d[ -]*?){13,19}\b")
+# Long numeric identifiers (payment cards 13–19 digits) + US SSN (3-2-4 grouping, only 9 digits so
+# it is below the card rule and needs its own shape).
+_SENSITIVE_IDENTIFIERS = re.compile(
+    r"\b(?:\d[ -]*?){13,19}\b|\b\d{3}-\d{2}-\d{4}\b")
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,15 +106,26 @@ def remove_chinese_content(text: str) -> str:
 _LATIN_LETTER = re.compile(r"[A-Za-zÀ-ɏḀ-ỿ]")
 _NONLATIN_LETTER = re.compile(
     "["
-    "぀-ヿ"                     # Hiragana + Katakana (Japanese kana)
+    "぀-ヿ"              # Hiragana + Katakana (Japanese kana)
     "㐀-䶿一-鿿豈-﫿"  # CJK ideographs (+ compatibility)
     "가-힣ᄀ-ᇿ㄰-㆏"  # Hangul (Korean)
-    "Ѐ-ӿ"                     # Cyrillic
-    "Ͱ-Ͽ"                     # Greek
-    "֐-׿"                     # Hebrew
-    "؀-ۿݐ-ݿ"        # Arabic
-    "฀-๿"                     # Thai
-    "ऀ-ॿ"                     # Devanagari
+    "Ѐ-ӿ"              # Cyrillic
+    "Ͱ-Ͽ"              # Greek
+    "֐-׿"              # Hebrew
+    "؀-ۿݐ-ݿ"  # Arabic
+    "฀-๿"              # Thai
+    "ऀ-ॿ"              # Devanagari
+    # Additional Brahmic + other non-Latin scripts (loop iter 3, FT3-LANG-SCRIPTS): these
+    # were at 0% language-gate recall. Pure additive Unicode coverage; digits/punctuation/
+    # Latin still never trip the gate (only letters are counted; ratio gate stays 0.5).
+    "԰-֏"              # Armenian
+    "ঀ-෿"              # Bengali, Gurmukhi, Gujarati, Odia, Tamil, Telugu,
+    #                            Kannada, Malayalam, Sinhala (contiguous U+0980-U+0DFF)
+    "຀-໿"              # Lao
+    "က-႟"              # Myanmar
+    "Ⴀ-ჿ"              # Georgian
+    "ሀ-፿"              # Ethiopic
+    "ក-៿"              # Khmer
     "]"
 )
 
