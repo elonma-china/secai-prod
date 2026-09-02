@@ -28,6 +28,18 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     reranker_api_key: str = ""
 
+    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+    # ONLY the /ai/exploit PoC-generation path (poc/prefetch.py → routes.exploit_prefetch)
+    # uses this — chat/report/statistical are untouched. For a FREE-TEXT prompt (no CVE id),
+    # it embeds the prompt, retrieves KB candidates and takes the reranker's top relevance_score
+    # as a confidence signal; below the floor → the prompt maps to no real/known vulnerability,
+    # so prefetch returns no evidence instead of building a PoC from a weak keyword match
+    # (the "user nhập linh tinh vẫn ra PoC tự tin" gap). A NAMED CVE is never gated.
+    # Measured 2026-09-02: in-KB ~1.0, off-topic ~0.0 (clean at 0.5). No reranker / any error →
+    # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
+    exploit_relevance_gate_enabled: bool = False
+    exploit_rerank_min_score: float = 0.5
+
     # ── Input sanitization classifier (model-based, chat path) ─────────────────
     # A tiny numpy linear head over the sec-embedding vector classifies each chat
     # prompt into a combined taxonomy (intent: security|chitchat|offtopic + risk:

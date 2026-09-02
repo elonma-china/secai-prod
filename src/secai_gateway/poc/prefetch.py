@@ -35,6 +35,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import httpx
+
+from ..config import get_settings
 from ..state import SqliteLedger
 from .backend import LocalPocBackend, PocError
 from .tools import record_fetch_evidence
@@ -44,6 +47,45 @@ _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 # hits first, then sources whose license makes real `source_code` likely.
 _PRIORITY_SOURCES = {"exploitdb", "metasploit", "nuclei", "ghsa"}
 _MAX_PREFETCH = 2  # matches poc/backend.py's _MAX_FETCH_PER_RUN — same evidence budget
+
+
+# ── Layer-4 exploit relevance gate (EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+async def kb_top_rerank_score(prompt: str) -> float | None:
+    """Top reranker relevance_score of the KB candidates for ``prompt`` (0..1), or ``None``
+    when no signal is available (no embedding/reranker configured, no hits, or any error —
+    fail-open). Reuses the same embed → dense-search → rerank pieces the KB tool uses; it is
+    NOT the shared qdrant_search tool, so this gate stays confined to the exploit path."""
+    from ..retrieval.embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
+    from ..retrieval.qdrant import CANDIDATE_LIMIT, _dense_search
+    prompt = (prompt or "").strip()
+    if not prompt or not EMBEDDING_URL or not RERANKER_URL:
+        return None
+    try:
+        async with httpx.AsyncClient() as client:
+            vector = await embed(client, prompt)
+            hits = await _dense_search(client, vector, None, CANDIDATE_LIMIT)
+            if not hits:
+                return None
+            docs = [str(h["payload"].get("text") or "") for h in hits]
+            results = await rerank(client, prompt, docs, len(docs))
+    except Exception:
+        return None
+    scores = [r.get("relevance_score", 0.0) for r in (results or []) if isinstance(r, dict)]
+    return max(scores) if scores else None
+
+
+async def exploit_relevance_ok(prompt: str) -> bool | None:
+    """Layer-4 decision for the exploit path. ``None`` = INERT (gate off, or no signal →
+    fail-open, treat as pass); ``True``/``False`` = the reranker top score compared to
+    ``exploit_rerank_min_score``. Used ONLY by routes.exploit_prefetch, for FREE-TEXT prompts
+    (a named CVE is never gated)."""
+    s = get_settings()
+    if not s.exploit_relevance_gate_enabled:
+        return None
+    score = await kb_top_rerank_score(prompt)
+    if score is None:
+        return None
+    return score >= s.exploit_rerank_min_score
 
 
 def _rank(hit: dict[str, Any]) -> tuple[bool, bool]:
