@@ -167,10 +167,23 @@ class PocCatalog:
                 f"""SELECT p.* FROM poc p JOIN poc_cve c ON c.poc_id=p.id
                     WHERE c.cve_id IN ({marks}) AND p.duplicate_of IS NULL
                     ORDER BY CASE WHEN p.kind = 'exploit' THEN 0 ELSE 1 END ASC,
+                             -- Prefer RUNNABLE-CODE entries over doc-primary (md/rst/txt) rows:
+                             -- a README-first poc_github "exploit" is not a runnable PoC in
+                             -- air-gap (served docs, not code — observed serving CVE-2021-41773 /
+                             -- CVE-2022-22947 READMEs as the PoC).
+                             CASE WHEN LOWER(COALESCE(p.language,'')) IN
+                                  ('md','markdown','rst','txt','') THEN 1 ELSE 0 END ASC,
                              -- Prefer GitHub PoCs within the exploit tier (requested): a repo
                              -- PoC is what the consolidation step merges into one runnable file.
                              CASE WHEN p.source = 'poc_github' THEN 0 ELSE 1 END ASC,
-                             p.rank DESC, p.verified DESC LIMIT ?""",
+                             -- Entries WITH stored real code before link-only rows (a link-only
+                             -- poc_github with no artifact is not servable in air-gap).
+                             (p.artifact_sha256 IS NULL) ASC,
+                             p.rank DESC, p.verified DESC,
+                             -- DETERMINISTIC tiebreak: identical (kind,source,rank,verified) rows
+                             -- otherwise return in arbitrary SQLite order → a DIFFERENT PoC served
+                             -- on each identical call (observed live: same CVE alternates PoCs).
+                             p.id ASC LIMIT ?""",
                 (*cves, limit)).fetchall()
             return self._rows_to_dicts(rows)
         # keyword FTS path (sanitize to a safe MATCH expression)
@@ -185,7 +198,7 @@ class PocCatalog:
         rows = self._db.execute(
             """SELECT p.* FROM poc p JOIN poc_fts f ON f.rowid=p.id
                WHERE poc_fts MATCH ? AND p.duplicate_of IS NULL
-               ORDER BY bm25(poc_fts) - (p.rank * 0.15) ASC, p.verified DESC
+               ORDER BY bm25(poc_fts) - (p.rank * 0.15) ASC, p.verified DESC, p.id ASC
                LIMIT ?""",
             (match, limit)).fetchall()
         return self._rows_to_dicts(rows)

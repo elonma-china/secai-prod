@@ -208,7 +208,10 @@ def _rank(hit: dict[str, Any]) -> tuple[int, bool, bool, bool]:
     else:
         tier = 1  # advisory / lab — between exploit and detection
     return (tier, source != "poc_github", not hit.get("verified"),
-            hit.get("source") not in _PRIORITY_SOURCES)
+            hit.get("source") not in _PRIORITY_SOURCES,
+            # DETERMINISTIC tiebreak so re-ranking identical-tier hits picks the SAME top-2 every
+            # run (Python sort is stable, but the input order from poc.search is not for ties).
+            str(hit.get("ref") or ""))
 
 
 async def prefetch_evidence(poc: LocalPocBackend, ledger: SqliteLedger, prompt: str,

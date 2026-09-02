@@ -640,10 +640,17 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
     `reason`) when the run gathered no real evidence to place."""
     refs = [e for e in (evidence or []) if _blocks_for(e)]
     fixed = [e for e in refs if e.get("fixed")]
+    # System-selected canonical entries (fixed / consolidated / pruned / extracted) are produced
+    # DETERMINISTICALLY by _build_exploit_grounding. The MODEL's own agentic run may also re-fetch
+    # a (different) raw catalog PoC into the merged evidence — rendering those extra entries makes
+    # Section 1 vary run-to-run (observed live: same CVE served different PoCs). Prefer the
+    # canonical entries and DROP the model's raw re-fetches; fixed still wins over other canonical.
+    canonical = [e for e in refs
+                 if e.get("fixed") or e.get("consolidated") or e.get("pruned") or e.get("extracted")]
     if fixed:
-        # Verified-good override: a fixed (lab-verified) PoC wins — render ONLY it, dropping any
-        # other real-code entry the model may have re-fetched (e.g. the unfixed catalog copy).
         refs = fixed
+    elif canonical:
+        refs = canonical
     if not refs:
         return text, {"reference_code_injected": False, "reason": "no_source_code"}
     canonical = "\n\n".join(_blocks_for(e, cve_id) for e in refs)
