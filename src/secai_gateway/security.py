@@ -66,6 +66,50 @@ def remove_chinese_content(text: str) -> str:
     return _CJK_RUN.sub("", text)
 
 
+# ── Input language gate (classifier trained on vi/en only) ───────────────────
+# The model-based input classifier head was trained purely on Vietnamese + English text
+# (evals/sanitize/dataset.jsonl: lang ∈ {vi, en}). Vietnamese and English both write in the
+# Latin script — Vietnamese's diacritics live in Latin Extended (U+00C0–024F, U+1E00–1EFF),
+# so a *non-Latin* script (CJK, kana, Hangul, Cyrillic, Arabic, Thai, Hebrew, Greek,
+# Devanagari…) is a reliable, dependency-free signal that the message is in a language we do
+# not support. We count only letters, so digits (CVE-2025-3248), punctuation, whitespace and
+# emoji never trip the gate; Latin-script languages (e.g. French) deliberately pass through.
+_LATIN_LETTER = re.compile(r"[A-Za-zÀ-ɏḀ-ỿ]")
+_NONLATIN_LETTER = re.compile(
+    "["
+    "぀-ヿ"                     # Hiragana + Katakana (Japanese kana)
+    "㐀-䶿一-鿿豈-﫿"  # CJK ideographs (+ compatibility)
+    "가-힣ᄀ-ᇿ㄰-㆏"  # Hangul (Korean)
+    "Ѐ-ӿ"                     # Cyrillic
+    "Ͱ-Ͽ"                     # Greek
+    "֐-׿"                     # Hebrew
+    "؀-ۿݐ-ݿ"        # Arabic
+    "฀-๿"                     # Thai
+    "ऀ-ॿ"                     # Devanagari
+    "]"
+)
+
+UNSUPPORTED_LANGUAGE_MSG = (
+    "Xin lỗi, IAS.AI hiện chỉ hỗ trợ tiếng Việt và tiếng Anh. "
+    "Vui lòng đặt lại câu hỏi bằng tiếng Việt hoặc tiếng Anh.\n"
+    "Sorry, IAS.AI currently supports Vietnamese and English only. "
+    "Please rephrase your question in Vietnamese or English."
+)
+
+
+def unsupported_language_ratio(text: str) -> float:
+    """Fraction of *letters* written in a non-Latin script. 0.0 when there are no letters."""
+    nonlatin = len(_NONLATIN_LETTER.findall(text))
+    latin = len(_LATIN_LETTER.findall(text))
+    total = nonlatin + latin
+    return nonlatin / total if total else 0.0
+
+
+def is_unsupported_language(text: str, *, ratio: float = 0.5) -> bool:
+    """True when ``text`` is predominantly (>= ``ratio``) a non-Latin script → not vi/en."""
+    return unsupported_language_ratio(text) >= ratio
+
+
 # ── Reasoning / meta-commentary leak guard ───────────────────────────────────
 # Even with thinking disabled, the small model occasionally streams its planning prose
 # (self-deliberation, internal rule/tool names, self-directed formatting instructions)

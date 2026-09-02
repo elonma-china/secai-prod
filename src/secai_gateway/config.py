@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     injection_cascade_enabled: bool = False
     injection_cascade_timeout_s: float = 8.0
 
+    # Language gate (security.is_unsupported_language): the classifier head was trained on
+    # Vietnamese + English only, so a message written predominantly in a non-Latin script
+    # (CJK/kana/Hangul/Cyrillic/Arabic/Thai/…) is refused on /ai/chat with a bilingual ask to
+    # use vi/en. Latin-script languages pass through. Dependency-free, no network.
+    language_gate_enabled: bool = True
+    language_gate_nonlatin_ratio: float = 0.5
+
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
