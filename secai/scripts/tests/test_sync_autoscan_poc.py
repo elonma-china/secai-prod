@@ -70,6 +70,8 @@ def test_normalize_record_list_only_maps_core_fields():
             "https://gitlab.com/exploit-database/exploitdb/-/raw/main/"
             "exploits/multiple/webapps/52666.txt"
         ),
+        # list-only record has no updated_at/_wm → source stamp falls back to date_published
+        "src_updated_at": "2026-08-31",
     }
 
 
@@ -195,3 +197,39 @@ def test_load_existing_reports_cve_count_per_source_ref(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ── refresh-if-newer decision (default) ───────────────────────────────────────
+def test_poc_needs_write_new_row():
+    assert sync._poc_needs_write(None, "2026-08-31", True, no_refresh=False) is True
+
+
+def test_poc_needs_write_source_newer_refreshes():
+    prior = {"cve_count": 1, "src_updated_at": "2026-08-30T00:00:00Z"}
+    assert sync._poc_needs_write(prior, "2026-08-31T00:00:00Z", True, no_refresh=False) is True
+
+
+def test_poc_needs_write_unchanged_skips():
+    prior = {"cve_count": 1, "src_updated_at": "2026-08-31T00:00:00Z"}
+    assert sync._poc_needs_write(prior, "2026-08-31T00:00:00Z", True, no_refresh=False) is False
+
+
+def test_poc_needs_write_backfills_missing_cve_links():
+    prior = {"cve_count": 0, "src_updated_at": "2026-08-31T00:00:00Z"}
+    assert sync._poc_needs_write(prior, "2026-08-31T00:00:00Z", True, no_refresh=False) is True
+
+
+def test_poc_needs_write_unstamped_legacy_adopted():
+    prior = {"cve_count": 1, "src_updated_at": ""}
+    assert sync._poc_needs_write(prior, "2026-08-31T00:00:00Z", True, no_refresh=False) is True
+
+
+def test_poc_needs_write_no_refresh_skips_existing():
+    prior = {"cve_count": 0, "src_updated_at": ""}
+    assert sync._poc_needs_write(prior, "2026-08-31T00:00:00Z", True, no_refresh=True) is False
+
+
+def test_provenance_carries_src_updated_at():
+    rec = dict(LIST_PAGE["results"][0]); rec["_wm"] = "2026-08-31T04:00:00Z"
+    poc = sync.normalize_record(rec)
+    assert poc.provenance.get("src_updated_at") == "2026-08-31T04:00:00Z"

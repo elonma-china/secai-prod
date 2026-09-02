@@ -270,3 +270,30 @@ def test_severity_of_thresholds(score, expected):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ── refresh-if-newer decision (default) ───────────────────────────────────────
+def test_needs_ingest_new_cve():
+    assert _load_module()._needs_ingest(False, "", "2026-09-02T00:00:00Z") is True
+
+
+def test_needs_ingest_source_newer_refreshes():
+    assert _load_module()._needs_ingest(True, "2026-09-01T00:00:00Z", "2026-09-02T00:00:00Z") is True
+
+
+def test_needs_ingest_source_not_newer_skips():
+    m = _load_module()
+    assert m._needs_ingest(True, "2026-09-02T00:00:00Z", "2026-09-02T00:00:00Z") is False
+    assert m._needs_ingest(True, "2026-09-03T00:00:00Z", "2026-09-02T00:00:00Z") is False
+
+
+def test_needs_ingest_unstamped_legacy_point_adopted():
+    assert _load_module()._needs_ingest(True, "", "2026-09-02T00:00:00Z") is True
+
+
+def test_build_chunks_payload_carries_updated_at():
+    m = _load_module()
+    row = {"cve_id": "CVE-2026-0001", "summary": "x", "cwes": [], "products": [],
+           "updated_at": "2026-09-02T03:30:00Z"}
+    chunks = m.build_chunks(row)
+    assert chunks and all(c["updated_at"] == "2026-09-02T03:30:00Z" for c in chunks)

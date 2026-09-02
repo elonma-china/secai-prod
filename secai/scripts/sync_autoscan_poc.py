@@ -21,10 +21,12 @@ skips that for a much faster pass when only the catalog metadata (no CVE links) 
 
 Re-running is safe: catalog upserts are ``ON CONFLICT(source,source_ref) DO UPDATE`` (never
 INSERT-duplicates) and ``poc_cve`` links are ``INSERT OR IGNORE`` (never duplicated) — see
-``secai_gateway/poc/catalog.py``. On top of that DB-level dedup, this script also skips
-re-writing a row that already exists in the catalog with its CVE links already populated
-(steady-state incremental reruns become near no-ops), unless ``--update-existing``. Nothing
-here ever DELETEs or touches a row under a different ``source``.
+``secai_gateway/poc/catalog.py``. On top of that DB-level dedup, the default is
+REFRESH-IF-NEWER: a row is re-upserted when the source is newer than its stored
+``src_updated_at`` (kept in provenance) or when it is still missing CVE links this record
+can supply; an unchanged, fully-linked row is skipped, so steady-state reruns are near
+no-ops. ``--no-refresh`` restores pure insert-only; ``--update-existing`` forces every row.
+Nothing here ever DELETEs or touches a row under a different ``source``.
 
 Usage:
   python3 sync_autoscan_poc.py --dry-run --max-pages 1     # fetch+map+print only, no DB
@@ -180,6 +182,10 @@ def normalize_record(rec: dict, detail: dict | None = None) -> "NormalizedPoc":
         "collector": "autoscan-exploitdb",
         "edb_id": merged.get("edb_id"),
         "raw_file_url": merged.get("raw_file_url"),
+        # The source freshness stamp (detail `updated_at`, else `date_published`), stored so a
+        # later run can REFRESH this row only when the source is genuinely newer (see
+        # _poc_needs_write / load_existing). `_wm` is the value fetch_candidates already picked.
+        "src_updated_at": merged.get("_wm") or merged.get("updated_at") or merged.get("date_published") or "",
     }
     return NormalizedPoc(
         source=SOURCE, source_ref=edb, kind="exploit", title=desc,
@@ -268,26 +274,54 @@ def fetch_candidates(watermark: str, page_size: int, max_pages: int, *,
 
 
 # ── skip-existing (steady-state incremental reruns become near no-ops) ─────────
-def load_existing(db_path: Path) -> dict[str, dict[str, int]]:
-    """``{source_ref: {"poc_id":..., "cve_count":...}}`` for every already-catalogued
-    ``autoscan-exploitdb`` row. Reads via a throwaway READ-ONLY connection (not through
-    ``PocCatalog``, whose ``__init__`` unconditionally creates the DB/schema) so a
-    ``--dry-run`` — or a first run against a catalog that doesn't exist yet — never creates
-    or touches the file."""
+def load_existing(db_path: Path) -> dict[str, dict[str, Any]]:
+    """``{source_ref: {"poc_id":int, "cve_count":int, "src_updated_at":str}}`` for every
+    already-catalogued ``autoscan-exploitdb`` row. ``src_updated_at`` is read back from the
+    stored provenance JSON so a rerun can REFRESH a row only when the source is newer. Reads
+    via a throwaway READ-ONLY connection (not through ``PocCatalog``, whose ``__init__``
+    unconditionally creates the DB/schema) so a ``--dry-run`` — or a first run against a
+    catalog that doesn't exist yet — never creates or touches the file."""
     if not db_path.exists():
         return {}
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         rows = conn.execute(
-            "SELECT p.source_ref, p.id, COUNT(c.cve_id) FROM poc p "
+            "SELECT p.source_ref, p.id, p.provenance, COUNT(c.cve_id) FROM poc p "
             "LEFT JOIN poc_cve c ON c.poc_id = p.id "
             "WHERE p.source = ? GROUP BY p.id", (SOURCE,),
         ).fetchall()
-        return {source_ref: {"poc_id": poc_id, "cve_count": cnt} for source_ref, poc_id, cnt in rows}
+        out: dict[str, dict[str, Any]] = {}
+        for source_ref, poc_id, prov, cnt in rows:
+            try:
+                src_lu = str((json.loads(prov) if prov else {}).get("src_updated_at") or "")
+            except (ValueError, TypeError):
+                src_lu = ""
+            out[source_ref] = {"poc_id": poc_id, "cve_count": cnt, "src_updated_at": src_lu}
+        return out
     except sqlite3.OperationalError:
         return {}  # `poc` table not created yet (fresh/empty file) -> nothing to skip
     finally:
         conn.close()
+
+
+def _poc_needs_write(prior: dict[str, Any] | None, src_lu: str, has_cve_ids: bool,
+                     *, no_refresh: bool) -> bool:
+    """Refresh-if-newer decision for one PoC row (pure, unit-tested). Write when:
+      • the row is new, OR
+      • it exists but is still missing CVE links this record can now supply (backfill), OR
+      • it exists but carries no comparable stamp (legacy row → adopt current), OR
+      • the source record is strictly newer than what is stored.
+    An unchanged, fully-linked row is skipped. ``no_refresh`` forces pure insert-only."""
+    if prior is None:
+        return True
+    if no_refresh:
+        return False
+    if int(prior.get("cve_count", 0)) == 0 and has_cve_ids:
+        return True
+    stored = prior.get("src_updated_at") or ""
+    if not stored:
+        return True
+    return (src_lu or "") > stored
 
 
 # ── state (watermark) ───────────────────────────────────────────────────────────
@@ -314,7 +348,10 @@ def main() -> int:
     ap.add_argument("--no-detail", action="store_true",
                     help="skip the /api/exploitdb/{id} detail fetch (faster; no cve_ids/language, coarser watermark)")
     ap.add_argument("--update-existing", action="store_true",
-                    help="re-upsert rows that already exist with CVE links present (default: skip them)")
+                    help="force re-upsert of EVERY row regardless of freshness (blanket)")
+    ap.add_argument("--no-refresh", action="store_true",
+                    help="pure insert-only: skip any row already in the catalog even if the "
+                         "source is newer (disables the default refresh-if-newer behavior)")
     ap.add_argument("--dry-run", action="store_true", help="fetch+map+print only; touches no DB (no read, no write)")
     args = ap.parse_args()
 
@@ -364,13 +401,13 @@ def main() -> int:
     added = updated = skipped = 0
     for poc in pocs:
         prior = existing.get(poc.source_ref)
-        # Skip a row that already exists AND already has its CVE links populated (or
-        # genuinely has none to add) — a steady-state incremental rerun then never
-        # re-writes our own rows. A row that exists but is still missing CVE links this
-        # record WOULD supply is backfilled regardless of --update-existing (that's a
-        # completeness fix, not a "re-sync everything" operation).
-        cve_links_present = prior is not None and (prior["cve_count"] > 0 or not poc.cve_ids)
-        if prior is not None and cve_links_present and not args.update_existing:
+        # Default REFRESH-IF-NEWER: write a new row; refresh one the source has updated;
+        # backfill one still missing CVE links; skip an unchanged, fully-linked row. Same
+        # (source, source_ref) → PocCatalog.upsert overwrites in place, never duplicates.
+        # --update-existing forces every row through; --no-refresh restores insert-only.
+        src_lu = str((poc.provenance or {}).get("src_updated_at") or "")
+        if not args.update_existing and not _poc_needs_write(
+                prior, src_lu, bool(poc.cve_ids), no_refresh=args.no_refresh):
             skipped += 1
             continue
         catalog.upsert(poc)

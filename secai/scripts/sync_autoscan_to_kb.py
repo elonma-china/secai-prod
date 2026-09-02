@@ -11,12 +11,14 @@ locally-synced ``cve_intel.db``, it pages the AutoScan REST API::
 which already merges NVD + MITRE + RedHat + vulnrichment (EPSS/SSVC/KEV) + CWE +
 vendor/product + exploit/MISP cross-links per CVE — a richer upstream than NVD alone.
 
-Only records MISSING from Qdrant are embedded (cheap steady state), so re-runs are
-idempotent (uuid5 point ids). The API returns rows newest-first by ``updated_at``,
-so incremental mode walks pages from page 1 and stops once it crosses the watermark.
-By default this is pure insert-only: a CVE already in Qdrant is skipped outright and
-its existing points are never re-upserted or mutated; pass ``--update-existing`` to
-opt into re-embedding+upserting CVEs that already exist.
+Default is REFRESH-IF-NEWER: a CVE not yet in Qdrant is embedded; one the source has
+updated (its ``updated_at`` is newer than the ``updated_at`` stored in the point payload)
+is re-embedded in place (same uuid5 id → overwrites, never duplicates); an unchanged one
+is skipped, so steady-state re-runs stay cheap. The API returns rows newest-first by
+``updated_at``, so incremental mode walks pages from page 1 and stops once it crosses the
+watermark. ``--no-refresh`` restores pure insert-only (skip any existing CVE); a legacy
+point with no stored ``updated_at`` is treated as stale and refreshed; ``--update-existing``
+forces re-embedding of every candidate (one-time migration).
 
 Config (embed endpoint/model/key, neo4j auth) is read from the gateway ``.env`` so it
 tracks the current serving IP — identical to sync_nvd_to_kb.py. NOTE: this reaches the
@@ -142,6 +144,37 @@ def qdrant_count(cve_id: str) -> int:
     return int(r["result"]["count"])
 
 
+def qdrant_existing(cve_id: str) -> tuple[bool, str]:
+    """``(exists, stored_updated_at)`` for a CVE already in the collection. Reads one point's
+    ``updated_at`` payload — enough to decide refresh-if-newer. ``stored_updated_at`` is ``""``
+    when the CVE is absent OR present but stamped by an older/other-source ingest that never
+    wrote the field (legacy ``nvd-cron-sync`` points)."""
+    r = http_json(
+        f"{QDRANT}/collections/{COLLECTION}/points/scroll",
+        method="POST",
+        body={"filter": {"must": [{"key": "cve_id", "match": {"value": cve_id}}]},
+              "limit": 1, "with_payload": ["updated_at"], "with_vector": False},
+    )
+    pts = r.get("result", {}).get("points", [])
+    if not pts:
+        return (False, "")
+    return (True, str((pts[0].get("payload") or {}).get("updated_at") or ""))
+
+
+def _needs_ingest(exists: bool, stored_lu: str, src_lu: str) -> bool:
+    """Refresh-if-newer decision (pure, unit-tested). Ingest/refresh when:
+      • the CVE is not in Qdrant yet (new), OR
+      • it is present but carries no comparable stamp (legacy/other-source point → adopt as
+        the current record), OR
+      • the source record's ``updated_at`` is strictly newer than what is stored.
+    An unchanged (stored >= source) CVE is skipped, so re-runs stay cheap and never churn."""
+    if not exists:
+        return True
+    if not stored_lu:
+        return True
+    return (src_lu or "") > stored_lu
+
+
 def qdrant_upsert(points: list[dict]) -> None:
     if not points:
         return
@@ -258,6 +291,9 @@ def build_chunks(row: dict) -> list[dict[str, Any]]:
         "cwe_refs": cwes, "products": products, "is_in_kev": bool(row.get("is_in_kev")),
         "capec_entries": [], "mitre_tactics": [], "mitre_techniques": [],
         "epss_score": row.get("epss_score"), "has_public_exploit": bool(row.get("has_public_exploit")),
+        # Stored so a later run can compare source freshness and REFRESH only when the
+        # source record is genuinely newer (see _needs_ingest / qdrant_existing).
+        "updated_at": row.get("updated_at") or "",
         "source": SOURCE,
     }
     return [
@@ -401,9 +437,11 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="fetch+map+print only; no Qdrant/embed/Neo4j")
     ap.add_argument("--no-neo4j", action="store_true")
     ap.add_argument("--update-existing", action="store_true",
-                     help="also re-embed and upsert CVEs already present in Qdrant "
-                          "(default OFF: pure insert-only — existing points are never "
-                          "re-upserted or mutated)")
+                     help="force re-embed+upsert of EVERY candidate regardless of freshness "
+                          "(blanket; useful for a one-time migration of legacy points)")
+    ap.add_argument("--no-refresh", action="store_true",
+                     help="pure insert-only: skip any CVE already in Qdrant even if the source "
+                          "is newer (disables the default refresh-if-newer behavior)")
     args = ap.parse_args()
 
     if not API_PASS:
@@ -434,29 +472,39 @@ def main() -> int:
         print(f"[autoscan->kb] DRY mapped {len(cands)} CVEs (watermark would -> {max_lu})", flush=True)
         return 0
 
-    # existence check (parallel) — only embed the ones actually missing from Qdrant.
-    # --update-existing bypasses this gate entirely: every candidate is re-embedded
-    # and re-upserted, existing or not. Default (off) is pure insert-only: an existing
-    # CVE is skipped outright, its old points are never touched.
+    # Selection (parallel). Default = REFRESH-IF-NEWER: for each candidate, look up whether
+    # the CVE is already in Qdrant and its stored updated_at, then ingest a NEW CVE, REFRESH
+    # one the source has updated (same uuid5 id → overwrites in place, never duplicates), and
+    # SKIP an unchanged one. --update-existing forces every candidate through (blanket);
+    # --no-refresh restores pure insert-only (existing CVE skipped, old points untouched).
     if args.update_existing:
         missing: list[dict] = cands
         print(f"[autoscan->kb] --update-existing set: re-embedding all {len(missing)} "
-              f"candidates (existence check skipped)", flush=True)
+              f"candidates (freshness check skipped)", flush=True)
     else:
         missing = []
+
+        def _select(c: dict) -> dict | None:
+            exists, stored_lu = qdrant_existing(c["cve_id"])
+            if args.no_refresh:
+                return c if not exists else None
+            return c if _needs_ingest(exists, stored_lu, c.get("updated_at") or "") else None
+
         with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
-            futs = {pool.submit(qdrant_count, c["cve_id"]): c for c in cands}
+            futs = {pool.submit(_select, c): c for c in cands}
             for fut in as_completed(futs):
                 c = futs[fut]
                 try:
-                    if fut.result() == 0:
-                        missing.append(c)
+                    res = fut.result()
+                    if res is not None:
+                        missing.append(res)
                     else:
                         state["skipped"] = int(state.get("skipped", 0)) + 1
                 except Exception as exc:  # noqa: BLE001
-                    print(f"  count fail {c['cve_id']}: {exc}", flush=True)
+                    print(f"  lookup fail {c['cve_id']}: {exc}", flush=True)
                     state["errors"] = int(state.get("errors", 0)) + 1
-        print(f"[autoscan->kb] missing (to ingest): {len(missing)} / {len(cands)}", flush=True)
+        mode = "insert-only" if args.no_refresh else "refresh-if-newer"
+        print(f"[autoscan->kb] to ingest ({mode}): {len(missing)} / {len(cands)}", flush=True)
 
     for i in range(0, len(missing), args.batch):
         slice_rows = missing[i:i + args.batch]
