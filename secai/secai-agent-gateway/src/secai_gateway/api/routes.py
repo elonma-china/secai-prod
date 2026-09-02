@@ -867,7 +867,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             existing = await store.load_messages(session_id)
             if existing:
                 return  # live memory still present — nothing to rehydrate
-            turns = conversations.recent_turns(conversation_id, n)
+            turns = await asyncio.to_thread(conversations.recent_turns, conversation_id, n)
             if not turns:
                 return
             from linch.types import Message, TextBlock
@@ -916,7 +916,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         text, metadata = await complete("chat", body, session_id=session_id)
         metadata = {**metadata, "conversation_id": conversation_id}
         if owner_hash and not metadata.get("short_circuit"):
-            _persist_turn(owner_hash, conversation_id, session_id, body.supplied_text(), text)
+            # Offload the sync SQLite write to a worker thread so it never blocks the event loop.
+            await asyncio.to_thread(
+                _persist_turn, owner_hash, conversation_id, session_id, body.supplied_text(), text)
         return {"response": text, "answer": text, "message": text,
                 "metadata": metadata, "conversation_id": conversation_id}
 
@@ -952,7 +954,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if holder["compaction"]:
                 md["compaction"] = holder["compaction"]
             if owner_hash and final and final != STREAM_ERROR_MESSAGE:
-                _persist_turn(owner_hash, conversation_id, session_id, user_text, final)
+                await asyncio.to_thread(
+                    _persist_turn, owner_hash, conversation_id, session_id, user_text, final)
             return {"content": final, "answer": final, "message": final,
                     "metadata": md, "conversation_id": conversation_id}
 
@@ -970,7 +973,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         conversations = getattr(state.runner, "conversations", None)
         if conversations is not None:
             try:
-                conversations.create(owner_hash, conversation_id, session_id, (body.title or ""), now)
+                await asyncio.to_thread(conversations.create, owner_hash, conversation_id,
+                                        session_id, body.title or "", now)
             except Exception:
                 logger.exception("create_conversation persist failed")
         return {"conversation_id": conversation_id, "title": body.title or "",
@@ -985,7 +989,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         conversations = getattr(state.runner, "conversations", None)
         if conversations is None:
             return {"conversations": [], "total": 0, "limit": limit, "offset": offset}
-        rows, total = conversations.list_for_owner(owner_hash, limit, offset)
+        rows, total = await asyncio.to_thread(conversations.list_for_owner, owner_hash, limit, offset)
         return {"conversations": rows, "total": total, "limit": limit, "offset": offset}
 
     @app.get("/ai/conversations/{conversation_id}")
@@ -995,10 +999,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not owner_hash:
             raise HTTPException(400, "user_id là bắt buộc để đọc hội thoại.")
         conversations = getattr(state.runner, "conversations", None)
-        if conversations is None or not conversations.owns(owner_hash, conversation_id):
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
             raise HTTPException(404, "Không tìm thấy hội thoại.")   # 404, không xác nhận tồn tại
-        row = conversations.get(conversation_id) or {}
-        messages, total = conversations.messages(conversation_id, limit, offset)
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        messages, total = await asyncio.to_thread(conversations.messages, conversation_id, limit, offset)
         return {"conversation_id": conversation_id, "title": row.get("title", ""),
                 "created_at": row.get("created_at"), "updated_at": row.get("updated_at"),
                 "message_count": row.get("message_count", total), "messages": messages,
@@ -1011,10 +1017,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not owner_hash:
             raise HTTPException(400, "user_id là bắt buộc để xoá hội thoại.")
         conversations = getattr(state.runner, "conversations", None)
-        if conversations is None or not conversations.owns(owner_hash, conversation_id):
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
             raise HTTPException(404, "Không tìm thấy hội thoại.")
-        row = conversations.get(conversation_id) or {}
-        conversations.soft_delete(conversation_id)
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        await asyncio.to_thread(conversations.soft_delete, conversation_id)
         store = getattr(state.runner, "session_store", None)
         sid = row.get("session_id")
         if store is not None and sid:

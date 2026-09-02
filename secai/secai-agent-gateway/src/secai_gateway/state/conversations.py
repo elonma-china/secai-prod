@@ -7,10 +7,14 @@ listing / switching old↔new) plus the full, uncompacted message transcript (fo
 history back long after the Redis live window has expired).
 
 Mirrors ``state/ledger.py::SqliteLedger``: same on-disk file (``gateway_db_path``), a
-process-wide ``threading.Lock`` around short write transactions, one fresh connection per
-call (``check_same_thread=False``). Everything here is best-effort from the caller's point
-of view — the route layer wraps calls fail-open so a durability hiccup never breaks a chat
-reply (see api/routes.py).
+process-wide ``threading.Lock`` around short write transactions. Performance: one shared
+connection (opened once, ``check_same_thread=False`` — safe because every access is
+serialized by ``self._lock``) in **WAL** mode with ``synchronous=NORMAL``, instead of
+opening a fresh connection per call. WAL + a reused handle removes the per-write
+connection-open + full-fsync cost that made the durable write a real bottleneck under
+concurrency (see load test 2026-09-02). The route layer additionally offloads these calls
+to a worker thread (``asyncio.to_thread``) so a write never blocks the async event loop,
+and wraps them fail-open so a durability hiccup never breaks a chat reply (api/routes.py).
 
 Ownership: ``owner_hash = sha256(user_id)``. It is also folded into the linch session id
 (``chat:conv:{owner_hash}:{conversation_id}``) so cross-user addressing is structurally
@@ -42,8 +46,16 @@ class ConversationStore:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
-        with self._connect() as conn:
-            conn.executescript(
+        # One shared connection, reused across calls (all access serialized by _lock, so
+        # check_same_thread=False is safe). WAL + synchronous=NORMAL keeps small writes fast
+        # and durable enough for a chat transcript (survives app crash; a full OS crash may
+        # lose the last few WAL frames — acceptable here, the linch Redis copy also exists).
+        self._conn = sqlite3.connect(self.path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("pragma journal_mode=WAL")
+        self._conn.execute("pragma synchronous=NORMAL")
+        with self._lock, self._conn:
+            self._conn.executescript(
                 """
                 create table if not exists conversations (
                   conversation_id text primary key,
@@ -66,18 +78,13 @@ class ConversationStore:
                 """
             )
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
-        return conn
-
     # ── index ────────────────────────────────────────────────────────────────
     def create(self, owner_hash: str, conversation_id: str, session_id: str,
                title: str, ts: int) -> None:
         """Insert a conversation row. Idempotent (``insert or ignore``) so a first-turn
         create that races a prior create just no-ops instead of overwriting."""
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock, self._conn:
+            self._conn.execute(
                 "insert or ignore into conversations "
                 "(conversation_id, owner_hash, session_id, title, created_at, updated_at, "
                 "message_count, deleted) values (?, ?, ?, ?, ?, ?, 0, 0)",
@@ -85,8 +92,8 @@ class ConversationStore:
             )
 
     def get(self, conversation_id: str) -> dict[str, Any] | None:
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
+        with self._lock:
+            row = self._conn.execute(
                 "select * from conversations where conversation_id = ?", (conversation_id,)
             ).fetchone()
         return dict(row) if row is not None else None
@@ -96,8 +103,8 @@ class ConversationStore:
         ``owner_hash``. The gate for every conversation-scoped read/write."""
         if not owner_hash:
             return False
-        with self._lock, self._connect() as conn:
-            row = conn.execute(
+        with self._lock:
+            row = self._conn.execute(
                 "select 1 from conversations where conversation_id = ? and owner_hash = ? "
                 "and deleted = 0",
                 (conversation_id, owner_hash),
@@ -109,12 +116,12 @@ class ConversationStore:
         """(page, total) of a user's live conversations, newest-updated first."""
         limit = max(1, min(int(limit or 20), 200))
         offset = max(0, int(offset or 0))
-        with self._lock, self._connect() as conn:
-            total = conn.execute(
+        with self._lock:
+            total = self._conn.execute(
                 "select count(*) from conversations where owner_hash = ? and deleted = 0",
                 (owner_hash,),
             ).fetchone()[0]
-            rows = conn.execute(
+            rows = self._conn.execute(
                 "select conversation_id, title, created_at, updated_at, message_count "
                 "from conversations where owner_hash = ? and deleted = 0 "
                 "order by updated_at desc, created_at desc limit ? offset ?",
@@ -123,8 +130,8 @@ class ConversationStore:
         return [dict(r) for r in rows], int(total)
 
     def soft_delete(self, conversation_id: str) -> None:
-        with self._lock, self._connect() as conn:
-            conn.execute(
+        with self._lock, self._conn:
+            self._conn.execute(
                 "update conversations set deleted = 1 where conversation_id = ?",
                 (conversation_id,),
             )
@@ -134,12 +141,12 @@ class ConversationStore:
                     ts: int) -> None:
         """Append one user+assistant turn (2 rows) to the durable transcript and bump the
         conversation's counters. Sets the title from the user message if still empty."""
-        with self._lock, self._connect() as conn:
-            base = conn.execute(
+        with self._lock, self._conn:
+            base = self._conn.execute(
                 "select coalesce(max(seq), 0) from conversation_messages "
                 "where conversation_id = ?", (conversation_id,),
             ).fetchone()[0]
-            conn.executemany(
+            self._conn.executemany(
                 "insert or ignore into conversation_messages "
                 "(conversation_id, seq, role, content, created_at) values (?, ?, ?, ?, ?)",
                 [
@@ -147,7 +154,7 @@ class ConversationStore:
                     (conversation_id, base + 2, "assistant", assistant_text or "", ts),
                 ],
             )
-            conn.execute(
+            self._conn.execute(
                 "update conversations set message_count = message_count + 2, updated_at = ?, "
                 "title = case when title = '' or title is null then ? else title end "
                 "where conversation_id = ?",
@@ -159,12 +166,12 @@ class ConversationStore:
         """(page, total) of the durable transcript, oldest first."""
         limit = max(1, min(int(limit or 200), 1000))
         offset = max(0, int(offset or 0))
-        with self._lock, self._connect() as conn:
-            total = conn.execute(
+        with self._lock:
+            total = self._conn.execute(
                 "select count(*) from conversation_messages where conversation_id = ?",
                 (conversation_id,),
             ).fetchone()[0]
-            rows = conn.execute(
+            rows = self._conn.execute(
                 "select role, content, seq, created_at from conversation_messages "
                 "where conversation_id = ? order by seq asc limit ? offset ?",
                 (conversation_id, limit, offset),
@@ -177,8 +184,8 @@ class ConversationStore:
         n = max(0, int(n or 0))
         if not n:
             return []
-        with self._lock, self._connect() as conn:
-            rows = conn.execute(
+        with self._lock:
+            rows = self._conn.execute(
                 "select role, content from conversation_messages where conversation_id = ? "
                 "order by seq desc limit ?",
                 (conversation_id, n),

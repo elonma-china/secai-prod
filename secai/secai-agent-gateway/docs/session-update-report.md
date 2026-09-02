@@ -111,3 +111,25 @@ Kịch bản: seed dữ kiện bí mật "FALCON-7788" ở lượt 1 → nhiều
 - **Recall-sau-nén đảm bảo** chỉ đạt được bằng cơ chế **"ghim dữ kiện" (pinned-facts/entity memory)** — chèn dữ kiện then chốt nguyên văn vào mọi bản tóm tắt, hoặc giữ ngoài vùng bị tóm tắt. Thay đổi lớn ⇒ issue riêng.
 
 **Tự đánh giá (trung thực):** trong quá trình kiểm chứng tôi đã kết luận SAI nhiều lần ("giới hạn model" → "artefact window nhỏ" → "erosion thật ở 32768") trước khi introspect ra window production thật = 65536 và chốt đúng: **production ổn; erosion là artefact test; fix max_output_tokens giảm rủi ro nhưng không đảm bảo recall.** Bảng số liệu là đo trực tiếp.
+
+---
+
+## 6. Tối ưu ghi bền + đo tải (2026-09-02)
+
+**Câu hỏi:** kiểu bố trí session này có làm giảm số user đồng thời (CCU) không?
+
+**Tối ưu đã làm** (`state/conversations.py` + `api/routes.py`): ghi SQLite chuyển từ *mở connection mới mỗi lần + đồng bộ trên event loop* sang **1 connection dùng chung + WAL + `synchronous=NORMAL`**, và **offload mọi lời gọi store sang `asyncio.to_thread`** (không chặn event loop).
+
+**Load test** (in-process, runner 0-giây để cô lập đúng chi phí bookkeeping session; rate-limit tắt):
+
+| CCU | Baseline (đồng bộ) | Sau tối ưu | Cải thiện |
+|---|---|---|---|
+| 10 | 45.7 req/s · p50 202ms | **281 req/s · p50 31ms** | ~6× tps, ~6× latency |
+| 30 | 32.9 req/s · p50 1080ms | **246 req/s · p50 105ms** | ~7× tps, ~10× latency |
+| 50 | 26.0 req/s · p50 1917ms · p99 2041ms | **287 req/s · p50 114ms · p99 528ms** | ~11× tps, ~17× latency |
+
+*(0 lỗi cả hai; 16/16 unit test store+endpoint pass sau tối ưu.)*
+
+**Kết luận:** **KHÔNG làm giảm CCU.** Nút thắt thực sự vẫn là serving LLM (mỗi lượt vài giây); phần bookkeeping session sau tối ưu chỉ ~30–115ms và trần ~280 req/s — gấp **~470×** mục tiêu hợp đồng (~0.6 RPS). Baseline (chưa tối ưu) từng để bookkeeping tự thành nút thắt ở CCU cao (p50 ~2s@50CCU); tối ưu đã loại bỏ. API cũ không đụng.
+
+**Lưu ý dài hạn (không chặn):** `agent._sessions` in-memory tăng theo số hội thoại (chưa evict); bảng `conversation_messages` không hết hạn → cần chính sách archive.
