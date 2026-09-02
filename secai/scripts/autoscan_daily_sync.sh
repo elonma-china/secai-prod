@@ -1,6 +1,7 @@
 #!/bin/bash
-# Daily AutoScan -> gateway data sync: CVE knowledge-base ingest
-# (sync_autoscan_to_kb.py) then PoC catalog ingest (sync_autoscan_poc.py).
+# Daily AutoScan -> gateway data sync: CVE knowledge-base ingest (sync_autoscan_to_kb.py).
+# The PoC step (sync_autoscan_poc.py) is DISABLED by default (see Step 2): AutoScan's only
+# PoC source is exploitdb, a subset the gateway's git-collector catalog already covers.
 # Modeled on /home/ict/Downloads/CVE-DB/run_sync.sh.
 #
 # Guard: the KB step needs LIVE embed vectors (dense(bge-m3/sec-embedding)+sparse(bm25))
@@ -8,8 +9,7 @@
 # NOT ingest CVEs without vectors (they'd sit in Qdrant unsearchable via dense retrieval and
 # silently degrade the RAG path to BM25-only, exactly the kind of failure noted in
 # CLAUDE.md's fine-tuned-serving-variant warning). So we probe it first: down -> SKIP the KB
-# step with a clear WARNING logged, but still run the PoC step, which has no such dependency
-# (it only writes rows/metadata to the sqlite PoC catalog).
+# step with a clear WARNING logged. (The PoC step is off by default anyway — see Step 2.)
 #
 # Both underlying python scripts are independently safe to re-run (incremental watermark +
 # idempotent upserts) — this wrapper adds no extra state of its own beyond the log file.
@@ -93,11 +93,20 @@ else
     log "WARNING: embed endpoint unreachable (EMBEDDING_API_URL='$EMBEDDING_API_URL') -- SKIPPING sync_autoscan_to_kb.py. Ingesting CVEs without dense vectors would silently degrade RAG retrieval to BM25-only, so the KB step is skipped entirely rather than run degraded. Fix the serving endpoint / .env, then re-run this wrapper."
 fi
 
-# ── Step 2: PoC catalog (independent of the embed endpoint) ────────────────────
-log "running sync_autoscan_poc.py"
-"$PY" "$SCRIPT_DIR/sync_autoscan_poc.py" >> "$LOG_FILE" 2>&1
-poc_exit=$?
-log "sync_autoscan_poc.py exit=$poc_exit"
+# ── Step 2: PoC catalog — DISABLED by default ──────────────────────────────────
+# AutoScan's only PoC source is exploitdb (~46.7k), the SAME single source the gateway's
+# git-collector catalog already covers (exploitdb ~46.7k), and AutoScan lacks the other 6
+# sources (poc_github/ghsa/nuclei/metasploit/vulhub/vendor, ~77k more PoCs). So pulling PoC
+# from AutoScan is redundant — a strict subset. Left OFF; set AUTOSCAN_SYNC_POC=1 to run it.
+poc_exit=0
+if [ "${AUTOSCAN_SYNC_POC:-0}" = "1" ]; then
+    log "AUTOSCAN_SYNC_POC=1 -- running sync_autoscan_poc.py"
+    "$PY" "$SCRIPT_DIR/sync_autoscan_poc.py" >> "$LOG_FILE" 2>&1
+    poc_exit=$?
+    log "sync_autoscan_poc.py exit=$poc_exit"
+else
+    log "PoC step SKIPPED (AutoScan PoC = exploitdb only, a subset of the gateway's 7-source catalog; set AUTOSCAN_SYNC_POC=1 to enable)."
+fi
 
 if [ "$kb_exit" -eq 0 ] && [ "$poc_exit" -eq 0 ]; then
     log "autoscan daily sync completed successfully"
