@@ -139,15 +139,15 @@ def test_normalize_detail_record_full_mapping():
     assert row["published_date"] == "2026-06-29T00:15:08Z"
 
 
-def test_normalize_list_record_falls_back_to_flat_weaknesses_and_empty_products():
+def test_normalize_list_record_falls_back_to_flat_weaknesses_and_vendors():
     row = sync.normalize(LIST_RECORD)
     assert row["cve_id"] == "CVE-2026-84442"
     # No parsed_weaknesses on the list-row shape -> fall back to flat "weaknesses".
     assert row["cwes"] == ["CWE-22"]
-    # No parsed_vendors on the list-row shape (only flat "vendors", which normalize()
-    # does not consume for products) -> empty.
-    assert row["products"] == []
-    assert row["vendors"] == []
+    # L1: no parsed_vendors on the list shape, so products/vendors come from the flat
+    # "vendors" field (["mapquest", "mapquest$PRODUCT$get_directions_app"]).
+    assert row["products"] == ["get_directions_app"]
+    assert row["vendors"] == ["mapquest"]
     # No "title" key at all on this record shape.
     assert row["title"] == ""
     # metrics.kev.data == {} -> not in KEV; metrics.epss.data == {} -> no score.
@@ -236,9 +236,9 @@ def test_build_chunks_chunk_id_and_point_id_are_stable_per_invariant():
 
 def test_build_chunks_context_lists_products_and_severity_unknown_without_score():
     row = sync.normalize(LIST_RECORD)
-    # LIST_RECORD has no parsed_vendors -> no products, but cvss should still resolve.
+    # L1: products parsed from the flat "vendors" field even on a list-only row.
     core, context = sync.build_chunks(row)
-    assert core["products"] == []
+    assert core["products"] == ["get_directions_app"]
     assert core["severity"] in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"}
 
     # A row with no usable CVSS score anywhere maps to UNKNOWN severity.
@@ -297,3 +297,51 @@ def test_build_chunks_payload_carries_updated_at():
            "updated_at": "2026-09-02T03:30:00Z"}
     chunks = m.build_chunks(row)
     assert chunks and all(c["updated_at"] == "2026-09-02T03:30:00Z" for c in chunks)
+
+
+# ── L1: vendors/products parsing + detail merge ───────────────────────────────
+def test_vendors_products_from_parsed_vendors_detail():
+    v, p = sync._vendors_products({"parsed_vendors": {"tenda": ["jd12l", "ac10"], "cisco": ["ios"]}})
+    assert set(v) == {"tenda", "cisco"}
+    assert set(p) == {"jd12l", "ac10", "ios"}
+
+
+def test_vendors_products_from_flat_vendors_list():
+    v, p = sync._vendors_products(
+        {"vendors": ["mapquest", "mapquest$PRODUCT$get_directions_app", "spring$PRODUCT$spring_cloud_config"]})
+    assert set(v) == {"mapquest", "spring"}
+    assert set(p) == {"get_directions_app", "spring_cloud_config"}
+
+
+def test_normalize_detail_merged_over_list_gives_products_and_exploit_flag():
+    merged = {**LIST_RECORD, "parsed_vendors": {"acme": ["widget"]},
+              "has_public_exploit": True, "title": "ACME Widget RCE"}
+    n = sync.normalize(merged)
+    assert n["products"] == ["widget"]
+    assert n["vendors"] == ["acme"]
+    assert n["has_public_exploit"] is True
+    assert n["title"] == "ACME Widget RCE"
+
+
+# ── D2: cve_id canonicalization ───────────────────────────────────────────────
+def test_cid_strips_and_uppercases():
+    assert sync._cid({"cve_id": "  cve-2026-1  "}) == "CVE-2026-1"
+    assert sync._cid({}) == ""
+
+
+# ── L3: refresh preserves fields the incoming record lacks ────────────────────
+def test_build_chunks_preserves_existing_fields_on_refresh():
+    row = {"cve_id": "CVE-2026-1", "summary": "x", "cwes": [], "products": [],
+           "updated_at": "2026-09-02T00:00:00Z"}
+    preserve = {"products": ["linux_kernel"], "capec_entries": ["CAPEC-66"],
+                "mitre_techniques": ["T1190"]}
+    core, _ctx = sync.build_chunks(row, preserve)
+    assert core["products"] == ["linux_kernel"]
+    assert core["capec_entries"] == ["CAPEC-66"]
+    assert core["mitre_techniques"] == ["T1190"]
+
+
+def test_build_chunks_new_products_win_over_preserve():
+    row = {"cve_id": "CVE-2026-1", "summary": "x", "cwes": [], "products": ["new_prod"], "updated_at": ""}
+    core, _ctx = sync.build_chunks(row, {"products": ["old_prod"]})
+    assert core["products"] == ["new_prod"]

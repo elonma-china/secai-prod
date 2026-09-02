@@ -56,6 +56,7 @@ API_PASS = os.environ.get("AUTOSCAN_PASS", "")
 GATEWAY_ENV = "/home/ict/AIEngines/secai/secai-agent-gateway/.env"
 QDRANT = "http://localhost:6333"
 COLLECTION = "cve_kb_hybrid"
+EXPECTED_DENSE_DIM = 1024  # collection's `dense` vector size; a mismatch = wrong embed model
 NEO4J_HTTP = "http://localhost:7474/db/neo4j/tx/commit"
 BM25_MODEL = "Qdrant/bm25"
 LOCAL_BM25_MODEL_DIR = "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model"
@@ -135,6 +136,32 @@ def api_page(page: int, page_size: int, timeout: float = 60) -> dict[str, Any]:
                      headers={"Authorization": _basic(API_USER, API_PASS)}, timeout=timeout)
 
 
+def api_detail(cve_id: str, timeout: float = 30) -> dict[str, Any]:
+    """GET /api/cve/{cve_id} — the DETAIL record. Only the detail carries `parsed_vendors`,
+    `parsed_weaknesses`, `has_public_exploit` and `title`; the list endpoint omits them, so
+    ingesting from the list alone yields empty products + exploit-flag=false (bug L1)."""
+    return http_json(f"{API_BASE}/api/cve/{urllib.parse.quote(cve_id)}",
+                     headers={"Authorization": _basic(API_USER, API_PASS)}, timeout=timeout)
+
+
+def fetch_details(cve_ids: list[str], workers: int) -> dict[str, dict]:
+    """Fetch /api/cve/{id} for each id in parallel. A failed fetch is logged and omitted —
+    that CVE falls back to list-only fields (products parsed from the flat `vendors` field)
+    instead of dropping the whole batch."""
+    out: dict[str, dict] = {}
+    if not cve_ids:
+        return out
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+        futs = {pool.submit(api_detail, c): c for c in cve_ids}
+        for fut in as_completed(futs):
+            cid = futs[fut]
+            try:
+                out[cid] = fut.result()
+            except Exception as exc:  # noqa: BLE001 — one bad id must not kill the run
+                print(f"  detail fetch fail {cid}: {exc}", flush=True)
+    return out
+
+
 def qdrant_count(cve_id: str) -> int:
     r = http_json(
         f"{QDRANT}/collections/{COLLECTION}/points/count",
@@ -144,21 +171,28 @@ def qdrant_count(cve_id: str) -> int:
     return int(r["result"]["count"])
 
 
-def qdrant_existing(cve_id: str) -> tuple[bool, str]:
-    """``(exists, stored_updated_at)`` for a CVE already in the collection. Reads one point's
-    ``updated_at`` payload — enough to decide refresh-if-newer. ``stored_updated_at`` is ``""``
-    when the CVE is absent OR present but stamped by an older/other-source ingest that never
-    wrote the field (legacy ``nvd-cron-sync`` points)."""
+_PRESERVE_KEYS = ("products", "capec_entries", "mitre_techniques", "mitre_tactics")
+
+
+def qdrant_existing(cve_id: str) -> tuple[bool, str, dict[str, Any]]:
+    """``(exists, stored_updated_at, preserve)`` for a CVE already in the collection.
+    ``preserve`` carries the existing point's ``products``/``capec_entries``/``mitre_*`` so a
+    refresh can KEEP them when the incoming record lacks them (L3 — otherwise refreshing a
+    richer legacy point blanks fields AutoScan never fills, e.g. CAPEC/ATT&CK). ``stored_lu``
+    is ``""`` when absent OR present but written by an ingest that never stamped ``updated_at``
+    (legacy ``nvd-cron-sync``/``hf``/``opencve`` points)."""
     r = http_json(
         f"{QDRANT}/collections/{COLLECTION}/points/scroll",
         method="POST",
         body={"filter": {"must": [{"key": "cve_id", "match": {"value": cve_id}}]},
-              "limit": 1, "with_payload": ["updated_at"], "with_vector": False},
+              "limit": 1, "with_payload": ["updated_at", *_PRESERVE_KEYS], "with_vector": False},
     )
     pts = r.get("result", {}).get("points", [])
     if not pts:
-        return (False, "")
-    return (True, str((pts[0].get("payload") or {}).get("updated_at") or ""))
+        return (False, "", {})
+    pl = pts[0].get("payload") or {}
+    preserve = {k: pl.get(k) for k in _PRESERVE_KEYS if pl.get(k)}
+    return (True, str(pl.get("updated_at") or ""), preserve)
 
 
 def _needs_ingest(exists: bool, stored_lu: str, src_lu: str) -> bool:
@@ -200,8 +234,42 @@ def _pick_cvss(metrics: dict) -> tuple[float | None, str]:
     return None, ""
 
 
+def _cid(rec: dict) -> str:
+    """Canonical CVE id: strip + upper (D2 — a stray-whitespace id would otherwise yield a
+    different chunk_id/uuid5 and leave an orphan duplicate)."""
+    return str(rec.get("cve_id") or "").strip().upper()
+
+
+def _vendors_products(rec: dict) -> tuple[list[str], list[str]]:
+    """(vendors, products) from a CVE record. Prefers the DETAIL `parsed_vendors`
+    ({vendor: [products]}); falls back to the LIST `vendors` field, whose entries are
+    ``"vendor$PRODUCT$product"`` (product half already snake_case = the reader's convention)
+    or a bare vendor. Fixes L1: the list endpoint has no `parsed_vendors`, so without this
+    every list-ingested CVE got empty products."""
+    pv = rec.get("parsed_vendors")
+    if isinstance(pv, dict) and pv:
+        vendors = [str(v) for v in pv.keys()]
+        products: list[str] = []
+        for prods in pv.values():
+            products.extend(str(p) for p in (prods or []))
+        return vendors, products
+    # flat `vendors` fallback
+    vendors_set: dict[str, None] = {}
+    products_out: list[str] = []
+    for entry in (rec.get("vendors") or []):
+        s = str(entry)
+        vend, sep, prod = s.partition("$PRODUCT$")
+        if vend:
+            vendors_set.setdefault(vend, None)
+        if sep and prod:
+            products_out.append(prod)
+    return list(vendors_set.keys()), products_out
+
+
 def normalize(rec: dict) -> dict[str, Any]:
-    """Map one /api/cve record to the flat shape build_chunks expects."""
+    """Map one /api/cve record (LIST row optionally merged with its DETAIL) to the flat shape
+    build_chunks expects. Detail fields (parsed_vendors/parsed_weaknesses/has_public_exploit/
+    title) win over list fields when both are present."""
     metrics = rec.get("metrics") or {}
     score, vector = _pick_cvss(metrics)
 
@@ -212,18 +280,13 @@ def normalize(rec: dict) -> dict[str, Any]:
     else:
         cwes = [str(w).upper() for w in (rec.get("weaknesses") or []) if str(w).upper().startswith("CWE-")]
 
-    # products / vendors from parsed_vendors {vendor: [products...]}
-    pv = rec.get("parsed_vendors") if isinstance(rec.get("parsed_vendors"), dict) else {}
-    vendors = [str(v) for v in pv.keys()]
-    products: list[str] = []
-    for prods in pv.values():
-        products.extend(str(p) for p in (prods or []))
+    vendors, products = _vendors_products(rec)
 
     kev_data = ((metrics.get("kev") or {}).get("data")) or {}
     epss_data = ((metrics.get("epss") or {}).get("data")) or {}
 
     return {
-        "cve_id": str(rec.get("cve_id") or "").upper(),
+        "cve_id": _cid(rec),
         "title": rec.get("title") or "",
         "summary": rec.get("description") or rec.get("title") or "",
         "cvss_score": score,
@@ -254,7 +317,10 @@ def severity_of(score: float | None) -> str:
     return "UNKNOWN"
 
 
-def build_chunks(row: dict) -> list[dict[str, Any]]:
+def build_chunks(row: dict, preserve: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """``preserve`` (from the existing point, via qdrant_existing) lets a REFRESH keep fields
+    the incoming record does not supply, so we never blank a richer legacy point (L3)."""
+    preserve = preserve or {}
     cve = row["cve_id"].upper()
     year = cve.split("-")[1] if "-" in cve else ""
     score = row.get("cvss_score")
@@ -263,7 +329,12 @@ def build_chunks(row: dict) -> list[dict[str, Any]]:
     title = (row.get("title") or "").strip()
     desc = (row.get("summary") or "").strip()
     cwes = row.get("cwes") or []
-    products = row.get("products") or []
+    # L3: keep the existing point's fields when the incoming record has none (AutoScan never
+    # supplies CAPEC/ATT&CK, and a list-only row may lack products).
+    products = (row.get("products") or []) or list(preserve.get("products") or [])
+    capec = list(preserve.get("capec_entries") or [])
+    mitre_tac = list(preserve.get("mitre_tactics") or [])
+    mitre_tech = list(preserve.get("mitre_techniques") or [])
     pub = row.get("published_date") or ""
 
     core_parts = [
@@ -289,7 +360,7 @@ def build_chunks(row: dict) -> list[dict[str, Any]]:
     base = {
         "cve_id": cve, "title": title, "year": year, "cvss_score": score, "severity": sev,
         "cwe_refs": cwes, "products": products, "is_in_kev": bool(row.get("is_in_kev")),
-        "capec_entries": [], "mitre_tactics": [], "mitre_techniques": [],
+        "capec_entries": capec, "mitre_tactics": mitre_tac, "mitre_techniques": mitre_tech,
         "epss_score": row.get("epss_score"), "has_public_exploit": bool(row.get("has_public_exploit")),
         # Stored so a later run can compare source freshness and REFRESH only when the
         # source record is genuinely newer (see _needs_ingest / qdrant_existing).
@@ -395,8 +466,12 @@ def save_state(state: dict) -> None:
 
 
 def fetch_candidates(watermark: str, page_size: int, max_pages: int) -> list[dict]:
-    """Page the API newest-first; keep rows with updated_at > watermark. Stop once a
-    page's oldest row has crossed the watermark (incremental), or at max_pages / end."""
+    """Page the API newest-first; return RAW list records with ``updated_at >= watermark``.
+    (L4: ``>=``, not ``>`` — many rows share the exact boundary second, and the reference NVD
+    script deliberately uses ``>=`` so same-second late rows are not skipped; the existence
+    + refresh-if-newer gate makes re-scanning the boundary batch idempotent.) Detail merge +
+    normalize happen later, per CVE actually ingested. Stops once a page's OLDEST row is
+    strictly older than the watermark, at max_pages, or at the last page."""
     out: list[dict] = []
     page = 1
     while True:
@@ -411,16 +486,12 @@ def fetch_candidates(watermark: str, page_size: int, max_pages: int) -> list[dic
         results = data.get("results") or []
         if not results:
             break
-        rows = [normalize(r) for r in results]
         if watermark:
-            fresh = [r for r in rows if r["updated_at"] > watermark]
-            out.extend(fresh)
-            # descending order → once the last (oldest) row on the page is <= watermark,
-            # every later page is older too.
-            if rows[-1]["updated_at"] <= watermark:
+            out.extend(r for r in results if str(r.get("updated_at") or "") >= watermark)
+            if str(results[-1].get("updated_at") or "") < watermark:
                 break
         else:
-            out.extend(rows)
+            out.extend(results)
         if not data.get("next"):
             break
         page += 1
@@ -436,9 +507,12 @@ def main() -> int:
     ap.add_argument("--full", action="store_true", help="ignore watermark; walk the whole API")
     ap.add_argument("--dry-run", action="store_true", help="fetch+map+print only; no Qdrant/embed/Neo4j")
     ap.add_argument("--no-neo4j", action="store_true")
+    ap.add_argument("--no-detail", action="store_true",
+                     help="skip the /api/cve/{id} detail fetch (faster; products parsed from the "
+                          "list `vendors` field, no has_public_exploit/title)")
     ap.add_argument("--update-existing", action="store_true",
                      help="force re-embed+upsert of EVERY candidate regardless of freshness "
-                          "(blanket; useful for a one-time migration of legacy points)")
+                          "(blanket; one-time migration of legacy points)")
     ap.add_argument("--no-refresh", action="store_true",
                      help="pure insert-only: skip any CVE already in Qdrant even if the source "
                           "is newer (disables the default refresh-if-newer behavior)")
@@ -452,43 +526,70 @@ def main() -> int:
     state = load_state()
     watermark = "" if args.full else state.get("watermark", "")
 
+    # L2: a missing/empty watermark must NOT silently become a full-API destructive walk on
+    # the default path (that would re-embed/refresh hundreds of thousands of records). A full
+    # scan has to be explicit via --full.
+    if not args.full and not watermark:
+        print(f"[autoscan->kb] FATAL: no watermark — state file ({STATE}) missing or empty. "
+              "Refusing a full-API scan on the default path. Pass --full to intentionally run a "
+              "full backfill, or restore/seed the watermark file.", flush=True)
+        return 2
+
     t0 = time.time()
     cands = fetch_candidates(watermark, args.page_size, args.max_pages)
-    print(f"[autoscan->kb] candidates since '{watermark or 'BEGIN'}': {len(cands)} "
+    print(f"[autoscan->kb] candidates since '{watermark or 'FULL'}': {len(cands)} "
           f"({time.time()-t0:.1f}s)", flush=True)
     if not cands:
         print("[autoscan->kb] nothing to do", flush=True)
         return 0
 
-    # de-dup within this run (same CVE can only appear once; guards odd pagination)
+    # de-dup within this run by canonical cve_id (newest-first order → first wins)
     seen: set[str] = set()
-    cands = [c for c in cands if c["cve_id"] and not (c["cve_id"] in seen or seen.add(c["cve_id"]))]
-    max_lu = max((c.get("updated_at") or "") for c in cands)
+    deduped: list[dict] = []
+    for c in cands:
+        cid = _cid(c)
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        deduped.append(c)
+    cands = deduped
+    max_lu = max((str(c.get("updated_at") or "") for c in cands), default="")
 
     if args.dry_run:
         for c in cands[:30]:
-            print(f"  DRY {c['cve_id']} cvss={c.get('cvss_score')} kev={c.get('is_in_kev')} "
-                  f"cwes={c.get('cwes')} prods={c.get('products')[:3]} lu={c.get('updated_at')}")
-        print(f"[autoscan->kb] DRY mapped {len(cands)} CVEs (watermark would -> {max_lu})", flush=True)
+            n = normalize(c)  # list-only (dry-run does not fetch detail)
+            print(f"  DRY {n['cve_id']} cvss={n['cvss_score']} kev={n['is_in_kev']} "
+                  f"cwes={n['cwes']} prods(list)={n['products'][:3]} lu={n['updated_at']}")
+        print(f"[autoscan->kb] DRY mapped {len(cands)} CVEs (detail not fetched) "
+              f"(watermark would -> {max_lu})", flush=True)
         return 0
 
-    # Selection (parallel). Default = REFRESH-IF-NEWER: for each candidate, look up whether
-    # the CVE is already in Qdrant and its stored updated_at, then ingest a NEW CVE, REFRESH
-    # one the source has updated (same uuid5 id → overwrites in place, never duplicates), and
-    # SKIP an unchanged one. --update-existing forces every candidate through (blanket);
-    # --no-refresh restores pure insert-only (existing CVE skipped, old points untouched).
+    run_ingested = run_skipped = run_errors = 0
+    preserve_map: dict[str, dict] = {}
+
+    # Selection (parallel). Default = REFRESH-IF-NEWER; also captures each existing point's
+    # preservable fields (products/capec/mitre) so a refresh never blanks them (L3).
+    # --update-existing = blanket force; --no-refresh = pure insert-only.
+    def _lookup(c: dict) -> tuple[bool, str]:
+        cid = _cid(c)
+        exists, stored_lu, extra = qdrant_existing(cid)
+        if extra:
+            preserve_map[cid] = extra
+        return exists, stored_lu
+
     if args.update_existing:
         missing: list[dict] = cands
-        print(f"[autoscan->kb] --update-existing set: re-embedding all {len(missing)} "
-              f"candidates (freshness check skipped)", flush=True)
+        with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+            list(pool.map(_lookup, cands))  # populate preserve_map for a clean refresh
+        print(f"[autoscan->kb] --update-existing: re-embedding all {len(missing)} candidates", flush=True)
     else:
         missing = []
 
         def _select(c: dict) -> dict | None:
-            exists, stored_lu = qdrant_existing(c["cve_id"])
+            exists, stored_lu = _lookup(c)
             if args.no_refresh:
                 return c if not exists else None
-            return c if _needs_ingest(exists, stored_lu, c.get("updated_at") or "") else None
+            return c if _needs_ingest(exists, stored_lu, str(c.get("updated_at") or "")) else None
 
         with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
             futs = {pool.submit(_select, c): c for c in cands}
@@ -499,21 +600,31 @@ def main() -> int:
                     if res is not None:
                         missing.append(res)
                     else:
-                        state["skipped"] = int(state.get("skipped", 0)) + 1
+                        run_skipped += 1
                 except Exception as exc:  # noqa: BLE001
-                    print(f"  lookup fail {c['cve_id']}: {exc}", flush=True)
-                    state["errors"] = int(state.get("errors", 0)) + 1
+                    print(f"  lookup fail {_cid(c)}: {exc}", flush=True)
+                    run_errors += 1
         mode = "insert-only" if args.no_refresh else "refresh-if-newer"
         print(f"[autoscan->kb] to ingest ({mode}): {len(missing)} / {len(cands)}", flush=True)
 
-    for i in range(0, len(missing), args.batch):
-        slice_rows = missing[i:i + args.batch]
+    # L1: fetch the DETAIL record for each CVE we will ingest (small delta), merge it over the
+    # list row, then normalize — so products/has_public_exploit/title come from the detail
+    # endpoint (the list endpoint omits parsed_vendors/has_public_exploit/title).
+    detail_map = {} if args.no_detail else fetch_details([_cid(c) for c in missing], args.workers)
+    norm_rows = [normalize({**c, **(detail_map.get(_cid(c)) or {})}) for c in missing]
+
+    for i in range(0, len(norm_rows), args.batch):
+        slice_rows = norm_rows[i:i + args.batch]
         all_chunks: list[dict] = []
         for row in slice_rows:
-            all_chunks.extend(build_chunks(row))
+            all_chunks.extend(build_chunks(row, preserve_map.get(row["cve_id"])))
         texts = [c["text"] for c in all_chunks]
         try:
             vectors = embed_batch(texts)
+            # D2: a 200 from the wrong embed model returns the wrong dim; fail loud instead of
+            # letting Qdrant reject the upsert (which L5 would then log as a lost slice).
+            if vectors and len(vectors[0]) != EXPECTED_DENSE_DIM:
+                raise ValueError(f"embed dim {len(vectors[0])} != {EXPECTED_DENSE_DIM} (wrong model?)")
             sparse = embed_sparse_batch(texts)
             points = [{
                 "id": str(uuid.uuid5(NS, ch["chunk_id"])),
@@ -523,23 +634,28 @@ def main() -> int:
             qdrant_upsert(points)
             if not args.no_neo4j:
                 neo4j_merge(slice_rows)
-            state["ingested"] = int(state.get("ingested", 0)) + len(slice_rows)
-            print(f"  +{len(slice_rows)} CVEs (total ingested={state['ingested']})", flush=True)
+            run_ingested += len(slice_rows)
+            print(f"  +{len(slice_rows)} CVEs (ingested={run_ingested})", flush=True)
         except Exception as exc:  # noqa: BLE001
-            state["errors"] = int(state.get("errors", 0)) + len(slice_rows)
+            run_errors += len(slice_rows)
             print(f"  slice FAIL ({len(slice_rows)} CVEs): {exc}", flush=True)
 
-    # Advance the watermark only on a full-window incremental scan (no page cap). A
-    # bounded --max-pages run is a manual slice and must not move the watermark, or the
-    # unscanned older rows would be skipped forever.
+    # L5: advance the watermark ONLY when the run had zero errors — a failed slice (or a
+    # failed lookup) must not let the watermark jump past CVEs that were never ingested, or
+    # they are lost until a manual --full. --max-pages is a manual slice and never advances.
+    # Counters are per-run (not cumulative) for a readable nightly health signal.
+    summary = {"ingested": run_ingested, "skipped": run_skipped, "errors": run_errors}
     if args.max_pages:
-        print(f"[autoscan->kb] --max-pages set: watermark left at '{state.get('watermark','')}' "
-              f"(manual slice) {json.dumps(state)}", flush=True)
+        print(f"[autoscan->kb] --max-pages: watermark left at '{state.get('watermark','')}' "
+              f"(manual slice) {json.dumps(summary)}", flush=True)
+    elif run_errors:
+        save_state({"watermark": state.get("watermark", ""), **summary})
+        print(f"[autoscan->kb] {run_errors} error(s) — watermark NOT advanced "
+              f"(left '{state.get('watermark','')}'); rerun to retry. {json.dumps(summary)}", flush=True)
     else:
-        state["watermark"] = max_lu
-        save_state(state)
-        print(f"[autoscan->kb] DONE watermark->{max_lu} {json.dumps(state)}", flush=True)
-    return 0
+        save_state({"watermark": max_lu, **summary})
+        print(f"[autoscan->kb] DONE watermark->{max_lu} {json.dumps(summary)}", flush=True)
+    return 1 if run_errors else 0
 
 
 if __name__ == "__main__":
