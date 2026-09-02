@@ -2,35 +2,35 @@
   "embed_model": "DuyTa/sec-embedding",
   "dim": 1024,
   "backend": "endpoint",
-  "n_train": 1771,
-  "n_test": 659,
+  "n_train": 1836,
+  "n_test": 681,
   "intent": {
     "security": {
-      "precision": 0.9953,
-      "recall": 0.9906,
-      "f1": 0.9929,
-      "tp": 422,
-      "fp": 2,
-      "fn": 4
+      "precision": 0.9752,
+      "recall": 0.9841,
+      "f1": 0.9796,
+      "tp": 432,
+      "fp": 11,
+      "fn": 7
     },
     "chitchat": {
-      "precision": 0.9744,
-      "recall": 0.9744,
-      "f1": 0.9744,
-      "tp": 38,
-      "fp": 1,
+      "precision": 0.9574,
+      "recall": 0.9783,
+      "f1": 0.9677,
+      "tp": 45,
+      "fp": 2,
       "fn": 1
     },
     "offtopic": {
-      "precision": 0.9796,
-      "recall": 0.9897,
-      "f1": 0.9846,
-      "tp": 192,
-      "fp": 4,
-      "fn": 2
+      "precision": 0.9581,
+      "recall": 0.9337,
+      "f1": 0.9457,
+      "tp": 183,
+      "fp": 8,
+      "fn": 13
     }
   },
-  "intent_accuracy": 0.9894,
+  "intent_accuracy": 0.9692,
   "intent_confusion": {
     "labels": [
       "security",
@@ -39,29 +39,29 @@
     ],
     "matrix": [
       [
-        422,
-        1,
-        3
+        432,
+        0,
+        7
       ],
       [
         0,
-        38,
+        45,
         1
       ],
       [
+        11,
         2,
-        0,
-        192
+        183
       ]
     ]
   },
   "injection": {
-    "precision": 0.9818,
-    "recall": 0.9818,
-    "f1": 0.9818,
-    "tp": 108,
-    "fp": 2,
-    "fn": 2
+    "precision": 0.9266,
+    "recall": 0.9712,
+    "f1": 0.9484,
+    "tp": 101,
+    "fp": 8,
+    "fn": 3
   },
   "pii": {
     "precision": 1.0,
@@ -72,24 +72,24 @@
     "fn": 0
   },
   "offtopic_decision": {
-    "precision": 0.9796,
-    "recall": 0.9897,
-    "f1": 0.9846,
-    "tp": 192,
-    "fp": 4,
-    "fn": 2
+    "precision": 0.9733,
+    "recall": 0.9286,
+    "f1": 0.9504,
+    "tp": 182,
+    "fp": 5,
+    "fn": 14
   },
-  "macro_f1": 0.9867,
+  "macro_f1": 0.9683,
   "thresholds": {
     "injection": 0.5,
-    "pii": 0.3,
-    "offtopic": 0.34
+    "pii": 0.2,
+    "offtopic": 0.468
   },
   "head_apply_latency_ms": {
-    "mean": 0.0474,
-    "p95": 0.0546
+    "mean": 0.0493,
+    "p95": 0.0599
   },
-  "train_intent_accuracy": 0.9994,
+  "train_intent_accuracy": 0.9842,
   "head": "mixed",
-  "overfit_gap_intent_acc": 0.0101
+  "overfit_gap_intent_acc": 0.015
 }
