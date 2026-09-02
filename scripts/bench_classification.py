@@ -162,7 +162,20 @@ def embed_all(texts: list[str], s: Settings) -> tuple[list, dict]:
     return vecs, stats
 
 
+def _parse_args() -> tuple[Path, Path, Path]:
+    """Optional path overrides; defaults preserve the original 1000-sample behaviour."""
+    import argparse
+
+    p = argparse.ArgumentParser(description="input-classification benchmark runner")
+    p.add_argument("--bench", type=Path, default=BENCH, help="input test-set jsonl")
+    p.add_argument("--results", type=Path, default=RESULTS, help="per-sample results jsonl")
+    p.add_argument("--summary", type=Path, default=SUMMARY, help="summary json")
+    a = p.parse_args()
+    return a.bench, a.results, a.summary
+
+
 def main() -> None:
+    bench_path, results_path, summary_path = _parse_args()
     env = _load_env()
     s = Settings(env)
     head = load_head(s, force_reload=True)
@@ -172,7 +185,7 @@ def main() -> None:
           f"thresholds={head.thresholds}")
     print(f"endpoint: {s.embedding_api_url}  model={s.embedding_model}")
 
-    rows = _read_rows(BENCH)
+    rows = _read_rows(bench_path)
     print(f"loaded {len(rows)} benchmark rows; embedding via LIVE endpoint (batch={BATCH})…")
 
     t0 = time.monotonic()
@@ -266,7 +279,7 @@ def main() -> None:
         })
 
     # ── write per-sample results ──
-    with RESULTS.open("w", encoding="utf-8") as f:
+    with results_path.open("w", encoding="utf-8") as f:
         for row in results:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
@@ -293,7 +306,7 @@ def main() -> None:
         "head": {"embed_model": head.embed_model, "dim": head.dim, "kind": head.kind,
                  "thresholds": head.thresholds},
     }
-    SUMMARY.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ── console summary ──
     print("\n=== BENCH SUMMARY ===")
@@ -304,8 +317,8 @@ def main() -> None:
     print("\nby_expected_action (action → correct/total → acc):")
     for k, v in summary["by_expected_action"].items():
         print(f"  {k:16s} {v['correct']:4d}/{v['total']:<4d}  {v['acc']:.4f}")
-    print(f"\nwrote results → {RESULTS}")
-    print(f"wrote summary → {SUMMARY}")
+    print(f"\nwrote results → {results_path}")
+    print(f"wrote summary → {summary_path}")
 
 
 if __name__ == "__main__":
