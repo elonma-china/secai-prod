@@ -1,99 +1,246 @@
-# Chat History API — hướng dẫn tích hợp FE (multi-conversation)
+# Chat History API — tài liệu tích hợp
 
-> Bộ API **mới** `/ai/conversations/*` cho phép nhiều cuộc trò chuyện mỗi người dùng: tạo /
-> liệt kê / mở lại / xoá, kèm lịch sử bền. **API cũ `/ai/chat`, `/chat_no_stream`,
-> `/ai/chat/stream` KHÔNG đổi** (hệ thống Nhật đang dùng) — có thể tiếp tục dùng song song.
+Bộ API **mới** `/ai/conversations/*` cho phép mỗi người dùng có **nhiều cuộc trò chuyện**
+riêng biệt (tạo / liệt kê / mở lại / xoá), với lịch sử lưu bền lâu dài.
 
-## Mô hình
+> **API cũ `/ai/chat`, `/chat_no_stream`, `/ai/chat/stream` không đổi** — hệ thống Nhật đang
+> dùng có thể tiếp tục chạy song song, không cần sửa gì.
 
-- Mỗi cuộc trò chuyện có một `conversation_id` (uuid, do server cấp). FE giữ id này để gửi
-  tiếp / mở lại / xoá.
-- **Bộ nhớ sống** (ngữ cảnh agent suy luận, tự nén khi đầy) nằm ở Redis, cửa sổ 24h. **Bản
-  bền** (index + transcript đầy đủ để liệt kê/đọc lại) nằm ở SQLite, **không hết hạn**. Đọc
-  lại lịch sử luôn lấy từ bản bền → còn nguyên kể cả sau khi cửa sổ sống 24h trôi qua.
-- **Quyền sở hữu bằng `user_id`**: `owner_hash = sha256(user_id)` được gấp vào session id nên
-  không user nào truy cập được hội thoại của user khác. Vì vậy các endpoint quản lý **bắt buộc
-  `user_id`** (thiếu → `400`). Truy cập nhầm chủ → `404` (không xác nhận tồn tại).
+Base URL: `http://<gateway>:8131` (production hiện tại).
 
-## Endpoints
+---
 
-### 1) Gửi tin nhắn (non-stream) — `POST /ai/conversations/chat`
+## 1. Khái niệm
 
-Body: `{ "user_id": "u123", "conversation_id"?: "<uuid>", "message": "..." }`
-(alias `message` như cũ: `question`/`prompt`/`content`/`text`/`messages[]`.)
-Thiếu `conversation_id` → server tạo cuộc mới và trả id trong kết quả.
+| | |
+|---|---|
+| **`conversation_id`** | uuid do server cấp khi tạo/gửi tin đầu tiên. Client giữ và gửi lại ở các lượt sau. |
+| **Bộ nhớ sống** | Redis, 24h, agent tự nén khi hội thoại dài. Đây là nơi model *suy luận*. |
+| **Bộ nhớ bền** | SQLite, **không hết hạn**. Đây là nơi `GET` đọc lại lịch sử — luôn đầy đủ dù bộ nhớ sống đã hết hạn. |
+| **Sở hữu** | Tính từ `user_id` (băm), không đoán được id của người khác. Mọi endpoint quản lý **bắt buộc `user_id`**. |
 
-Response (**superset** của `/ai/chat` cũ — thêm đúng `conversation_id`):
+---
+
+## 2. Endpoints
+
+| # | Method | Path | Việc gì | `user_id` |
+|---|---|---|---|---|
+| 1 | POST | `/ai/conversations/chat` | Gửi tin nhắn (không stream) | tuỳ chọn* |
+| 2 | POST | `/ai/conversations/chat/stream` | Gửi tin nhắn (SSE) | tuỳ chọn* |
+| 3 | GET | `/ai/conversations` | Liệt kê hội thoại | **bắt buộc** |
+| 4 | GET | `/ai/conversations/{id}` | Đọc transcript | **bắt buộc** |
+| 5 | POST | `/ai/conversations` | Tạo hội thoại rỗng | **bắt buộc** |
+| 6 | DELETE | `/ai/conversations/{id}` | Xoá hội thoại | **bắt buộc** |
+
+\* Không có `user_id` vẫn chat được (giống `/ai/chat` cũ) nhưng hội thoại **không lưu lại** — không liệt kê/mở lại được. Luôn gửi `user_id` nếu muốn dùng lịch sử.
+
+**Rate limit:** endpoint 1–2 dùng chung hạn ngạch với `/ai/chat` (90 req/60s/IP). Endpoint 3–6: 15 req/60s/IP.
+
+---
+
+## 3. Gửi tin nhắn — không stream
+
+```
+POST /ai/conversations/chat
+```
+
+**Request**
+```json
+{ "user_id": "user-42", "conversation_id": "<uuid, để trống nếu tạo mới>", "message": "SQL injection là gì?" }
+```
+
+**Response 200** — khung giống hệt `/ai/chat` cũ, chỉ thêm `conversation_id`:
 ```json
 {
-  "response": "…", "answer": "…", "message": "…",
-  "metadata": { "run_id": "…", "profile": "chat", "tool_registry": [...], "conversation_id": "<uuid>" },
-  "conversation_id": "<uuid>"
+  "response": "SQL injection là...",
+  "answer": "SQL injection là...",
+  "message": "SQL injection là...",
+  "metadata": { "run_id": "...", "profile": "chat", "tool_registry": [...], "conversation_id": "a397e7...b690" },
+  "conversation_id": "a397e7...b690"
 }
 ```
 
-### 2) Gửi tin nhắn (stream SSE) — `POST /ai/conversations/chat/stream`
+**Ví dụ chạy được:**
+```bash
+curl -X POST http://<gateway>:8131/ai/conversations/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user-42", "message": "SQL injection là gì?"}'
+```
+Lượt sau, gửi kèm `conversation_id` nhận được ở trên để tiếp tục **cùng** hội thoại:
+```bash
+curl -X POST http://<gateway>:8131/ai/conversations/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user-42", "conversation_id": "a397e7...b690", "message": "Vậy XSS thì sao?"}'
+```
 
-Body giống trên. Dùng `fetch` + `ReadableStream` (KHÔNG `EventSource`, vì là POST); tách frame
-theo `\n\n`, đọc dòng `event:` và `data:`. Chuỗi frame:
+---
 
-| `event:` | `data` | FE xử lý |
+## 4. Gửi tin nhắn — streaming (SSE)
+
+```
+POST /ai/conversations/chat/stream
+```
+Request giống mục 3. Response là `text/event-stream` — dùng `fetch` + `ReadableStream` (**không** dùng `EventSource`, vì đây là POST). Mỗi frame cách nhau `\n\n`, gồm dòng `event:` và `data:`.
+
+| `event:` | `data` | Ý nghĩa |
 |---|---|---|
-| `conversation` | `{"conversation_id"}` | **frame đầu tiên** (mới) — lưu id ngay để hiển thị/gửi tiếp |
-| `token` | `{"delta"}` | nối vào bong bóng trả lời (typewriter) |
-| `tool_call` / `tool_result` | như cũ | chip "đang tra cứu…" |
-| `regenerate` | `{"hook","reason"}` | **xoá sạch buffer token** rồi nhận lại từ đầu |
-| `compaction` | `{"strategy",...}` | (tuỳ chọn) hội thoại dài vừa được nén — chỉ để hiển thị/log |
-| `error` | `{"error"}` | báo lỗi (vẫn theo sau bởi token+final) |
-| `final` | `{"content","answer","message","metadata","conversation_id"}` | **nguồn chân lý** — thay toàn bộ text đã render bằng `final.content` |
-| *(none)* | `data: [DONE]` | đóng reader |
+| `conversation` | `{"conversation_id"}` | Frame **đầu tiên** — lưu id ngay |
+| `token` | `{"delta"}` | Nối vào bong bóng trả lời (typewriter) |
+| `tool_call` / `tool_result` | — | Đang tra cứu (hiện chip trạng thái nếu muốn) |
+| `regenerate` | `{"hook","reason"}` | **Xoá sạch buffer token đã nhận**, chờ token mới |
+| `compaction` | `{"strategy",...}` | (tuỳ chọn) hội thoại vừa được nén — chỉ để log |
+| `error` | `{"error"}` | Có lỗi (vẫn có `token`+`final` theo sau) |
+| `final` | `{"content","answer","message","metadata","conversation_id"}` | **Nguồn chân lý** — thay toàn bộ text đã render bằng `final.content` |
+| — | `data: [DONE]` | Đóng stream |
 
-`final` giữ nguyên khung cũ + thêm `conversation_id` (top-level và trong `metadata`).
-
-### 3) Liệt kê hội thoại — `GET /ai/conversations?user_id=&limit=20&offset=0`
-
-```json
-{ "conversations": [ {"conversation_id","title","created_at","updated_at","message_count"} ],
-  "total": 12, "limit": 20, "offset": 0 }
+**Ví dụ chạy được (xem thô qua curl):**
+```bash
+curl -N -X POST http://<gateway>:8131/ai/conversations/chat/stream \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user-42", "message": "SSRF là gì?"}'
 ```
-Sắp xếp mới-cập-nhật-trước; chỉ trả hội thoại của chính `user_id`. Thiếu `user_id` → `400`.
-
-### 4) Đọc transcript — `GET /ai/conversations/{conversation_id}?user_id=&limit=&offset=`
-
-```json
-{ "conversation_id":"…","title":"…","created_at":…,"updated_at":…,"message_count":8,
-  "total":8,"limit":200,"offset":0,
-  "messages": [ {"role":"user|assistant","content":"…","seq":1,"created_at":…} ] }
 ```
-Từ bản **bền SQLite** (đọc lại được lâu dài). Không đúng chủ → `404`.
+event: conversation
+data: {"conversation_id": "faedc8d9...41f7f"}
 
-### 5) Tạo cuộc mới (rỗng) — `POST /ai/conversations`
+event: token
+data: {"delta": "SSRF"}
 
-Body `{ "user_id":"u123", "title"?:"Tên hiển thị" }` → `{conversation_id, title, created_at, updated_at, message_count:0}`.
-Dùng khi FE muốn nút "Cuộc trò chuyện mới" trước khi người dùng gõ. (Cũng có thể bỏ qua và để
-`/ai/conversations/chat` tự mint khi gửi tin đầu.) Thiếu `user_id` → `400`.
+event: token
+data: {"delta": " (Server-Side..."}
 
-### 6) Xoá — `DELETE /ai/conversations/{conversation_id}?user_id=`
+...
 
-→ `{ "deleted": true, "conversation_id": "…" }`. Soft-delete (ẩn khỏi danh sách) + xoá session
-sống. Không đúng chủ → `404`.
+event: final
+data: {"content": "SSRF (Server-Side Request Forgery)...", "answer": "...", "message": "...", "metadata": {...}, "conversation_id": "faedc8d9...41f7f"}
 
-## Luồng FE điển hình (chuyển cũ ↔ mới)
+data: [DONE]
+```
 
-1. Mở app → `GET /ai/conversations?user_id=` để dựng danh sách bên trái.
-2. Chọn một cuộc → `GET /ai/conversations/{cid}` để nạp transcript.
-3. Gửi tin → `POST /ai/conversations/chat/stream` với `conversation_id` đang mở; frame
-   `conversation` xác nhận id, `final.content` là câu trả lời chốt.
-4. "Cuộc mới" → gửi không kèm `conversation_id` (hoặc gọi `POST /ai/conversations` trước); lưu
-   `conversation_id` trả về.
-5. Xoá → `DELETE /ai/conversations/{cid}`.
+**Ví dụ FE (JavaScript):**
+```javascript
+const res = await fetch(`${BASE}/ai/conversations/chat/stream`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ user_id: userId, conversation_id: currentCid, message }),
+});
+const reader = res.body.getReader();
+const decoder = new TextDecoder();
+let buf = "", answer = "";
+
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  buf += decoder.decode(value, { stream: true });
+  let idx;
+  while ((idx = buf.indexOf("\n\n")) >= 0) {
+    const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+    const event = frame.match(/^event: (.+)$/m)?.[1];
+    const data = frame.match(/^data: (.+)$/m)?.[1];
+    if (!data || data === "[DONE]") continue;
+    const payload = JSON.parse(data);
+    if (event === "conversation") currentCid = payload.conversation_id;
+    else if (event === "token") answer += payload.delta;         // render dần
+    else if (event === "regenerate") answer = "";                 // xoá, chờ lại
+    else if (event === "final") answer = payload.content;         // chốt bằng bản final
+  }
+}
+```
+
+---
+
+## 5. Liệt kê hội thoại
+
+```
+GET /ai/conversations?user_id=user-42&limit=20&offset=0
+```
+```json
+{
+  "conversations": [
+    { "conversation_id": "a397e7...", "title": "SQL injection là gì?", "created_at": 1798..., "updated_at": 1798..., "message_count": 4 }
+  ],
+  "total": 1, "limit": 20, "offset": 0
+}
+```
+Mới cập nhật gần nhất xếp trước. `title` tự lấy từ tin nhắn đầu tiên.
+
+---
+
+## 6. Đọc transcript một hội thoại
+
+```
+GET /ai/conversations/{conversation_id}?user_id=user-42
+```
+```json
+{
+  "conversation_id": "a397e7...", "title": "SQL injection là gì?",
+  "created_at": 1798..., "updated_at": 1798..., "message_count": 4,
+  "messages": [
+    { "role": "user", "content": "SQL injection là gì?", "seq": 1, "created_at": 1798... },
+    { "role": "assistant", "content": "SQL injection là...", "seq": 2, "created_at": 1798... }
+  ],
+  "total": 4, "limit": 200, "offset": 0
+}
+```
+Luôn đọc từ **bộ nhớ bền** — đầy đủ kể cả sau khi cửa sổ sống Redis (24h) đã hết hạn.
+
+---
+
+## 7. Tạo hội thoại rỗng (tuỳ chọn)
+
+```
+POST /ai/conversations
+{ "user_id": "user-42", "title": "Câu hỏi về CVE-2026-xxxx" }
+```
+```json
+{ "conversation_id": "b21f...", "title": "Câu hỏi về CVE-2026-xxxx", "created_at": 1798..., "updated_at": 1798..., "message_count": 0 }
+```
+Dùng khi cần nút "**+ Cuộc trò chuyện mới**" hiện ngay trước khi người dùng gõ gì. Có thể bỏ qua bước này — cứ gửi tin ở mục 3/4 mà không kèm `conversation_id`, server tự tạo.
+
+---
+
+## 8. Xoá hội thoại
+
+```
+DELETE /ai/conversations/{conversation_id}?user_id=user-42
+```
+```json
+{ "deleted": true, "conversation_id": "a397e7..." }
+```
+Soft-delete — ẩn khỏi danh sách, không hiện lại.
+
+---
+
+## 9. Lỗi
+
+| Mã | Khi nào | Body |
+|---|---|---|
+| `400` | Thiếu `user_id` ở endpoint quản lý (3, 5, 6, 8) | `{"detail": "user_id là bắt buộc để ..."}` |
+| `404` | `conversation_id` không tồn tại **hoặc** không thuộc `user_id` này | `{"detail": "Không tìm thấy hội thoại."}` |
+| `429` | Vượt rate limit | `{"detail": "rate limit exceeded"}` |
+| `503` | Model tạm thời không phản hồi (endpoint 3/4 only) | `{"detail": "AI service unavailable: ..."}` |
+
+`404` dùng cho cả "không tồn tại" lẫn "sai chủ" — để không lộ thông tin có hội thoại đó tồn tại hay không.
+
+---
+
+## 10. Luồng FE điển hình
+
+```
+Mở app  ──▶  GET /ai/conversations?user_id=       (danh sách bên trái)
+              │
+              ├─ chọn 1 cuộc  ──▶  GET /ai/conversations/{id}   (nạp transcript)
+              │                     │
+              │                     └─▶  POST /ai/conversations/chat/stream (kèm id)  (tiếp tục)
+              │
+              └─ "+ Cuộc mới"  ──▶  POST /ai/conversations/chat/stream (không kèm id)
+                                     → lưu conversation_id từ frame đầu tiên
+```
+
+---
 
 ## Ghi chú vận hành
 
-- nginx proxy phải tắt buffering cho SSE (`proxy_buffering off;` + `X-Accel-Buffering: no`),
-  giống guide `/ai/exploit/stream`.
-- Cửa sổ sống Redis 24h cấu hình qua `SESSION_TTL_SECONDS`; khôi phục ngữ cảnh sau khi hết hạn
-  qua `CHAT_HISTORY_REHYDRATE_TURNS` (mặc định 12, 0 = tắt). Transcript hiển thị không phụ thuộc
-  các giá trị này (luôn từ SQLite bền).
-- Người dùng ẩn danh (không `user_id`) vẫn gọi được `/ai/conversations/chat` (parity với
-  `/ai/chat`) nhưng KHÔNG được lập chỉ mục → không liệt kê/đọc lại được.
+- Proxy SSE (nginx) phải tắt buffering: `proxy_buffering off;` + header `X-Accel-Buffering: no`.
+- Ẩn danh (không `user_id`) vẫn chat được để tương thích ngược, nhưng **không lưu lịch sử**.
+- Cấu hình: `SESSION_TTL_SECONDS` (cửa sổ sống Redis, mặc định 24h), `CHAT_HISTORY_REHYDRATE_TURNS` (số lượt nạp lại từ bộ nhớ bền khi cửa sổ sống đã hết hạn, mặc định 12, 0 = tắt).
