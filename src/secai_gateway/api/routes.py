@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import Annotated, Any
@@ -25,8 +26,14 @@ from ..poc import (
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
 from ..security import require_public_input, sanitize_output_language
+from ..state.conversations import derive_title
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
-from .schemas import LegacyRequest
+from .schemas import (
+    ConversationChatRequest,
+    CreateConversationRequest,
+    LegacyRequest,
+    RenameConversationRequest,
+)
 from .sse import event_to_sse, sse_frame
 
 logger = logging.getLogger(__name__)
@@ -59,6 +66,42 @@ def _chat_session_id(body: LegacyRequest) -> str:
     return f"chat:{hashlib.sha256(user_id.encode()).hexdigest()}"
 
 
+# ── Durable multi-conversation chat history (/ai/conversations/*) ──────────────────────────
+# Same-owner-hashing scheme as `_chat_session_id` above, but the hash is folded directly into
+# the linch session id (`chat:conv:{owner_hash}:{conversation_id}`) rather than being the whole
+# id — so a request can only ever address a session under ITS OWN owner_hash prefix. Guessing
+# another user's conversation_id resolves to a different (empty) session; there is nothing to
+# leak. `state.runner.conversations` (ConversationStore, SQLite) is the durable index +
+# transcript layered on top — independent of the 24h Redis live-memory window.
+
+def _conv_owner_hash(user_id: Any) -> str | None:
+    uid = str(user_id or "").strip()
+    if not uid or uid == "anonymous":
+        return None
+    return hashlib.sha256(uid.encode()).hexdigest()
+
+
+def _conv_session_id(owner_hash: str | None, conversation_id: str) -> str:
+    if owner_hash:
+        return f"chat:conv:{owner_hash}:{conversation_id}"
+    return f"chat:conv:anon:{uuid4().hex}"
+
+
+_RENAME_TITLE_MAX = 120
+
+# Fire-and-forget background tasks (the auto-title LLM call) must keep a live reference or
+# asyncio may garbage-collect them mid-flight — a well-known footgun for create_task() calls
+# whose result nothing awaits. This module-level set is that reference; entries are dropped via
+# add_done_callback once each task finishes (success or failure), so it never grows unbounded.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _fire_and_forget(coro: Any) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
@@ -84,12 +127,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
         return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
 
-    def stream(profile: str, prompt: str, session_id: str | None, build_final) -> StreamingResponse:
+    def stream(profile: str, prompt: str, session_id: str | None, build_final, *,
+              prelude: list[bytes] | None = None, observe=None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
-        endpoint's ``build_final(final_text, run_id)`` (which may also persist state)."""
+        endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
+
+        ``prelude``/``observe`` are additive, optional hooks for the conversation-scoped
+        endpoints (see /ai/conversations/chat/stream): every EXISTING call site passes
+        neither, so their frame sequence is byte-identical to before. ``prelude`` yields
+        fixed frames before the run starts (e.g. the leading `conversation` id frame);
+        ``observe(event)`` is called per raw linch event and may return an extra SSE frame
+        to yield (e.g. an additive `compaction` frame) without altering anything else."""
 
         async def gen() -> AsyncIterator[bytes]:
+            for frame in (prelude or []):
+                yield frame
             final = ""
             run_id = None
             failed = False
@@ -102,6 +155,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     frame = event_to_sse(event)
                     if frame:
                         yield frame
+                    if observe is not None:
+                        extra = observe(event)
+                        if extra:
+                            yield extra
             except Exception:  # surface runtime failures as a visible message, not a broken/blank stream
                 failed = True
                 # Log the real cause server-side (the client only gets a friendly message).
@@ -203,13 +260,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
         }
         return decision.message, metadata
 
-    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+    def _short_circuit_stream(message: str, metadata: dict[str, Any], *,
+                              prelude: list[bytes] | None = None,
+                              top_level: dict[str, Any] | None = None) -> StreamingResponse:
         """SSE response for a classifier short-circuit: one token + one final, then DONE
-        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it).
+        ``prelude``/``top_level`` are additive, optional (see ``stream()`` above) — every
+        existing call site passes neither, so its output is byte-identical to before."""
         async def gen() -> AsyncIterator[bytes]:
+            for frame in (prelude or []):
+                yield frame
             yield sse_frame("token", {"delta": message})
-            yield sse_frame("final", {"content": message, "answer": message,
-                                      "message": message, "metadata": metadata})
+            final_payload = {"content": message, "answer": message,
+                             "message": message, "metadata": metadata}
+            if top_level:
+                final_payload.update(top_level)
+            yield sse_frame("final", final_payload)
             yield b"data: [DONE]\n\n"
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -245,6 +311,282 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, session_id, build_final)
+
+    # ── Durable multi-conversation chat history (/ai/conversations/*) ──────────────────────
+    # Additive endpoints layered on the SAME `chat` profile pipeline as /ai/chat above (same
+    # `_chat_gate`, same `state.runner.complete`/`stream`) — /ai/chat itself is byte-identical,
+    # untouched. Live memory (linch/Redis, 24h) stays the working set the model reasons over;
+    # `state.runner.conversations` (ConversationStore, SQLite) is the durable system of record
+    # for listing/reopening old conversations and reading their transcript back after the live
+    # window has expired.
+
+    async def _maybe_rehydrate(session_id: str, conversation_id: str) -> None:
+        """Reopen-after-expiry: if the linch session has no live messages but the durable
+        transcript does, seed the session with the last N turns so context survives the 24h
+        Redis window. Fail-open — any error just means older context isn't reloaded."""
+        conversations = getattr(state.runner, "conversations", None)
+        store = getattr(state.runner, "session_store", None)
+        n = int(getattr(state.settings, "chat_history_rehydrate_turns", 0) or 0)
+        if conversations is None or store is None or n <= 0:
+            return
+        try:
+            existing = await store.load_messages(session_id)
+            if existing:
+                return  # live memory still present — nothing to rehydrate
+            turns = await asyncio.to_thread(conversations.recent_turns, conversation_id, n)
+            if not turns:
+                return
+            from linch.types import Message, TextBlock
+            msgs = [Message(role=t["role"], content=[TextBlock(text=t["content"])])
+                    for t in turns
+                    if (t.get("content") or "").strip() and t.get("role") in ("user", "assistant")]
+            if not msgs:
+                return
+            try:
+                await store.create(id=session_id)
+            except Exception:
+                pass
+            await store.append_messages(session_id, msgs)
+        except Exception:
+            logger.exception("conversation rehydrate failed (fail-open)")
+
+    def _persist_turn(owner_hash: str, conversation_id: str, session_id: str,
+                      user_text: str, assistant_text: str) -> bool:
+        """Durably record one user+assistant turn in SQLite (create-if-first). Fail-open: a
+        store error must never break a chat reply that already succeeded. Skips a cross-owner
+        conversation_id collision (owns() re-checked after create).
+
+        Returns whether this call is the conversation's FIRST turn (i.e. it just created the
+        row) — the caller uses that to fire the background auto-title generation exactly once,
+        right after the model's first real answer exists to summarize."""
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None or not owner_hash:
+            return False
+        first_use = False
+        try:
+            now = int(time.time())
+            if not conversations.owns(owner_hash, conversation_id):
+                conversations.create(owner_hash, conversation_id, session_id, "", now)
+                first_use = True
+            if conversations.owns(owner_hash, conversation_id):
+                conversations.append_turn(conversation_id, user_text, assistant_text, now)
+        except Exception:
+            logger.exception("durable conversation persist failed (fail-open)")
+        return first_use
+
+    def _build_title_prompt(user_text: str, assistant_text: str) -> str:
+        u = (user_text or "").strip()[:500]
+        a = (assistant_text or "").strip()[:500]
+        return f'Hỏi: "{u}"\nĐáp (rút gọn): "{a}"\n\nTiêu đề:'
+
+    def _clean_title(raw: str) -> str:
+        """First non-empty line of the model's reply, stripped of wrapping quotes/punctuation
+        the model sometimes adds despite the prompt, capped generously as a backstop (the model
+        is asked for ≤6 words; this is not the primary length control)."""
+        line = next((l.strip() for l in (raw or "").splitlines() if l.strip()), "")
+        line = line.strip(" \"'“”.–-")
+        return line[:_RENAME_TITLE_MAX]
+
+    async def _maybe_autotitle(owner_hash: str, conversation_id: str,
+                               user_text: str, assistant_text: str) -> None:
+        """Background, non-blocking: replace the interim (first-line-of-question) title with a
+        short LLM-generated one summarizing the first Q&A pair. Fires exactly once per
+        conversation (only on its first turn — see _persist_turn's `first_use`). Fail-open and
+        fully decoupled from the request/response cycle: any failure just leaves the interim
+        title in place, never surfaces to the caller, and never delays the chat reply (this
+        coroutine is scheduled via `_fire_and_forget`, not awaited).
+
+        Uses `rename_if_matches` (NOT the unconditional `rename`) so a manual PATCH rename
+        that lands while this LLM call is still in flight always wins, never the other way
+        around — this job only writes when the title still equals the exact interim value
+        `_persist_turn`'s own fallback set, i.e. nothing has renamed it since."""
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None:
+            return
+        try:
+            expected_interim = derive_title(user_text)
+            prompt = _build_title_prompt(user_text, assistant_text)
+            raw, _meta = await asyncio.wait_for(
+                state.runner.complete("conversation_title", prompt), timeout=15.0)
+            title = _clean_title(raw)
+            if title:
+                await asyncio.to_thread(conversations.rename_if_matches,
+                                        conversation_id, expected_interim, title, int(time.time()))
+        except Exception:
+            logger.warning("auto-title generation failed (fail-open, keeping interim title)",
+                           exc_info=True)
+
+    def _new_cid(supplied: str | None) -> str:
+        cid = (supplied or "").strip()
+        return cid or uuid4().hex
+
+    @app.post("/ai/conversations/chat")
+    async def conversations_chat(body: ConversationChatRequest) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(body.user_id)
+        conversation_id = _new_cid(body.conversation_id)
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        if owner_hash:
+            await _maybe_rehydrate(session_id, conversation_id)
+        prompt = require_public_input(body.supplied_text())
+        gated = await _chat_gate(prompt)
+        if gated:
+            message, metadata = gated
+            metadata = {**metadata, "conversation_id": conversation_id}
+            return {"response": message, "answer": message, "message": message,
+                    "metadata": metadata, "conversation_id": conversation_id}
+        try:
+            text, metadata = await state.runner.complete("chat", prompt, session_id)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
+        text = sanitize_output_language(text)
+        metadata = {**metadata, "conversation_id": conversation_id}
+        if owner_hash:
+            # Offload the sync SQLite write to a worker thread so it never blocks the event loop.
+            first_use = await asyncio.to_thread(
+                _persist_turn, owner_hash, conversation_id, session_id, prompt, text)
+            if first_use:
+                _fire_and_forget(_maybe_autotitle(owner_hash, conversation_id, prompt, text))
+        return {"response": text, "answer": text, "message": text,
+                "metadata": metadata, "conversation_id": conversation_id}
+
+    @app.post("/ai/conversations/chat/stream")
+    async def conversations_chat_stream(body: ConversationChatRequest) -> StreamingResponse:
+        text = require_public_input(body.supplied_text())
+        owner_hash = _conv_owner_hash(body.user_id)
+        conversation_id = _new_cid(body.conversation_id)
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        conv_frame = sse_frame("conversation", {"conversation_id": conversation_id})
+        gated = await _chat_gate(text)
+        if gated is not None:  # classifier short-circuit before the agent runs (not persisted)
+            message, gated_metadata = gated
+            md = {**gated_metadata, "conversation_id": conversation_id}
+            return _short_circuit_stream(message, md, prelude=[conv_frame],
+                                         top_level={"conversation_id": conversation_id})
+        if owner_hash:
+            await _maybe_rehydrate(session_id, conversation_id)
+        user_text = text
+        holder: dict[str, Any] = {"compaction": None}
+
+        def observe(event: Any) -> bytes | None:
+            if (getattr(state.settings, "conversation_compaction_meta", True)
+                    and type(event).__name__ == "CompactionEvent"):
+                info = {k: getattr(event, k, None) for k in
+                        ("strategy", "tokens_before", "tokens_after",
+                         "messages_before", "messages_after")}
+                holder["compaction"] = info
+                return sse_frame("compaction", info)
+            return None
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            md = {**base_meta("chat", run_id), "conversation_id": conversation_id}
+            if holder["compaction"]:
+                md["compaction"] = holder["compaction"]
+            if owner_hash and final and final != STREAM_ERROR_MESSAGE:
+                first_use = await asyncio.to_thread(
+                    _persist_turn, owner_hash, conversation_id, session_id, user_text, final)
+                if first_use:
+                    _fire_and_forget(_maybe_autotitle(owner_hash, conversation_id, user_text, final))
+            return {"content": final, "answer": final, "message": final,
+                    "metadata": md, "conversation_id": conversation_id}
+
+        return stream("chat", text, session_id, build_final,
+                      prelude=[conv_frame], observe=observe)
+
+    @app.post("/ai/conversations")
+    async def create_conversation(body: CreateConversationRequest) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(body.user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để tạo hội thoại có lịch sử.")
+        conversation_id = uuid4().hex
+        session_id = _conv_session_id(owner_hash, conversation_id)
+        now = int(time.time())
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is not None:
+            try:
+                await asyncio.to_thread(conversations.create, owner_hash, conversation_id,
+                                        session_id, body.title or "", now)
+            except Exception:
+                logger.exception("create_conversation persist failed")
+        return {"conversation_id": conversation_id, "title": body.title or "",
+                "created_at": now, "updated_at": now, "message_count": 0}
+
+    @app.get("/ai/conversations")
+    async def list_conversations(user_id: str | None = None, limit: int = 20,
+                                 offset: int = 0) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để liệt kê hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        if conversations is None:
+            return {"conversations": [], "total": 0, "limit": limit, "offset": offset}
+        rows, total = await asyncio.to_thread(conversations.list_for_owner, owner_hash, limit, offset)
+        return {"conversations": rows, "total": total, "limit": limit, "offset": offset}
+
+    @app.get("/ai/conversations/{conversation_id}")
+    async def get_conversation(conversation_id: str, user_id: str | None = None,
+                               limit: int = 200, offset: int = 0) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để đọc hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
+            raise HTTPException(404, "Không tìm thấy hội thoại.")   # 404, không xác nhận tồn tại
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        messages, total = await asyncio.to_thread(conversations.messages, conversation_id, limit, offset)
+        return {"conversation_id": conversation_id, "title": row.get("title", ""),
+                "created_at": row.get("created_at"), "updated_at": row.get("updated_at"),
+                "message_count": row.get("message_count", total), "messages": messages,
+                "total": total, "limit": limit, "offset": offset}
+
+    @app.patch("/ai/conversations/{conversation_id}")
+    async def rename_conversation(conversation_id: str, body: RenameConversationRequest) -> dict[str, Any]:
+        """User-driven rename — sets an explicit title, overriding whatever the auto-title
+        (interim first-line, or the background LLM title) produced. Idempotent; no effect on
+        the transcript or the live session."""
+        owner_hash = _conv_owner_hash(body.user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để đổi tên hội thoại.")
+        title = (body.title or "").strip()
+        if not title:
+            raise HTTPException(400, "title không được để trống.")
+        title = title[:_RENAME_TITLE_MAX]
+        conversations = getattr(state.runner, "conversations", None)
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
+            raise HTTPException(404, "Không tìm thấy hội thoại.")
+        now = int(time.time())
+        await asyncio.to_thread(conversations.rename, conversation_id, title, now)
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        return {"conversation_id": conversation_id, "title": title,
+                "created_at": row.get("created_at"), "updated_at": now,
+                "message_count": row.get("message_count", 0)}
+
+    @app.delete("/ai/conversations/{conversation_id}")
+    async def delete_conversation(conversation_id: str,
+                                  user_id: str | None = None) -> dict[str, Any]:
+        owner_hash = _conv_owner_hash(user_id)
+        if not owner_hash:
+            raise HTTPException(400, "user_id là bắt buộc để xoá hội thoại.")
+        conversations = getattr(state.runner, "conversations", None)
+        owned = conversations is not None and await asyncio.to_thread(
+            conversations.owns, owner_hash, conversation_id)
+        if not owned:
+            raise HTTPException(404, "Không tìm thấy hội thoại.")
+        row = await asyncio.to_thread(conversations.get, conversation_id) or {}
+        await asyncio.to_thread(conversations.soft_delete, conversation_id)
+        store = getattr(state.runner, "session_store", None)
+        sid = row.get("session_id")
+        if store is not None and sid:
+            try:
+                await store.delete(sid)
+            except Exception:
+                logger.exception("delete_conversation session cleanup failed")
+        return {"deleted": True, "conversation_id": conversation_id}
 
     @app.post("/ai/translate")
     async def translate(body: LegacyRequest) -> dict[str, Any]:

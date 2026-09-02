@@ -45,3 +45,28 @@ class LegacyRequest(BaseModel):
         if self.data is not None:
             return json.dumps(self.data, ensure_ascii=False)
         raise HTTPException(422, "One of message, question, prompt, content, text, messages, or data is required")
+
+
+class ConversationChatRequest(LegacyRequest):
+    """POST /ai/conversations/chat(/stream) — a chat turn scoped to a named conversation."""
+
+    conversation_id: str | None = None
+    title: str | None = None
+
+
+class CreateConversationRequest(BaseModel):
+    """POST /ai/conversations — create an empty conversation (for a "new chat" button)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | int | None = None
+    title: str | None = None
+
+
+class RenameConversationRequest(BaseModel):
+    """PATCH /ai/conversations/{id} — set a user-chosen title, overriding the auto-title."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | int | None = None
+    title: str | None = None

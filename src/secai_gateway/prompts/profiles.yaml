@@ -24,6 +24,15 @@ injection_judge:
   base: false
   max_turns: 2
 
+# Single-shot conversation auto-title (api/routes.py::_maybe_autotitle): summarizes the first
+# Q&A pair of a new /ai/conversations/* thread into a short display title. Runs in the
+# background after the first turn — never blocks the chat response. No tools, pure text→text.
+conversation_title:
+  prompt: conversation_title.md
+  tools: []
+  base: false
+  max_turns: 2
+
 translate:
   prompt: translate.md
   tools: []

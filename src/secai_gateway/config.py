@@ -105,6 +105,19 @@ class Settings(BaseSettings):
     admin_api_key: str = ""
     allowed_origins: str = ""
 
+    # ── Durable multi-conversation chat history (/ai/conversations/*) ──────────
+    # Live-memory retention window for linch's RedisSessionStore (both the legacy /ai/chat
+    # thread and each /ai/conversations/* conversation). Durable history for the latter is a
+    # separate SQLite store (state/conversations.py), independent of this TTL — refreshed on
+    # every write. Default = the pre-existing hardcoded 24h so /ai/chat's behavior is unchanged.
+    session_ttl_seconds: int = 86400
+    # Turns to reload from the durable SQLite transcript into a fresh linch session when its
+    # 24h live window has expired and the model would otherwise have no context. 0 = off.
+    chat_history_rehydrate_turns: int = 12
+    # Surface an additive `compaction` SSE frame/metadata field on /ai/conversations/chat/stream
+    # when linch compacts mid-run. Observational only — never changes the old /ai/chat stream.
+    conversation_compaction_meta: bool = True
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

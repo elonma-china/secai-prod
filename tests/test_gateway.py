@@ -246,3 +246,25 @@ async def test_route_cascade_judge_failure_falls_back_to_raw_threshold(monkeypat
     assert r.status_code == 200
     assert "chỉ thị hệ thống" in r.json()["response"]
     assert not any(p == "chat" for p, _, _ in fake.calls)
+
+
+@pytest.mark.asyncio
+async def test_old_chat_contract_unchanged_by_conversation_history_feature() -> None:
+    """Regression fence for /ai/conversations/* (see test_conversations.py): the OLD /ai/chat,
+    /chat_no_stream, /ai/chat/stream endpoints — consumed by an external system — must stay
+    byte-identical. No `conversation_id` key, no new SSE frame types."""
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        for path in ("/chat_no_stream", "/ai/chat"):
+            r = await client.post(path, json={"user_id": "u1", "message": "hello"})
+            assert r.status_code == 200
+            assert set(r.json().keys()) == {"response", "answer", "message", "metadata"}
+
+        stream = await client.post("/ai/chat/stream", json={"user_id": "u1", "message": "hello"})
+        assert stream.status_code == 200
+        body = stream.text
+        assert "event: conversation" not in body       # no leaking additive prelude frame
+        assert "event: token" in body
+        assert "event: final" in body
+        assert "data: [DONE]" in body

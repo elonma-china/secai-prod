@@ -21,12 +21,15 @@ class _FakeRedis:
     def __init__(self) -> None:
         self.kv: dict[str, str] = {}
         self.lists: dict[str, list[str]] = {}
+        self.ex: dict[str, int] = {}  # last `ex=`/`expire()` TTL seen per key, for TTL tests
 
     async def get(self, k):  # noqa: ANN001
         return self.kv.get(k)
 
     async def set(self, k, v, ex=None):  # noqa: ANN001
         self.kv[k] = v
+        if ex is not None:
+            self.ex[k] = ex
 
     async def lrange(self, k, a, b):  # noqa: ANN001
         arr = self.lists.get(k, [])
@@ -39,7 +42,7 @@ class _FakeRedis:
         self.lists.setdefault(k, []).extend(vals)
 
     async def expire(self, k, ttl):  # noqa: ANN001
-        return None
+        self.ex[k] = ttl
 
     async def delete(self, *ks):  # noqa: ANN001
         for k in ks:
@@ -79,3 +82,24 @@ async def test_update_meta_and_skills_autocreate(store: RedisSessionStore) -> No
     await store.set_invoked_skills("chat:new2", [{"name": "x", "substituted_body": ""}])
     loaded = await store.load("chat:new2")
     assert loaded is not None and loaded.invoked_skills
+
+
+@pytest.mark.asyncio
+async def test_ttl_seconds_is_parametrized(monkeypatch) -> None:
+    """Default preserves the legacy 24h; an explicit value (used for /ai/conversations/*
+    conversations) is honored on every write path (record, messages, and via `expire`)."""
+    import redis.asyncio as raio
+
+    shared = _FakeRedis()
+    monkeypatch.setattr(raio.Redis, "from_url", classmethod(lambda cls, url, decode_responses=True: shared))
+
+    default_store = RedisSessionStore("redis://fake")
+    assert default_store._ttl == 86_400
+
+    custom_store = RedisSessionStore("redis://fake", ttl_seconds=2_592_000)
+    assert custom_store._ttl == 2_592_000
+    await custom_store.append_messages("chat:conv:x:y", [_msg("user", "hi")])
+    # Both the record (_save_record's `ex=`) and the message list (`expire()`) use the SAME
+    # instance's custom TTL — never the default, and never each other's hardcoded value.
+    assert shared.ex.get("linch:sess:chat:conv:x:y") == 2_592_000
+    assert shared.ex.get("linch:sess:chat:conv:x:y:msgs") == 2_592_000
