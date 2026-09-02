@@ -89,26 +89,25 @@ Kịch bản: seed dữ kiện bí mật "FALCON-7788" ở lượt 1 → nhiều
 - Giữ context sống **bounded** (~4–5k token) thay vì phình vô hạn.
 - **Transcript bền SQLite giữ đủ 30/30 dòng** dù đã nén — dữ kiện KHÔNG BAO GIỜ mất ở tầng lưu trữ.
 
+**Cấu hình production thật (quan trọng):** `.env` đặt `QWEN_CONTEXT_WINDOW=65536`; Agent `max_output_tokens=None` ⇒ reserve=32768. Ngưỡng nén = `0.8×65536 − 32768 ≈ 19.660 token` (~49+ lượt). Trong khi `keep_recent_turns=10` chỉ nặng ~4–5k token ≪ ngưỡng ⇒ **production nén HIẾM, mỗi lần là MỘT pass LỚN → giữ được fact** (test cô lập chứng minh tóm tắt một-pass giữ fact với mọi prompt).
+
 **Recall dữ kiện sớm — kết quả đo thật:**
 
 | Cấu hình | Nén nổ | Recall "FALCON-7788" |
 |---|---|---|
-| Chat thường (chưa đủ dài để nén) | 0 lần | ✅ **Chính xác** |
-| Long chat, window 6000 / 8000 / 16000 | mỗi lượt (rolling) | ❌ Mất |
-| Long chat, **window 32768 (production thật)** | mỗi lượt (rolling) | ❌ Mất |
-| **Tóm tắt cô lập MỘT lần** (default / GENERAL / VI / chỉ-fact) | 1 lần | ✅ **Giữ, cả 4 prompt** |
+| **Production thật (window 65536)**, chat ≤ ~15 lượt | 0 lần | ✅ **Chính xác** |
+| Tóm tắt cô lập MỘT lần (default/GENERAL/VI/chỉ-fact) | 1 lần | ✅ **Giữ, cả 4 prompt** |
+| Ép window nhỏ 6k–32k (reserve 32768 ≥ 0.8×window) | mỗi lượt (rolling) | ❌ Mất |
 
-**Chẩn đoán (đã sửa lại sau khi đo kỹ — kết luận vội trước đó là SAI):**
-Không phải "model không tóm tắt được fact" (test cô lập chứng minh tóm tắt MỘT lần giữ fact với mọi prompt, kể cả default). Nguyên nhân thật: khi chat vượt ~11 lượt có nội dung, mỗi lượt `keep_recent_turns=10` giữ lại ~4–5k token — **xấp xỉ ngưỡng kích hoạt** — nên nén **nổ LẠI mỗi lượt**, mỗi lần chỉ tóm tắt 1–3 lượt cũ nhất và **re-summarize chính bản tóm tắt trước**. Qua ~10–15 vòng lặp, dữ kiện cũ nhất (lượt 1) bị **bào mòn dần** rồi mất. **Đây là hành vi thật ở production (đã xác nhận ở window 32768), không phải artefact do test.**
+**Chẩn đoán cuối (đã đo tận nơi):**
+- **Production ổn:** window 65536 khiến nén rất hiếm + một-pass-lớn ⇒ dữ kiện đầu cuộc trò chuyện được giữ. Test đầu tiên (không override) đã cho recall hoàn hảo.
+- **Việc mất fact chỉ xảy ra khi ÉP window nhỏ (≤ ~41k)** sao cho `reserve(32768) ≥ 0.8×window` ⇒ ngưỡng ≤ 0 ⇒ nén **nổ mỗi lượt** ⇒ re-summarize bản tóm tắt lặp lại ⇒ bào mòn fact. **Đây là artefact do tôi override window nhỏ khi test, KHÔNG phải hành vi production.**
+- **Rủi ro tiềm ẩn có thật:** config **mặc định** `qwen_context_window=32768`. Nếu deploy KHÔNG set `.env` (production LUÔN set 65536) thì rơi vào regime nổ-mỗi-lượt trên chat dài.
 
-**Ảnh hưởng thực tế:**
-- Chat ngắn/vừa (< ~11–15 lượt có nội dung): **không nén → recall hoàn hảo.**
-- Chat dài (> ~15 lượt): dữ kiện nêu ở đầu **có thể mất khỏi ngữ cảnh sống** sau ~10–15 lượt kế.
-- **Lưới an toàn:** transcript bền SQLite luôn còn đủ (`GET /ai/conversations/{cid}`); rehydrate nạp lại N lượt gần nhất.
+**Thử nghiệm khắc phục (đã làm + đo):** đặt `max_output_tokens=8192` (config `LLM_MAX_OUTPUT_TOKENS`, `agent/factory.py`) ⇒ reserve nhỏ ⇒ ngưỡng cao ở MỌI window ⇒ nén hiếm + big-pass, **bảo vệ cả config default 32768**. Đo ở window 18000: nén nổ **2 lần** (thay vì 15) với giảm token thật (6545→4220). **64 test regression pass, không lỗi.** TUY NHIÊN recall-sau-nén **vẫn không đảm bảo** (kể cả 2 pass, summarizer vẫn rơi fact qua re-summarize). ⇒ Fix này là **cải thiện robustness (giảm tần suất nén + chặn generation runaway + vá config-default), KHÔNG phải giải pháp recall.**
 
-**Hướng khắc phục (follow-up có chủ đích, ngoài phạm vi bản cập nhật này):**
-- **(khuyến nghị) Chỉnh `max_output_tokens` (reserve) của Agent về giá trị cố định hợp lý** trong `agent/factory.py`: hiện reserve lớn khiến ngưỡng nén thấp → nổ mỗi lượt. Giảm reserve ⇒ nén chỉ nổ khi thật sự gần đầy (một pass LỚN, giữ fact) và không re-fire mỗi lượt. Đánh đổi: `max_output_tokens` cũng chặn độ dài sinh ra ⇒ cần cân nhắc theo profile (PoC exploit có thể dài) — nên làm + đo riêng.
-- Tăng `keep_recent_turns`; hoặc cơ chế "ghim dữ kiện" (pinned-facts/entity memory) — thay đổi lớn.
-- (nhẹ) Bật `CHAT_GENERAL_SUMMARY_PROMPT=true` (tóm tắt tiếng Việt) — cải thiện chất lượng tóm tắt nhưng KHÔNG tự giải quyết được bào mòn do lặp.
+**Lưới an toàn & giải pháp thật:**
+- **Transcript bền SQLite** luôn còn đủ (`GET /ai/conversations/{cid}`) + rehydrate — dữ liệu KHÔNG BAO GIỜ mất.
+- **Recall-sau-nén đảm bảo** chỉ đạt được bằng cơ chế **"ghim dữ kiện" (pinned-facts/entity memory)** — chèn dữ kiện then chốt nguyên văn vào mọi bản tóm tắt, hoặc giữ ngoài vùng bị tóm tắt. Thay đổi lớn ⇒ issue riêng.
 
-**Tự đánh giá:** trong quá trình kiểm chứng, kết luận trung gian của tôi đã sai 2 lần (đổ cho "giới hạn model", rồi "artefact window nhỏ") trước khi đo ở window production thật và chốt đúng nguyên nhân (re-summarize lặp mỗi lượt). Bảng số liệu trên là kết quả đo trực tiếp.
+**Tự đánh giá (trung thực):** trong quá trình kiểm chứng tôi đã kết luận SAI nhiều lần ("giới hạn model" → "artefact window nhỏ" → "erosion thật ở 32768") trước khi introspect ra window production thật = 65536 và chốt đúng: **production ổn; erosion là artefact test; fix max_output_tokens giảm rủi ro nhưng không đảm bảo recall.** Bảng số liệu là đo trực tiếp.

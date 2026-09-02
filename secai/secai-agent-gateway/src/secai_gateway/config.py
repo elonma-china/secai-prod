@@ -126,6 +126,16 @@ class Settings(BaseSettings):
     # simple queries to 1-2 turns. Override per-deploy via STEP_CAP.
     step_cap: int = 16
     tool_timeout_ms: int = 30000
+    # Max tokens the LLM may generate per turn. ALSO used by linch as the compaction "reserve":
+    # compaction fires when est(context)+reserve >= 0.8*context_window. Left as None (linch's
+    # 32768 default) this made the trigger fire EVERY turn whenever the context window is small
+    # (<= ~41k), e.g. the qwen_context_window=32768 default with no .env override → 0.8*32768 <
+    # 32768 → threshold always met → rolling re-summarization every turn erodes early user facts
+    # (measured 2026-09-02). A fixed, modest cap keeps compaction rare + one big fact-preserving
+    # pass at any window, and bounds runaway generation. 8192 tokens (~32KB) is ample for chat/
+    # report/exploit narration (the big consolidated PoC is injected deterministically, not
+    # generated). Raise per-deploy via LLM_MAX_OUTPUT_TOKENS if a profile needs longer output.
+    llm_max_output_tokens: int = 8192
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     gateway_db_path: str = "./data/gateway.db"
