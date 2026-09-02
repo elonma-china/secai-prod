@@ -28,7 +28,7 @@ _SECRET_PATTERNS = (
     re.compile(r"\bCFPAT-[A-Za-z0-9_-]{40,}\b"),                          # Cloudflare
     re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),                            # Google API key
     re.compile(r"\bAC[0-9a-f]{32}\b"),                                    # Twilio Account SID
-    re.compile(r"\bAccountKey=[A-Za-z0-9+/=]{40,}"),                      # Azure storage key
+    re.compile(r"\bAccountKey=[A-Za-z0-9+/=_-]{40,}"),                    # Azure storage key (base64url + '=' padding)
     # Discord bot token: base64(snowflake).timestamp.hmac — first segment starts M/N/O.
     re.compile(r"\b[MNO][A-Za-z0-9_-]{22,}\.[A-Za-z0-9_-]{6,7}\.[A-Za-z0-9_-]{27,}\b"),
     # Telegram bot token: <numeric bot id>:<35-char secret>.
@@ -47,7 +47,7 @@ _SECRET_PATTERNS = (
     re.compile(r"\beyJ[A-Za-z0-9_/+-]{6,}\.[A-Za-z0-9_/+=.-]{6,}\.[A-Za-z0-9_/+=-]{6,}"),
     re.compile(r"\bsk-proj-[A-Za-z0-9_-]{20,}\b"),                        # OpenAI project key
     re.compile(r"\bsk-ant-(?:api|admin)[0-9]{2}-[A-Za-z0-9_-]{20,}\b"),   # Anthropic
-    re.compile(r"\bpscale_(?:pw|tkn)_[A-Za-z0-9_]{20,}\b"),               # PlanetScale
+    re.compile(r"\bpscale_(?:pw|tkn)_[A-Za-z0-9_-]{20,}\b"),              # PlanetScale (tail carries '-')
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{40,}\b"),                      # GitHub fine-grained PAT
     re.compile(r"https://hooks\.slack\.com/services/T[A-Za-z0-9]+/B[A-Za-z0-9]+/[A-Za-z0-9]{16,}"),
     re.compile(r"\bshpat_[0-9a-fA-F]{32}\b"),                             # Shopify access token
@@ -62,6 +62,17 @@ _SECRET_PATTERNS = (
     # Discord bot token: base64url(24+).timestamp(6).hmac(27-38); first segment may start with
     # any letter/digit (the M/N/O rule above only catches the older snowflake-derived shape).
     re.compile(r"\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38}\b"),
+    # ── Vendor secret/credential formats (loop iter 5, FT5-PII-VENDOR-REGEX) ──
+    # 7 real leaked-secret rows pasted with benign framing ("my key rate-limits", "401s from the
+    # client", "leaked in CI logs") slipped past every rule above: new vendor prefixes not yet
+    # covered, plus two rules whose charset was too narrow (pscale_/AccountKey= widened above to
+    # admit '-'/'_'). Each anchors on a distinctive vendor prefix + a long random tail so benign
+    # code/hashes/ids do NOT trip (verified 0 FP over the non-PII dataset rows).
+    re.compile(r"\bgsk_[A-Za-z0-9]{40,}\b"),                              # Groq
+    re.compile(r"\br8_[A-Za-z0-9]{32,}\b"),                              # Replicate
+    re.compile(r"\bsk-or-v1-[A-Za-z0-9]{40,}\b"),                        # OpenRouter
+    re.compile(r"\bpplx-[A-Za-z0-9]{40,}\b"),                            # Perplexity
+    re.compile(r"\bdp\.pt\.[A-Za-z0-9]{30,}\b"),                         # Doppler personal token
 )
 # Long numeric identifiers (payment cards 13–19 digits) + US SSN (3-2-4 grouping, only 9 digits so
 # it is below the card rule and needs its own shape).

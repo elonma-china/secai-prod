@@ -2,35 +2,35 @@
   "embed_model": "DuyTa/sec-embedding",
   "dim": 1024,
   "backend": "endpoint",
-  "n_train": 1836,
-  "n_test": 681,
+  "n_train": 2164,
+  "n_test": 799,
   "intent": {
     "security": {
-      "precision": 0.9752,
-      "recall": 0.9841,
-      "f1": 0.9796,
-      "tp": 432,
-      "fp": 11,
-      "fn": 7
+      "precision": 0.9899,
+      "recall": 0.98,
+      "f1": 0.9849,
+      "tp": 490,
+      "fp": 5,
+      "fn": 10
     },
     "chitchat": {
-      "precision": 0.9574,
-      "recall": 0.9783,
-      "f1": 0.9677,
-      "tp": 45,
-      "fp": 2,
+      "precision": 0.9767,
+      "recall": 0.9767,
+      "f1": 0.9767,
+      "tp": 42,
+      "fp": 1,
       "fn": 1
     },
     "offtopic": {
-      "precision": 0.9581,
-      "recall": 0.9337,
-      "f1": 0.9457,
-      "tp": 183,
-      "fp": 8,
-      "fn": 13
+      "precision": 0.9617,
+      "recall": 0.9805,
+      "f1": 0.971,
+      "tp": 251,
+      "fp": 10,
+      "fn": 5
     }
   },
-  "intent_accuracy": 0.9692,
+  "intent_accuracy": 0.98,
   "intent_confusion": {
     "labels": [
       "security",
@@ -39,29 +39,29 @@
     ],
     "matrix": [
       [
-        432,
+        490,
         0,
-        7
+        10
       ],
       [
-        0,
-        45,
-        1
+        1,
+        42,
+        0
       ],
       [
-        11,
-        2,
-        183
+        4,
+        1,
+        251
       ]
     ]
   },
   "injection": {
-    "precision": 0.9266,
-    "recall": 0.9712,
-    "f1": 0.9484,
-    "tp": 101,
-    "fp": 8,
-    "fn": 3
+    "precision": 0.9747,
+    "recall": 0.965,
+    "f1": 0.9698,
+    "tp": 193,
+    "fp": 5,
+    "fn": 7
   },
   "pii": {
     "precision": 1.0,
@@ -72,24 +72,24 @@
     "fn": 0
   },
   "offtopic_decision": {
-    "precision": 0.9733,
-    "recall": 0.9286,
-    "f1": 0.9504,
-    "tp": 182,
-    "fp": 5,
-    "fn": 14
+    "precision": 0.9617,
+    "recall": 0.9805,
+    "f1": 0.971,
+    "tp": 251,
+    "fp": 10,
+    "fn": 5
   },
-  "macro_f1": 0.9683,
+  "macro_f1": 0.9805,
   "thresholds": {
-    "injection": 0.5,
-    "pii": 0.2,
-    "offtopic": 0.468
+    "injection": 0.65,
+    "pii": 0.35,
+    "offtopic": 0.34
   },
   "head_apply_latency_ms": {
-    "mean": 0.0493,
-    "p95": 0.0599
+    "mean": 0.0403,
+    "p95": 0.0756
   },
-  "train_intent_accuracy": 0.9842,
+  "train_intent_accuracy": 0.9982,
   "head": "mixed",
-  "overfit_gap_intent_acc": 0.015
+  "overfit_gap_intent_acc": 0.0182
 }
