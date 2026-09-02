@@ -216,3 +216,58 @@ def test_untrusted_content_policy_present_in_base_system_prompt():
     text = compose_system_prompt()
     assert "untrusted_content_policy" in text
     assert "untrusted_retrieved_content" in text
+
+
+# ── input language gate (classifier trained on vi/en only) ──────────────────
+from secai_gateway.security import (  # noqa: E402
+    UNSUPPORTED_LANGUAGE_MSG,
+    is_unsupported_language,
+    unsupported_language_ratio,
+)
+
+
+def test_language_gate_allows_vietnamese_with_diacritics():
+    assert not is_unsupported_language(
+        "Mô tả cơ chế của lỗ hổng CVE-2025-3248 và cách khắc phục triệt để.")
+
+
+def test_language_gate_allows_english():
+    assert not is_unsupported_language("Describe the mechanism of CVE-2025-3248 and its impact.")
+
+
+def test_language_gate_allows_latin_french_by_scope():
+    # Scope decision: only NON-Latin scripts are rejected; Latin-script languages pass through.
+    assert not is_unsupported_language(
+        "Décris le mécanisme de la vulnérabilité CVE-2025-3248 et son impact.")
+
+
+def test_language_gate_blocks_japanese():
+    assert is_unsupported_language("CVE-2025-3248脆弱性の仕組みを説明してください。")
+
+
+def test_language_gate_blocks_chinese():
+    assert is_unsupported_language("请描述CVE-2025-3248漏洞的机制，以及攻击者能获得什么。")
+
+
+def test_language_gate_blocks_korean():
+    assert is_unsupported_language("CVE-2025-3248 취약점의 메커니즘을 설명해 주세요.")
+
+
+def test_language_gate_blocks_russian_cyrillic():
+    assert is_unsupported_language("Опишите механизм уязвимости CVE-2025-3248.")
+
+
+def test_language_gate_ignores_digits_punct_emoji():
+    # No letters at all → ratio 0.0, never a false refusal on an ID-only / symbol message.
+    assert unsupported_language_ratio("CVE-2025-3248 !!! ??? 🔒") == 0.0
+    assert not is_unsupported_language("192.168.0.1:8080 -> /api/v1/validate/code")
+
+
+def test_language_gate_mostly_latin_with_stray_cjk_passes():
+    # A vi/en question that merely quotes a product name in CJK stays allowed (below 0.5).
+    assert not is_unsupported_language(
+        "Explain the CVE affecting the 华为 router firmware update procedure in detail please.")
+
+
+def test_language_gate_message_is_bilingual():
+    assert "tiếng Việt" in UNSUPPORTED_LANGUAGE_MSG and "Vietnamese" in UNSUPPORTED_LANGUAGE_MSG
