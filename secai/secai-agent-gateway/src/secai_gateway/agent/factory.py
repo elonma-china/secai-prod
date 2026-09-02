@@ -85,7 +85,10 @@ def make_gateway_agent(
         ],
         compaction_ladder=CompactionLadder(),
         max_turns=s.step_cap,
-        max_output_tokens=getattr(s, "llm_max_output_tokens", 8192),
+        # agent-level value = COMPACTION RESERVE ONLY (small → healthy compaction at any window).
+        # The real per-turn generation cap is passed per-profile via RunOptions in agent/runner.py,
+        # so this never truncates a long output (e.g. an exploit PoC).
+        max_output_tokens=getattr(s, "llm_compaction_reserve_tokens", 4096),
         tool_timeout_ms=s.tool_timeout_ms,
         include_partial_messages=True,  # emit PartialAssistantEvent → token-by-token SSE
     )

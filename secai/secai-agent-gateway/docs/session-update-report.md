@@ -133,3 +133,19 @@ Kịch bản: seed dữ kiện bí mật "FALCON-7788" ở lượt 1 → nhiều
 **Kết luận:** **KHÔNG làm giảm CCU.** Nút thắt thực sự vẫn là serving LLM (mỗi lượt vài giây); phần bookkeeping session sau tối ưu chỉ ~30–115ms và trần ~280 req/s — gấp **~470×** mục tiêu hợp đồng (~0.6 RPS). Baseline (chưa tối ưu) từng để bookkeeping tự thành nút thắt ở CCU cao (p50 ~2s@50CCU); tối ưu đã loại bỏ. API cũ không đụng.
 
 **Lưu ý dài hạn (không chặn):** `agent._sessions` in-memory tăng theo số hội thoại (chưa evict); bảng `conversation_messages` không hết hạn → cần chính sách archive.
+
+---
+
+## 7. Tách bạch generation cap vs reserve nén (khắc phục rủi ro cắt PoC)
+
+**Vấn đề của bản trước (§5):** đặt `max_output_tokens=8192` ở cấp Agent để chữa nén cũng **giới hạn độ dài sinh ra cho MỌI profile** → **exploit sinh PoC dài có thể bị CẮT** (nguy hiểm).
+
+**Nguyên nhân:** trong linch một giá trị kiêm 2 vai — generation cap = `RunOptions.max_output_tokens or agent.max_output_tokens`, còn reserve nén = **chỉ** `agent.max_output_tokens`.
+
+**Khắc phục (đã tách bạch):**
+- `agent.max_output_tokens = llm_compaction_reserve_tokens = **4096**` → **chỉ** làm reserve nén (nén hiếm + big-pass ở mọi window, kể cả default 32768). Không còn dùng làm generation cap.
+- Mỗi lượt truyền **generation cap per-profile** qua `RunOptions.max_output_tokens` (`agent/runner.py::_run_opts`), rộng rãi:
+  - **exploit_research → `llm_exploit_max_output_tokens = 32768`** (~128KB, dư cho PoC dài)
+  - chat/translate/report/statistical/bughunt → `llm_max_output_tokens = 16384` (~64KB)
+
+**Kết quả:** exploit không còn bị cắt (cap 32768, gấp 4× mức cũ, và tách hẳn khỏi reserve); nén vẫn khoẻ nhờ reserve 4096. Introspect xác nhận: agent reserve=4096, gen cap exploit=32768, chat=16384. 20/20 unit test store+endpoint+SSE pass. Có thể chỉnh từng knob độc lập qua env (`LLM_COMPACTION_RESERVE_TOKENS`, `LLM_MAX_OUTPUT_TOKENS`, `LLM_EXPLOIT_MAX_OUTPUT_TOKENS`).
