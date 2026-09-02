@@ -13,12 +13,36 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any, AsyncIterator
 from urllib.parse import urlparse
 
 from .kt_exploit import run_kt_exploit
 
 logger = logging.getLogger(__name__)
+
+# Tên công cụ nội bộ của gateway — KHÔNG phải lệnh shell. LLM yếu hay nhầm "command chứng minh RCE"
+# thành một tool-call (quan sát live: `poc_search(query=...)`), làm vòng repair chạy rác. Chặn ở đây.
+_TOOL_WORDS = ("poc_search", "qdrant_search", "neo4j_search", "web_search", "web_fetch",
+               "poc_fetch", "poc_verify", "poc_scan", "poc_exec", "fetch_reference")
+_CMD_FIRST_TOKEN = re.compile(r"^/?[A-Za-z0-9_][A-Za-z0-9_./+-]*$")  # lệnh hoặc path tuyệt đối (/usr/bin/id)
+_FUNC_CALL = re.compile(r"\b\w+\s*\(")  # dạng gọi-hàm foo(...) → không phải shell
+
+
+def _valid_shell_command(s: str) -> bool:
+    """True khi `s` trông như MỘT lệnh shell hợp lệ (id, whoami, `cat /flag`, `uname -a`…), KHÔNG
+    phải tool-call / lời giải thích. Chống repair-mù của LLM yếu (design: method-c-upgrade.md)."""
+    s = (s or "").strip()
+    if not s or len(s) > 200 or "\n" in s:
+        return False
+    if _FUNC_CALL.search(s):                       # foo(...) / poc_search(...) → loại
+        return False
+    if any(t in s for t in _TOOL_WORDS):           # tên tool nội bộ → loại
+        return False
+    toks = s.split()
+    if not toks or not _CMD_FIRST_TOKEN.match(toks[0]):  # từ lệnh đầu phải là command/path
+        return False
+    return True
 
 
 def parse_target(target: str) -> tuple[str, str | None]:
@@ -66,17 +90,23 @@ async def _suggest_command(runner: Any, cve: str, command: str, output: str) -> 
     if runner is None:
         return None
     prompt = (
-        f"Bạn đang khai thác {cve}. Lệnh chứng minh RCE vừa chạy: `{command}` — nhưng CHƯA thành công.\n"
+        f"Đang khai thác {cve}. Lệnh chứng minh RCE vừa chạy: `{command}` — CHƯA thành công.\n"
         f"--- OUTPUT/LỖI ---\n{(output or '')[-1500:]}\n"
-        "Đề xuất DUY NHẤT một lệnh shell khác để chứng minh RCE (vd đổi đường dẫn tuyệt đối, "
-        "`/usr/bin/id`, `cat /flag`, `whoami`). CHỈ in đúng một dòng lệnh, không giải thích.")
+        "Nhiệm vụ: đề xuất MỘT LỆNH SHELL LINUX khác để chứng minh RCE. QUY TẮC BẮT BUỘC:\n"
+        "- CHỈ in đúng MỘT dòng là lệnh shell (vd: id | whoami | /usr/bin/id | cat /flag | "
+        "cat /etc/passwd | uname -a | hostname).\n"
+        "- TUYỆT ĐỐI KHÔNG phải lời gọi hàm/tool (không `poc_search(...)`, không tên công cụ), "
+        "KHÔNG giải thích, KHÔNG markdown, KHÔNG dấu backtick.")
     try:
         text, _meta = await runner.complete("exploit_research", prompt)
     except Exception:
         logger.info("advance: repair suggest failed for %s", cve)
         return None
-    line = (text or "").strip().splitlines()[0].strip("` ").strip() if text and text.strip() else ""
-    return line or None
+    line = (text or "").strip().splitlines()[0].strip("`* ").strip() if text and text.strip() else ""
+    if not _valid_shell_command(line):
+        logger.info("advance: repair suggestion rejected (không phải lệnh shell): %r", line[:80])
+        return None  # dừng loop sạch thay vì chạy rác
+    return line
 
 
 async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
