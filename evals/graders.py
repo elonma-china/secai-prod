@@ -29,11 +29,11 @@ SECTION1_HEADING = "## 1. Mã Khai thác (PoC) và Payload"
 NO_POC_NOTE = "Chưa có thông tin PoC được xác thực trong dữ liệu nội bộ cho lỗ hổng này."
 
 VALID_TIERS = {
-    "real", "real_consolidated", "synthesized_readme", "synthesized_cve",
+    "real", "real_consolidated", "real_pruned", "synthesized_readme", "synthesized_cve",
     "synthesis_failed", "not_found",
 }
 SYNTH_TIERS = {"synthesized_readme", "synthesized_cve"}
-REAL_TIERS = {"real", "real_consolidated"}
+REAL_TIERS = {"real", "real_consolidated", "real_pruned"}
 
 # Tên tool nội bộ KHÔNG được rò ra văn bản hiển thị (đã qua strip_tool_name_mentions —
 # thấy lại nghĩa là backstop bị sót).
