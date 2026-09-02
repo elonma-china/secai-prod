@@ -15,6 +15,30 @@ python3 run_eval.py exploit chat translate report statistical_report bughunt --l
 Kết quả: `results/<function>_<ts>.jsonl` (raw response + grade từng sample) +
 `results/<function>_<ts>_summary.json` (pass rate, breakdown theo category, top lý do fail).
 
+## Bộ `chat_history/` — lịch sử chat (multi-conversation)
+
+Eval riêng cho tính năng `/ai/conversations/*` (xem `docs/chat-history-api-guide.md`), chấm
+**3 tiêu chí thang 0–100**: `do_chinh_xac` (độ chính xác), `on_dinh` (ổn định), `nho_ngu_canh`
+(nhớ ngữ cảnh). Hai chế độ:
+
+```bash
+python3 chat_history/gen_samples.py                 # sinh samples/memory_scenarios.jsonl (seed cố định)
+python3 chat_history/run_eval.py --offline          # in-process, KHÔNG cần LLM/Redis (plumbing + hợp đồng cũ)
+python3 chat_history/run_eval.py --live http://127.0.0.1:8131 --limit 40   # gateway thật: đủ 3 điểm
+```
+
+- **`--offline`** boot app qua `httpx.ASGITransport` với runner giả tất định (giống
+  `tests/test_conversations.py::ConvFakeRunner`): kiểm hợp đồng `/ai/chat` + `/ai/chat/stream`
+  cũ **byte-identical** (cổng CỨNG = 100 hoặc FAIL), superset output mới, cô lập chủ sở hữu,
+  ownership→404, transcript bền + đúng thứ tự, đa lượt tích luỹ, anonymous parity,
+  blocked-không-lưu. Không cần dịch vụ ngoài.
+- **`--live`** gọi gateway thật: replay `samples/chat.jsonl` qua `/ai/conversations/chat` chấm
+  bằng `graders.grade_chat` và so với `/ai/chat` cũ (accuracy, không tụt); kịch bản đa lượt
+  recall/isolation/compaction (nhớ ngữ cảnh). Cần gateway + serving embed/LLM biến thể
+  fine-tuned (xem CLAUDE.md).
+
+Kết quả: `results/chat_history_<mode>_<ts>_summary.json` (3 điểm 0–100 + `by_check` + `failures`).
+
 ## Chức năng & cỡ mẫu
 
 | Chức năng | Endpoint | Số sample | Ghi chú |
