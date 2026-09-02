@@ -254,7 +254,12 @@ async def run_live(base_url: str, limit: int) -> Scorer:
     timeout = httpx.Timeout(90.0, connect=10)
 
     async def post(client, path, payload):
-        r = await client.post(base_url + path, json=payload, timeout=timeout)
+        # A single slow LLM turn (ReadTimeout) or connect error must NOT abort the whole
+        # run before write_summary — count it as a failed check via a sentinel status 0.
+        try:
+            r = await client.post(base_url + path, json=payload, timeout=timeout)
+        except Exception as exc:
+            return 0, {"_error": type(exc).__name__}
         try:
             return r.status_code, r.json()
         except Exception:
@@ -271,7 +276,9 @@ async def run_live(base_url: str, limit: int) -> Scorer:
     async with httpx.AsyncClient() as client:
         # ---- ACCURACY: replay chat.jsonl qua endpoint mới, so với /ai/chat cũ ----
         chat_samples = []
-        cs_path = SAMPLES_DIR.parent / "samples" / "chat.jsonl"
+        # The shared chat corpus lives at evals/samples/chat.jsonl (EVALS_ROOT), NOT under
+        # this suite's own samples/ dir — resolving it wrong silently skipped accuracy scoring.
+        cs_path = EVALS_ROOT / "samples" / "chat.jsonl"
         if cs_path.is_file():
             chat_samples = [json.loads(l) for l in cs_path.read_text(encoding="utf-8").splitlines() if l.strip()][:limit]
         new_pass = old_pass = 0
