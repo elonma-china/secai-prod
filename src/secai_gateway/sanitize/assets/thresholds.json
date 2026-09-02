@@ -1,6 +1,5 @@
 {
-  "injection": 0.45,
-  "pii": 0.2,
-  "offtopic": 0.661,
-  "_note_injection": "Data-driven, updated 2026-09-01 (round 2) after adding 8 more benign hard-negative templates targeting the specific residual pattern found in round 1: imperative audit phrasing ending in '...bypass'/'...khai thác' after 'liệt kê/chỉ ra các điểm dính {vuln}' (scripts/build_sanitize_dataset.py HN_AUDIT_VI/EN, +58 rows). Held-out sweep on evals/sanitize/{overdefense,attacks}.jsonl (scripts/eval_sanitize.py): min true-attack injection score is now 0.600, max benign audit-imperative score is 0.362 — a 0.24 margin. At 0.45 (midpoint), over-defense false positives are 0/211 (was 6/211 at the round-1 threshold 0.35) with injection recall still 36/36=100%. All 11 real KPI-bench false positives PASS (max inj 0.176). Round 1 (this session, earlier) had already improved the shipped-at-the-time head from 0.6 stopgap: recall 94.4%->100%, FP 3.8%->2.8%. This round closes the remaining 6/211. offtopic threshold auto-tuned in-distribution by scripts/train_sanitize_head.py (not swept against a held-out offtopic set — no dedicated set exists yet); offtopic_decision precision/recall on the training test split is 0.99/0.96, not worse than the prior head. Retrain offline via: HF_HUB_OFFLINE=1 python scripts/train_sanitize_head.py --embed st --model DuyTa/sec-embedding --head mixed"
+  "injection": 0.6,
+  "pii": 0.3,
+  "offtopic": 0.34
 }
