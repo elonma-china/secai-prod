@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 _FENCE_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.S)
 _HIST_KEEP = 3          # số observation gần nhất đưa vào prompt
 _HIST_SLICE = 800       # ký tự mỗi observation trong prompt
+_HUMAN_ASK_THRESHOLD = 5  # bước không có oracle success → system tự pause và hỏi user
 
 
 @dataclass
@@ -143,6 +144,89 @@ def _subst(value: Any, nonce: str, cmd: str) -> Any:
     return value
 
 
+def _system_question(cve: str, host: str, port: str | None, history: list[Observation],
+                     skill: Any) -> tuple[str, list[str]]:
+    """System tự sinh câu hỏi khi bị stuck — không phụ thuộc LLM, dựa hoàn toàn vào context."""
+    tried_paths = []
+    has_401 = has_403 = has_ssl_error = False
+    for o in history:
+        if o.tool == "http_request":
+            p = o.meta.get("path", "")
+            st = int(o.meta.get("status") or 0)
+            if p and p not in tried_paths:
+                tried_paths.append(p)
+            if st == 401:
+                has_401 = True
+            if st == 403:
+                has_403 = True
+        if not o.ok and "SSL" in (o.text or ""):
+            has_ssl_error = True
+
+    tried_str = ", ".join(tried_paths[-5:]) if tried_paths else "chưa có"
+    target = f"{host}:{port or 80}"
+
+    # Câu hỏi cố định theo CVE/vuln_class — rõ ràng, có thể trả lời
+    vc = str(getattr(skill, "vuln_class", "") or "").lower()
+    if "shellshock" in cve.lower() or "6271" in cve:
+        question = (
+            f"Lane1 đã thử {len(tried_paths)} đường dẫn trên {target} ({tried_str}) "
+            f"nhưng chưa tìm được CGI endpoint của Shellshock.\n"
+            f"Để tiếp tục cần biết: đường dẫn CGI script nào đang chạy bash?"
+        )
+        suggestions = [
+            "/victim.cgi — script CGI chạy bash (vulhub default)",
+            "/cgi-bin/victim.cgi",
+            "/cgi-bin/bash",
+            "Đường dẫn khác?",
+        ]
+    elif "12615" in cve or "tomcat" in vc:
+        question = (
+            f"Lane1 đã thử {len(tried_paths)} path trên Tomcat {target} ({tried_str}) "
+            f"nhưng PUT chưa thành công.\n"
+            f"Để upload JSP cần: webapps root nào để PUT? Cần trailing slash /shell.jsp/ không?"
+        )
+        suggestions = [
+            "PUT /shell.jsp/ — trailing slash bypass Tomcat readonly filter",
+            "PUT /shell.jsp%20 — URL-encoded space bypass",
+            "PUT /uploads/shell.jsp/ — nếu có thư mục uploads",
+        ]
+    elif "15107" in cve or "webmin" in vc:
+        question = (
+            f"Lane1 thử {target} nhưng gặp lỗi " +
+            ("SSL certificate" if has_ssl_error else "không tìm được endpoint") + ".\n"
+            f"Webmin thường chạy HTTPS. Endpoint exploit là /password_change.cgi."
+        )
+        suggestions = [
+            "HTTPS + POST /password_change.cgi với user=root|id|",
+            "Dùng tls=true trong http_request args",
+            "Port 10000 (Webmin default)",
+        ]
+    elif "sqli" in vc or has_401:
+        question = (
+            f"Lane1 đã thử {tried_str} trên {target}.\n"
+            + ("Cần authentication (401 detected). " if has_401 else "")
+            + "Endpoint SQLi inject ở đâu? Có tham số cụ thể không?"
+        )
+        suggestions = [
+            "Chỉ rõ URL + tham số SQLi (vd: /api/users?id=1)",
+            "Header auth nếu cần (Bearer/Cookie)",
+        ]
+    else:
+        question = (
+            f"Lane1 đã thử {len(tried_paths)} đường dẫn trên {target} ({tried_str}) "
+            f"nhưng chưa khai thác được {cve}.\n"
+            f"Cần thêm thông tin để tiếp tục:"
+        )
+        suggestions = [
+            "Endpoint/path nào bị vulnerable?",
+            "HTTP hay HTTPS? (tls=true/false)",
+            "Cần authentication không? (header/cookie)",
+            "Có payload hoặc PoC template không?",
+        ]
+
+    return question, suggestions
+
+
 def _hist_text(history: list[Observation]) -> str:
     out = []
     for o in history[-_HIST_KEEP:]:
@@ -165,37 +249,19 @@ def build_react_prompt(cve: str, host: str, port: str | None, skill: Any, state:
         "run_cmd": '{"shell"} — chạy lệnh tuỳ ý trong sandbox (payload/msf); output trả về',
     }
     menu = "\n".join(f'  - {t}: {tools_desc[t]}' for t in tools_desc if t in allowed)
-    # Gợi ý ask_user dựa trên total_steps (không bao giờ reset, khác với stuck reset mỗi ok-response)
-    _ts = state.total_steps
-    if _ts >= 5:
-        ask_user_line = (
-            f'\n  - ask_user: {{"question","suggestions"(list)}} — ĐÃ {_ts} BƯỚC MÀ CHƯA KHAI THÁC ĐƯỢC.'
-            ' PHẢI DÙNG ask_user NGAY ĐỂ HỎI NGƯỜI DÙNG endpoint/vector/protocol chính xác.'
-            ' Đừng thử thêm nữa — hỏi trước, hành động sau.'
-        )
-    elif _ts >= 3:
-        ask_user_line = (
-            '\n  - ask_user: {"question","suggestions"(list)} — hỏi người dùng khi không xác định'
-            ' được endpoint/vector/protocol sau nhiều bước thất bại'
-        )
-    else:
-        ask_user_line = (
-            '\n  - ask_user: {"question","suggestions"(list)} — hỏi người dùng khi hoàn toàn bí'
-        )
     templates = "\n".join(f"  - {p}" for p in (skill.payload_templates or [])) or "  (không có)"
     return (
         f"Bạn là chuyên gia khai thác, đang tấn công lab {cve} tại {host}:{port or 80} "
-        f"(phase HIỆN TẠI = {state.phase.value}, bước đã chạy = {state.total_steps}).\n"
+        f"(phase HIỆN TẠI = {state.phase.value}).\n"
         f"BỐI CẢNH LỖ HỔNG ({skill.vuln_class}): {skill.context}\n"
         f"CHUỖI GỢI Ý: {'; '.join(skill.suggested_sequence)}\n"
         f"TEMPLATE PAYLOAD (thay {{NONCE}}={nonce}, {{CMD}}={cmd} tự động):\n{templates}\n"
         f"THÀNH CÔNG khi: {skill.oracle_hint}\n\n"
-        f"TOOL ĐƯỢC PHÉP (phase này):\n{menu}{ask_user_line}\n\n"
+        f"TOOL ĐƯỢC PHÉP (phase này):\n{menu}\n\n"
         f"QUAN SÁT GẦN NHẤT:\n{_hist_text(history)}\n\n"
         "NHIỆM VỤ: chọn HÀNH ĐỘNG TIẾP THEO. IN RA ĐÚNG MỘT object JSON, KHÔNG prose/markdown:\n"
         '{"thought":"<1 câu>","tool":"<tên tool>","args":{...},"done":false}\n'
-        "Để chứng minh RCE, hãy chèn `echo NONCE; <lệnh>` (hoặc dùng {NONCE}/{CMD}) rồi đọc lại trong response.\n"
-        f"{'⚠ ĐÃ ' + str(state.total_steps) + ' BƯỚC: nếu chưa biết endpoint chính xác → PHẢI dùng ask_user ngay, không thử tiếp.' if state.total_steps >= 5 else 'Nếu sau 5 bước chưa biết endpoint → dùng ask_user.'}"
+        "Để chứng minh RCE, hãy chèn `echo NONCE; <lệnh>` (hoặc dùng {NONCE}/{CMD}) rồi đọc lại trong response."
     )
 
 
@@ -288,6 +354,30 @@ async def run_lane1(settings: Any, runner: Any, *, cve: str, host: str, port: st
         if time.monotonic() > deadline:
             yield _step(idx, f"lane1#{step}", "done", "hết thời gian tổng (total_timeout)")
             break
+
+        # ─── System-level human-in-the-loop trigger (tất định, không phụ thuộc LLM) ───
+        # Sau _HUMAN_ASK_THRESHOLD bước mà chưa có oracle success → system tự pause và hỏi user.
+        if state.total_steps >= _HUMAN_ASK_THRESHOLD:
+            question, suggestions = _system_question(cve, host, port, history, skill)
+            yield _step(idx, f"lane1#{step}", "done",
+                        f"[system] {state.total_steps} bước chưa khai thác → hỏi user")
+            from .lane1_state import PausedState
+            outcome.paused = True
+            outcome.question = question
+            outcome.suggestions = suggestions
+            outcome.paused_state = PausedState(
+                run_id=run_id, question=question, suggestions=suggestions,
+                history=list(history), phase_state=state, step=step,
+                nonce=nonce, seen=set(seen),
+                cve=cve, host=host, port=port,
+                vuln_class=vuln_class, success_signal=success_signal,
+                command=cmd, max_steps=max_steps,
+                step_timeout_s=step_timeout_s, total_timeout_s=total_timeout_s,
+                base_index=idx,
+            )
+            break
+        # ─────────────────────────────────────────────────────────────────────────────────
+
         state.step = step
         allowed = allowed_tools(state)
         prompt = build_react_prompt(cve, host, port, skill, state, history, allowed, nonce, cmd)
