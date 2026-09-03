@@ -830,8 +830,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         Returns ``{"evidence", "cve_id", "cve_known"}``."""
         from ..poc.inject import has_synthesis_evidence
         from ..poc.prefetch import (
-            set_session_coverage, set_session_cve_known, set_session_real_code_evidence,
-            set_session_synthesis_evidence,
+            exploit_relevance_ok, set_session_coverage, set_session_cve_known,
+            set_session_real_code_evidence, set_session_synthesis_evidence,
         )
         from ..retrieval.neo4j import cve_exists_in_kb
         cve_id = extract_cve_id(prompt)
@@ -851,6 +851,19 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id))
             else:
                 report, cve_known = await prefetch_evidence(poc, ledger, prompt, run_id), False
+                # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt
+                # (no CVE id) that maps to no sufficiently-relevant KB entry is treated as
+                # "nothing found" — so the exploit path does not build a PoC from a weak
+                # keyword match (the "nhập linh tinh vẫn ra PoC" gap). Inert by default; a
+                # named CVE keeps using cve_known above. Fail-open (None → not gated).
+                if await exploit_relevance_ok(prompt) is False:
+                    logger.info("exploit prefetch gated: low KB relevance for free-text prompt")
+                    set_session_coverage(session_id, "empty")
+                    set_session_cve_known(session_id, False)
+                    set_session_synthesis_evidence(session_id, False)
+                    set_session_real_code_evidence(session_id, False)
+                    return {"evidence": [], "cve_id": None, "cve_known": False,
+                            "coverage": "empty", "gated": "low_relevance"}
             cov = report.get("coverage") or "failed"
             if cov not in ("enough", "empty", "partial", "failed"):
                 cov = "failed"
