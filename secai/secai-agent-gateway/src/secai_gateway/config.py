@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     reranker_api_key: str = ""
 
+    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+    # ONLY the /ai/exploit PoC-generation path (poc/prefetch.py → routes.exploit_prefetch)
+    # uses this — chat/report/statistical are untouched. For a FREE-TEXT prompt (no CVE id),
+    # it embeds the prompt, retrieves KB candidates and takes the reranker's top relevance_score
+    # as a confidence signal; below the floor → the prompt maps to no real/known vulnerability,
+    # so prefetch reports "nothing found" instead of building a PoC from a weak keyword match
+    # (the "user nhập linh tinh vẫn ra PoC tự tin" gap). A NAMED CVE keeps using cve_exists_in_kb.
+    # Measured 2026-09-02: in-KB ~1.0, off-topic ~0.0 (clean at 0.5). No reranker / any error →
+    # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
+    exploit_relevance_gate_enabled: bool = False
+    exploit_rerank_min_score: float = 0.5
+
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
