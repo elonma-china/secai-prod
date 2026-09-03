@@ -323,6 +323,14 @@ def grade_translate(sample: dict, http_status: int, body: dict, elapsed: float) 
             _ok(g, "target_language")
         else:
             _fail(g, "target_language", "target=en nhưng output vẫn còn nhiều dấu tiếng Việt")
+    # Customer fix (2026-09): credentials/URLs/hashes must survive the translation verbatim.
+    literals = sample.get("literals") or []
+    if literals:
+        missing = [lit for lit in literals if lit not in out]
+        if missing:
+            _fail(g, "preserved_literals", f"mất literal (tài khoản/mật khẩu/URL...): {missing}")
+        else:
+            _ok(g, "preserved_literals")
     return g
 
 

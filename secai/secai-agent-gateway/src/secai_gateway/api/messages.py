@@ -7,6 +7,7 @@ import re
 from typing import Any
 
 from ..security import require_public_input
+from .literal_mask import mask_literals
 from .schemas import LegacyRequest
 
 
@@ -14,19 +15,36 @@ def _field(body: LegacyRequest, name: str) -> Any:
     return (body.model_dump() or {}).get(name)
 
 
-def translate_prompt(body: LegacyRequest) -> str:
-    text = require_public_input(body.supplied_text())
-    # `language` is the TARGET language in the FE contract ("dịch sang <language>"), so it
-    # falls back into `tgt` — NOT `src`. (Previously it was OR'd into `src`, which silently
-    # dropped the caller's target: e.g. English text + language="vi" hit the auto-detect
-    # branch and echoed the English back untranslated.)
-    src = _field(body, "source_lang")
-    tgt = _field(body, "target_lang") or _field(body, "language")
+def translate_langs(body: LegacyRequest) -> tuple[Any, Any]:
+    """Resolve (source, target) languages from the request. `language` is the TARGET in the
+    FE contract ("dịch sang <language>"), so it falls back into `tgt` — NOT `src`.
+    (Previously it was OR'd into `src`, which silently dropped the caller's target: e.g.
+    English text + language="vi" hit the auto-detect branch and echoed English back.)"""
+    return _field(body, "source_lang"), (_field(body, "target_lang") or _field(body, "language"))
+
+
+def build_translate_prompt(text: str, src: Any, tgt: Any) -> tuple[str, list[str]]:
+    """Mask literals in ``text`` and wrap it in the translate instruction for (src, tgt).
+
+    Returns ``(prompt, literals)``. Literal spans (credentials, tokens, URLs, code, hashes)
+    are masked to ``⟦L{i}⟧`` placeholders BEFORE the model — the caller (routes.translate/*)
+    restores them via ``unmask_literals`` after generation, so the model can neither reword
+    nor drop them. Masking also strips every secret pattern the input guard would 422 on, so
+    — unlike the other endpoints — translate does NOT call ``require_public_input``:
+    credential-bearing text is translatable and the secrets stay server-side.
+    """
+    masked, literals = mask_literals(text)
     if src and tgt:
-        return f"Dịch văn bản sau từ {src} sang {tgt}:\n\n{text}"
+        return f"Dịch văn bản sau từ {src} sang {tgt}:\n\n{masked}", literals
     if tgt:
-        return f"Dịch văn bản sau sang {tgt}:\n\n{text}"
-    return f"Dịch văn bản sau (tự nhận diện ngôn ngữ nguồn; Việt→Anh hoặc Anh→Việt):\n\n{text}"
+        return f"Dịch văn bản sau sang {tgt}:\n\n{masked}", literals
+    return f"Dịch văn bản sau (tự nhận diện ngôn ngữ nguồn; Việt→Anh hoặc Anh→Việt):\n\n{masked}", literals
+
+
+def translate_prompt(body: LegacyRequest) -> tuple[str, list[str]]:
+    """Single-chunk convenience wrapper: build the prompt for the whole supplied text."""
+    src, tgt = translate_langs(body)
+    return build_translate_prompt(body.supplied_text(), src, tgt)
 
 
 def report_prompt(body: LegacyRequest) -> str:

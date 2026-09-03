@@ -171,6 +171,52 @@ async def test_secrets_are_rejected_before_runner() -> None:
     assert not fake.calls
 
 
+@pytest.mark.asyncio
+async def test_translate_masks_secrets_instead_of_rejecting() -> None:
+    """Unlike /ai/chat, /ai/translate must TRANSLATE credential-bearing text (not 422):
+    the value is masked out of the model prompt yet restored verbatim in the output, so
+    the customer's accounts/passwords survive and the secret never reaches the runner."""
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        resp = await client.post("/ai/translate",
+                                 json={"text": "Đăng nhập với password=super-secret-token-value", "target_lang": "en"})
+    assert resp.status_code == 200
+    # secret restored verbatim in the user-facing translation …
+    assert "super-secret-token-value" in resp.json()["translated_text"]
+    # … but never sent to the model (the recorded prompt is masked)
+    assert fake.calls, "runner should have been invoked"
+    assert "super-secret-token-value" not in fake.calls[0][1]
+    assert "⟦L0⟧" in fake.calls[0][1]
+
+
+@pytest.mark.asyncio
+async def test_translate_chunks_long_input_preserving_literals_across_chunks() -> None:
+    """A long document is split into several chunks (so no single turn can truncate the
+    tail); every chunk is translated and rejoined, and credentials/IPs survive verbatim
+    across the whole document. One runner call per chunk, none carrying a raw secret."""
+    fake = FakeRunner()
+    paras = [
+        f"Đoạn phân tích số {i}: máy chủ tại địa chỉ 10.0.0.{i} tồn tại mật khẩu: Secret{i}Pass "
+        "cần được thay đổi ngay lập tức, và đây là phần mô tả bổ sung khá dài nhằm đẩy tổng độ "
+        "dài của văn bản vượt qua ngưỡng chia khối để kích hoạt cơ chế chunking khi kiểm thử."
+        for i in range(40)
+    ]
+    text = "\n\n".join(paras)
+    assert len(text) > 6000  # exceeds the default chunk budget → must split
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        resp = await client.post("/ai/translate", json={"text": text, "target_lang": "en"})
+    assert resp.status_code == 200
+    body = resp.json()
+    nchunks = body["metadata"]["chunks"]
+    assert nchunks >= 2
+    out = body["translated_text"]
+    for i in range(40):
+        assert f"10.0.0.{i}" in out          # every IP marker survived (no dropped middle)
+        assert f"Secret{i}Pass" in out       # every password value survived verbatim
+    assert len(fake.calls) == nchunks        # exactly one model call per chunk
+    assert all("Secret" not in prompt for _p, prompt, _s in fake.calls)  # secrets masked out
+
+
 class FailingRunner:
     """A runner whose stream dies mid-run — models the live 'session not found' case."""
 

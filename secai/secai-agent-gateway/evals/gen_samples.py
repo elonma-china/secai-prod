@@ -219,15 +219,42 @@ TRANSLATE_PAIRS = [
 ]
 
 
+# Credential/literal-bearing samples (both directions). `literals` = spans that MUST
+# survive verbatim — the grader fails the sample if any is dropped. Targets the 2026-09
+# customer report: "tinh chỉnh quá nhiều → mất tài khoản/mật khẩu".
+TRANSLATE_LITERAL_SAMPLES = [
+    {"category": "literal_preservation", "source_lang": "vi", "target_lang": "en",
+     "message": "Đăng nhập vào máy chủ với tài khoản: admin và mật khẩu: P@ssw0rd!2024 rồi báo lại.",
+     "literals": ["admin", "P@ssw0rd!2024"]},
+    {"category": "literal_preservation", "source_lang": "en", "target_lang": "vi",
+     "message": "Log in with username: root and password: Str0ng#Pass2024, then rotate the key.",
+     "literals": ["root", "Str0ng#Pass2024"]},
+    {"category": "literal_preservation", "source_lang": "vi", "target_lang": "en",
+     "message": "Gửi yêu cầu tới http://10.10.0.5:8080/api/login để kiểm tra lỗ hổng CVE-2024-1234.",
+     "literals": ["http://10.10.0.5:8080/api/login", "CVE-2024-1234"]},
+    {"category": "literal_preservation", "source_lang": "en", "target_lang": "vi",
+     "message": "Run `curl -X POST http://target/exec` and capture the token abcDEF1234567890xyz.",
+     "literals": ["`curl -X POST http://target/exec`", "abcDEF1234567890xyz"]},
+    {"category": "literal_preservation", "source_lang": "vi", "target_lang": "en",
+     "message": "Khóa API là sk_live_ABCDEFGHIJKLMNOP1234, tuyệt đối không để lộ ra ngoài.",
+     "literals": ["sk_live_ABCDEFGHIJKLMNOP1234"]},
+    {"category": "literal_preservation", "source_lang": "en", "target_lang": "vi",
+     "message": "The MD5 hash 5f4dcc3b5aa765d61d8327deb882cf99 confirms the password file leaked.",
+     "literals": ["5f4dcc3b5aa765d61d8327deb882cf99"]},
+]
+
+
 def gen_translate_samples(n: int, rng: random.Random) -> list[dict]:
+    # Literal-preservation cases first so even a small --limit run exercises the customer
+    # fix; then the rotating explicit_target VI↔EN pairs for the 70-85% adequacy baseline.
+    base = list(TRANSLATE_LITERAL_SAMPLES) + [
+        {"category": "explicit_target", "message": text, "source_lang": src, "target_lang": tgt}
+        for text, src, tgt in TRANSLATE_PAIRS
+    ]
     samples = []
     i = 0
     while len(samples) < n:
-        text, src, tgt = TRANSLATE_PAIRS[i % len(TRANSLATE_PAIRS)]
-        samples.append({
-            "id": f"translate-{len(samples):03d}", "category": "explicit_target",
-            "message": text, "source_lang": src, "target_lang": tgt,
-        })
+        samples.append({"id": f"translate-{len(samples):03d}", **base[i % len(base)]})
         i += 1
     return samples[:n]
 
