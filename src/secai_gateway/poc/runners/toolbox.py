@@ -115,8 +115,12 @@ SCOPED_TOOLS: dict[str, tuple[Callable[..., Any], bool]] = {
 
 
 # ── orchestration ─────────────────────────────────────────────────────────────
-async def run_tool(settings: Any, tool: str, params: dict[str, Any], *, run_id: str) -> dict[str, Any]:
-    """Scoped tool: gated `verify_enabled`, authz target (tool cần target), argv do gateway dựng."""
+async def run_tool(settings: Any, tool: str, params: dict[str, Any], *, run_id: str,
+                   net: str | None = None) -> dict[str, Any]:
+    """Scoped tool: gated `verify_enabled`, authz target (tool cần target), argv do gateway dựng.
+    `net` override docker network (vd 'host' cho lane1 chạm lab publish 127.0.0.1:180xx)."""
+    from dataclasses import replace
+
     from ..backend import PocBadRequest, PocForbidden          # lazy: tránh vòng import
     from ..verify import _exec_cfg, target_allowed
     if not getattr(settings, "verify_enabled", False):
@@ -129,8 +133,11 @@ async def run_tool(settings: Any, tool: str, params: dict[str, Any], *, run_id: 
         target = str(params.get("target") or "")
         if not target_allowed(settings, target):
             raise PocForbidden(f"Target '{target}' ngoài allowlist (VERIFY_ALLOWED_TARGETS/VERIFY_ALLOW_ALL)")
+    cfg = _exec_cfg(settings)
+    if net:
+        cfg = replace(cfg, net=net)
     try:
-        return await func(_exec_cfg(settings), params, run_id)
+        return await func(cfg, params, run_id)
     except ValueError as exc:
         raise PocBadRequest(str(exc)) from exc
 

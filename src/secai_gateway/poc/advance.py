@@ -17,6 +17,8 @@ import re
 from typing import Any, AsyncIterator
 from urllib.parse import urlparse
 
+from ._events import _log, _step
+from .backend import PocNotFound
 from .kt_exploit import run_kt_exploit
 
 logger = logging.getLogger(__name__)
@@ -56,16 +58,6 @@ def parse_target(target: str) -> tuple[str, str | None]:
         if right.isdigit():
             return host, right
     return raw.split("/", 1)[0], None
-
-
-def _step(index: int, name: str, status: str, detail: str = "",
-          verdict: str | None = None) -> dict[str, Any]:
-    return {"type": "step", "index": index, "name": name, "status": status,
-            "detail": detail, "verdict": verdict}
-
-
-def _log(line: str, stream: str = "stdout") -> dict[str, Any]:
-    return {"type": "log", "stream": stream, "line": line}
 
 
 async def _probe(host: str, port: str | None, timeout: float = 5.0) -> bool:
@@ -157,34 +149,71 @@ async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
                 verdict, engine = "exploit_success", "primitive"
                 result = {"scan": {"output": pres.output}}
 
-    # 4 — vòng exploit → verify → sửa (fallback pocsuite khi primitive chưa thắng)
-    for i in range(1, max_steps + 1):
-        if verdict == "exploit_success":
-            break
-        yield _step(4, f"exploit#{i}", "running", f"command=`{command}`")
-        try:
-            result = await run_kt_exploit(settings, ip=host, cve=cve, port=port,
-                                          command=command, use_proxy=bool(getattr(req, "use_proxy", True)),
-                                          run_id=run_id)
-        except Exception as exc:
-            yield _step(4, f"exploit#{i}", "failed", f"engine lỗi: {exc}")
-            verdict = "error"
-            break
-        for line in ((result.get("scan") or {}).get("output") or "").splitlines():
-            if line.strip():
-                yield _log(line)
-        verdict = result.get("exploit_verdict") or "inconclusive"
-        yield _step(4, f"verify#{i}", "done", f"verdict={verdict}", verdict=verdict)
-        if verdict == "exploit_success":
-            break
-        # repair: LLM đề xuất command khác; trùng/None → dừng (tránh phí vòng)
-        nxt = await _suggest_command(runner, cve, command, (result.get("scan") or {}).get("output") or "")
-        if not nxt or nxt in seen_cmds:
-            yield _step(4, f"repair#{i}", "done", "không có hướng sửa mới — dừng.")
-            break
-        seen_cmds.add(nxt)
-        yield _step(4, f"repair#{i}", "done", f"đổi command → `{nxt}`")
-        command = nxt
+    # Cổng lane1 (ReAct kiểu hacker) + phát hiện "CVE KHÔNG có trong pocsuite".
+    lane1_on = bool(getattr(settings, "lane1_enabled", False))
+    pocsuite_on = bool(getattr(settings, "poc_exploit_enabled", False))
+    extra = getattr(req, "extra", None) or {}
+    route_lane1 = False
+    # Fast-path: CVE mới (không primitive) + engine pocsuite TẮT → vào thẳng lane1, tránh 404 vô ích.
+    if verdict != "exploit_success" and not has_primitive(cve) and not pocsuite_on and lane1_on:
+        route_lane1 = True
+
+    # 4 — vòng exploit → verify → sửa (pocsuite). PocNotFound (engine 404) = không có module cho CVE
+    # → KHÔNG coi là lỗi; chuyển sang lane1. Chỉ chạy khi engine bật.
+    if pocsuite_on:
+        for i in range(1, max_steps + 1):
+            if verdict == "exploit_success":
+                break
+            yield _step(4, f"exploit#{i}", "running", f"command=`{command}`")
+            try:
+                result = await run_kt_exploit(settings, ip=host, cve=cve, port=port,
+                                              command=command, use_proxy=bool(getattr(req, "use_proxy", True)),
+                                              run_id=run_id)
+            except PocNotFound:
+                yield _step(4, f"exploit#{i}", "skipped",
+                            "engine không có module cho CVE — chuyển lane1")
+                route_lane1 = lane1_on
+                break
+            except Exception as exc:
+                yield _step(4, f"exploit#{i}", "failed", f"engine lỗi: {exc}")
+                verdict = "error"
+                break
+            for line in ((result.get("scan") or {}).get("output") or "").splitlines():
+                if line.strip():
+                    yield _log(line)
+            verdict = result.get("exploit_verdict") or "inconclusive"
+            yield _step(4, f"verify#{i}", "done", f"verdict={verdict}", verdict=verdict)
+            if verdict == "exploit_success":
+                break
+            # repair: LLM đề xuất command khác; trùng/None → dừng (tránh phí vòng)
+            nxt = await _suggest_command(runner, cve, command, (result.get("scan") or {}).get("output") or "")
+            if not nxt or nxt in seen_cmds:
+                yield _step(4, f"repair#{i}", "done", "không có hướng sửa mới — dừng.")
+                break
+            seen_cmds.add(nxt)
+            yield _step(4, f"repair#{i}", "done", f"đổi command → `{nxt}`")
+            command = nxt
+
+    # 5 — lane1 (ReAct recon→exploit kiểu hacker): CVE không có primitive/pocsuite module.
+    if route_lane1 and lane1_on and verdict != "exploit_success":
+        from .lane1 import Lane1Outcome, run_lane1
+        lane1_steps = max(int(max_steps or 0), int(getattr(settings, "lane1_max_steps", 12) or 12))
+        outcome = Lane1Outcome()
+        async for ev in run_lane1(
+                settings, runner, cve=cve, host=host, port=port,
+                vuln_class=str(extra.get("vuln_class") or ""),
+                success_signal=(extra.get("success_signal") or None),
+                command=command, base_index=5, run_id=run_id,
+                max_steps=lane1_steps,
+                step_timeout_s=int(getattr(req, "step_timeout_s", 180) or 180),
+                total_timeout_s=int(getattr(req, "total_timeout_s", 900) or 900),
+                outcome=outcome):
+            yield ev
+        verdict = outcome.verdict or verdict
+        engine = "lane1"
+        if outcome.transcript_tail:
+            result = {"scan": {"output": outcome.transcript_tail}}
+        command = outcome.final_action or command
 
     ok = verdict == "exploit_success"
     yield {"type": "final", "ok": ok, "verdict": verdict,

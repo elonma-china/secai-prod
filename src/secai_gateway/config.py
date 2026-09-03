@@ -140,6 +140,18 @@ class Settings(BaseSettings):
     poc_exploit_timeout_s: int = 180
     poc_exploit_node_name: str = "secai-gateway"
 
+    # ── lane1 (ReAct kiểu hacker) cho exploit-advance ────────────────────────────
+    # TẮT mặc định. Khi CVE KHÔNG có primitive tất định VÀ engine pocsuite không có module
+    # (404) → thay vì fail, chạy vòng ReAct: LLM (Cyber-F1, JSON có cấu trúc) suy nghĩ → chọn
+    # tool → chạy trong sandbox Docker → đọc observation → lặp → oracle nonce/uid=. Không nới
+    # authz (vẫn dùng verify_allow_all/verify_allowed_targets); tool sandbox vẫn theo
+    # verify_enabled, run_cmd vẫn theo exec_enabled.
+    lane1_enabled: bool = False
+    lane1_max_steps: int = 12            # trần vòng lặp (req.max_steps lớn hơn thì lấy req)
+    lane1_net: str = "host"             # docker net cho tool sandbox (lab publish 127.0.0.1:180xx)
+    lane1_use_raw_cmd: bool = True       # cho phép run_cmd (payload/msf tùy ý) khi exec_enabled
+    lane1_http_inprocess: bool = True    # http_request qua stdlib in-process (vs curl sandbox)
+
     # ── Bughunt / BugHunter recon engine ───────────────────────────────────────
     # Path to claude-bug-bounty clone (empty = auto sibling of gateway / BUGBOUNTY_ROOT).
     bugbounty_root: str = ""
