@@ -32,7 +32,9 @@ from ..security import (
     sanitize_output_language,
 )
 from ..state.conversations import derive_title
-from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
+from .literal_mask import unmask_literals
+from .messages import build_translate_prompt, parse_statistical, report_prompt, statistical_prompt, translate_langs
+from .text_chunk import split_for_translation
 from .schemas import (
     ConversationChatRequest,
     CreateConversationRequest,
@@ -611,16 +613,78 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 logger.exception("delete_conversation session cleanup failed")
         return {"deleted": True, "conversation_id": conversation_id}
 
+    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
+        """Split the input and enforce the max-chunk cap (413) so one request can't fan out
+        into unbounded model calls. Returns (chunks, src, tgt)."""
+        src, tgt = translate_langs(body)
+        chunks = split_for_translation(body.supplied_text(), state.settings.translate_chunk_chars)
+        if len(chunks) > state.settings.translate_max_chunks:
+            raise HTTPException(413, f"Văn bản quá dài để dịch (>{state.settings.translate_max_chunks} "
+                                     "khối). Vui lòng chia nhỏ yêu cầu.")
+        return chunks, src, tgt
+
+    async def translate_assemble(body: LegacyRequest) -> tuple[str, dict[str, Any]]:
+        """Translate the whole input, chunking long text so no single model turn has to emit
+        a translation past its output-token cap (which would truncate). Each chunk runs the
+        full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
+        separators. complete() already sanitizes; we unmask each chunk's literals here."""
+        chunks, src, tgt = _translate_chunks(body)
+
+        async def render(chunk_text: str) -> str:
+            prompt, literals = build_translate_prompt(chunk_text, src, tgt)
+            out, _meta = await complete("translate", body, prompt_override=prompt)
+            return unmask_literals(out, literals)
+
+        if len(chunks) == 1:
+            return await render(chunks[0][0]), base_meta("translate", None)
+
+        sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
+
+        async def render_bounded(chunk_text: str) -> str:
+            async with sem:
+                return await render(chunk_text)
+
+        outs = await asyncio.gather(*(render_bounded(c) for c, _ in chunks))
+        final = "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
+        meta = base_meta("translate", None)
+        meta["chunks"] = len(chunks)
+        return final, meta
+
     @app.post("/ai/translate")
     async def translate(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await complete("translate", body, prompt_override=translate_prompt(body))
+        text, metadata = await translate_assemble(body)
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
     @app.post("/ai/translate/stream")
     async def translate_stream(body: LegacyRequest) -> StreamingResponse:
-        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-            return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
-        return stream("translate", translate_prompt(body), None, build_final)
+        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
+
+        if len(chunks) <= 1:
+            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
+
+            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+                # Restore literals in the authoritative `final` event (token deltas may still
+                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
+                final = unmask_literals(final, literals)
+                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
+
+            return stream("translate", prompt, None, build_final)
+
+        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
+        # True token streaming is traded for guaranteed completeness (no truncated tail).
+        async def gen() -> AsyncIterator[bytes]:
+            try:
+                final, meta = await translate_assemble(body)
+            except Exception:  # provider/runtime failure → visible error, not a torn stream
+                logger.exception("chunked translate_stream failed")
+                final, meta = STREAM_ERROR_MESSAGE, base_meta("translate", None)
+                yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
+            yield sse_frame("token", {"delta": final})
+            yield sse_frame("final", {"content": final, "translation": final,
+                                      "translated_text": final, "metadata": meta})
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.post("/ai/generate-report")
     async def report(body: LegacyRequest) -> dict[str, Any]:
