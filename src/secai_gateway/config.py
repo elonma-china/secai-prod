@@ -148,6 +148,47 @@ class Settings(BaseSettings):
     # when linch compacts mid-run. Observational only — never changes the old /ai/chat stream.
     conversation_compaction_meta: bool = True
 
+    # ── Activity log → Elasticsearch (/logs) ──────────────────────────────────
+    # Every AI request (chat / conversations-chat / translate / report / statistical /
+    # exploit) is recorded as one Elasticsearch document: when, which server, which client
+    # IP + User-Agent, which function, the question and the answer, how long it took, and
+    # whether it errored or was blocked. Purely observational and FAIL-OPEN by construction:
+    # the sink never awaits the network on the request path and swallows every error, so a
+    # dead/slow/full Elasticsearch can only lose log lines — never break or slow down chat.
+    activity_log_enabled: bool = True
+    elasticsearch_url: str = "http://localhost:9200"
+    elasticsearch_username: str = ""            # only if xpack.security is enabled
+    elasticsearch_password: str = ""
+    activity_log_index: str = "secai-ai-logs"   # data stream name (ILM-managed)
+    activity_log_retention_days: int = 30
+    # Bounded queue + batching. The queue is the backpressure valve: when it fills (ES down
+    # or slower than the request rate) the newest record is dropped and counted rather than
+    # letting memory grow or the caller wait.
+    activity_log_queue_max: int = 10000
+    activity_log_batch_max: int = 200
+    activity_log_flush_interval_s: float = 1.0  # drives the ~1-2s realtime latency target
+    activity_log_timeout_s: float = 5.0
+    # Circuit breaker: after N consecutive failed flushes, stop calling ES for a cooldown
+    # instead of hammering a dead endpoint every second.
+    activity_log_breaker_threshold: int = 5
+    activity_log_breaker_cooldown_s: float = 30.0
+    # Hard cap per text field (a single pathological exploit report must not bloat the index).
+    activity_log_max_field_chars: int = 200_000
+    # Trust X-Forwarded-For for the client IP. True when behind a reverse proxy you control;
+    # False when clients reach the gateway directly (a client can forge the header).
+    activity_log_trust_proxy_headers: bool = True
+
+    # ── /logs viewer UI ───────────────────────────────────────────────────────
+    # The log viewer exposes conversation content verbatim, so it is password-gated and
+    # refuses to serve at all when no password is configured (fail-safe, never wide open).
+    logs_ui_enabled: bool = True
+    logs_ui_username: str = "admin"
+    logs_ui_password: str = ""                  # plaintext; or set logs_ui_password_sha256
+    logs_ui_password_sha256: str = ""           # preferred: sha256 hex of the password
+    logs_ui_session_secret: str = ""            # empty → random per boot (sessions die on restart)
+    logs_ui_session_hours: int = 12
+    logs_ui_cookie_secure: bool = False         # True when served over HTTPS
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

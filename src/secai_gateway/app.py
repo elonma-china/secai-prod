@@ -4,8 +4,10 @@ import logging
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
+from .activity import ActivityLogSink, register_logs_ui
 from .agent import CompletionRunner, LinchRunner
 from .api import configure_middleware, register_routes
 from .config import Settings, get_settings
@@ -24,6 +26,13 @@ class GatewayState:
         self.runner = runner or LinchRunner(self.settings.gateway_db_path)
         self.rate_limiter = FixedWindowRateLimiter()
         self.started_at = time.monotonic()
+        # Shared outbound HTTP client, opened by the lifespan. Also picked up by the input
+        # classifier, which already reads `getattr(state, "http_client", None)` and until now
+        # always found None and built a throwaway client per call.
+        self.http_client: httpx.AsyncClient | None = None
+        # Activity log. Constructed here but inert until `start()` runs in the lifespan, so
+        # unit tests (which never run the lifespan) do no I/O.
+        self.logsink = ActivityLogSink(self.settings)
 
 
 def create_app(runner: CompletionRunner | None = None) -> FastAPI:
@@ -40,7 +49,20 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
                                       getattr(state.settings, "embedding_model", ""))
             if warn:
                 logger.warning(warn)
+        # Activity log startup is best-effort: a missing/unreachable Elasticsearch must not
+        # stop the gateway from serving.
+        try:
+            state.http_client = httpx.AsyncClient(timeout=httpx.Timeout(10.0))
+            await state.logsink.start(state.http_client)
+        except Exception:
+            logger.warning("activity log: failed to start (continuing without it)",
+                           exc_info=True)
         yield
+        try:
+            await state.logsink.stop()
+        finally:
+            if state.http_client is not None:
+                await state.http_client.aclose()
 
     app = FastAPI(
         title="SECAI Agent Gateway",
@@ -53,6 +75,7 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     )
     configure_middleware(app, state)
     register_routes(app, state)
+    register_logs_ui(app, state)
     return app
 
 

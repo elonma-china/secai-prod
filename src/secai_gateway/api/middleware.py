@@ -9,6 +9,11 @@ from fastapi.responses import JSONResponse
 
 
 def route_limit(path: str) -> int:
+    if path.startswith("/logs"):
+        # Login is the one brute-forceable endpoint here — keep it tight. The rest of the
+        # viewer (search-as-you-type, facets, the realtime tail) would trip the default 15
+        # instantly, and it is already behind a session cookie.
+        return 5 if path == "/logs/api/login" else 600
     if path.endswith("/stream"):
         path = path[: -len("/stream")]  # rate-limit /ai/x/stream as /ai/x
     if path == "/ai/conversations/chat":

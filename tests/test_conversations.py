@@ -344,18 +344,28 @@ async def test_autotitle_never_clobbers_a_manual_rename_that_landed_first(monkey
     captured: list = []
     monkeypatch.setattr(routes_module, "_fire_and_forget", lambda coro: captured.append(coro))
 
+    def _take_autotitle() -> object:
+        """`_fire_and_forget` also carries the activity-log emit, so select the auto-title
+        job by name instead of by position, and close the rest (a captured-but-never-awaited
+        coroutine otherwise raises RuntimeWarning)."""
+        job = next(c for c in captured if "autotitle" in getattr(c, "__qualname__", ""))
+        for other in captured:
+            if other is not job:
+                other.close()
+        return job
+
     fake = ConvFakeRunner(title_reply="Tiêu đề LLM")
     async with _client(fake) as client:
         resp = await client.post("/ai/conversations/chat",
                                  json={"user_id": "u1", "message": "SQL injection là gì?"})
         cid = resp.json()["conversation_id"]
-        assert len(captured) == 1  # auto-title job scheduled but intentionally NOT yet run
+        autotitle_job = _take_autotitle()  # scheduled but intentionally NOT yet run
 
         renamed = await client.patch(f"/ai/conversations/{cid}",
                                      json={"user_id": "u1", "title": "Tên tôi tự đặt"})
         assert renamed.status_code == 200
 
-        await captured[0]  # now let the late-arriving auto-title job run
+        await autotitle_job  # now let the late-arriving auto-title job run
 
         got = (await client.get(f"/ai/conversations/{cid}", params={"user_id": "u1"})).json()
         assert got["title"] == "Tên tôi tự đặt"  # manual rename must win, NOT "Tiêu đề LLM"
