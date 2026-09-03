@@ -16,7 +16,7 @@ from typing import Any
 
 from . import primitives
 
-TOOL_MENU = frozenset({"http_request", "nmap", "sqlmap", "searchsploit", "gobuster", "run_cmd"})
+TOOL_MENU = frozenset({"http_request", "nmap", "sqlmap", "searchsploit", "gobuster", "run_cmd", "ask_user"})
 
 _MAX_OBS = 8000   # cắt observation thô (prompt sẽ cắt tiếp còn ngắn hơn)
 

@@ -51,6 +51,7 @@ from .schemas import (
     BughuntRequest,
     ExecRequest,
     ExploitAdvanceRequest,
+    ExploitAdvanceReplyRequest,
     ExploitRunRequest,
     LegacyRequest,
     ToolRequest,
@@ -1628,9 +1629,67 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     elif et == "log":
                         yield sse_frame("log", {"stream": ev.get("stream", "stdout"),
                                                 "line": ev.get("line", ""), "run_id": run_id})
+                    elif et == "question":
+                        # Human-in-the-loop: lane1 cần thêm thông tin từ user.
+                        # FE nhận event này → hiện input → gọi /ai/exploit-advance/reply khi user trả lời.
+                        final_seen = True   # Không phát error-final sau question
+                        yield sse_frame("question", {k: ev.get(k)
+                                                     for k in ("run_id", "question", "suggestions")})
                     await asyncio.sleep(0)  # flush từng event cho FE console
             except Exception:
                 logger.exception("exploit-advance stream failed target=%s cve=%s", body.target, body.cve)
+                yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
+                if not final_seen:
+                    yield sse_frame("final", {"ok": False, "verdict": "error",
+                                              "content": STREAM_ERROR_MESSAGE, "result": {},
+                                              "metadata": {"run_id": run_id, "profile": "exploit_advance"}})
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive",
+                     "X-Accel-Buffering": "no"})
+
+    @app.post("/ai/exploit-advance/reply")
+    async def exploit_advance_reply(body: ExploitAdvanceReplyRequest) -> StreamingResponse:
+        """Tiếp tục lane1 sau khi user cung cấp thông tin bổ sung (human-in-the-loop).
+        Nhận `run_id` từ event `question` + `answer` của user → resume stream."""
+        from ..poc.lane1_state import load as _load_lane1, clear as _clear_lane1
+        from ..poc.advance import run_exploit_advance_resumed
+
+        paused = _load_lane1(body.run_id)
+        if paused is None:
+            raise HTTPException(404, f"Session '{body.run_id}' không tìm thấy hoặc đã hết hạn (30 phút). "
+                                     "Hãy bắt đầu lại từ /ai/exploit-advance/stream.")
+        _clear_lane1(body.run_id)
+
+        _advance_authz(paused.host)
+        run_id = body.run_id
+        _audit(run_id, "exploit_advance_reply", f"{paused.cve}:{paused.host}",
+               {"user_id": body.user_id, "answer_len": len(body.answer)})
+
+        async def gen() -> AsyncIterator[bytes]:
+            final_seen = False
+            try:
+                async for ev in run_exploit_advance_resumed(
+                        state.settings, state.runner, paused, body.answer, run_id=run_id):
+                    et = ev.get("type")
+                    if et == "final":
+                        final_seen = True
+                        yield sse_frame("final", {k: ev.get(k) for k in
+                                                  ("ok", "verdict", "content", "result", "metadata")})
+                    elif et == "step":
+                        yield sse_frame("step", {k: ev.get(k) for k in
+                                                 ("index", "name", "status", "detail", "verdict")})
+                    elif et == "log":
+                        yield sse_frame("log", {"stream": ev.get("stream", "stdout"),
+                                                "line": ev.get("line", ""), "run_id": run_id})
+                    elif et == "question":
+                        final_seen = True
+                        yield sse_frame("question", {k: ev.get(k)
+                                                     for k in ("run_id", "question", "suggestions")})
+                    await asyncio.sleep(0)
+            except Exception:
+                logger.exception("exploit-advance reply stream failed run_id=%s", run_id)
                 yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
                 if not final_seen:
                     yield sse_frame("final", {"ok": False, "verdict": "error",

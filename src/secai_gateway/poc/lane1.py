@@ -47,6 +47,11 @@ class Lane1Outcome:
     transcript_tail: str = ""
     final_action: str = ""
     steps_to_success: int | None = None
+    # Human-in-the-loop: lane1 tạm dừng để hỏi user
+    paused: bool = False
+    question: str = ""
+    suggestions: list[str] = field(default_factory=list)
+    paused_state: Any = None        # PausedState — advance.py lưu vào lane1_state store
 
 
 # ───────────────────────────── parse JSON action ─────────────────────────────
@@ -160,19 +165,37 @@ def build_react_prompt(cve: str, host: str, port: str | None, skill: Any, state:
         "run_cmd": '{"shell"} — chạy lệnh tuỳ ý trong sandbox (payload/msf); output trả về',
     }
     menu = "\n".join(f'  - {t}: {tools_desc[t]}' for t in tools_desc if t in allowed)
+    # Gợi ý ask_user dựa trên total_steps (không bao giờ reset, khác với stuck reset mỗi ok-response)
+    _ts = state.total_steps
+    if _ts >= 5:
+        ask_user_line = (
+            f'\n  - ask_user: {{"question","suggestions"(list)}} — ĐÃ {_ts} BƯỚC MÀ CHƯA KHAI THÁC ĐƯỢC.'
+            ' PHẢI DÙNG ask_user NGAY ĐỂ HỎI NGƯỜI DÙNG endpoint/vector/protocol chính xác.'
+            ' Đừng thử thêm nữa — hỏi trước, hành động sau.'
+        )
+    elif _ts >= 3:
+        ask_user_line = (
+            '\n  - ask_user: {"question","suggestions"(list)} — hỏi người dùng khi không xác định'
+            ' được endpoint/vector/protocol sau nhiều bước thất bại'
+        )
+    else:
+        ask_user_line = (
+            '\n  - ask_user: {"question","suggestions"(list)} — hỏi người dùng khi hoàn toàn bí'
+        )
     templates = "\n".join(f"  - {p}" for p in (skill.payload_templates or [])) or "  (không có)"
     return (
         f"Bạn là chuyên gia khai thác, đang tấn công lab {cve} tại {host}:{port or 80} "
-        f"(phase HIỆN TẠI = {state.phase.value}).\n"
+        f"(phase HIỆN TẠI = {state.phase.value}, bước đã chạy = {state.total_steps}).\n"
         f"BỐI CẢNH LỖ HỔNG ({skill.vuln_class}): {skill.context}\n"
         f"CHUỖI GỢI Ý: {'; '.join(skill.suggested_sequence)}\n"
         f"TEMPLATE PAYLOAD (thay {{NONCE}}={nonce}, {{CMD}}={cmd} tự động):\n{templates}\n"
         f"THÀNH CÔNG khi: {skill.oracle_hint}\n\n"
-        f"TOOL ĐƯỢC PHÉP (phase này):\n{menu}\n\n"
+        f"TOOL ĐƯỢC PHÉP (phase này):\n{menu}{ask_user_line}\n\n"
         f"QUAN SÁT GẦN NHẤT:\n{_hist_text(history)}\n\n"
         "NHIỆM VỤ: chọn HÀNH ĐỘNG TIẾP THEO. IN RA ĐÚNG MỘT object JSON, KHÔNG prose/markdown:\n"
         '{"thought":"<1 câu>","tool":"<tên tool>","args":{...},"done":false}\n'
-        "Để chứng minh RCE, hãy chèn `echo NONCE; <lệnh>` (hoặc dùng {NONCE}/{CMD}) rồi đọc lại trong response."
+        "Để chứng minh RCE, hãy chèn `echo NONCE; <lệnh>` (hoặc dùng {NONCE}/{CMD}) rồi đọc lại trong response.\n"
+        f"{'⚠ ĐÃ ' + str(state.total_steps) + ' BƯỚC: nếu chưa biết endpoint chính xác → PHẢI dùng ask_user ngay, không thử tiếp.' if state.total_steps >= 5 else 'Nếu sau 5 bước chưa biết endpoint → dùng ask_user.'}"
     )
 
 
@@ -215,37 +238,50 @@ def _action_summary(action: Lane1Action) -> str:
 async def run_lane1(settings: Any, runner: Any, *, cve: str, host: str, port: str | None,
                     vuln_class: str, success_signal: str | None, command: str, base_index: int,
                     run_id: str, max_steps: int, step_timeout_s: int, total_timeout_s: int,
-                    outcome: Lane1Outcome) -> AsyncIterator[dict[str, Any]]:
+                    outcome: Lane1Outcome,
+                    resume_from: Any = None) -> AsyncIterator[dict[str, Any]]:
+    """resume_from: PausedState — nếu set, bỏ qua seed và tiếp tục từ state đã lưu."""
     idx = base_index
     skill = load_skill(vuln_class, cve)
     net = getattr(settings, "lane1_net", "host") or "host"
     cmd = (command or "id").strip()
-    nonce = primitives._nonce()
-    state = Lane1State()
-    history: list[Observation] = []
-    seen: set[str] = set()
 
-    yield _step(idx, "lane1", "running",
-                f"ReAct recon→exploit {cve} (skill={skill.vuln_class}, nonce={nonce})")
+    if resume_from is not None:
+        # Resume: dùng lại history/state/nonce/seen từ lần trước
+        nonce = resume_from.nonce
+        state = resume_from.phase_state
+        state.stuck = 0             # user vừa cho thêm info → reset stuck counter
+        history: list[Observation] = list(resume_from.history)
+        seen: set[str] = set(resume_from.seen)
+        yield _step(idx, "lane1", "running",
+                    f"ReAct resume {cve} sau user-input (skill={skill.vuln_class}, nonce={nonce})")
+    else:
+        nonce = primitives._nonce()
+        state = Lane1State()
+        history = []
+        seen = set()
+        yield _step(idx, "lane1", "running",
+                    f"ReAct recon→exploit {cve} (skill={skill.vuln_class}, nonce={nonce})")
 
     if runner is None:
         outcome.verdict = "error"
         yield _step(idx, "lane1", "failed", "không có LLM runner")
         return
 
-    # Seed recon tất định: GET / và /actuator để mồi observation cho LLM yếu (không tốn bước max_steps).
-    seed = await run_lane1_tool(settings, Lane1Action("seed", "http_request", {"method": "GET", "path": "/"}),
-                                run_id=run_id, host=host, port=port, net=net, timeout_s=step_timeout_s)
-    history.append(seed)
-    if seed.ok:
-        state.facts["alive"] = True
-    yield _log(f"[seed http GET /] {seed.text.splitlines()[0] if seed.text else ''}")
-    # Seed actuator endpoint discovery (Spring Boot / actuator-based apps) — tất định, không tốn bước.
-    seed_act = await run_lane1_tool(settings, Lane1Action("seed", "http_request", {"method": "GET", "path": "/actuator"}),
+    if resume_from is None:
+        # Seed recon tất định: GET / và /actuator (không tốn bước max_steps).
+        seed = await run_lane1_tool(settings, Lane1Action("seed", "http_request", {"method": "GET", "path": "/"}),
                                     run_id=run_id, host=host, port=port, net=net, timeout_s=step_timeout_s)
-    if seed_act.ok and "_links" in seed_act.body:
-        history.append(seed_act)
-        yield _log(f"[seed http GET /actuator] {seed_act.text.splitlines()[0] if seed_act.text else ''}")
+        history.append(seed)
+        if seed.ok:
+            state.facts["alive"] = True
+        yield _log(f"[seed http GET /] {seed.text.splitlines()[0] if seed.text else ''}")
+        # Seed actuator endpoint discovery (Spring Boot) — tất định, không tốn bước.
+        seed_act = await run_lane1_tool(settings, Lane1Action("seed", "http_request", {"method": "GET", "path": "/actuator"}),
+                                        run_id=run_id, host=host, port=port, net=net, timeout_s=step_timeout_s)
+        if seed_act.ok and "_links" in seed_act.body:
+            history.append(seed_act)
+            yield _log(f"[seed http GET /actuator] {seed_act.text.splitlines()[0] if seed_act.text else ''}")
 
     deadline = time.monotonic() + max(30, total_timeout_s)
     for step in range(1, max_steps + 1):
@@ -256,11 +292,37 @@ async def run_lane1(settings: Any, runner: Any, *, cve: str, host: str, port: st
         allowed = allowed_tools(state)
         prompt = build_react_prompt(cve, host, port, skill, state, history, allowed, nonce, cmd)
         action = await _one_action(runner, prompt, step_timeout_s)
+        state.total_steps += 1
+
         if action is None:
             state.stuck += 1
             yield _step(idx, f"lane1#{step}", "done", "LLM không trả JSON hợp lệ (bỏ lượt)")
             advance_phase(state, None, None)
             continue
+
+        # ask_user: meta-action — LLM muốn hỏi thêm thông tin từ người dùng (human-in-the-loop).
+        # Intercept trước risk-check vì đây không phải tool thật mà là tín hiệu dừng tạm.
+        if action.tool == "ask_user":
+            question = str(action.args.get("question") or "Cần thêm thông tin để tiếp tục khai thác.")
+            suggestions = [str(s) for s in (action.args.get("suggestions") or [])]
+            yield _step(idx, f"lane1#{step}:ask_user", "done",
+                        f"Dừng để hỏi user: {question[:120]}")
+            # Lưu toàn bộ state để resume sau khi user trả lời
+            from .lane1_state import PausedState
+            outcome.paused = True
+            outcome.question = question
+            outcome.suggestions = suggestions
+            outcome.paused_state = PausedState(
+                run_id=run_id, question=question, suggestions=suggestions,
+                history=list(history), phase_state=state, step=step,
+                nonce=nonce, seen=set(seen),
+                cve=cve, host=host, port=port,
+                vuln_class=vuln_class, success_signal=success_signal,
+                command=cmd, max_steps=max_steps,
+                step_timeout_s=step_timeout_s, total_timeout_s=total_timeout_s,
+                base_index=idx,
+            )
+            break
 
         risk = classify(action, state.phase, host, port, settings)
         if not risk.allow:
@@ -313,10 +375,11 @@ async def run_lane1(settings: Any, runner: Any, *, cve: str, host: str, port: st
                     f"{obs.tool} ok={obs.ok} → phase {state.phase.value}")
         advance_phase(state, obs, action)
 
-    if outcome.verdict != "exploit_success":
-        outcome.verdict = "exploit_failed" if history else "inconclusive"
-    outcome.transcript_tail = _hist_text(history)[-1500:]
-    yield _step(idx, "lane1", "done", f"kết thúc lane1: {outcome.verdict}", verdict=outcome.verdict)
+    if not outcome.paused:
+        if outcome.verdict != "exploit_success":
+            outcome.verdict = "exploit_failed" if history else "inconclusive"
+        outcome.transcript_tail = _hist_text(history)[-1500:]
+        yield _step(idx, "lane1", "done", f"kết thúc lane1: {outcome.verdict}", verdict=outcome.verdict)
 
 
 # ───────────────────────────── dry-run offline ─────────────────────────────

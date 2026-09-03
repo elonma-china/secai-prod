@@ -209,6 +209,15 @@ async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
                 total_timeout_s=int(getattr(req, "total_timeout_s", 900) or 900),
                 outcome=outcome):
             yield ev
+
+        # Human-in-the-loop: LLM dùng ask_user → pause, lưu state, phát question thay final.
+        if outcome.paused and outcome.paused_state is not None:
+            from .lane1_state import save as _save_lane1
+            _save_lane1(outcome.paused_state)
+            yield {"type": "question", "run_id": run_id,
+                   "question": outcome.question, "suggestions": outcome.suggestions}
+            return                  # Không phát final — FE gọi /reply khi user trả lời
+
         verdict = outcome.verdict or verdict
         engine = "lane1"
         if outcome.transcript_tail:
@@ -221,4 +230,54 @@ async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
            "result": {"cve": cve, "target": host, "port": port, "verdict": verdict,
                       "final_command": command, "engine": engine,
                       "output_tail": ((result.get("scan") or {}).get("output") or "")[-1500:]},
+           "metadata": {"run_id": run_id, "profile": "exploit_advance", "cve": cve, "target": host}}
+
+
+async def run_exploit_advance_resumed(settings: Any, runner: Any, paused: Any, answer: str, *,
+                                      run_id: str) -> AsyncIterator[dict[str, Any]]:
+    """Tiếp tục lane1 sau khi user trả lời câu hỏi. Append answer vào history rồi resume."""
+    from .lane1 import Lane1Outcome, run_lane1
+    from .lane1_tools import Observation
+
+    cve = paused.cve
+    host = paused.host
+
+    yield _step(5, "lane1_resume", "running",
+                f"Tiếp tục lane1 với thông tin bổ sung từ user: {answer[:80]}")
+
+    # Đưa câu trả lời của user vào history như một observation đặc biệt
+    user_obs = Observation(
+        tool="user_input", ok=True,
+        text=f"Thông tin bổ sung từ người dùng: {answer}",
+        meta={"source": "user"}, body=answer)
+    paused.history.append(user_obs)
+
+    outcome = Lane1Outcome()
+    async for ev in run_lane1(
+            settings, runner, cve=cve, host=host, port=paused.port,
+            vuln_class=paused.vuln_class, success_signal=paused.success_signal,
+            command=paused.command, base_index=paused.base_index, run_id=run_id,
+            max_steps=paused.max_steps,
+            step_timeout_s=paused.step_timeout_s,
+            total_timeout_s=paused.total_timeout_s,
+            outcome=outcome, resume_from=paused):
+        yield ev
+
+    # Nếu user lại muốn hỏi tiếp (multi-turn)
+    if outcome.paused and outcome.paused_state is not None:
+        from .lane1_state import save as _save_lane1
+        _save_lane1(outcome.paused_state)
+        yield {"type": "question", "run_id": run_id,
+               "question": outcome.question, "suggestions": outcome.suggestions}
+        return
+
+    verdict = outcome.verdict or "exploit_failed"
+    engine = "lane1"
+    result_output = outcome.transcript_tail or ""
+    ok = verdict == "exploit_success"
+    yield {"type": "final", "ok": ok, "verdict": verdict,
+           "content": f"Khai thác {cve} vào {host}: {verdict}",
+           "result": {"cve": cve, "target": host, "port": paused.port, "verdict": verdict,
+                      "final_command": outcome.final_action or paused.command, "engine": engine,
+                      "output_tail": result_output[-1500:]},
            "metadata": {"run_id": run_id, "profile": "exploit_advance", "cve": cve, "target": host}}
