@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     llm_presence_penalty: float = 1.1
     llm_repetition_penalty: float = 1.0
 
+    # ── Translate chunking ─────────────────────────────────────────────────────
+    # /ai/translate is single-shot; an input whose translation would exceed the per-turn
+    # output-token cap gets truncated. So a long input is split on paragraph/sentence
+    # boundaries into ≤``translate_chunk_chars`` pieces, each translated then rejoined.
+    # ``chars`` (not tokens) keeps it provider-agnostic; ~6000 chars ≈ well under a 4k-token
+    # output cap for VI/EN. Concurrency bounds the fan-out per request; max_chunks caps it
+    # (413 beyond) so one request can't spawn unbounded model calls.
+    translate_chunk_chars: int = 6000
+    translate_chunk_concurrency: int = 4
+    translate_max_chunks: int = 40
+
     # ── Agent loop ─────────────────────────────────────────────────────────────
     # 16 gives headroom for the exploit_research tool chain (qdrant→neo4j→poc_search→
     # poc_fetch, ×multiple PoCs) and legit multi-hop, without letting a
