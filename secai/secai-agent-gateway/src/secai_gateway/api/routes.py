@@ -44,6 +44,7 @@ from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..security import require_public_input, sanitize_output_language
+from .literal_mask import unmask_literals
 from .messages import parse_statistical, report_prompt, statistical_prompt, translate_prompt
 from .schemas import (
     BughuntRequest,
@@ -711,14 +712,24 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     @app.post("/ai/translate")
     async def translate(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await complete("translate", body, prompt_override=translate_prompt(body))
+        prompt, literals = translate_prompt(body)
+        text, metadata = await complete("translate", body, prompt_override=prompt)
+        # complete() has already run sanitize_output_language on the masked text; restore
+        # the protected literals (credentials/URLs/code) verbatim into the final output.
+        text = unmask_literals(text, literals)
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
     @app.post("/ai/translate/stream")
     async def translate_stream(body: LegacyRequest) -> StreamingResponse:
+        prompt, literals = translate_prompt(body)
+
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            # Restore literals in the authoritative `final` event (token deltas may still
+            # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
+            final = unmask_literals(final, literals)
             return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
-        return stream("translate", translate_prompt(body), None, build_final)
+
+        return stream("translate", prompt, None, build_final)
 
     @app.post("/ai/generate-report")
     async def report(body: LegacyRequest) -> dict[str, Any]:
@@ -1507,8 +1518,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         from ..poc.advance import parse_target
         from ..poc.verify import target_allowed
         settings = state.settings
-        if not settings.poc_exploit_enabled or not (settings.poc_exploit_api_url or "").strip():
-            raise HTTPException(404, "exploit-advance disabled (POC_EXPLOIT_ENABLED + POC_EXPLOIT_API_URL)")
+        pocsuite_ok = settings.poc_exploit_enabled and (settings.poc_exploit_api_url or "").strip()
+        lane1_ok = getattr(settings, "lane1_enabled", False)
+        if not pocsuite_ok and not lane1_ok:
+            raise HTTPException(404, "exploit-advance disabled (POC_EXPLOIT_ENABLED+POC_EXPLOIT_API_URL hoặc LANE1_ENABLED)")
         host, _ = parse_target(target)
         if not host:
             raise HTTPException(422, "target không hợp lệ")
