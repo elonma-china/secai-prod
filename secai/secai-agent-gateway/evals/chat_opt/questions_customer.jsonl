@@ -1,0 +1,100 @@
+{"id": "cust-001", "category": "system_overview", "q": "Hệ thống IAS.AI này là gì vậy?"}
+{"id": "cust-002", "category": "system_overview", "q": "Trang này dùng để làm gì ạ?"}
+{"id": "cust-003", "category": "system_overview", "q": "Cho tôi hỏi chatbot này hoạt động trong lĩnh vực nào?"}
+{"id": "cust-004", "category": "system_overview", "q": "IAS.AI có thể giúp tôi những gì trong công việc bảo mật?"}
+{"id": "cust-005", "category": "system_overview", "q": "Đây là một công cụ quét lỗ hổng hay chỉ là chatbot hỏi đáp thôi?"}
+{"id": "cust-006", "category": "system_overview", "q": "Ứng dụng này khác gì so với ChatGPT thông thường?"}
+{"id": "cust-007", "category": "system_overview", "q": "Hệ thống có phải chuyên về an ninh mạng không?"}
+{"id": "cust-008", "category": "system_overview", "q": "Tôi muốn biết tổng quan về nền tảng này trước khi dùng."}
+{"id": "cust-009", "category": "system_overview", "q": "Sản phẩm này được xây dựng để giải quyết vấn đề gì?"}
+{"id": "cust-010", "category": "system_overview", "q": "Ai nên sử dụng hệ thống này, doanh nghiệp hay cá nhân?"}
+{"id": "cust-011", "category": "system_overview", "q": "Hệ thống này có phải là một SOC ảo không?"}
+{"id": "cust-012", "category": "system_overview", "q": "Nền tảng IAS hoạt động dựa trên cơ sở tri thức nào vậy?"}
+{"id": "cust-013", "category": "system_overview", "q": "Cho hỏi mục đích chính của trợ lý này là gì?"}
+{"id": "cust-014", "category": "capability", "q": "Bạn có thể tra cứu lỗ hổng CVE giúp tôi không?"}
+{"id": "cust-015", "category": "capability", "q": "Chatbot có hỗ trợ phân tích mã độc không?"}
+{"id": "cust-016", "category": "capability", "q": "Tôi có thể nhờ bạn viết PoC khai thác không?"}
+{"id": "cust-017", "category": "capability", "q": "Có chức năng quét port cho tôi được không?"}
+{"id": "cust-018", "category": "capability", "q": "Bạn có thể giải thích một CVE cụ thể chi tiết không?"}
+{"id": "cust-019", "category": "capability", "q": "Hệ thống có hỗ trợ tra CWE và CAPEC không?"}
+{"id": "cust-020", "category": "capability", "q": "Bạn làm được việc đánh giá mức độ nghiêm trọng của lỗ hổng không?"}
+{"id": "cust-021", "category": "capability", "q": "Có thể nhờ bạn dựng kịch bản tấn công theo MITRE ATT&CK không?"}
+{"id": "cust-022", "category": "capability", "q": "Bạn hỗ trợ những ngôn ngữ lập trình nào khi phân tích mã nguồn?"}
+{"id": "cust-023", "category": "capability", "q": "Tôi muốn kiểm tra một domain có bị dính lỗ hổng nào không, được không?"}
+{"id": "cust-024", "category": "capability", "q": "Có tính năng nào giúp viết báo cáo pentest tự động không?"}
+{"id": "cust-025", "category": "capability", "q": "Bạn có thể so sánh hai lỗ hổng CVE với nhau không?"}
+{"id": "cust-026", "category": "capability", "q": "Chatbot có thể gợi ý bản vá cho một lỗ hổng cụ thể không?"}
+{"id": "cust-027", "category": "data_coverage", "q": "Dữ liệu CVE của hệ thống cập nhật đến thời điểm nào rồi?"}
+{"id": "cust-028", "category": "data_coverage", "q": "Cơ sở tri thức có bao nhiêu CVE trong đó?"}
+{"id": "cust-029", "category": "data_coverage", "q": "Nguồn dữ liệu lấy từ đâu, có phải từ NVD không?"}
+{"id": "cust-030", "category": "data_coverage", "q": "Dữ liệu có được cập nhật hàng ngày không hay bao lâu một lần?"}
+{"id": "cust-031", "category": "data_coverage", "q": "Hệ thống có dữ liệu CVE từ năm nào đến năm nào?"}
+{"id": "cust-032", "category": "data_coverage", "q": "Thông tin CAPEC và ATT&CK có được cập nhật thường xuyên không?"}
+{"id": "cust-033", "category": "data_coverage", "q": "Catalog PoC lấy từ những nguồn nào vậy?"}
+{"id": "cust-034", "category": "data_coverage", "q": "Dữ liệu có bao gồm các lỗ hổng mới nhất năm 2026 không?"}
+{"id": "cust-035", "category": "data_coverage", "q": "Có dữ liệu về lỗ hổng của các phần mềm Việt Nam không?"}
+{"id": "cust-036", "category": "data_coverage", "q": "Độ trễ cập nhật dữ liệu là bao lâu kể từ khi CVE được công bố?"}
+{"id": "cust-037", "category": "data_coverage", "q": "Cơ sở dữ liệu có phân biệt theo mức độ nghiêm trọng CVSS không?"}
+{"id": "cust-038", "category": "data_coverage", "q": "Dữ liệu CWE trong hệ thống có đầy đủ không?"}
+{"id": "cust-039", "category": "usage", "q": "Tôi nên bắt đầu hỏi như thế nào cho đúng?"}
+{"id": "cust-040", "category": "usage", "q": "Cho tôi vài ví dụ câu hỏi mẫu để thử hệ thống được không?"}
+{"id": "cust-041", "category": "usage", "q": "Muốn tra một CVE thì gõ cú pháp ra sao?"}
+{"id": "cust-042", "category": "usage", "q": "Có cần đăng nhập tài khoản mới dùng được không?"}
+{"id": "cust-043", "category": "usage", "q": "Tôi hỏi bằng tiếng Anh được không hay phải tiếng Việt?"}
+{"id": "cust-044", "category": "usage", "q": "Làm sao để hỏi hiệu quả nhất, có mẹo gì không?"}
+{"id": "cust-045", "category": "usage", "q": "Nếu tôi không biết mã CVE thì mô tả kiểu gì để bạn tìm ra?"}
+{"id": "cust-046", "category": "usage", "q": "Hướng dẫn tôi cách dùng tính năng tra cứu lỗ hổng với."}
+{"id": "cust-047", "category": "usage", "q": "Tôi cần cung cấp thông tin gì khi hỏi về một hệ thống bị tấn công?"}
+{"id": "cust-048", "category": "usage", "q": "Có giới hạn số câu hỏi mỗi ngày không?"}
+{"id": "cust-049", "category": "usage", "q": "Dùng trên điện thoại có khác gì trên máy tính không?"}
+{"id": "cust-050", "category": "usage", "q": "Bày tôi cách hỏi để ra được báo cáo PoC đầy đủ."}
+{"id": "cust-051", "category": "vague_messy", "q": "giúp tôi với"}
+{"id": "cust-052", "category": "vague_messy", "q": "bảo mật"}
+{"id": "cust-053", "category": "vague_messy", "q": "hack là gì"}
+{"id": "cust-054", "category": "vague_messy", "q": "lô hông"}
+{"id": "cust-055", "category": "vague_messy", "q": "cái này là seo"}
+{"id": "cust-056", "category": "vague_messy", "q": "ko hiểu gì cả giúp vs"}
+{"id": "cust-057", "category": "vague_messy", "q": "cve"}
+{"id": "cust-058", "category": "vague_messy", "q": "sao lại thế này"}
+{"id": "cust-059", "category": "vague_messy", "q": "bị hack rồi làm sao"}
+{"id": "cust-060", "category": "vague_messy", "q": "mật khẩu yếu có sao k"}
+{"id": "cust-061", "category": "vague_messy", "q": "con vius"}
+{"id": "cust-062", "category": "vague_messy", "q": "tường lữa là j"}
+{"id": "cust-063", "category": "vague_messy", "q": "giúp gấp!!!"}
+{"id": "cust-064", "category": "random_offtopic", "q": "Hôm nay Sài Gòn có mưa không bạn?"}
+{"id": "cust-065", "category": "random_offtopic", "q": "Bạn nấu phở bò ngon không, chỉ tôi công thức đi?"}
+{"id": "cust-066", "category": "random_offtopic", "q": "Đội tuyển Việt Nam đá vòng loại World Cup thế nào rồi?"}
+{"id": "cust-067", "category": "random_offtopic", "q": "25 nhân 37 bằng bao nhiêu vậy?"}
+{"id": "cust-068", "category": "random_offtopic", "q": "Bạn có biết truyện Conan tập mới nhất chưa?"}
+{"id": "cust-069", "category": "random_offtopic", "q": "Tôi buồn quá, dạo này công việc chán ghê."}
+{"id": "cust-070", "category": "random_offtopic", "q": "Cho tôi xin công thức làm bánh flan."}
+{"id": "cust-071", "category": "random_offtopic", "q": "Giá vàng hôm nay bao nhiêu một chỉ vậy?"}
+{"id": "cust-072", "category": "random_offtopic", "q": "Bạn có thể dịch giúp tôi câu này sang tiếng Anh không?"}
+{"id": "cust-073", "category": "random_offtopic", "q": "Tối nay nên xem phim gì hay?"}
+{"id": "cust-074", "category": "random_offtopic", "q": "Học tiếng Nhật bắt đầu từ đâu vậy bạn?"}
+{"id": "cust-075", "category": "random_offtopic", "q": "Con mèo nhà tôi bỏ ăn mấy hôm rồi, phải làm sao?"}
+{"id": "cust-076", "category": "greeting_chitchat", "q": "Chào bạn!"}
+{"id": "cust-077", "category": "greeting_chitchat", "q": "Xin chào, hôm nay bạn khỏe không?"}
+{"id": "cust-078", "category": "greeting_chitchat", "q": "Cảm ơn bạn nhiều nha."}
+{"id": "cust-079", "category": "greeting_chitchat", "q": "Bạn là ai vậy?"}
+{"id": "cust-080", "category": "greeting_chitchat", "q": "Chào buổi sáng!"}
+{"id": "cust-081", "category": "greeting_chitchat", "q": "Bạn có đang rảnh không, tôi hỏi chút được không?"}
+{"id": "cust-082", "category": "greeting_chitchat", "q": "Hi bot, lâu rồi mới quay lại nè."}
+{"id": "cust-083", "category": "greeting_chitchat", "q": "Cảm ơn vì đã giúp tôi lúc nãy."}
+{"id": "cust-084", "category": "greeting_chitchat", "q": "Chào em, chị mới lần đầu dùng đây."}
+{"id": "cust-085", "category": "greeting_chitchat", "q": "Dạo này bạn (à mà bạn là AI mà nhỉ) thế nào?"}
+{"id": "cust-086", "category": "greeting_chitchat", "q": "Tạm biệt nhé, hẹn gặp lại."}
+{"id": "cust-087", "category": "greeting_chitchat", "q": "Bạn khỏe không, hôm nay có gì vui không?"}
+{"id": "cust-088", "category": "greeting_chitchat", "q": "Chào bạn, rất vui được làm quen."}
+{"id": "cust-089", "category": "meta_self", "q": "Bạn được ai tạo ra vậy?"}
+{"id": "cust-090", "category": "meta_self", "q": "Bạn chạy trên mô hình AI nào?"}
+{"id": "cust-091", "category": "meta_self", "q": "Dữ liệu tôi nhập vào có bị lưu lại không?"}
+{"id": "cust-092", "category": "meta_self", "q": "Bạn có phải là ChatGPT không?"}
+{"id": "cust-093", "category": "meta_self", "q": "Công ty nào đứng sau phát triển bạn?"}
+{"id": "cust-094", "category": "meta_self", "q": "Bạn có gửi câu hỏi của tôi cho bên thứ ba không?"}
+{"id": "cust-095", "category": "meta_self", "q": "Bạn có nhớ được cuộc trò chuyện trước của tôi không?"}
+{"id": "cust-096", "category": "meta_self", "q": "Bạn tên gì, có phải IAS không?"}
+{"id": "cust-097", "category": "meta_self", "q": "Bạn có biết bạn đang chạy trên hạ tầng nào không?"}
+{"id": "cust-098", "category": "meta_self", "q": "Thông tin cá nhân tôi cung cấp có được bảo mật không?"}
+{"id": "cust-099", "category": "meta_self", "q": "Bạn có tự học từ những câu hỏi của người dùng không?"}
+{"id": "cust-100", "category": "meta_self", "q": "Bạn có phải con người thật đang trả lời không đấy?"}
