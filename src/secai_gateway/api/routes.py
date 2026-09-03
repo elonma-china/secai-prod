@@ -10,11 +10,12 @@ from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from linch.events import ResultEvent, SystemEvent
 
+from ..activity import LogContext
 from ..agent import registry_for
 from ..poc import (
     enforce_reference_code,
@@ -135,7 +136,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
 
     def stream(profile: str, prompt: str, session_id: str | None, build_final, *,
-              prelude: list[bytes] | None = None, observe=None) -> StreamingResponse:
+              prelude: list[bytes] | None = None, observe=None,
+              log: LogContext | None = None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
         endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
@@ -145,7 +147,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
         neither, so their frame sequence is byte-identical to before. ``prelude`` yields
         fixed frames before the run starts (e.g. the leading `conversation` id frame);
         ``observe(event)`` is called per raw linch event and may return an extra SSE frame
-        to yield (e.g. an additive `compaction` frame) without altering anything else."""
+        to yield (e.g. an additive `compaction` frame) without altering anything else.
+
+        ``log`` is the activity-log context for this request: the record is written once the
+        stream has produced its final answer (the only point where the answer is known),
+        after the last frame, so it can never delay or alter what the client receives."""
 
         async def gen() -> AsyncIterator[bytes]:
             for frame in (prelude or []):
@@ -178,8 +184,50 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if not failed:
                 yield sse_frame("final", await build_final(final, run_id))
             yield b"data: [DONE]\n\n"
+            _emit(log, answer=(STREAM_ERROR_MESSAGE if failed else final), run_id=run_id,
+                  profile=profile, error=failed,
+                  error_detail="stream failed" if failed else "")
 
         return StreamingResponse(gen(), media_type="text/event-stream")
+
+    # ── Activity log (see activity/) ──────────────────────────────────────────────────────
+    # One record per AI request. Both helpers are fail-open: a logging problem must never
+    # surface to the caller, so neither raises and neither is awaited on the request path.
+
+    def _log_ctx(request: Request, function: str, *, stream: bool = False,
+                 body: Any = None, question: str = "", profile: str = "",
+                 conversation_id: str = "") -> LogContext | None:
+        sink = getattr(state, "logsink", None)
+        if sink is None or not getattr(sink, "enabled", False):
+            return None
+        try:
+            ctx = LogContext.from_request(
+                request, function=function, stream=stream,
+                trust_proxy=getattr(state.settings, "activity_log_trust_proxy_headers", True))
+            ctx.question = question
+            ctx.profile = profile
+            ctx.conversation_id = conversation_id
+            if body is not None:
+                ctx.user_id = str(getattr(body, "user_id", "") or "")
+            return ctx
+        except Exception:
+            logger.exception("activity log: context build failed (fail-open)")
+            return None
+
+    def _emit(ctx: LogContext | None, **kw: Any) -> None:
+        """Emit once. The `emitted` guard is what lets a handler call this on both its
+        success and its error path without ever writing the request twice."""
+        if ctx is None or ctx.emitted:
+            return
+        ctx.emitted = True
+        try:
+            _fire_and_forget(state.logsink.emit(ctx.finish(**kw)))
+        except Exception:
+            logger.exception("activity log: emit failed (fail-open)")
+
+    def _gate_meta(metadata: dict[str, Any]) -> str:
+        cls = metadata.get("input_classification") or {}
+        return str(cls.get("action") or cls.get("label") or "blocked")
 
     def _audit(run_id: str, tool_name: str, key_material: str, meta: dict[str, Any]) -> None:
         """Audit line for the input-sanitize gate — parallel to ledger.audit_once's use
@@ -287,7 +335,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     def _short_circuit_stream(message: str, metadata: dict[str, Any], *,
                               prelude: list[bytes] | None = None,
-                              top_level: dict[str, Any] | None = None) -> StreamingResponse:
+                              top_level: dict[str, Any] | None = None,
+                              log: LogContext | None = None) -> StreamingResponse:
         """SSE response for a classifier short-circuit: one token + one final, then DONE
         (same frame shape as chat_stream's build_final, so token-only UIs still render it).
         ``prelude``/``top_level`` are additive, optional (see ``stream()`` above) — every
@@ -302,40 +351,49 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 final_payload.update(top_level)
             yield sse_frame("final", final_payload)
             yield b"data: [DONE]\n\n"
+            _emit(log, answer=message, run_id=metadata.get("run_id"), profile="chat",
+                  blocked=True, block_reason=_gate_meta(metadata))
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.post("/chat_no_stream")
     @app.post("/ai/chat")
-    async def chat(body: LegacyRequest) -> dict[str, Any]:
+    async def chat(body: LegacyRequest, request: Request) -> dict[str, Any]:
         prompt = require_public_input(body.supplied_text())
+        log = _log_ctx(request, "chat", body=body, question=prompt, profile="chat")
         gated = await _chat_gate(prompt)
         if gated:
             message, metadata = gated
+            _emit(log, answer=message, run_id=metadata.get("run_id"), profile="chat",
+                  blocked=True, block_reason=_gate_meta(metadata))
             return {"response": message, "answer": message, "message": message, "metadata": metadata}
         session_id = _chat_session_id(body)
         try:
             text, metadata = await state.runner.complete("chat", prompt, session_id)
-        except HTTPException:
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
             raise
         except Exception as exc:
+            _emit(log, http_status=503, error=True, error_detail=f"{type(exc).__name__}: {exc}")
             raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
         text = sanitize_output_language(text)
+        _emit(log, answer=text, run_id=metadata.get("run_id"), profile="chat")
         return {"response": text, "answer": text, "message": text, "metadata": metadata}
 
     @app.post("/ai/chat/stream")
-    async def chat_stream(body: LegacyRequest) -> StreamingResponse:
+    async def chat_stream(body: LegacyRequest, request: Request) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
+        log = _log_ctx(request, "chat", stream=True, body=body, question=text, profile="chat")
         gated = await _chat_gate(text)
         if gated:
             message, metadata = gated
-            return _short_circuit_stream(message, metadata)
+            return _short_circuit_stream(message, metadata, log=log)
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run — nothing to do here.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
-        return stream("chat", text, session_id, build_final)
+        return stream("chat", text, session_id, build_final, log=log)
 
     # ── Durable multi-conversation chat history (/ai/conversations/*) ──────────────────────
     # Additive endpoints layered on the SAME `chat` profile pipeline as /ai/chat above (same
@@ -446,26 +504,34 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return cid or uuid4().hex
 
     @app.post("/ai/conversations/chat")
-    async def conversations_chat(body: ConversationChatRequest) -> dict[str, Any]:
+    async def conversations_chat(body: ConversationChatRequest,
+                                 request: Request) -> dict[str, Any]:
         owner_hash = _conv_owner_hash(body.user_id)
         conversation_id = _new_cid(body.conversation_id)
         session_id = _conv_session_id(owner_hash, conversation_id)
         if owner_hash:
             await _maybe_rehydrate(session_id, conversation_id)
         prompt = require_public_input(body.supplied_text())
+        log = _log_ctx(request, "conversation_chat", body=body, question=prompt,
+                       profile="chat", conversation_id=conversation_id)
         gated = await _chat_gate(prompt)
         if gated:
             message, metadata = gated
             metadata = {**metadata, "conversation_id": conversation_id}
+            _emit(log, answer=message, run_id=metadata.get("run_id"), profile="chat",
+                  blocked=True, block_reason=_gate_meta(metadata))
             return {"response": message, "answer": message, "message": message,
                     "metadata": metadata, "conversation_id": conversation_id}
         try:
             text, metadata = await state.runner.complete("chat", prompt, session_id)
-        except HTTPException:
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
             raise
         except Exception as exc:
+            _emit(log, http_status=503, error=True, error_detail=f"{type(exc).__name__}: {exc}")
             raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
         text = sanitize_output_language(text)
+        _emit(log, answer=text, run_id=metadata.get("run_id"), profile="chat")
         metadata = {**metadata, "conversation_id": conversation_id}
         if owner_hash:
             # Offload the sync SQLite write to a worker thread so it never blocks the event loop.
@@ -477,18 +543,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "metadata": metadata, "conversation_id": conversation_id}
 
     @app.post("/ai/conversations/chat/stream")
-    async def conversations_chat_stream(body: ConversationChatRequest) -> StreamingResponse:
+    async def conversations_chat_stream(body: ConversationChatRequest,
+                                        request: Request) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
         owner_hash = _conv_owner_hash(body.user_id)
         conversation_id = _new_cid(body.conversation_id)
         session_id = _conv_session_id(owner_hash, conversation_id)
         conv_frame = sse_frame("conversation", {"conversation_id": conversation_id})
+        log = _log_ctx(request, "conversation_chat", stream=True, body=body, question=text,
+                       profile="chat", conversation_id=conversation_id)
         gated = await _chat_gate(text)
         if gated is not None:  # classifier short-circuit before the agent runs (not persisted)
             message, gated_metadata = gated
             md = {**gated_metadata, "conversation_id": conversation_id}
             return _short_circuit_stream(message, md, prelude=[conv_frame],
-                                         top_level={"conversation_id": conversation_id})
+                                         top_level={"conversation_id": conversation_id},
+                                         log=log)
         if owner_hash:
             await _maybe_rehydrate(session_id, conversation_id)
         user_text = text
@@ -517,7 +587,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     "metadata": md, "conversation_id": conversation_id}
 
         return stream("chat", text, session_id, build_final,
-                      prelude=[conv_frame], observe=observe)
+                      prelude=[conv_frame], observe=observe, log=log)
 
     @app.post("/ai/conversations")
     async def create_conversation(body: CreateConversationRequest) -> dict[str, Any]:
@@ -651,13 +721,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return final, meta
 
     @app.post("/ai/translate")
-    async def translate(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await translate_assemble(body)
+    async def translate(body: LegacyRequest, request: Request) -> dict[str, Any]:
+        log = _log_ctx(request, "translate", body=body, profile="translate",
+                       question=body.supplied_text())
+        try:
+            text, metadata = await translate_assemble(body)
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
+            raise
+        _emit(log, answer=text, run_id=metadata.get("run_id"), profile="translate")
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
     @app.post("/ai/translate/stream")
-    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
+    async def translate_stream(body: LegacyRequest, request: Request) -> StreamingResponse:
         chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
+        log = _log_ctx(request, "translate", stream=True, body=body, profile="translate",
+                       question=body.supplied_text())
 
         if len(chunks) <= 1:
             prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
@@ -668,46 +747,70 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 final = unmask_literals(final, literals)
                 return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
 
-            return stream("translate", prompt, None, build_final)
+            return stream("translate", prompt, None, build_final, log=log)
 
         # Long input: assemble the chunked translation, then emit it as one token+final SSE.
         # True token streaming is traded for guaranteed completeness (no truncated tail).
         async def gen() -> AsyncIterator[bytes]:
+            failed = False
             try:
                 final, meta = await translate_assemble(body)
             except Exception:  # provider/runtime failure → visible error, not a torn stream
                 logger.exception("chunked translate_stream failed")
+                failed = True
                 final, meta = STREAM_ERROR_MESSAGE, base_meta("translate", None)
                 yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
             yield sse_frame("token", {"delta": final})
             yield sse_frame("final", {"content": final, "translation": final,
                                       "translated_text": final, "metadata": meta})
             yield b"data: [DONE]\n\n"
+            _emit(log, answer=final, run_id=meta.get("run_id"), profile="translate",
+                  error=failed, error_detail="chunked translate failed" if failed else "")
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.post("/ai/generate-report")
-    async def report(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await complete("report", body, prompt_override=report_prompt(body))
+    async def report(body: LegacyRequest, request: Request) -> dict[str, Any]:
+        log = _log_ctx(request, "report", body=body, profile="report",
+                       question=body.supplied_text())
+        try:
+            text, metadata = await complete("report", body, prompt_override=report_prompt(body))
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
+            raise
+        _emit(log, answer=text, run_id=metadata.get("run_id"), profile="report")
         return {"report": text, "metadata": metadata}
 
     @app.post("/ai/generate-report/stream")
-    async def report_stream(body: LegacyRequest) -> StreamingResponse:
+    async def report_stream(body: LegacyRequest, request: Request) -> StreamingResponse:
+        log = _log_ctx(request, "report", stream=True, body=body, profile="report",
+                       question=body.supplied_text())
+
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             return {"content": final, "report": final, "metadata": base_meta("report", run_id)}
-        return stream("report", report_prompt(body), None, build_final)
+        return stream("report", report_prompt(body), None, build_final, log=log)
 
     @app.post("/ai/generate-statistical-report")
-    async def statistical_report(body: LegacyRequest) -> dict[str, Any]:
-        text, metadata = await complete("statistical_report", body, prompt_override=statistical_prompt(body))
+    async def statistical_report(body: LegacyRequest, request: Request) -> dict[str, Any]:
+        log = _log_ctx(request, "statistical_report", body=body, profile="statistical_report",
+                       question=statistical_prompt(body))
+        try:
+            text, metadata = await complete("statistical_report", body, prompt_override=statistical_prompt(body))
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
+            raise
+        _emit(log, answer=text, run_id=metadata.get("run_id"), profile="statistical_report")
         # Legacy gemini shape: report_title / report_summary / report_detail (parsed from JSON).
         return {**parse_statistical(text), "report": text, "statistical_report": text, "metadata": metadata}
 
     @app.post("/ai/generate-statistical-report/stream")
-    async def statistical_stream(body: LegacyRequest) -> StreamingResponse:
+    async def statistical_stream(body: LegacyRequest, request: Request) -> StreamingResponse:
+        log = _log_ctx(request, "statistical_report", stream=True, body=body,
+                       profile="statistical_report", question=statistical_prompt(body))
+
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             return {**parse_statistical(final), "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
-        return stream("statistical_report", statistical_prompt(body), None, build_final)
+        return stream("statistical_report", statistical_prompt(body), None, build_final, log=log)
 
     async def exploit_prefetch(prompt: str) -> list[dict[str, Any]]:
         """Deterministic evidence gathering (see poc/prefetch.py) — runs independently of,
@@ -772,23 +875,33 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return meta
 
     @app.post("/ai/exploit")
-    async def exploit(body: LegacyRequest) -> dict[str, Any]:
+    async def exploit(body: LegacyRequest, request: Request) -> dict[str, Any]:
         prompt_text = require_public_input(body.supplied_text())
+        log = _log_ctx(request, "exploit", body=body, question=prompt_text,
+                       profile="exploit_research")
         prefetch_task = asyncio.create_task(exploit_prefetch(prompt_text))
-        text, metadata = await complete("exploit_research", body)
+        try:
+            text, metadata = await complete("exploit_research", body)
+        except HTTPException as exc:
+            _emit(log, http_status=exc.status_code, error=True, error_detail=str(exc.detail))
+            raise
         pre_evidence = await prefetch_task
         text, injected = inject_reference_code(text, metadata.get("run_id"), pre_evidence)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
         metadata.update(injected)
+        _emit(log, answer=text or no_poc, run_id=metadata.get("run_id"),
+              profile="exploit_research")
         return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
-    async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
+    async def exploit_stream(body: LegacyRequest, request: Request) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
         no_poc = "No verified public PoC was found in the supplied evidence."
         prefetch_task = asyncio.create_task(exploit_prefetch(text))
+        log = _log_ctx(request, "exploit", stream=True, body=body, question=text,
+                       profile="exploit_research")
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             pre_evidence = await prefetch_task
@@ -797,7 +910,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(injected)
             return {"content": final or no_poc, "exploit_guide": final or no_poc, "description": final or no_poc, "metadata": meta}
 
-        return stream("exploit_research", text, None, build_final)
+        return stream("exploit_research", text, None, build_final, log=log)
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -836,7 +949,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # /health said ok) that fail-open observability was built to catch.
         sanitize_stats = verdict_stats()
         status = _health_status(qwen_ok, sanitize_stats)
-        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        # Activity log counters — the same "silently disabled guard" failure mode the
+        # input_sanitize block above exists for: if Elasticsearch is unreachable the log
+        # quietly drops records, and only a counter here makes that visible.
+        sink = getattr(state, "logsink", None)
+        activity_stats = sink.stats() if sink is not None else {"enabled": False}
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats,
+                "activity_log": activity_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:

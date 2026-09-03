@@ -220,13 +220,28 @@ GET /health
 ```
 ```json
 { "status": "ok|degraded", "llm": true, "redis": "connected", "searchsploit": true,
-  "exploitdb_commit": "...", "input_sanitize": {"total":0,"unknown":0,"unknown_rate":0.0} }
+  "exploitdb_commit": "...", "input_sanitize": {"total":0,"unknown":0,"unknown_rate":0.0},
+  "activity_log": {"enabled":true,"running":true,"queued":0,"sent":128,"dropped":0,
+                   "breaker_open":false,"last_error":""} }
 ```
 `status: degraded` khi LLM không phản hồi, hoặc bộ lọc đầu vào fail-open >50% trên mẫu ≥20 request gần nhất.
+`activity_log.dropped` tăng dần = Elasticsearch đang không ghi được (xem §7.1) — chat vẫn chạy bình thường, chỉ mất log.
 
 ```
 POST /admin/refresh-models   (header X-API-Key bắt buộc)
 ```
+
+### 7.1. Nhật ký hoạt động + giao diện xem log — `/logs`
+
+Mỗi request AI (chat, hội thoại, dịch, báo cáo, báo cáo thống kê, khai thác) được ghi **1 bản ghi** vào Elasticsearch: thời gian · **tên máy chủ** · IP + User-Agent client · chức năng · `user_id`/`conversation_id`/`run_id` · **câu hỏi và câu trả lời đầy đủ** · thời lượng · HTTP status · có lỗi / bị chặn hay không.
+
+- **Giao diện**: mở `http://<gateway>:8131/logs` trên trình duyệt (đăng nhập bằng `LOGS_UI_USERNAME`/`LOGS_UI_PASSWORD`). Có lọc theo ngày, tìm theo từng trường, thanh bên thu gọn được, và chế độ **Live** hiện log mới sau ~1–2 giây.
+- **Tìm không dấu vẫn ra**: gõ `phong chong` khớp nội dung `phòng chống`.
+- **Không ảnh hưởng API**: ghi log chạy nền, không nằm trên đường phản hồi. Elasticsearch chết → chat vẫn trả lời bình thường, chỉ mất log (đếm ở `activity_log.dropped`).
+- **Lưu 30 ngày** rồi tự xoá (`ACTIVITY_LOG_RETENTION_DAYS`).
+- Log chứa **nội dung hội thoại nguyên văn** → Elasticsearch chỉ nghe nội bộ (không mở cổng 9200 ra ngoài), giao diện bắt buộc đăng nhập.
+
+Biến môi trường chính: `ELASTICSEARCH_URL`, `ACTIVITY_LOG_ENABLED`, `ACTIVITY_LOG_RETENTION_DAYS`, `LOGS_UI_ENABLED`, `LOGS_UI_USERNAME`, `LOGS_UI_PASSWORD` (hoặc `LOGS_UI_PASSWORD_SHA256`), `LOGS_UI_SESSION_SECRET`.
 
 ---
 
