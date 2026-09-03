@@ -1,11 +1,17 @@
 # AIEngines root
 .env
 .env.*
+.env.bak*
 *.pyc
+*.py[cod]
 __pycache__/
 .venv/
 node_modules/
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+data/
+gateway.log
 
 # Huge / external / backup trees — not part of the working gateway commit
 secai/secai-data/
@@ -23,3 +29,6 @@ POC_API_Guide.docx
 *.log
 CVE_exploit_info.md
 secai/claude-bug-bounty/
+
+# vendored third-party repo (its own git history/remote) — not part of this project
+secai-serving-vast/

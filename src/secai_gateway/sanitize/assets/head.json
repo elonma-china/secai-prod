@@ -1,0 +1,16 @@
+{
+  "embed_model": "DuyTa/sec-embedding",
+  "dim": 1024,
+  "trained": true,
+  "backend": "endpoint",
+  "kind": "mixed",
+  "trained_at": "2026-09-02T14:20:16+00:00",
+  "labels": [
+    "security",
+    "chitchat",
+    "offtopic",
+    "injection",
+    "pii"
+  ],
+  "notes": "head=mixed; intent softmax(3) + injection/pii sigmoid; L2-normalised input."
+}
