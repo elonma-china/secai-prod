@@ -86,6 +86,16 @@ class ExploitAdvanceRequest(BaseModel):
     run_id: str | None = Field(default=None, description="Gán run_id cố định để truy vết; bỏ trống sẽ tự sinh.")
 
 
+class ExploitAdvanceReplyRequest(BaseModel):
+    """POST /ai/exploit-advance/reply — cung cấp thông tin bổ sung cho lane1 đang paused."""
+
+    model_config = ConfigDict(extra="allow")
+
+    run_id: str = Field(description="run_id từ event `question` (adv:xxx).")
+    answer: str = Field(description="Câu trả lời/thông tin bổ sung từ user (endpoint, protocol, credential...).")
+    user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
+
+
 class BughuntRequest(BaseModel):
     """POST /ai/bughunt/stream — a target-only BugHunter run."""
 

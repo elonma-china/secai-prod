@@ -40,6 +40,7 @@ class Lane1State:
     facts: dict[str, Any] = field(default_factory=dict)   # alive, open_ports, endpoints, partial_hit
     stuck: int = 0
     enum_steps: int = 0
+    total_steps: int = 0   # tổng số bước đã chạy — KHÔNG bao giờ reset, dùng để trigger ask_user
 
 
 def allowed_tools(state: Lane1State) -> frozenset[str]:
