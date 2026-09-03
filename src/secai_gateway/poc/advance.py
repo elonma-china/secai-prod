@@ -131,11 +131,36 @@ async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
     yield _step(3, "recon", "done" if alive else "failed",
                 "target phản hồi TCP" if alive else "không mở được TCP (vẫn thử khai thác)")
 
-    # 4 — vòng exploit → verify → sửa
+    # 3.5 — lane PRIMITIVE tất định (tham khảo PentestCode inject-probe): hệ thống TỰ tra CVE →
+    # có primitive thì thử TRƯỚC; strong-success → xong; không → fallback pocsuite. Không cherry-pick.
+    from .primitives import has_primitive, run_primitive
     result: dict[str, Any] = {}
     verdict = "inconclusive"
+    engine = "kt-pocsuite"
     seen_cmds = {command}
+    if has_primitive(cve):
+        base = f"http://{host}:{port}" if port else f"http://{host}"
+        yield _step(4, "primitive", "running", f"primitive tất định cho {cve}")
+        pres = None
+        try:
+            pres = await asyncio.to_thread(run_primitive, cve, base, command)
+        except Exception as exc:
+            yield _step(4, "primitive", "failed", f"primitive lỗi: {exc}")
+        if pres is not None:
+            for line in (pres.output or "").splitlines():
+                if line.strip():
+                    yield _log(line)
+            yield _step(4, "primitive", "done",
+                        f"{pres.primitive}: {pres.evidence[:76]} (lead={pres.lead})",
+                        verdict=pres.verdict)
+            if pres.ok:
+                verdict, engine = "exploit_success", "primitive"
+                result = {"scan": {"output": pres.output}}
+
+    # 4 — vòng exploit → verify → sửa (fallback pocsuite khi primitive chưa thắng)
     for i in range(1, max_steps + 1):
+        if verdict == "exploit_success":
+            break
         yield _step(4, f"exploit#{i}", "running", f"command=`{command}`")
         try:
             result = await run_kt_exploit(settings, ip=host, cve=cve, port=port,
@@ -165,6 +190,6 @@ async def run_exploit_advance(settings: Any, runner: Any, req: Any, *,
     yield {"type": "final", "ok": ok, "verdict": verdict,
            "content": f"Khai thác {cve} vào {host}: {verdict}",
            "result": {"cve": cve, "target": host, "port": port, "verdict": verdict,
-                      "final_command": command, "engine": "kt-pocsuite",
+                      "final_command": command, "engine": engine,
                       "output_tail": ((result.get("scan") or {}).get("output") or "")[-1500:]},
            "metadata": {"run_id": run_id, "profile": "exploit_advance", "cve": cve, "target": host}}
