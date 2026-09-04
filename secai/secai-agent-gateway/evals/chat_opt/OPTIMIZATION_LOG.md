@@ -44,3 +44,14 @@ _(các vòng tiếp theo ghi bên dưới: điểm, top failure bucket, thay đ�
 2. Phiên bản vá: chép đúng từ dữ liệu, CẤM đoán số version (đoán sai → nâng cấp vẫn dính lỗ hổng).
 3. Cấm gán CVSS đồng loạt + cấm "trang trí" mã T####/CAPEC không có trong dữ liệu.
 - (wrong_refusal cust-100 "bạn có phải người thật" = false-positive classifier injection → follow-up [CODE/CONFIG], không sửa bằng prompt.)
+
+## Round 3 — Eval v3 + grader web-verify + KẾT LUẬN (2026-09-04)
+**Điểm (Opus + web-verify): mean = 89.66/100** (customer 91.31, secpro 88.00). Δ +0.29 vs R2, +1.67 vs R1.
+- **accuracy_grounded 82.3% — BẤT ĐỘNG** (R1 82.2 → R2 82.4 → R3 82.3). Điểm tăng chỉ từ answer_attitude/scope (phía customer).
+- **162/200 câu y hệt R2**; rule hard-grounding v3 chỉ chạm 38 câu (customer). **0/12 hallucination R2 được sửa.**
+- **Chẩn đoán gốc (chứng minh bằng query Qdrant + web):** bot báo TRUNG THỰC dữ liệu KB, nhưng KB có ô SAI (Zerologon 5.5 thay vì 10.0; PaperCut/XZ fixed-version sai; ProxyLogon↔ProxyShell; CVE tương lai 2026-xxxx). ⇒ điểm nghẽn = **DATA + retrieval [DATA/CODE]**, prompt hết dư địa.
+
+## KẾT LUẬN & DỪNG (sau 3 vòng)
+Tối ưu prompt **bão hoà** (162/200 y hệt, accuracy phẳng). Dừng đúng tiêu chí (grader ổn định + đã bắt & root-cause nhiều case). Xem **HANDOVER.md** cho tổng kết + hướng tiếp theo ưu tiên ([DATA] hiệu đính CVSS/version từ NVD là cao nhất).
+
+**Kết quả cuối:** 87.98 → 89.36 → 89.66. Customer 88→91.3 (đạt). Secpro 87.8→88.0 (chặn bởi data).
