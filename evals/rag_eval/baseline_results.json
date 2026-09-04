@@ -1,0 +1,901 @@
+{
+  "n": 40,
+  "recall@5": 0.725,
+  "recall@10": 0.725,
+  "MRR": 0.671,
+  "rows": [
+    {
+      "id": "q01",
+      "query": "Lỗ hổng Log4Shell là gì và tại sao nó nguy hiểm?",
+      "got": [
+        "CVE-2021-44228",
+        "CVE-2019-17571",
+        "CVE-2017-5645",
+        "CVE-2022-21704",
+        "CVE-2012-5616",
+        "CVE-2019-25590",
+        "CVE-2026-47901",
+        "CVE-2026-32743",
+        "CVE-2022-22965"
+      ],
+      "rel": [
+        "CVE-2021-44228"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q02",
+      "query": "EternalBlue là lỗ hổng gì, mã độc WannaCry đã khai",
+      "got": [
+        "CVE-2017-0144",
+        "CVE-2005-0595",
+        "CVE-2001-0277",
+        "CVE-2026-63985",
+        "CVE-2006-3632",
+        "CVE-2002-0821",
+        "CVE-2026-44111"
+      ],
+      "rel": [
+        "CVE-2017-0144"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q03",
+      "query": "Zerologon cho phép kẻ tấn công làm gì với Active D",
+      "got": [
+        "CVE-2020-1472",
+        "CVE-2026-11861",
+        "CVE-2017-2343",
+        "CVE-2011-3406",
+        "CVE-2008-4023",
+        "CVE-2013-1282",
+        "CVE-2023-37943",
+        "CVE-2011-2014"
+      ],
+      "rel": [
+        "CVE-2020-1472"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q04",
+      "query": "ProxyShell là chuỗi lỗ hổng gì trên Microsoft Exch",
+      "got": [
+        "CVE-2021-34473",
+        "CVE-2021-26855",
+        "CVE-2018-8581",
+        "CVE-2018-8604",
+        "CVE-2018-8374",
+        "CVE-2017-8560",
+        "CVE-2017-8559",
+        "CVE-2017-8621",
+        "CVE-2009-0099"
+      ],
+      "rel": [
+        "CVE-2021-34473"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q05",
+      "query": "BlueKeep là lỗ hổng RDP nghiêm trọng như thế nào?",
+      "got": [
+        "CVE-2019-0708",
+        "CVE-2026-41252",
+        "CVE-2026-44178",
+        "CVE-2026-73227",
+        "CVE-2026-32623",
+        "CVE-2026-33516",
+        "CVE-2026-55238",
+        "CVE-2025-23546"
+      ],
+      "rel": [
+        "CVE-2019-0708"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q06",
+      "query": "Backdoor trong thư viện nén XZ Utils (xz-utils) là",
+      "got": [
+        "CVE-2024-3094",
+        "CVE-2025-0851",
+        "CVE-2026-14266",
+        "CVE-2025-31115",
+        "CVE-2024-47611",
+        "CVE-2026-34743",
+        "CVE-2021-29482",
+        "CVE-2020-28337"
+      ],
+      "rel": [
+        "CVE-2024-3094"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q07",
+      "query": "Heartbleed khai thác lỗi gì trong OpenSSL?",
+      "got": [
+        "CVE-2014-0160",
+        "CVE-2016-2177",
+        "CVE-2020-36164",
+        "CVE-2025-59464",
+        "CVE-2021-23840",
+        "CVE-2021-3449",
+        "CVE-2016-0702",
+        "CVE-2021-23841",
+        "CVE-2011-0014",
+        "CVE-2019-1552"
+      ],
+      "rel": [
+        "CVE-2014-0160"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q08",
+      "query": "Shellshock là lỗ hổng gì trong Bash shell?",
+      "got": [
+        "CVE-2014-6271",
+        "CVE-2019-1593",
+        "CVE-2026-29783",
+        "CVE-2019-18276",
+        "CVE-2019-1730",
+        "CVE-2017-12340",
+        "CVE-2026-32094",
+        "CVE-2026-27113",
+        "CVE-2022-36064",
+        "CVE-2006-1780"
+      ],
+      "rel": [
+        "CVE-2014-6271"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q09",
+      "query": "PrintNightmare ảnh hưởng tới dịch vụ Windows Print",
+      "got": [
+        "CVE-2021-34527",
+        "CVE-2026-50499",
+        "CVE-2016-3238",
+        "CVE-2016-3239",
+        "CVE-2025-49722",
+        "CVE-2020-1070",
+        "CVE-2020-1048",
+        "CVE-2026-50383",
+        "CVE-2013-0011"
+      ],
+      "rel": [
+        "CVE-2021-34527"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q10",
+      "query": "Follina là lỗ hổng zero-day nào liên quan tới Micr",
+      "got": [
+        "CVE-2022-30190",
+        "CVE-2006-2492",
+        "CVE-2022-34713",
+        "CVE-2007-0671",
+        "CVE-2022-35743",
+        "CVE-2006-3864",
+        "CVE-2006-3493",
+        "CVE-2006-1540",
+        "CVE-2022-34478"
+      ],
+      "rel": [
+        "CVE-2022-30190"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q11",
+      "query": "Spring4Shell là lỗ hổng RCE trong framework Java n",
+      "got": [
+        "CVE-2022-22965",
+        "CVE-2026-47884",
+        "CVE-2016-1000027",
+        "CVE-2023-25581",
+        "CVE-2013-2423",
+        "CVE-2026-41586",
+        "CVE-2026-55852",
+        "CVE-2012-4681"
+      ],
+      "rel": [
+        "CVE-2022-22965"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q12",
+      "query": "Citrix Bleed là lỗ hổng gì trên Citrix NetScaler A",
+      "got": [
+        "CVE-2023-4966",
+        "CVE-2019-18225",
+        "CVE-2021-22919",
+        "CVE-2017-14602",
+        "CVE-2018-5314",
+        "CVE-2020-8246",
+        "CVE-2020-8247",
+        "CVE-2017-17382",
+        "CVE-2014-7140"
+      ],
+      "rel": [
+        "CVE-2023-4966"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q13",
+      "query": "ProxyLogon là chuỗi lỗ hổng nào bị khai thác trên ",
+      "got": [
+        "CVE-2021-26855",
+        "CVE-2021-34473",
+        "CVE-2021-41348",
+        "CVE-2021-34470",
+        "CVE-2021-33768",
+        "CVE-2021-31209",
+        "CVE-2021-41350",
+        "CVE-2021-24085",
+        "CVE-2017-8560"
+      ],
+      "rel": [
+        "CVE-2021-26855",
+        "CVE-2021-27065"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q14",
+      "query": "CVE nghiêm trọng nhất của Fortinet FortiOS SSL VPN",
+      "got": [
+        "CVE-2018-13379",
+        "CVE-2020-12812",
+        "CVE-2018-13382",
+        "CVE-2018-13383",
+        "CVE-2026-22153",
+        "CVE-2025-53844",
+        "CVE-2023-45586",
+        "CVE-2017-7738",
+        "CVE-2025-53847",
+        "CVE-2025-54822"
+      ],
+      "rel": [
+        "CVE-2018-13379"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q15",
+      "query": "Lỗ hổng RCE nào trong Apache Struts2 đã gây ra vụ ",
+      "got": [
+        "CVE-2017-12611",
+        "CVE-2026-50632",
+        "CVE-2016-4433",
+        "CVE-2017-9793",
+        "CVE-2016-4431",
+        "CVE-2016-4430",
+        "CVE-2012-1592",
+        "CVE-2018-1327",
+        "CVE-2026-73634",
+        "CVE-2012-1006"
+      ],
+      "rel": [
+        "CVE-2017-5638"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q16",
+      "query": "CVE nào cho phép bỏ qua xác thực trên giao diện qu",
+      "got": [
+        "CVE-2025-59718",
+        "CVE-2022-40684",
+        "CVE-2025-22252",
+        "CVE-2017-14189",
+        "CVE-2024-26009",
+        "CVE-2025-54821",
+        "CVE-2025-25255",
+        "CVE-2025-47890",
+        "CVE-2025-31366",
+        "CVE-2023-22640"
+      ],
+      "rel": [
+        "CVE-2022-40684"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5,
+      "rank": 2
+    },
+    {
+      "id": "q17",
+      "query": "Lỗ hổng nghiêm trọng nào trong Atlassian Confluenc",
+      "got": [
+        "CVE-2021-26084",
+        "CVE-2022-26134",
+        "CVE-2012-0391",
+        "CVE-2022-26138",
+        "CVE-2026-73498",
+        "CVE-2023-22512",
+        "CVE-2026-21579",
+        "CVE-2026-60253",
+        "CVE-2026-60228",
+        "CVE-2021-39114"
+      ],
+      "rel": [
+        "CVE-2022-26134"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5,
+      "rank": 2
+    },
+    {
+      "id": "q18",
+      "query": "Ivanti Connect Secure có lỗ hổng bỏ qua xác thực n",
+      "got": [
+        "CVE-2023-35078",
+        "CVE-2024-21893",
+        "CVE-2023-46805",
+        "CVE-2022-36983",
+        "CVE-2022-36972",
+        "CVE-2022-36975",
+        "CVE-2022-36976",
+        "CVE-2025-55145",
+        "CVE-2025-55148",
+        "CVE-2025-5462"
+      ],
+      "rel": [
+        "CVE-2023-46805"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.3333333333333333,
+      "rank": 3
+    },
+    {
+      "id": "q19",
+      "query": "Citrix ADC/Gateway có lỗ hổng path traversal nghiê",
+      "got": [
+        "CVE-2019-19781",
+        "CVE-2019-18225",
+        "CVE-2021-22919",
+        "CVE-2020-8247",
+        "CVE-2020-8246",
+        "CVE-2021-22955",
+        "CVE-2020-10111",
+        "CVE-2020-8300",
+        "CVE-2020-8245",
+        "CVE-2021-22920"
+      ],
+      "rel": [
+        "CVE-2019-19781"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q20",
+      "query": "GitLab bị lỗ hổng RCE không cần xác thực nào thông",
+      "got": [
+        "CVE-2021-22205",
+        "CVE-2026-42589",
+        "CVE-2026-43893",
+        "CVE-2026-42590",
+        "CVE-2026-7580",
+        "CVE-2022-23935",
+        "CVE-2026-40281"
+      ],
+      "rel": [
+        "CVE-2021-22205"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q21",
+      "query": "JetBrains TeamCity có lỗ hổng bỏ qua xác thực nào ",
+      "got": [
+        "CVE-2024-27198",
+        "CVE-2023-42793",
+        "CVE-2026-50141",
+        "CVE-2024-36378",
+        "CVE-2019-15038",
+        "CVE-2025-54532",
+        "CVE-2019-12846",
+        "CVE-2014-10002",
+        "CVE-2019-15035",
+        "CVE-2020-11686"
+      ],
+      "rel": [
+        "CVE-2024-27198"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q22",
+      "query": "Progress MOVEit Transfer bị khai thác hàng loạt bở",
+      "got": [
+        "CVE-2024-5806",
+        "CVE-2024-5805",
+        "CVE-2024-6576",
+        "CVE-2025-10932",
+        "CVE-2026-10699",
+        "CVE-2025-11235",
+        "CVE-2026-8801",
+        "CVE-2026-8800",
+        "CVE-2026-8651",
+        "CVE-2026-8649"
+      ],
+      "rel": [
+        "CVE-2023-34362"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q23",
+      "query": "F5 BIG-IP có lỗ hổng iControl REST nào cho phép th",
+      "got": [
+        "CVE-2022-1388",
+        "CVE-2026-20916",
+        "CVE-2016-9251",
+        "CVE-2017-6145",
+        "CVE-2019-6621",
+        "CVE-2017-6167",
+        "CVE-2020-5922",
+        "CVE-2016-5021",
+        "CVE-2015-3628",
+        "CVE-2019-6641"
+      ],
+      "rel": [
+        "CVE-2022-1388"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q24",
+      "query": "CVE nào liên quan tới lỗi JNDI injection dẫn đến t",
+      "got": [
+        "CVE-2021-44228",
+        "CVE-2021-45046",
+        "CVE-2017-5645",
+        "CVE-2019-17531",
+        "CVE-2022-25167",
+        "CVE-2022-34916",
+        "CVE-2026-50633",
+        "CVE-2024-54660",
+        "CVE-2024-45199",
+        "CVE-2021-4104"
+      ],
+      "rel": [
+        "CVE-2021-44228"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q25",
+      "query": "Lỗ hổng deserialization (CWE-502) nghiêm trọng nào",
+      "got": [
+        "CVE-2026-66713",
+        "CVE-2026-31214",
+        "CVE-2019-17571",
+        "CVE-2017-5645",
+        "CVE-2026-31223",
+        "CVE-2026-7818",
+        "CVE-2025-54923",
+        "CVE-2022-23302",
+        "CVE-2021-4104"
+      ],
+      "rel": [
+        "CVE-2021-44228"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q26",
+      "query": "Lỗ hổng buffer overflow trong lệnh sudo trên Linux",
+      "got": [
+        "CVE-2021-3156",
+        "CVE-2024-45173",
+        "CVE-2019-18634",
+        "CVE-2002-0184",
+        "CVE-2001-0279",
+        "CVE-1999-0317",
+        "CVE-2002-0816",
+        "CVE-2000-0362",
+        "CVE-1999-1458",
+        "CVE-2000-0467"
+      ],
+      "rel": [
+        "CVE-2021-3156"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q27",
+      "query": "CVE nào là lỗi type confusion trong Oracle Java SE",
+      "got": [
+        "CVE-2012-1723",
+        "CVE-2026-70906",
+        "CVE-2023-21930",
+        "CVE-2025-30761",
+        "CVE-2025-30691",
+        "CVE-2024-21085",
+        "CVE-2025-61748",
+        "CVE-2026-71054",
+        "CVE-2026-60164",
+        "CVE-2026-47013"
+      ],
+      "rel": [
+        "CVE-2012-1723"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q28",
+      "query": "Lỗ hổng SSRF trong Microsoft Exchange Server dẫn t",
+      "got": [
+        "CVE-2026-26137",
+        "CVE-2026-65801",
+        "CVE-2026-45504",
+        "CVE-2026-55993",
+        "CVE-2026-55994",
+        "CVE-2026-45501",
+        "CVE-2026-65813",
+        "CVE-2026-45502",
+        "CVE-2018-16793"
+      ],
+      "rel": [
+        "CVE-2021-26855",
+        "CVE-2021-27065"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q29",
+      "query": "CVE nào khai thác lỗi tràn số nguyên trong xử lý h",
+      "got": [
+        "CVE-2015-1635",
+        "CVE-2026-47291",
+        "CVE-2026-49787",
+        "CVE-2018-8226",
+        "CVE-2018-0956",
+        "CVE-2026-77014",
+        "CVE-2026-77680",
+        "CVE-2013-1305",
+        "CVE-2007-0086"
+      ],
+      "rel": [
+        "CVE-2015-1635"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q30",
+      "query": "Cuộc tấn công DROWN khai thác lỗ hổng nào trong gi",
+      "got": [
+        "CVE-2003-0545",
+        "CVE-2016-0800",
+        "CVE-2021-23839",
+        "CVE-2015-0293",
+        "CVE-2002-1568",
+        "CVE-2006-4343",
+        "CVE-2015-3197",
+        "CVE-2016-0704",
+        "CVE-2016-0703",
+        "CVE-2018-12384"
+      ],
+      "rel": [
+        "CVE-2016-0800"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5,
+      "rank": 2
+    },
+    {
+      "id": "q31",
+      "query": "CVE nào cho phép giả mạo chữ ký chứng chỉ ECC do l",
+      "got": [
+        "CVE-2020-0601",
+        "CVE-2026-55144",
+        "CVE-2021-20305",
+        "CVE-2022-34689",
+        "CVE-2026-50302",
+        "CVE-2023-35339",
+        "CVE-2023-24938",
+        "CVE-2023-24937",
+        "CVE-2021-1679",
+        "CVE-2002-0862"
+      ],
+      "rel": [
+        "CVE-2020-0601"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q32",
+      "query": "Lỗ hổng command injection zero-day trong Barracuda",
+      "got": [
+        "CVE-2023-2868",
+        "CVE-2025-59689",
+        "CVE-2025-20393",
+        "CVE-2023-7102",
+        "CVE-2014-2595",
+        "CVE-2023-26213",
+        "CVE-2012-10046",
+        "CVE-2020-25849",
+        "CVE-2015-2702",
+        "CVE-2019-3631"
+      ],
+      "rel": [
+        "CVE-2023-2868"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q33",
+      "query": "Lỗ hổng cho phép kẻ tấn công từ xa không cần xác t",
+      "got": [
+        "CVE-2025-50171",
+        "CVE-2016-0036",
+        "CVE-2016-0019",
+        "CVE-2019-9510",
+        "CVE-2015-2373",
+        "CVE-2015-2472",
+        "CVE-2018-0976",
+        "CVE-2017-8673",
+        "CVE-2014-6318",
+        "CVE-2026-61367"
+      ],
+      "rel": [
+        "CVE-2019-0708"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q34",
+      "query": "Lỗ hổng trong giao thức chia sẻ file SMB phiên bản",
+      "got": [
+        "CVE-2017-0147",
+        "CVE-2008-4835",
+        "CVE-2018-0749",
+        "CVE-2024-8260",
+        "CVE-2025-34350",
+        "CVE-2017-0275",
+        "CVE-2017-0276",
+        "CVE-2017-0270",
+        "CVE-2017-0271",
+        "CVE-2010-0476"
+      ],
+      "rel": [
+        "CVE-2017-0144"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q35",
+      "query": "Sự cố chuỗi cung ứng phần mềm: một thư viện nén dữ",
+      "got": [
+        "CVE-2019-12776",
+        "CVE-2022-32985",
+        "CVE-2018-12338",
+        "CVE-2018-12336",
+        "CVE-2025-48413",
+        "CVE-2025-14821",
+        "CVE-2025-48415",
+        "CVE-2020-5763",
+        "CVE-2017-12084",
+        "CVE-2025-71317"
+      ],
+      "rel": [
+        "CVE-2024-3094"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q36",
+      "query": "Lỗ hổng cho phép kẻ tấn công giả mạo là bộ điều kh",
+      "got": [
+        "CVE-2017-2343",
+        "CVE-2026-58222",
+        "CVE-2026-3238",
+        "CVE-2020-9330",
+        "CVE-2020-10704",
+        "CVE-2000-0311",
+        "CVE-2001-0237",
+        "CVE-2026-19550"
+      ],
+      "rel": [
+        "CVE-2020-1472"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q37",
+      "query": "Lỗ hổng cho phép leo thang đặc quyền lên hệ thống ",
+      "got": [
+        "CVE-2026-42916",
+        "CVE-2026-56647",
+        "CVE-2026-56175",
+        "CVE-2026-56182",
+        "CVE-2026-58532",
+        "CVE-2026-50298",
+        "CVE-2026-61937",
+        "CVE-2026-50668",
+        "CVE-2026-50333",
+        "CVE-2026-49168"
+      ],
+      "rel": [
+        "CVE-2021-34527"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q38",
+      "query": "Lỗ hổng cho phép đọc trộm nội dung bộ nhớ máy chủ,",
+      "got": [
+        "CVE-2014-0160",
+        "CVE-2026-30795",
+        "CVE-2026-54876",
+        "CVE-2014-3513",
+        "CVE-2002-1215",
+        "CVE-2026-12932",
+        "CVE-2024-40492",
+        "CVE-2026-4299",
+        "CVE-2010-0551"
+      ],
+      "rel": [
+        "CVE-2014-0160"
+      ],
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0,
+      "rank": 1
+    },
+    {
+      "id": "q39",
+      "query": "Lỗ hổng cho phép chèn và thực thi lệnh hệ điều hàn",
+      "got": [
+        "CVE-2024-39943",
+        "CVE-2026-65086",
+        "CVE-2011-1412",
+        "CVE-2005-3750",
+        "CVE-2026-4802",
+        "CVE-2026-8632",
+        "CVE-2004-0630"
+      ],
+      "rel": [
+        "CVE-2014-6271"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    },
+    {
+      "id": "q40",
+      "query": "Lỗ hổng zero-click trong ứng dụng email trên Windo",
+      "got": [
+        "CVE-2026-32631",
+        "CVE-2025-66413",
+        "CVE-2024-1243",
+        "CVE-2024-22318",
+        "CVE-2024-45204",
+        "CVE-2025-11696",
+        "CVE-2016-3352",
+        "CVE-2024-1244",
+        "CVE-2025-42943",
+        "CVE-2026-54206"
+      ],
+      "rel": [
+        "CVE-2023-23397"
+      ],
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0,
+      "rank": null
+    }
+  ]
+}

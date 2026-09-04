@@ -1,0 +1,139 @@
+{"id": "alias-01", "category": "alias", "query": "Lỗ hổng Log4Shell là gì?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "alias-02", "category": "alias", "query": "Lỗ hổng EternalBlue là gì?", "relevant_cves": ["CVE-2017-0144"]}
+{"id": "alias-03", "category": "alias", "query": "Lỗ hổng Zerologon là gì?", "relevant_cves": ["CVE-2020-1472"]}
+{"id": "alias-04", "category": "alias", "query": "Lỗ hổng ProxyShell là gì?", "relevant_cves": ["CVE-2021-34473"]}
+{"id": "alias-05", "category": "alias", "query": "Lỗ hổng ProxyLogon là gì?", "relevant_cves": ["CVE-2021-26855"]}
+{"id": "alias-06", "category": "alias", "query": "Lỗ hổng BlueKeep là gì?", "relevant_cves": ["CVE-2019-0708"]}
+{"id": "alias-07", "category": "alias", "query": "Lỗ hổng PrintNightmare là gì?", "relevant_cves": ["CVE-2021-34527"]}
+{"id": "alias-08", "category": "alias", "query": "Lỗ hổng Follina là gì?", "relevant_cves": ["CVE-2022-30190"]}
+{"id": "alias-09", "category": "alias", "query": "Lỗ hổng Spring4Shell là gì?", "relevant_cves": ["CVE-2022-22965"]}
+{"id": "alias-10", "category": "alias", "query": "Lỗ hổng Citrix Bleed là gì?", "relevant_cves": ["CVE-2023-4966"]}
+{"id": "alias-11", "category": "alias", "query": "Lỗ hổng Heartbleed là gì?", "relevant_cves": ["CVE-2014-0160"]}
+{"id": "alias-12", "category": "alias", "query": "Lỗ hổng Shellshock là gì?", "relevant_cves": ["CVE-2014-6271"]}
+{"id": "alias-13", "category": "alias", "query": "Lỗ hổng Dirty COW là gì?", "relevant_cves": ["CVE-2016-5195"]}
+{"id": "alias-14", "category": "alias", "query": "Lỗ hổng PwnKit là gì?", "relevant_cves": ["CVE-2021-4034"]}
+{"id": "alias-15", "category": "alias", "query": "Lỗ hổng Sudo Baron Samedit là gì?", "relevant_cves": ["CVE-2021-3156"]}
+{"id": "alias-16", "category": "alias", "query": "Lỗ hổng SMBGhost là gì?", "relevant_cves": ["CVE-2020-0796"]}
+{"id": "alias-17", "category": "alias", "query": "Lỗ hổng SIGRed là gì?", "relevant_cves": ["CVE-2020-1350"]}
+{"id": "alias-18", "category": "alias", "query": "Lỗ hổng Ghostcat là gì?", "relevant_cves": ["CVE-2020-1938"]}
+{"id": "alias-19", "category": "alias", "query": "Lỗ hổng backdoor XZ Utils là gì?", "relevant_cves": ["CVE-2024-3094"]}
+{"id": "alias-20", "category": "alias", "query": "Lỗ hổng Text4Shell là gì?", "relevant_cves": ["CVE-2022-42889"]}
+{"id": "alias-21", "category": "alias", "query": "Lỗ hổng Meltdown là gì?", "relevant_cves": ["CVE-2017-5754"]}
+{"id": "alias-22", "category": "alias", "query": "Lỗ hổng Spectre là gì?", "relevant_cves": ["CVE-2017-5753"]}
+{"id": "alias-23", "category": "alias", "query": "Lỗ hổng Dirty Pipe là gì?", "relevant_cves": ["CVE-2022-0847"]}
+{"id": "alias-24", "category": "alias", "query": "Lỗ hổng regreSSHion là gì?", "relevant_cves": ["CVE-2024-6387"]}
+{"id": "alias-25", "category": "alias", "query": "Lỗ hổng Terrapin là gì?", "relevant_cves": ["CVE-2023-48795"]}
+{"id": "alias-26", "category": "alias", "query": "Lỗ hổng GHOST glibc là gì?", "relevant_cves": ["CVE-2015-0235"]}
+{"id": "alias-27", "category": "alias", "query": "Lỗ hổng Drupalgeddon2 là gì?", "relevant_cves": ["CVE-2018-7600"]}
+{"id": "alias-28", "category": "alias", "query": "Lỗ hổng Looney Tunables là gì?", "relevant_cves": ["CVE-2023-4911"]}
+{"id": "alias-29", "category": "alias", "query": "Lỗ hổng KRACK là gì?", "relevant_cves": ["CVE-2017-13077"]}
+{"id": "alias-30", "category": "alias", "query": "Lỗ hổng Ripple20 là gì?", "relevant_cves": ["CVE-2020-11896"]}
+{"id": "description-01", "category": "description", "query": "Lỗ hổng cho phép giả mạo là bộ điều khiển miền qua giao thức Netlogon", "relevant_cves": ["CVE-2020-1472"]}
+{"id": "description-02", "category": "description", "query": "Lỗ hổng thực thi mã từ xa trong dịch vụ Windows Print Spooler", "relevant_cves": ["CVE-2021-34527"]}
+{"id": "description-03", "category": "description", "query": "Lỗ hổng RCE không cần xác thực trong giao thức RDP của Windows", "relevant_cves": ["CVE-2019-0708"]}
+{"id": "description-04", "category": "description", "query": "Lỗ hổng tràn bộ đệm đọc lộ nội dung bộ nhớ trong OpenSSL heartbeat", "relevant_cves": ["CVE-2014-0160"]}
+{"id": "description-05", "category": "description", "query": "Lỗ hổng chèn lệnh qua biến môi trường trong Bash", "relevant_cves": ["CVE-2014-6271"]}
+{"id": "description-06", "category": "description", "query": "Lỗ hổng deserialization JNDI trong thư viện logging Java", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "description-07", "category": "description", "query": "Lỗ hổng path traversal và RCE trong Apache HTTP Server 2.4.49", "relevant_cves": ["CVE-2021-41773"]}
+{"id": "description-08", "category": "description", "query": "Lỗ hổng SSRF trên Microsoft Exchange dẫn tới chiếm quyền", "relevant_cves": ["CVE-2021-26855"]}
+{"id": "description-09", "category": "description", "query": "Lỗ hổng leo thang đặc quyền cục bộ trong polkit pkexec", "relevant_cves": ["CVE-2021-4034"]}
+{"id": "description-10", "category": "description", "query": "Lỗ hổng bỏ qua xác thực qua SQL injection trên JetBrains TeamCity", "relevant_cves": ["CVE-2024-27198"]}
+{"id": "description-11", "category": "description", "query": "Lỗ hổng khai thác hàng loạt đánh cắp dữ liệu trên MOVEit Transfer", "relevant_cves": ["CVE-2023-34362"]}
+{"id": "description-12", "category": "description", "query": "Lỗ hổng RCE trong OGNL của Apache Struts2 gây vụ rò rỉ Equifax", "relevant_cves": ["CVE-2017-5638"]}
+{"id": "description-13", "category": "description", "query": "Lỗ hổng đọc trộm session token trên Citrix NetScaler ADC", "relevant_cves": ["CVE-2023-4966"]}
+{"id": "description-14", "category": "description", "query": "Lỗ hổng chèn template MSDT trong tài liệu Office", "relevant_cves": ["CVE-2022-30190"]}
+{"id": "description-15", "category": "description", "query": "Lỗ hổng ghi đè ánh xạ bộ nhớ copy-on-write trong nhân Linux", "relevant_cves": ["CVE-2016-5195"]}
+{"id": "description-16", "category": "description", "query": "Lỗ hổng ghi trái phép vào pipe buffer trong nhân Linux", "relevant_cves": ["CVE-2022-0847"]}
+{"id": "description-17", "category": "description", "query": "Lỗ hổng tràn số nguyên trong glibc gethostbyname", "relevant_cves": ["CVE-2015-0235"]}
+{"id": "description-18", "category": "description", "query": "Lỗ hổng thực thi mã từ xa trước xác thực trong OpenSSH server", "relevant_cves": ["CVE-2024-6387"]}
+{"id": "description-19", "category": "description", "query": "Lỗ hổng chèn OGNL trong Apache Struts2 qua Content-Type", "relevant_cves": ["CVE-2017-5638"]}
+{"id": "description-20", "category": "description", "query": "Lỗ hổng RCE trong Atlassian Confluence qua OGNL injection", "relevant_cves": ["CVE-2022-26134"]}
+{"id": "description-21", "category": "description", "query": "Lỗ hổng đọc file tùy ý không cần xác thực trên Pulse Secure VPN", "relevant_cves": ["CVE-2019-11510"]}
+{"id": "description-22", "category": "description", "query": "Lỗ hổng command injection zero-day trên Palo Alto PAN-OS GlobalProtect", "relevant_cves": ["CVE-2024-3400"]}
+{"id": "description-23", "category": "description", "query": "Lỗ hổng RCE trên VMware vCenter qua plugin vSAN Health", "relevant_cves": ["CVE-2021-21985"]}
+{"id": "description-24", "category": "description", "query": "Lỗ hổng leo thang đặc quyền qua GameOver(lay) OverlayFS Linux", "relevant_cves": ["CVE-2023-2640"]}
+{"id": "description-25", "category": "description", "query": "Lỗ hổng tràn heap trong xử lý DNS SIG record trên Windows DNS Server", "relevant_cves": ["CVE-2020-1350"]}
+{"id": "product-01", "category": "product", "query": "Lỗ hổng Fortinet FortiOS SSL VPN path traversal?", "relevant_cves": ["CVE-2018-13379"]}
+{"id": "product-02", "category": "product", "query": "Lỗ hổng F5 BIG-IP iControl REST cho phép RCE?", "relevant_cves": ["CVE-2022-1388", "CVE-2021-22986"]}
+{"id": "product-03", "category": "product", "query": "Lỗ hổng Atlassian Confluence OGNL injection RCE?", "relevant_cves": ["CVE-2022-26134", "CVE-2021-26084"]}
+{"id": "product-04", "category": "product", "query": "Lỗ hổng Citrix ADC/Gateway (NetScaler) path traversal RCE?", "relevant_cves": ["CVE-2019-19781"]}
+{"id": "product-05", "category": "product", "query": "Lỗ hổng Ivanti Connect Secure bỏ qua xác thực?", "relevant_cves": ["CVE-2023-46805", "CVE-2024-21887"]}
+{"id": "product-06", "category": "product", "query": "Lỗ hổng VMware vCenter Server RCE?", "relevant_cves": ["CVE-2021-21972", "CVE-2021-22005", "CVE-2021-21985"]}
+{"id": "product-07", "category": "product", "query": "Lỗ hổng Palo Alto PAN-OS GlobalProtect command injection?", "relevant_cves": ["CVE-2024-3400"]}
+{"id": "product-08", "category": "product", "query": "Lỗ hổng Pulse Secure VPN đọc file tùy ý?", "relevant_cves": ["CVE-2019-11510"]}
+{"id": "product-09", "category": "product", "query": "Lỗ hổng GitLab RCE không cần xác thực qua ExifTool?", "relevant_cves": ["CVE-2021-22205"]}
+{"id": "product-10", "category": "product", "query": "Lỗ hổng Apache Log4j2 RCE?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "product-11", "category": "product", "query": "Lỗ hổng Microsoft SharePoint RCE?", "relevant_cves": ["CVE-2019-0604", "CVE-2023-29357"]}
+{"id": "product-12", "category": "product", "query": "Lỗ hổng Progress MOVEit Transfer SQL injection?", "relevant_cves": ["CVE-2023-34362"]}
+{"id": "product-13", "category": "product", "query": "Lỗ hổng Cisco IOS XE web UI leo thang đặc quyền?", "relevant_cves": ["CVE-2023-20198"]}
+{"id": "product-14", "category": "product", "query": "Lỗ hổng SolarWinds Orion supply chain SUNBURST?", "relevant_cves": ["CVE-2020-10148"]}
+{"id": "product-15", "category": "product", "query": "Lỗ hổng Zoho ManageEngine ADSelfService Plus RCE?", "relevant_cves": ["CVE-2021-40539"]}
+{"id": "product-16", "category": "product", "query": "Lỗ hổng Oracle WebLogic Server RCE qua T3/IIOP?", "relevant_cves": ["CVE-2020-14882", "CVE-2019-2725"]}
+{"id": "product-17", "category": "product", "query": "Lỗ hổng Apache Struts2 RCE Jakarta Multipart?", "relevant_cves": ["CVE-2017-5638"]}
+{"id": "product-18", "category": "product", "query": "Lỗ hổng Microsoft Exchange ProxyNotShell?", "relevant_cves": ["CVE-2022-41040", "CVE-2022-41082"]}
+{"id": "product-19", "category": "product", "query": "Lỗ hổng PaperCut MF/NG bỏ qua xác thực RCE?", "relevant_cves": ["CVE-2023-27350"]}
+{"id": "product-20", "category": "product", "query": "Lỗ hổng Barracuda Email Security Gateway command injection zero-day?", "relevant_cves": ["CVE-2023-2868"]}
+{"id": "cwe-01", "category": "cwe", "query": "CVE nào là lỗ hổng chèn và thực thi lệnh hệ điều hành (CWE-78)?", "relevant_cves": ["CVE-2014-6271", "CVE-2024-3400", "CVE-2023-2868"]}
+{"id": "cwe-02", "category": "cwe", "query": "CVE nào là lỗ hổng deserialization dữ liệu không tin cậy (CWE-502)?", "relevant_cves": ["CVE-2021-44228", "CVE-2017-9805", "CVE-2015-4852"]}
+{"id": "cwe-03", "category": "cwe", "query": "CVE nào là lỗ hổng path traversal (CWE-22)?", "relevant_cves": ["CVE-2021-41773", "CVE-2018-13379", "CVE-2019-19781"]}
+{"id": "cwe-04", "category": "cwe", "query": "CVE nào là lỗ hổng server-side request forgery SSRF (CWE-918)?", "relevant_cves": ["CVE-2021-26855", "CVE-2021-21972"]}
+{"id": "cwe-05", "category": "cwe", "query": "CVE nào là lỗ hổng SQL injection (CWE-89)?", "relevant_cves": ["CVE-2024-27198", "CVE-2023-34362"]}
+{"id": "cwe-06", "category": "cwe", "query": "CVE nào là lỗ hổng leo thang đặc quyền cục bộ Linux?", "relevant_cves": ["CVE-2021-4034", "CVE-2021-3156", "CVE-2016-5195", "CVE-2022-0847"]}
+{"id": "cwe-07", "category": "cwe", "query": "CVE nào là lỗ hổng use-after-free (CWE-416)?", "relevant_cves": ["CVE-2021-21220", "CVE-2022-0609"]}
+{"id": "cwe-08", "category": "cwe", "query": "CVE nào là lỗ hổng tràn bộ đệm heap (CWE-122)?", "relevant_cves": ["CVE-2015-0235", "CVE-2020-0796"]}
+{"id": "cwe-09", "category": "cwe", "query": "CVE nào là lỗ hổng cross-site scripting XSS (CWE-79)?", "relevant_cves": ["CVE-2018-6389", "CVE-2019-11043"]}
+{"id": "cwe-10", "category": "cwe", "query": "CVE nào là lỗ hổng out-of-bounds write (CWE-787)?", "relevant_cves": ["CVE-2019-0708", "CVE-2020-1350"]}
+{"id": "cwe-11", "category": "cwe", "query": "CVE nào là lỗ hổng bỏ qua xác thực (CWE-287)?", "relevant_cves": ["CVE-2022-1388", "CVE-2023-46805", "CVE-2020-1472"]}
+{"id": "cwe-12", "category": "cwe", "query": "CVE nào là lỗ hổng OGNL/expression injection?", "relevant_cves": ["CVE-2017-5638", "CVE-2022-26134", "CVE-2022-22965"]}
+{"id": "cwe-13", "category": "cwe", "query": "CVE nào là lỗ hổng XML external entity XXE (CWE-611)?", "relevant_cves": ["CVE-2014-3529"]}
+{"id": "cwe-14", "category": "cwe", "query": "CVE nào là lỗ hổng thực thi mã từ xa qua JNDI/LDAP?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "cwe-15", "category": "cwe", "query": "CVE nào là lỗ hổng chèn lệnh qua template (SSTI)?", "relevant_cves": ["CVE-2022-30190"]}
+{"id": "multi_hop-01", "category": "multi_hop", "query": "CVE nào của Apache Struts2 liên quan OGNL bị khai thác thực tế?", "relevant_cves": ["CVE-2017-5638", "CVE-2018-11776"]}
+{"id": "multi_hop-02", "category": "multi_hop", "query": "Các CVE path traversal của Fortinet FortiOS?", "relevant_cves": ["CVE-2018-13379"]}
+{"id": "multi_hop-03", "category": "multi_hop", "query": "Những CVE nào trên Microsoft Exchange tạo thành chuỗi ProxyLogon?", "relevant_cves": ["CVE-2021-26855", "CVE-2021-27065", "CVE-2021-26857", "CVE-2021-26858"]}
+{"id": "multi_hop-04", "category": "multi_hop", "query": "CVE nào của Citrix cho phép chiếm phiên đăng nhập?", "relevant_cves": ["CVE-2023-4966"]}
+{"id": "multi_hop-05", "category": "multi_hop", "query": "Các lỗ hổng RCE của Apache HTTP Server 2.4.49/2.4.50?", "relevant_cves": ["CVE-2021-41773", "CVE-2021-42013"]}
+{"id": "multi_hop-06", "category": "multi_hop", "query": "CVE deserialization nào trong Oracle WebLogic?", "relevant_cves": ["CVE-2019-2725", "CVE-2020-14882"]}
+{"id": "multi_hop-07", "category": "multi_hop", "query": "Lỗ hổng nào của SonicWall SMA bị khai thác zero-day?", "relevant_cves": ["CVE-2021-20016"]}
+{"id": "multi_hop-08", "category": "multi_hop", "query": "CVE nào của VMware vCenter cho phép RCE không cần xác thực?", "relevant_cves": ["CVE-2021-21972", "CVE-2021-22005"]}
+{"id": "multi_hop-09", "category": "multi_hop", "query": "Chuỗi CVE ProxyNotShell trên Exchange gồm những gì?", "relevant_cves": ["CVE-2022-41040", "CVE-2022-41082"]}
+{"id": "multi_hop-10", "category": "multi_hop", "query": "Lỗ hổng leo thang đặc quyền nhân Linux OverlayFS?", "relevant_cves": ["CVE-2021-3493", "CVE-2023-0386", "CVE-2023-2640"]}
+{"id": "multi_hop-11", "category": "multi_hop", "query": "CVE nào trên Ivanti Connect Secure bị chuỗi để RCE?", "relevant_cves": ["CVE-2023-46805", "CVE-2024-21887"]}
+{"id": "multi_hop-12", "category": "multi_hop", "query": "Lỗ hổng nào của Zimbra bị khai thác để RCE?", "relevant_cves": ["CVE-2022-27925", "CVE-2022-41352"]}
+{"id": "multi_hop-13", "category": "multi_hop", "query": "CVE nào của Cisco ASA/FTD bị khai thác VPN?", "relevant_cves": ["CVE-2020-3452", "CVE-2018-0101"]}
+{"id": "multi_hop-14", "category": "multi_hop", "query": "Lỗ hổng RCE của Spring Framework/Spring Cloud?", "relevant_cves": ["CVE-2022-22965", "CVE-2022-22963"]}
+{"id": "multi_hop-15", "category": "multi_hop", "query": "CVE nào của Windows SMBv3 cho phép RCE wormable?", "relevant_cves": ["CVE-2020-0796"]}
+{"id": "exact_id-01", "category": "exact_id", "query": "CVE-2021-44228 là lỗ hổng gì?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "exact_id-02", "category": "exact_id", "query": "CVE-2017-0144 là lỗ hổng gì?", "relevant_cves": ["CVE-2017-0144"]}
+{"id": "exact_id-03", "category": "exact_id", "query": "CVE-2020-1472 là lỗ hổng gì?", "relevant_cves": ["CVE-2020-1472"]}
+{"id": "exact_id-04", "category": "exact_id", "query": "CVE-2019-0708 là lỗ hổng gì?", "relevant_cves": ["CVE-2019-0708"]}
+{"id": "exact_id-05", "category": "exact_id", "query": "CVE-2018-13379 là lỗ hổng gì?", "relevant_cves": ["CVE-2018-13379"]}
+{"id": "exact_id-06", "category": "exact_id", "query": "CVE-2023-4966 là lỗ hổng gì?", "relevant_cves": ["CVE-2023-4966"]}
+{"id": "exact_id-07", "category": "exact_id", "query": "CVE-2024-3094 là lỗ hổng gì?", "relevant_cves": ["CVE-2024-3094"]}
+{"id": "exact_id-08", "category": "exact_id", "query": "CVE-2022-30190 là lỗ hổng gì?", "relevant_cves": ["CVE-2022-30190"]}
+{"id": "exact_id-09", "category": "exact_id", "query": "CVE-2021-34473 là lỗ hổng gì?", "relevant_cves": ["CVE-2021-34473"]}
+{"id": "exact_id-10", "category": "exact_id", "query": "CVE-2014-0160 là lỗ hổng gì?", "relevant_cves": ["CVE-2014-0160"]}
+{"id": "exact_id-11", "category": "exact_id", "query": "CVE-2024-3400 là lỗ hổng gì?", "relevant_cves": ["CVE-2024-3400"]}
+{"id": "exact_id-12", "category": "exact_id", "query": "CVE-2023-34362 là lỗ hổng gì?", "relevant_cves": ["CVE-2023-34362"]}
+{"id": "aggregate-01", "category": "aggregate", "query": "Cơ sở tri thức có tổng cộng bao nhiêu CVE?", "expected": "count_total"}
+{"id": "aggregate-02", "category": "aggregate", "query": "CVE cũ nhất trong hệ thống là năm nào?", "expected": "min_year~1999"}
+{"id": "aggregate-03", "category": "aggregate", "query": "CVE mới nhất được ghi nhận là gì?", "expected": "max_recent"}
+{"id": "aggregate-04", "category": "aggregate", "query": "Có bao nhiêu CVE năm 2024?", "expected": "count_year_2024"}
+{"id": "aggregate-05", "category": "aggregate", "query": "Có bao nhiêu CVE mức CRITICAL?", "expected": "count_severity_critical"}
+{"id": "aggregate-06", "category": "aggregate", "query": "Dữ liệu bao phủ từ năm nào đến năm nào?", "expected": "range_1999_2026"}
+{"id": "aggregate-07", "category": "aggregate", "query": "Có bao nhiêu CVE nằm trong danh sách KEV của CISA?", "expected": "count_kev"}
+{"id": "aggregate-08", "category": "aggregate", "query": "Bao nhiêu CVE của năm 2021 có mức nghiêm trọng cao?", "expected": "count_year_severity"}
+{"id": "aggregate-09", "category": "aggregate", "query": "Sản phẩm nào có nhiều CVE nhất trong KB?", "expected": "top_product"}
+{"id": "aggregate-10", "category": "aggregate", "query": "Có bao nhiêu CVE liên quan CWE-79?", "expected": "count_cwe79"}
+{"id": "aggregate-11", "category": "aggregate", "query": "CVE nào có điểm CVSS cao nhất (10.0)?", "expected": "list_cvss10"}
+{"id": "aggregate-12", "category": "aggregate", "query": "Trung bình mỗi năm có bao nhiêu CVE?", "expected": "avg_per_year"}
+{"id": "aggregate-13", "category": "aggregate", "query": "Bao nhiêu CVE được cập nhật trong 30 ngày qua?", "expected": "count_recent_update"}
+{"id": "aggregate-14", "category": "aggregate", "query": "Năm nào có nhiều CVE nhất?", "expected": "peak_year"}
+{"id": "edge-01", "category": "edge", "query": "CVE-2030-99999 là gì?", "relevant_cves": []}
+{"id": "edge-02", "category": "edge", "query": "CVE-2099-00001 mô tả lỗ hổng nào?", "relevant_cves": []}
+{"id": "edge-03", "category": "edge", "query": "CVE-ABCD-1234 là gì?", "relevant_cves": []}
+{"id": "edge-04", "category": "edge", "query": "Lỗ hổng CVE-2045-55555 nghiêm trọng ra sao?", "relevant_cves": []}
+{"id": "edge-05", "category": "edge", "query": "CVE-2027-12345 ảnh hưởng sản phẩm nào?", "relevant_cves": []}
+{"id": "edge-06", "category": "edge", "query": "CVE-2020-9999999 có PoC không?", "relevant_cves": []}
+{"id": "edge-07", "category": "edge", "query": "Lỗ hổng FooBarShell năm 2035 là gì?", "relevant_cves": []}
+{"id": "edge-08", "category": "edge", "query": "CVE-1990-0001 là gì?", "relevant_cves": []}
