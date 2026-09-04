@@ -1,0 +1,36 @@
+{
+  "mode": "rerank",
+  "url": "http://80.188.223.202:11441",
+  "model": "DuyTa/sec-rerank",
+  "levels": [
+    {
+      "conc": 8,
+      "batch": 50,
+      "reqs": 64,
+      "docs": 3200,
+      "seconds": 5.52,
+      "per_s": 580.1,
+      "ok_reqs": 64
+    },
+    {
+      "conc": 16,
+      "batch": 50,
+      "reqs": 64,
+      "docs": 3200,
+      "seconds": 3.08,
+      "per_s": 1037.7,
+      "ok_reqs": 64
+    },
+    {
+      "conc": 32,
+      "batch": 50,
+      "reqs": 64,
+      "docs": 3200,
+      "seconds": 1.95,
+      "per_s": 1640.1,
+      "ok_reqs": 64
+    }
+  ],
+  "peak_per_s": 1640.1,
+  "peak_conc": 32
+}

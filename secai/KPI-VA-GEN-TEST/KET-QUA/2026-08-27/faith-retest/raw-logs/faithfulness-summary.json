@@ -1,0 +1,6 @@
+{
+  "mean_faithfulness_pct": 97.82,
+  "n": 233,
+  "judge": "DuyTa/Cyber-F1-AWQ",
+  "method": "direct-judge (RAGAS-style)"
+}

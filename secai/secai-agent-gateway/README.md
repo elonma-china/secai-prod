@@ -49,6 +49,66 @@ Each AI task has a JSON form and an SSE `…/stream` form (streams `tool_call` /
 - `GET  /health` · `POST /admin/refresh-models` (needs `X-API-Key`)
 - Interactive API docs at `/docs` (Swagger) and `/redoc`
 
+## Sanitization
+
+Every request is filtered on the way **in** and every answer on the way **out**.
+
+**Input — redaction gate.** `require_public_input` (`security.py`) rejects prompts carrying
+secrets/PII (private keys, `sk_/AKIA/…` tokens, `password:`/`bearer …`, long card-like digit
+runs) with `422` — only public or pre-redacted input reaches the model.
+
+**Input — model-based classification** (`src/secai_gateway/sanitize/`). Before the agent runs,
+each chat prompt is embedded with the deployed `sec-embedding` model and a tiny **numpy** head
+assigns a combined taxonomy — intent `security | chitchat | offtopic` (softmax) plus independent
+`injection` (prompt-injection/jailbreak) and `pii` sigmoids — then `gate.decide` acts:
+
+- `injection` → **blocked** with a safe refusal (never reaches the LLM),
+- `offtopic` → deterministic `<scope_policy>` refusal,
+- `chitchat` → pass (the LLM handles greetings), `pii` → soft flag (audit/redact), else **pass**.
+
+The head is **mixed** (intent = 1-hidden-layer MLP, injection/pii = class-balanced logistic),
+runs numpy-only (no torch at serving) and ships as `sanitize/assets/head.npz`. It is trained
+offline against the same embedding space (`scripts/train_sanitize_head.py`, data
+`evals/sanitize/dataset.jsonl` built by `scripts/build_sanitize_dataset.py`). On the held-out
+split (leakage-free, split **by template skeleton**) every class scores **F1 ≥ 0.98**
+(macro-F1 ≈ 0.986; injection recall 1.0). **Fail-open by construction**: a missing/untrained
+head, an `EMBEDDING_MODEL` mismatch, a dimension mismatch, or any embedding error passes the
+prompt through — the classifier can only *add* a block, never take chat down. Toggle and tune
+via `INPUT_CLASSIFIER_*` env vars (enable, per-action block flags, per-label thresholds, embed
+timeout); flip a `BLOCK_*` flag off for shadow/log-only.
+
+_Model_ — `sec-embedding` (bge-m3 fine-tune, 1024-d) → **mixed** numpy head: intent = 1-hidden
+MLP (128 units, softmax-3), injection/pii = class-balanced logistic (sigmoid). Inference is a
+few matmuls, sub-ms; head is ~0.5 MB, no torch at serving.
+
+_Train_ — 1005 bilingual (VI/EN) prompts embedded via `sec-embedding`; `C` chosen by 4-fold CV
+on train only; intent oversampled to balance chitchat. Deterministic dataset (`SEED`) covering
+9 injection techniques, VN PII formats, no-diacritics/teencode, pasted code/logs, and
+security↔offtopic hard-negatives.
+
+_Eval_ — held-out **383** samples, split **by template skeleton** so test phrasings are unseen
+(train↔test skeleton overlap = 0); metrics independently reproduced to 4 decimals.
+
+| class | precision | recall | **F1** |
+|---|---|---|---|
+| security  | 0.992 | 0.988 | 0.990 |
+| chitchat  | 1.000 | 0.966 | 0.983 |
+| offtopic  | 0.973 | 0.991 | 0.982 |
+| injection | 0.967 | **1.000** | 0.983 |
+| pii       | 0.988 | **1.000** | 0.994 |
+
+intent accuracy **0.987** · macro-F1 **0.986** · every class F1 ≥ 0.98 · train↔test overfit gap
+0.013. Full report: `sanitize/assets/metrics.json`.
+
+**Output — language + anti-XSS.** `sanitize_output_language` (`security.py`) runs on every
+answer: it drops leaked reasoning/meta-planning and internal tool-call echoes, strips CJK
+(VI/EN-only), then **defangs active content** (`neutralize_active_content`) so a frontend that
+renders the answer cannot execute it — dangerous URL schemes (`javascript:`/`vbscript:`/
+`data:text/html`) get a zero-width break, HTML tags are angle-escaped (`<script>` → `&lt;script&gt;`),
+event handlers are broken. Payloads stay readable/educational but inert. This applies to chat,
+translate, report, exploit, the SSE token stream and the injected PoC. It is **defense-in-depth**;
+the frontend must still sanitize on render (DOMPurify, block `javascript:` links) as the primary fix.
+
 ## Memory
 
 Conversation memory is **unified in Redis** via Linch's own session store

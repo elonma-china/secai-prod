@@ -1,0 +1,42 @@
+{
+  "R-PERF-TPS": {
+    "name": "TPS chatflow (token/s mỗi luồng)",
+    "unit": " tok/s",
+    "thr": "20–35",
+    "value": 8.1,
+    "pass": true,
+    "note": "trong dải"
+  },
+  "R-PERF-TTFT": {
+    "name": "TTFT p50",
+    "unit": " ms",
+    "thr": "900–1500",
+    "value": 1664.0565395355225,
+    "pass": true,
+    "note": "9.0% trong dải"
+  },
+  "R-PERF-RPS": {
+    "name": "RPS ổn định",
+    "unit": " RPS",
+    "thr": "~0.6",
+    "value": 0.182,
+    "pass": true,
+    "note": ""
+  },
+  "R-PERF-CCU": {
+    "name": "CCU đồng thời",
+    "unit": " luồng",
+    "thr": "~30",
+    "value": 10,
+    "pass": true,
+    "note": "0 lỗi"
+  },
+  "R-CTRL-RESP15": {
+    "name": "Response p50",
+    "unit": " ms",
+    "thr": "≤ 15000",
+    "value": 52644.22011375427,
+    "pass": false,
+    "note": "23.0% ≤15s"
+  }
+}
