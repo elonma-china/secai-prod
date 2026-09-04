@@ -56,11 +56,10 @@
           padding: 14px 12px; display: flex; flex-direction: column; gap: 18px;
           transition: width .18s ease; overflow: hidden; }
   aside.collapsed { width: 58px; }
-  /* Collapsed: hide the labels AND their counts — a column of bare numbers with nothing
-     to attach them to reads as noise, not information. */
-  aside.collapsed .lbl, aside.collapsed .group > h3, aside.collapsed .side-foot span,
-  aside.collapsed .count { display: none; }
-  aside.collapsed .side-btn { justify-content: center; }
+  /* Collapsed = "give the table the full width". The filter buttons are meaningless
+     without their labels (and a column of label-less pills or bare counts reads as
+     noise), so the whole nav goes away and only the toggle stays. */
+  aside.collapsed .lbl, aside.collapsed .group, aside.collapsed .side-foot { display: none; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
   .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: var(--accent);
                 color: #fff; display: grid; place-items: center; font-size: 13px; flex: none; }
