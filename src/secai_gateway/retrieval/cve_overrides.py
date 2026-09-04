@@ -45,6 +45,21 @@ CVE_OVERRIDES: dict[str, dict[str, Any]] = {
         "products_add": ["afd.sys"],
         "is_in_kev": True,
     },
+    # ── CVSS/severity corrections vs NVD (nvd@nist.gov authoritative) — 2026-09-04 ──
+    # Ingest lấy nhầm CVSS metric (CNA/secondary) thay vì NVD-analyst khi CVE có nhiều
+    # metric. Đối chiếu services.nvd.nist.gov/rest/json/cves/2.0.
+    "CVE-2020-1472": {  # Zerologon: Microsoft CNA ghi 5.5, NVD-analyst 10.0 CRITICAL
+        "cvss_score": 10.0, "severity": "CRITICAL",
+    },
+    "CVE-2018-13379": {  # Fortinet path traversal: NVD 9.8
+        "cvss_score": 9.8, "severity": "CRITICAL",
+    },
+    "CVE-2021-26855": {  # ProxyLogon SSRF: NVD 9.8
+        "cvss_score": 9.8, "severity": "CRITICAL",
+    },
+    "CVE-2023-4966": {  # Citrix Bleed: NVD base 7.5 HIGH (KB có 9.4 từ nguồn phụ)
+        "cvss_score": 7.5, "severity": "HIGH",
+    },
 }
 
 def _set_labeled_field(text: str, label: str, value: str) -> str:
@@ -102,6 +117,25 @@ def apply_cve_override(payload: dict[str, Any] | None) -> dict[str, Any]:
             text = re.sub(r"In KEV:\s*\S+", "In KEV: True", text, count=1, flags=re.I)
         elif not re.search(r"\bKEV:", text):
             text = _set_labeled_field(text, "KEV", "Known Exploited Vulnerability")
+
+    # CVSS/severity correction (NVD/OpenCVE sometimes ingested a disputed CNA/secondary
+    # score instead of the NVD-analyst score — e.g. Zerologon 5.5 vs 10.0). Rewrite the
+    # payload facets + the "CVSS v3: X SEV" text label so BM25/dense stay consistent.
+    new_cvss = ov.get("cvss_score")
+    new_sev = ov.get("severity")
+    if new_cvss is not None or new_sev is not None:
+        try:
+            score = float(new_cvss) if new_cvss is not None else out.get("cvss_score")
+            sev = str(new_sev).upper() if new_sev is not None else str(out.get("severity") or "").upper()
+            if new_cvss is not None:
+                out["cvss_score"] = float(new_cvss)
+            if new_sev is not None:
+                out["severity"] = sev
+            if score is not None and re.search(r"CVSS v3:\s*[\d.]+", text):
+                text = re.sub(r"CVSS v3:\s*[\d.]+\s*[A-Za-z]*",
+                              f"CVSS v3: {score} {sev}".rstrip(), text, count=1)
+        except (TypeError, ValueError):
+            pass
 
     if text != str(out.get("text") or ""):
         out["text"] = text
