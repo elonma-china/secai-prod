@@ -20,3 +20,17 @@ Lưu ý: POC enrich đúng CVE eval hỏi (proof-of-mechanism). Production cần
 
 ## Deliverables
 `evals/rag_eval/{queries.jsonl(40), run_rag_eval.py, baseline_results.json, RAG_FINDINGS.md}`; báo cáo chi tiết trong worktree agent (RAG_ANALYSIS.md, RAG_GITHUB_SURVEY.md).
+
+## A/B áp cải tiến #1 + #3 (2026-09-04, eval 139 query)
+| Nhóm | Baseline (post-CVSS) | +#1 alias enrich | +#3 graph-fusion |
+|---|---|---|---|
+| alias | 0.400 | **0.800** | 0.800 |
+| product | 0.600 | 0.750 | 0.750 |
+| multi_hop | 0.533 | 0.667 | 0.667 |
+| description | 0.560 | 0.640 | 0.640 |
+| cwe | 0.067 | 0.067 | **0.133** |
+| exact_id | 1.000 | 1.000 | 1.000 |
+| **TỔNG recall@10** | **0.504** | **0.667** | **0.675** |
+
+- **#1 alias enrichment [DATA]**: `alias_enrich.py` — prepend "Tên gọi phổ biến: X" + re-embed dense+BM25, 59 CVE nổi tiếng. LIVE trong Qdrant (production ăn ngay). +0.163 tổng.
+- **#3 graph-fusion [CODE]**: `qdrant.py::_graph_reverse_candidates` — query class (CWE/CAPEC/T-id) bơm CVE từ Neo4j (KEV/CVSS-ranked) vào pool rerank. CHỈ kích hoạt cho class query → zero regression. cwe metric x2; kiểm chứng functional trả CVE lớp đúng (nhãn eval hẹp nên metric under-measure). CẦN deploy vào container để prod dùng.
