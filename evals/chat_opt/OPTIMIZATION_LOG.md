@@ -31,3 +31,16 @@ _(các vòng tiếp theo ghi bên dưới: điểm, top failure bucket, thay đ�
 - Research (web) xác nhận: only-from-context + say-don't-know + tool-routing rõ ràng.
 
 **Verify nhanh (3 case từng fail):** overview→trả lời thực chất ✓; aggregate→honest, hết leak ✓; vague→hỏi làm rõ ✓.
+
+## Round 2 — Eval v2 + grader web-verify + tối ưu v3 (2026-09-04)
+**Điểm (Opus + WEB VERIFY): mean = 89.36/100** (customer 90.72, secpro 88.01). **Δ +1.38 vs R1.**
+- deflection 9→1 (diệt gọn), no_grounding 8→2. Nhưng **hallucination vẫn 11**, tool_leak 1→2, wrong_refusal 4.
+- **Web bắt 12 câu sai fact** (trên ~25 verify): Zerologon CVSS 5.5→10.0; vá XZ 5.6.1→phải 5.6.2 (nguy hiểm); bịa tên kỹ thuật ATT&CK (sec-055); ProxyLogon↔ProxyShell (sec-083); PaperCut vá 22.0.6→20.1.7/21.2.11/22.0.9; Log4j flag sai; "max CVSS 8.8" vô lý.
+- **Chẩn đoán:** cùng fact lúc đúng lúc sai (5.6.1 vs 5.6.2) ⇒ model dùng TRÍ NHỚ THAM SỐ thay vì KB ⇒ accuracy_grounded kẹt 82.4% (≈R1). Đây là điểm nghẽn secpro.
+- Grader chuyên môn mới (web-verify) đã tạo & dùng: `grader_spec.md`.
+
+**Tối ưu v3 (chat.md, hotpatch):** siết `<grounding_and_honesty>`:
+1. Con số/định danh (CVSS/severity/phiên bản/T####/CAPEC/mapping) CHỈ nêu nếu có trong kết quả tra KB câu đó; thiếu → "không rõ"; CẤM lấy từ trí nhớ.
+2. Phiên bản vá: chép đúng từ dữ liệu, CẤM đoán số version (đoán sai → nâng cấp vẫn dính lỗ hổng).
+3. Cấm gán CVSS đồng loạt + cấm "trang trí" mã T####/CAPEC không có trong dữ liệu.
+- (wrong_refusal cust-100 "bạn có phải người thật" = false-positive classifier injection → follow-up [CODE/CONFIG], không sửa bằng prompt.)
