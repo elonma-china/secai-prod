@@ -8,6 +8,7 @@ import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
@@ -43,9 +44,19 @@ from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
-from ..security import require_public_input, sanitize_output_language
+from ..sanitize import classify_input, decide, judge_injection
+from ..sanitize.classifier import note_verdict, verdict_stats
+from ..sanitize.gate import REFUSE_INJECTION_MSG
+from ..security import (
+    UNSUPPORTED_LANGUAGE_MSG, has_hidden_smuggling, is_unsupported_language,
+    neutralize_active_content, require_public_input, sanitize_output_language,
+    wrap_untrusted_content,
+)
 from .literal_mask import unmask_literals
-from .messages import build_translate_prompt, parse_statistical, report_prompt, statistical_prompt, translate_langs
+from .messages import (
+    build_translate_prompt, parse_statistical, report_prompt, statistical_prompt,
+    translate_langs, translate_prompt,
+)
 from .text_chunk import split_for_translation
 from .schemas import (
     BughuntRequest,
@@ -232,6 +243,15 @@ _PREFETCH_APPENDIX_BUDGET = 3000
 _WEB_HINTS_APPENDIX_BUDGET = 12000
 
 
+def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
+    """Pure decision for /health's ``status`` field. Degraded when the LLM is unreachable OR
+    the input classifier has been failing open on more than half its calls over a real sample
+    (``total>=20`` — a small/cold-start sample shouldn't flip status on one or two unlucky
+    calls). Separate function so this can be unit-tested without a live LLM/httpx round trip."""
+    sanitize_degraded = sanitize_stats.get("total", 0) >= 20 and sanitize_stats.get("unknown_rate", 0.0) > 0.5
+    return "ok" if (qwen_ok and not sanitize_degraded) else "degraded"
+
+
 def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
     """Truncated, path-labelled dump of the fetched PoC bytes (README/entry first) — enough
     for the model to write Mục 2/3, not the whole repo (that is Section 1's job)."""
@@ -280,7 +300,10 @@ def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
     sources = [f"{ev.get('source') or '?'}: {ev.get('url') or ev.get('source_ref') or ''}"
                for ev in evidence]
     sources_line = "Nguồn: " + " ; ".join(sources) + "\n"
-    body = "Nội dung (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+    # Externally-sourced (fetched PoC/advisory) bytes — spotlight as untrusted data, never
+    # instructions (indirect prompt-injection defense; see <untrusted_content_policy>).
+    body = ("Nội dung (đã cắt bớt theo giới hạn):\n"
+            + wrap_untrusted_content(preview, source="poc_prefetch") + "\n]")
     if has_real_code_evidence(evidence):
         return (
             "\n\n[Hệ thống đã tìm thấy PoC khai thác công khai đã xác thực cho lỗ hổng này qua "
@@ -343,7 +366,8 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
         "được PoC thật. Một đoạn phân tích trung thực còn hữu ích hơn một đoạn code trông giống "
         "thật nhưng không dựa trên gì cả.\n"
         "Nguồn tham khảo:\n- " + "\n- ".join(sources) + "\n"
-        "Nội dung trang tham khảo (đã cắt bớt):\n" + preview + "\n]"
+        "Nội dung trang tham khảo (đã cắt bớt):\n"
+        + wrap_untrusted_content(preview, source="web_hints") + "\n]"
     )
 
 
@@ -530,7 +554,8 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         readme_ground = (
             "\nTÀI LIỆU HƯỚNG DẪN CHẠY THẬT của tác giả PoC (README/hướng dẫn gốc đã fetch)"
             f"{readme_cut} — DỊCH lại thành Mục 2 bằng tiếng Việt, bám ĐÚNG các lệnh/tham số/cổng/"
-            "tiền đề trong đó, không bịa thêm:\n---\n" + readme_preview + "\n---"
+            "tiền đề trong đó, không bịa thêm:\n---\n"
+            + wrap_untrusted_content(readme_preview, source="consolidated_poc_readme") + "\n---"
         )
     else:
         readme_ground = ""
@@ -544,7 +569,7 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         f"phiên bản/cờ dòng lệnh không tồn tại.{readme_ground}{cli_ground} "
         "Giữ air-gap: không tải/clone/cài từ internet.\n"
         f"Mã tệp `{name}`{cut_note} (KHÔNG chép lại vào câu trả lời):\n"
-        + preview + "\n]"
+        + wrap_untrusted_content(preview, source="consolidated_poc") + "\n]"
     )
 
 
@@ -642,6 +667,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = prompt_override
         else:
             prompt = require_public_input(body.supplied_text())
+            if profile == "chat":
+                gated = await _chat_gate(prompt)
+                if gated is not None:  # model classifier short-circuited (injection/off-topic)
+                    return gated
         try:
             text, metadata = await state.runner.complete(profile, prompt, session_id)
         except HTTPException:
@@ -695,6 +724,124 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
+    async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
+        """Model-based input sanitization for the chat path (runs BEFORE the agent).
+
+        Embeds the prompt with the deployed sec-embedding model and applies the numpy head
+        (secai_gateway.sanitize) to classify intent + risk. Returns a short-circuit
+        ``(refusal_text, metadata)`` when the classifier blocks (injection / off-topic), or
+        ``None`` to let the agent answer. FAIL-OPEN: any classifier error/unavailability, or
+        the feature being disabled, returns ``None`` (pass through)."""
+        # Language gate (runs first, no embedding needed): the classifier head was trained on
+        # vi/en only, so a message predominantly in a non-Latin script (CJK/kana/Hangul/
+        # Cyrillic/…) is refused with a bilingual ask to use Vietnamese or English. Latin-script
+        # languages pass through to the classifier. Independent of input_classifier_enabled.
+        if getattr(state.settings, "language_gate_enabled", True) and is_unsupported_language(
+                prompt, ratio=getattr(state.settings, "language_gate_nonlatin_ratio", 0.5)):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=refuse_language", run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "unsupported_language", "action": "refuse_language", "pii": False})
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": {"label": "unsupported_language",
+                                         "action": "refuse_language", "blocked": True, "pii": False},
+                "short_circuit": True,
+            }
+            return UNSUPPORTED_LANGUAGE_MSG, metadata
+        # Unicode-smuggling injection gate (loop iter 4, FT-A): a prompt-injection payload hidden
+        # in non-rendering codepoints (TAG block / variation selectors / zero-width / interlinear)
+        # is invisible to the sec-embedding model, so the classifier head cannot see it. Catch it
+        # deterministically BEFORE embedding and refuse as an injection. High-precision — legit
+        # emoji / ZWJ / flag-tag sequences never trip it (see security.has_hidden_smuggling).
+        if getattr(state.settings, "input_classifier_enabled", True) and has_hidden_smuggling(prompt):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=block_injection reason=unicode_smuggling",
+                        run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "injection", "action": "block_injection", "pii": False})
+            classification = {"label": "injection", "action": "block_injection",
+                              "blocked": True, "pii": False, "reason": "unicode_smuggling"}
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": classification, "short_circuit": True,
+            }
+            return REFUSE_INJECTION_MSG, metadata
+        if not getattr(state.settings, "input_classifier_enabled", True):
+            return None
+        run_id = uuid4().hex
+        try:
+            verdict = await classify_input(prompt, settings=state.settings,
+                                           client=getattr(state, "http_client", None))
+            # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
+            # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
+            # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
+            # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
+            # straight back to the classifier's own threshold decision — never a new failure
+            # mode. See sanitize/cascade.py.
+            if (verdict.ok and verdict.injection_uncertain
+                    and getattr(state.settings, "injection_cascade_enabled", False)):
+                # Prefer the calibrated score (the one band-membership was actually decided on)
+                # if shipped; falls back to the raw score for display when it isn't.
+                cascade_score = verdict.scores.get("injection_calibrated",
+                                                   verdict.scores.get("injection", 0.0))
+                judge_verdict = await judge_injection(
+                    state.runner, prompt, cascade_score,
+                    timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                if judge_verdict is not None:
+                    logger.info(
+                        "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
+                        "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
+                    verdict = replace(verdict, injection=judge_verdict)
+            decision = decide(verdict, state.settings)
+        except Exception:  # a guard must never break chat
+            logger.exception("input classifier failed → fail-open")
+            return None
+
+        classification = {
+            "label": decision.label,
+            "action": decision.action.value,
+            "blocked": decision.short_circuit,
+            "pii": decision.pii,
+            "scores": {k: round(v, 4) for k, v in verdict.scores.items()},
+            "latency_ms": round(verdict.latency_ms, 1),
+        }
+        # Fail-open observability: a verdict that is not ``ok`` means the guard was bypassed
+        # (embed down / embed-model mismatch / timeout). That is safe but SILENT, so surface it
+        # at WARNING with the running unknown-rate rather than only INFO (see CLAUDE.md incident).
+        note_verdict(verdict.ok)
+        if not verdict.ok:
+            st = verdict_stats()
+            logger.warning("input-sanitize FAIL-OPEN run_id=%s reason=%s unknown_rate=%.3f (%d/%d)",
+                           run_id, verdict.reason, st["unknown_rate"], st["unknown"], st["total"])
+        logger.info("input-sanitize run_id=%s verdict=%s action=%s latency_ms=%.1f",
+                    run_id, verdict.summary(), decision.action.value, verdict.latency_ms)
+        # Persist an audit line (digest, not plaintext) for any block or PII hit.
+        if decision.short_circuit or decision.pii:
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": decision.label, "action": decision.action.value, "pii": decision.pii})
+
+        if not decision.short_circuit:
+            return None
+        metadata = {
+            "run_id": run_id, "profile": "chat",
+            "tool_registry": sorted(registry_for("chat")),
+            "input_classification": classification, "short_circuit": True,
+        }
+        return decision.message, metadata
+
+    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+        """SSE response for a classifier short-circuit: one token + one final, then DONE
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        async def gen() -> AsyncIterator[bytes]:
+            yield sse_frame("token", {"delta": message})
+            yield sse_frame("final", {"content": message, "answer": message,
+                                      "message": message, "metadata": metadata})
+            yield b"data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
     @app.post("/chat_no_stream")
     @app.post("/ai/chat")
     async def chat(body: LegacyRequest) -> dict[str, Any]:
@@ -704,6 +851,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
     @app.post("/ai/chat/stream")
     async def chat_stream(body: LegacyRequest) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
+        gated = await _chat_gate(text)
+        if gated is not None:  # model classifier short-circuited before the agent runs
+            return _short_circuit_stream(gated[0], gated[1])
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -1154,7 +1304,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    {"user_id": body.user_id, "exploit_verdict": kt_result.get("exploit_verdict"),
                     "ok": kt_result.get("ok"), "error": kt_result.get("error")})
         await _pad_to_floor(_start, _floor)  # uniform total latency (see _pad_to_floor)
-        return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
+        safe = neutralize_active_content(text or no_poc)  # defang XSS in the injected PoC too
+        return {"description": safe, "exploit_guide": safe, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
     async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
@@ -1248,8 +1399,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(injected)
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
-            return {"content": final or no_poc, "exploit_guide": final or no_poc,
-                    "description": final or no_poc, "metadata": meta}
+            safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
+            return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
 
         async def gen() -> AsyncIterator[bytes]:
             final = ""
@@ -1370,7 +1521,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             preview_body = canonical_block(fullened, _pfres.get("cve_id"))
                             if preview_body:
                                 section1_sent = True
-                                yield sse_frame("section1", {"body": preview_body, "preview": True})
+                                yield sse_frame("section1",
+                                                {"body": neutralize_active_content(preview_body),
+                                                 "preview": True})
 
                     if model_next in done:
                         try:
@@ -1821,7 +1974,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
             redis_status = "connected" if await store.ping() else "unreachable"
         else:
             redis_status = "memory-dev"
-        return {"status": "ok" if qwen_ok else "degraded", "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit}
+        # Ư4: surface the input-classifier fail-open rate here too, not just as a WARNING log
+        # line — this is exactly the CLAUDE.md-documented failure mode (guard silently disabled,
+        # /health said ok) that fail-open observability was built to catch. A high unknown_rate
+        # over a real sample means the guard is bypassed on most requests right now.
+        sanitize_stats = verdict_stats()
+        status = _health_status(qwen_ok, sanitize_stats)
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:

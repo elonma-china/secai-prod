@@ -56,6 +56,11 @@ translate:
 # tool trong sandbox. KHÔNG native tool-call (Cyber-F1 gãy) → tools rỗng, base false (pure transform).
 lane1_react:
   prompt: lane1.md
+# Uncertain-band cascade judge (sanitize/cascade.py): decides injection-vs-legit-security-
+# question for chat messages whose classifier score falls in the calibrated uncertain band.
+# No tools — pure text-in, JSON-out; never sees anything beyond the one message + its score.
+injection_judge:
+  prompt: injection_judge.md
   tools: []
   base: false
   max_turns: 2

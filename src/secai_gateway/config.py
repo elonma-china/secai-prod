@@ -56,6 +56,44 @@ class Settings(BaseSettings):
     # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
     exploit_relevance_gate_enabled: bool = False
     exploit_rerank_min_score: float = 0.5
+    # ── Input sanitization classifier (model-based, chat path) ─────────────────
+    # A tiny numpy linear head over the sec-embedding vector classifies each chat
+    # prompt into a combined taxonomy (intent: security|chitchat|offtopic + risk:
+    # injection|pii) BEFORE the agent runs, so off-topic/injection are refused
+    # deterministically instead of relying only on the LLM's <scope_policy>. Runtime
+    # is numpy-only (no torch/transformers); the head ships as sanitize/assets/head.npz,
+    # trained offline by scripts/train_sanitize_head.py against this same embedding
+    # model. FAIL-OPEN by construction: a missing/untrained head, an embed-model or
+    # dimension mismatch, or any embedding error passes the prompt through unchanged —
+    # the classifier can only ADD a block, never take chat down.
+    input_classifier_enabled: bool = True
+    # Directory holding head.npz/head.json/thresholds.json. Empty → packaged assets.
+    input_classifier_weights_path: str = ""
+    # Per-action switches (turn a behaviour into shadow/log-only by flipping to false).
+    input_classifier_block_injection: bool = True
+    input_classifier_block_offtopic: bool = True
+    input_classifier_shortcircuit_chitchat: bool = False  # OFF: LLM <interaction_policy> handles greetings
+    # Decision thresholds; 0 → use the value shipped in thresholds.json.
+    input_classifier_injection_threshold: float = 0.0
+    input_classifier_pii_threshold: float = 0.0
+    input_classifier_offtopic_threshold: float = 0.0
+    # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
+    input_classifier_embed_timeout_s: float = 5.0
+    # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
+    # the LLM judge instead of a binary threshold call. OFF by default — opt in once verified
+    # against a live serving endpoint (calibration was fit/verified offline; vast was down when
+    # this was built). No-op regardless of this flag when assets/calibration.json is absent
+    # (InputVerdict.injection_uncertain then never sets True), so enabling it is inert until a
+    # calibrated head is shipped.
+    injection_cascade_enabled: bool = False
+    injection_cascade_timeout_s: float = 8.0
+
+    # Language gate (security.is_unsupported_language): the classifier head was trained on
+    # Vietnamese + English only, so a message written predominantly in a non-Latin script
+    # (CJK/kana/Hangul/Cyrillic/Arabic/Thai/…) is refused on /ai/chat with a bilingual ask to
+    # use vi/en. Latin-script languages pass through. Dependency-free, no network.
+    language_gate_enabled: bool = True
+    language_gate_nonlatin_ratio: float = 0.5
 
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
