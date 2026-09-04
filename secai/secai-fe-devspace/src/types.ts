@@ -1,6 +1,6 @@
 // Contract khớp src/secai_gateway/api/{routes,sse,schemas}.py
 
-export type Tab = "chat" | "poc" | "translate" | "bughunt";
+export type Tab = "chat" | "poc" | "translate";
 
 export interface ToolCall {
   id: string;
@@ -31,18 +31,6 @@ export interface ExploitMeta {
   [k: string]: unknown;
 }
 
-/** SSE ``event: phase`` from Linch WorkflowEvent (bughunt AgentHunt/Validate). */
-export interface PhaseEvent {
-  kind?: string;
-  title?: string;
-  call_key?: string;
-  occurrence?: number;
-  subagent_type?: string;
-  result_text?: string | null;
-  structured_output?: Record<string, unknown> | null;
-  structured_error?: string | null;
-}
-
 export interface StreamHandlers {
   onToken?: (delta: string) => void;
   onToolCall?: (t: ToolCall) => void;
@@ -51,9 +39,6 @@ export interface StreamHandlers {
   // Mục 1 (mã PoC) đẩy sớm ngay khi backend fetch xong — song song với model đang gõ Mục
   // 2-4 (xem /ai/exploit/stream). `preview=true`: có thể bị `final` thay thế/chính xác hoá.
   onSection1?: (body: string, preview: boolean) => void;
-  onPhase?: (p: PhaseEvent) => void;
-  /** Live terminal line from recon_engine / scanners. */
-  onLog?: (p: { stream?: string; line?: string; run_id?: string }) => void;
   onError?: (msg: string) => void;
   onFinal?: (payload: Record<string, unknown>) => void;
 }

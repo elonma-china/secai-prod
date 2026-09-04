@@ -4,12 +4,10 @@ import { health } from "./api";
 import ChatPanel from "./components/ChatPanel";
 import PocPanel from "./components/PocPanel";
 import TranslatePanel from "./components/TranslatePanel";
-import BughuntPanel from "./components/BughuntPanel";
 
 const NAV: { id: Tab; ic: string; label: string; sub: string }[] = [
   { id: "chat", ic: "💬", label: "Chatbot", sub: "/ai/chat" },
   { id: "poc", ic: "🛡️", label: "PoC / Khai thác", sub: "/ai/exploit" },
-  { id: "bughunt", ic: "🎯", label: "Bug Hunt", sub: "/ai/bughunt" },
   { id: "translate", ic: "🌐", label: "Dịch", sub: "/ai/translate" },
 ];
 
@@ -66,7 +64,7 @@ export default function App() {
         <div className="spacer" />
         <div className="side-foot">
           Agent Gateway · IAS v1<br />
-          chat · exploit · bughunt · translate
+          chat · exploit · translate
         </div>
       </aside>
 
@@ -90,10 +88,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className={"content" + (tab === "bughunt" ? " content-wide" : "")}>
+        <div className="content">
           {tab === "chat" && <ChatPanel streaming={streaming} userId={userId} />}
           {tab === "poc" && <PocPanel streaming={streaming} userId={userId} />}
-          {tab === "bughunt" && <BughuntPanel streaming={streaming} />}
           {tab === "translate" && <TranslatePanel streaming={streaming} />}
         </div>
       </div>
