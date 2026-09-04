@@ -94,13 +94,16 @@
   /* Fixed layout with explicit widths: the question preview then takes whatever is left
      instead of pushing the table wider than the viewport and clipping itself off-screen. */
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th:nth-child(1), td:nth-child(1) { width: 152px; }   /* thời gian */
-  th:nth-child(2), td:nth-child(2) { width: 132px; }   /* chức năng */
-  th:nth-child(3), td:nth-child(3) { width: 124px; }   /* người dùng */
-  th:nth-child(4), td:nth-child(4) { width: 118px; }   /* IP */
-  th:nth-child(5), td:nth-child(5) { width: 118px; }   /* máy chủ */
-  th:nth-child(6), td:nth-child(6) { width: 96px; }    /* thời lượng */
-  th:nth-child(7), td:nth-child(7) { width: 92px; }    /* trạng thái */
+  /* "Máy chủ" is deliberately not a column: it is the same value on every row of a
+     single-gateway deployment, so it only stole width from the two columns people
+     actually read. It is still in the detail panel, where it matters. */
+  th:nth-child(1), td:nth-child(1) { width: 150px; }   /* thời gian */
+  th:nth-child(2), td:nth-child(2) { width: 130px; }   /* chức năng */
+  th:nth-child(3), td:nth-child(3) { width: 120px; }   /* người dùng */
+  th:nth-child(4), td:nth-child(4) { width: 116px; }   /* IP */
+  th:nth-child(5), td:nth-child(5) { width: 94px; }    /* thời lượng */
+  th:nth-child(6), td:nth-child(6) { width: 88px; }    /* trạng thái */
+  /* câu hỏi + phản hồi chia đôi phần còn lại */
   td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 11.5px;
        letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
@@ -123,7 +126,22 @@
   .pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
 
   .state { padding: 40px 16px; text-align: center; color: var(--muted); }
-  .foot { padding: 12px 16px; display: flex; justify-content: center; }
+  .t-ans { color: var(--ink); }
+
+  /* pager */
+  .pager { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 16px;
+           display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pager .spacer { flex: 1; }
+  .pg { border: 1px solid var(--line); background: transparent; border-radius: 8px;
+        min-width: 34px; padding: 6px 9px; font-variant-numeric: tabular-nums; }
+  .pg:hover:not(:disabled) { background: var(--bg); }
+  .pg[aria-current="page"] { background: var(--accent); border-color: var(--accent);
+                             color: #fff; font-weight: 600; }
+  .pg:disabled { opacity: .4; cursor: default; }
+  .pg-info { font-size: 12.5px; color: var(--muted); }
+  .pg-gap { color: var(--muted); padding: 0 2px; }
+  .pager select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px;
+                  background: var(--bg); }
 
   /* ── detail drawer ─────────────────────────────────────────────────────── */
   #drawer { position: fixed; inset: 0 0 0 auto; width: min(680px, 100%); background: var(--panel);
@@ -233,13 +251,27 @@
       <table>
         <thead><tr>
           <th>Thời gian</th><th>Chức năng</th><th>Người dùng</th><th>IP</th>
-          <th>Máy chủ</th><th class="t-num">Thời lượng</th><th>Trạng thái</th><th>Câu hỏi</th>
+          <th class="t-num">Thời lượng</th><th>Trạng thái</th>
+          <th>Câu hỏi</th><th>Phản hồi của hệ thống</th>
         </tr></thead>
         <tbody id="rows"></tbody>
       </table>
       <div class="state" id="empty" hidden>Chưa có bản ghi nào khớp bộ lọc.</div>
-      <div class="foot"><button class="btn ghost" id="more" hidden>Tải thêm</button></div>
     </div>
+
+    <nav class="pager" id="pager" aria-label="Phân trang">
+      <button class="pg" id="pgFirst" title="Trang đầu">«</button>
+      <button class="pg" id="pgPrev" title="Trang trước">‹</button>
+      <span id="pgNums" style="display:flex;gap:6px"></span>
+      <button class="pg" id="pgNext" title="Trang sau">›</button>
+      <button class="pg" id="pgLast" title="Trang cuối">»</button>
+      <span class="pg-info" id="pgInfo"></span>
+      <span class="spacer"></span>
+      <span class="pg-info">Số dòng/trang</span>
+      <select id="pgSize">
+        <option>25</option><option selected>50</option><option>100</option><option>200</option>
+      </select>
+    </nav>
   </main>
 </div>
 
@@ -266,7 +298,8 @@
     report: "#7c3aed", statistical_report: "#b45309", exploit: "#be123c",
   };
 
-  const state = { rows: [], next: null, live: false, es: null, cursor: null, fn: "", status: "" };
+  const state = { live: false, es: null, cursor: null, fn: "", status: "",
+                  page: 1, pages: 1, size: 50, total: 0 };
 
   // ── helpers ────────────────────────────────────────────────────────────────
   const fmtTime = (iso) => {
@@ -328,7 +361,6 @@
 
     tr.appendChild(el("td", "", r.user_id || "—"));
     tr.appendChild(el("td", "", r.client_ip || "—"));
-    tr.appendChild(el("td", "", r.server_hostname || "—"));
     tr.appendChild(el("td", "t-num", fmtMs(r.duration_ms)));
 
     const [cls, label] = statusPill(r);
@@ -336,7 +368,13 @@
     tdSt.appendChild(el("span", "pill " + cls, label));
     tr.appendChild(tdSt);
 
-    tr.appendChild(el("td", "t-prev", clip(r.question, 140) || "—"));
+    tr.appendChild(el("td", "t-prev", clip(r.question, 160) || "—"));
+    // Reply preview: newlines collapsed so a markdown answer stays on one line here; the
+    // full text (with formatting) is one click away in the detail panel.
+    const answer = (r.answer || "").replace(/\s*\n+\s*/g, " ").trim();
+    const tdAns = el("td", "t-ans", clip(answer, 160) || (r.error ? "(lỗi)" : "—"));
+    tdAns.title = clip(answer, 400);
+    tr.appendChild(tdAns);
     tr.addEventListener("click", () => openDetail(r.id));
     if (fresh) $("rows").prepend(tr); else $("rows").appendChild(tr);
 
@@ -351,23 +389,64 @@
       : `${shown} / ${total.toLocaleString("vi-VN")} bản ghi khớp bộ lọc`;
   }
 
-  // ── search ─────────────────────────────────────────────────────────────────
-  async function search(reset) {
-    if (reset) { $("rows").textContent = ""; state.next = null; }
+  // ── search + pagination ────────────────────────────────────────────────────
+  // `resetPage` = a filter changed, so go back to page 1; otherwise keep the current page.
+  async function search(resetPage) {
+    if (resetPage) state.page = 1;
+    $("rows").textContent = "";
     $("empty").hidden = true;
     try {
-      const p = params({ size: 50, after: reset ? null : state.next });
+      const p = params({ size: state.size, page: state.page });
       const data = await api(`${API}/search?${p}`);
       data.rows.forEach((r) => addRow(r, false));
-      state.next = data.next;
-      $("more").hidden = !data.next || data.rows.length === 0;
-      setSummary(data.total, $("rows").children.length);
-      $("empty").hidden = $("rows").children.length > 0;
-      if (reset && data.rows.length) state.cursor = data.rows[0].sort;  // newest → tail anchor
+      state.page = data.page; state.pages = data.pages; state.total = data.total;
+      setSummary(data.total, data.rows.length);
+      $("empty").hidden = data.rows.length > 0;
+      renderPager(data.capped);
+      // Anchor the realtime tail to the newest row currently visible.
+      if (state.page === 1 && data.newest) state.cursor = data.newest;
       loadFacets();
     } catch (e) {
       if (e.message !== "unauthorized") $("summary").textContent = "Lỗi: " + e.message;
     }
+  }
+
+  function goPage(n) {
+    const target = Math.min(Math.max(1, n), state.pages);
+    if (target === state.page) return;
+    state.page = target;
+    if (state.live) setLive(false);   // paging away from the tail: stop following
+    search(false);
+    document.querySelector(".table-wrap").scrollTop = 0;
+  }
+
+  function renderPager(capped) {
+    const { page, pages, total } = state;
+    $("pgFirst").disabled = $("pgPrev").disabled = page <= 1;
+    $("pgNext").disabled = $("pgLast").disabled = page >= pages;
+
+    // Window of page numbers around the current one, with ellipses — a 200-page list of
+    // buttons is unusable, and log traffic makes that count realistic.
+    const nums = $("pgNums");
+    nums.textContent = "";
+    const want = new Set([1, pages, page, page - 1, page + 1, page - 2, page + 2]);
+    const shown = [...want].filter((n) => n >= 1 && n <= pages).sort((a, b) => a - b);
+    let prev = 0;
+    shown.forEach((n) => {
+      if (n - prev > 1) nums.appendChild(el("span", "pg-gap", "…"));
+      const b = el("button", "pg", String(n));
+      if (n === page) b.setAttribute("aria-current", "page");
+      b.addEventListener("click", () => goPage(n));
+      nums.appendChild(b);
+      prev = n;
+    });
+
+    const from = total === 0 ? 0 : (page - 1) * state.size + 1;
+    const to = Math.min(page * state.size, total);
+    $("pgInfo").textContent = total === 0
+      ? "Không có bản ghi"
+      : `${from.toLocaleString("vi-VN")}–${to.toLocaleString("vi-VN")} / ${total.toLocaleString("vi-VN")}`
+        + (capped ? " · chỉ duyệt được 10.000 bản ghi đầu, hãy thu hẹp bộ lọc" : "");
   }
 
   async function loadFacets() {
@@ -556,8 +635,19 @@
   $("searchBtn").addEventListener("click", () => search(true));
   $("q").addEventListener("keydown", (e) => { if (e.key === "Enter") search(true); });
   ["from", "to", "field"].forEach((id) => $(id).addEventListener("change", () => search(true)));
-  $("more").addEventListener("click", () => search(false));
-  $("liveBtn").addEventListener("click", () => setLive(!state.live));
+  $("pgFirst").addEventListener("click", () => goPage(1));
+  $("pgPrev").addEventListener("click", () => goPage(state.page - 1));
+  $("pgNext").addEventListener("click", () => goPage(state.page + 1));
+  $("pgLast").addEventListener("click", () => goPage(state.pages));
+  $("pgSize").addEventListener("change", () => {
+    state.size = parseInt($("pgSize").value, 10) || 50;
+    search(true);
+  });
+  $("liveBtn").addEventListener("click", () => {
+    // The tail only makes sense on page 1 (newest first) — jump back before following.
+    if (!state.live && state.page !== 1) { state.page = 1; search(false).then(() => setLive(true)); }
+    else setLive(!state.live);
+  });
   $("dwClose").addEventListener("click", () => {
     $("drawer").classList.remove("on");
     $("drawer").setAttribute("aria-hidden", "true");

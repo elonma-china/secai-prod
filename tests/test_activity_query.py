@@ -75,3 +75,24 @@ def test_facets_body_asks_for_counts_only() -> None:
     body = build_facets_body(q="x")
     assert body["size"] == 0 and "sort" not in body
     assert set(body["aggs"]) == {"functions", "blocked", "errors", "top_users", "top_ips"}
+
+
+# ── pagination ───────────────────────────────────────────────────────────────
+def test_offset_becomes_from() -> None:
+    body = build_search_body(size=25, offset=50)
+    assert body["from"] == 50 and body["size"] == 25
+
+
+def test_no_from_key_on_the_first_page() -> None:
+    assert "from" not in build_search_body(size=25, offset=0)
+
+
+def test_search_after_and_offset_are_mutually_exclusive() -> None:
+    """The tail walks with search_after; the pager jumps with from. Sending both would make
+    Elasticsearch ignore one silently."""
+    body = build_search_body(size=25, offset=50, search_after=[1, "x"])
+    assert body["search_after"] == [1, "x"] and "from" not in body
+
+
+def test_total_is_tracked_exactly_for_the_page_count() -> None:
+    assert build_search_body()["track_total_hits"] is True
