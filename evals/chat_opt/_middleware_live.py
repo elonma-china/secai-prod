@@ -9,8 +9,6 @@ from fastapi.responses import JSONResponse
 
 
 def route_limit(path: str) -> int:
-    if path in ("/ai/chat", "/ai/chat/stream"):
-        return 100000   # EVAL hotpatch — nới rate-limit cho tối ưu (khôi phục sau)
     if path.startswith("/logs"):
         # Login is the one brute-forceable endpoint here — keep it tight. The rest of the
         # viewer (search-as-you-type, facets, the realtime tail) would trip the default 15
