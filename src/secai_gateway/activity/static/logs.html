@@ -56,7 +56,10 @@
           padding: 14px 12px; display: flex; flex-direction: column; gap: 18px;
           transition: width .18s ease; overflow: hidden; }
   aside.collapsed { width: 58px; }
-  aside.collapsed .lbl, aside.collapsed .group > h3, aside.collapsed .side-foot span { display: none; }
+  /* Collapsed: hide the labels AND their counts — a column of bare numbers with nothing
+     to attach them to reads as noise, not information. */
+  aside.collapsed .lbl, aside.collapsed .group > h3, aside.collapsed .side-foot span,
+  aside.collapsed .count { display: none; }
   aside.collapsed .side-btn { justify-content: center; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; }
   .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: var(--accent);
@@ -89,7 +92,17 @@
                border-bottom: 1px solid var(--line); display: flex; gap: 14px; flex-wrap: wrap; }
 
   .table-wrap { flex: 1; overflow: auto; }
-  table { width: 100%; border-collapse: collapse; }
+  /* Fixed layout with explicit widths: the question preview then takes whatever is left
+     instead of pushing the table wider than the viewport and clipping itself off-screen. */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th:nth-child(1), td:nth-child(1) { width: 152px; }   /* thời gian */
+  th:nth-child(2), td:nth-child(2) { width: 132px; }   /* chức năng */
+  th:nth-child(3), td:nth-child(3) { width: 124px; }   /* người dùng */
+  th:nth-child(4), td:nth-child(4) { width: 118px; }   /* IP */
+  th:nth-child(5), td:nth-child(5) { width: 118px; }   /* máy chủ */
+  th:nth-child(6), td:nth-child(6) { width: 96px; }    /* thời lượng */
+  th:nth-child(7), td:nth-child(7) { width: 92px; }    /* trạng thái */
+  td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   th { position: sticky; top: 0; background: var(--panel); text-align: left; font-size: 11.5px;
        letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
        padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; z-index: 1; }
@@ -100,8 +113,8 @@
   @keyframes flash { from { background: var(--accent-soft) } to { background: transparent } }
   .t-time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
   .t-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .t-prev { color: var(--muted); max-width: 520px; overflow: hidden; text-overflow: ellipsis;
-            white-space: nowrap; }
+  .t-prev { color: var(--muted); }
+  .bar-lbl { font-size: 12px; color: var(--muted); }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px;
            font-weight: 600; white-space: nowrap; background: var(--accent-soft); color: var(--accent); }
   .pill { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11.5px;
@@ -187,8 +200,9 @@
 
   <main>
     <div class="bar">
+      <span class="bar-lbl">Từ</span>
       <input type="datetime-local" id="from" title="Từ thời điểm">
-      <span style="color:var(--muted)">→</span>
+      <span class="bar-lbl">đến</span>
       <input type="datetime-local" id="to" title="Đến thời điểm">
       <div class="sep"></div>
       <select id="field" title="Tìm trong trường nào">
