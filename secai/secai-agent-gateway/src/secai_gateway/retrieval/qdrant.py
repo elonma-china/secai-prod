@@ -390,7 +390,18 @@ async def _qdrant_search(
             score *= 2.0
         scored.append({"point_id": pid, "score": score, "payload": payloads[pid], "rerank_score": reranked})
     scored.sort(key=lambda x: x["score"], reverse=True)
-    final_hits = scored[:top_k]
+    # #2 dedup theo CVE: giữ chunk điểm cao nhất mỗi CVE → top_k = CVE riêng biệt (tránh
+    # nhiều chunk cùng 1 CVE chiếm slot). Node định nghĩa (CWE/CAPEC/T) không có cve_id → giữ.
+    deduped: list[dict[str, Any]] = []
+    seen_cve: set[str] = set()
+    for h in scored:
+        cve = str(h["payload"].get("cve_id") or "").upper()
+        if cve:
+            if cve in seen_cve:
+                continue
+            seen_cve.add(cve)
+        deduped.append(h)
+    final_hits = deduped[:top_k]
 
     output = "\n\n---\n\n".join(_format_hit(i, h["score"], h["payload"], h["rerank_score"]) for i, h in enumerate(final_hits))
     mode = "hybrid" if (dense_hits and bm25_used) else ("dense" if dense_hits else "bm25")

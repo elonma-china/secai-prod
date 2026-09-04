@@ -34,3 +34,9 @@ Lưu ý: POC enrich đúng CVE eval hỏi (proof-of-mechanism). Production cần
 
 - **#1 alias enrichment [DATA]**: `alias_enrich.py` — prepend "Tên gọi phổ biến: X" + re-embed dense+BM25, 59 CVE nổi tiếng. LIVE trong Qdrant (production ăn ngay). +0.163 tổng.
 - **#3 graph-fusion [CODE]**: `qdrant.py::_graph_reverse_candidates` — query class (CWE/CAPEC/T-id) bơm CVE từ Neo4j (KEV/CVSS-ranked) vào pool rerank. CHỈ kích hoạt cho class query → zero regression. cwe metric x2; kiểm chứng functional trả CVE lớp đúng (nhãn eval hẹp nên metric under-measure). CẦN deploy vào container để prod dùng.
+
+## #2 ranking + depth tuning (2026-09-04) — DIAGNOSIS
+- **dedup theo CVE**: GIỮ (top_k = CVE riêng biệt, UX win, recall 0.675 không đổi, zero regression).
+- **RRF_K 60→20**: không đổi → revert.
+- **depth (CANDIDATE_LIMIT 20→100, rerank window 20→50, BM25 50→100)**: KHÔNG net win — chỉ *phân phối lại* recall: product 0.75→0.85, multi_hop 0.67→0.80 NHƯNG description 0.64→0.56, MRR↓, latency 2.5×. → revert.
+- **KẾT LUẬN**: recall bị giới hạn ở **RERANKER** (pool sâu hơn = thêm distractor reranker chấm sai), không phải ranking/depth. recall@5==recall@10 mọi nhóm ⇒ ground-truth hoặc lọt top-5 hoặc trượt hẳn. Lever thật còn lại: **#4 HyDE** (query rep tốt hơn) + **reranker mạnh hơn** + tiếp tục **data enrichment (#1)**.
