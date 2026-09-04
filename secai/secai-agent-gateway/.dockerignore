@@ -25,4 +25,5 @@ docs/
 deploy/
 secai-serving-vast/
 .git/
+.git.bak-nested/
 .gitignore

@@ -62,6 +62,30 @@ CVE_OVERRIDES: dict[str, dict[str, Any]] = {
     },
 }
 
+# ── Bulk CVSS overlay (durability) ────────────────────────────────────────────
+# Bản hiệu đính CVSS/severity toàn KB đối chiếu NVD (nvd@nist.gov). Được sinh bởi
+# scripts/bulk_reconcile_cvss.py và nạp vào CVE_OVERRIDES ở đây để MỌI đường ingest
+# (backfill OpenCVE, sync AutoScan qua apply_cve_override) + query-time áp lại → bản
+# vá KHÔNG mất khi re-sync dữ liệu. File: $CVSS_OVERLAY_PATH (mặc định dưới _state/).
+import json as _json  # noqa: E402
+import os as _os  # noqa: E402
+from pathlib import Path as _Path  # noqa: E402
+
+_OVERLAY_PATH = _Path(_os.environ.get(
+    "CVSS_OVERLAY_PATH",
+    "/home/ict/AIEngines/secai/secai-data/_state/cvss_overrides_nvd.json"))
+try:
+    if _OVERLAY_PATH.is_file():
+        _overlay = _json.loads(_OVERLAY_PATH.read_text())
+        for _cve, _v in _overlay.items():
+            if not isinstance(_v, dict) or _v.get("cvss_score") is None:
+                continue
+            CVE_OVERRIDES.setdefault(_cve.upper(), {}).update(
+                {"cvss_score": float(_v["cvss_score"]),
+                 "severity": str(_v.get("severity") or "").upper()})
+except Exception:  # noqa: BLE001 — overlay là tuỳ chọn, không được làm hỏng import
+    pass
+
 def _set_labeled_field(text: str, label: str, value: str) -> str:
     """Replace ``Label: …`` up to the next pipe (or EOS), or append the field."""
     pat = re.compile(rf"({re.escape(label)}:\s*)([^|]*)")

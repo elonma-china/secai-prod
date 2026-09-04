@@ -219,6 +219,24 @@ def qdrant_upsert(points: list[dict]) -> None:
 # ── field mapping: AutoScan API record → normalized row ───────────────────────
 _CVSS_PREF = ("cvssV4_0", "cvssV3_1", "cvssV3_0", "cvssV2_0")
 
+# CVSS overlay bền: bản hiệu đính CVSS đối chiếu NVD (nvd@nist.gov) — sinh bởi
+# scripts/bulk_reconcile_cvss.py. AutoScan (như OpenCVE) chỉ lưu 1 score/version, đôi khi
+# là điểm CNA/secondary sai (vd Zerologon 5.5 thay 10.0). Overlay ép CVSS đúng ở MỌI lần
+# sync → bản vá không mất khi cập nhật lại dữ liệu. Severity suy ra từ score (severity_of).
+import json as _json
+import os as _os
+_CVSS_OVERLAY: dict[str, float] = {}
+try:
+    _op = _os.environ.get("CVSS_OVERLAY_PATH",
+                          "/home/ict/AIEngines/secai/secai-data/_state/cvss_overrides_nvd.json")
+    if _os.path.isfile(_op):
+        for _c, _v in _json.load(open(_op)).items():
+            if isinstance(_v, dict) and _v.get("cvss_score") is not None:
+                _CVSS_OVERLAY[_c.upper()] = float(_v["cvss_score"])
+        print(f"[overlay] nạp {len(_CVSS_OVERLAY)} CVSS override từ {_op}", flush=True)
+except Exception as _e:  # noqa: BLE001 — overlay tuỳ chọn
+    print(f"[overlay] bỏ qua ({_e})", flush=True)
+
 
 def _pick_cvss(metrics: dict) -> tuple[float | None, str]:
     """Best available CVSS score+vector, preferring the newest scheme present."""
@@ -272,6 +290,9 @@ def normalize(rec: dict) -> dict[str, Any]:
     title) win over list fields when both are present."""
     metrics = rec.get("metrics") or {}
     score, vector = _pick_cvss(metrics)
+    _ov = _CVSS_OVERLAY.get(_cid(rec))  # ép CVSS đúng theo overlay NVD (durability)
+    if _ov is not None:
+        score = _ov
 
     # CWE: prefer parsed_weaknesses keys, fall back to the flat weaknesses list.
     pw = rec.get("parsed_weaknesses")
