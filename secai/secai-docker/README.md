@@ -8,7 +8,7 @@ vast** (`202.122.49.242`) qua HTTP — không serve local, không đụng GPU.
 
 | Service | Image | Vai trò | Port host |
 |---|---|---|---|
-| `secai-docker-gateway` | `secai-agent-gateway:0.2.4-chatopt-repro` (build từ `./gateway-image-src`) | BE FastAPI (IAS gateway) | **8140** → 8131 |
+| `secai-docker-gateway` | `secai-agent-gateway:0.3.0-merged` (build từ `../secai-agent-gateway`) | BE FastAPI (IAS gateway) | **8140** → 8131 |
 | `secai-docker-qdrant` | `qdrant/qdrant:v1.10.1` | Vector store (collection `cve_kb_hybrid`) | 6333 / 6334 |
 | `secai-docker-neo4j` | `neo4j:5.20-community` | Knowledge graph | 7474 / 7687 |
 | `secai-docker-redis` | `redis:7-alpine` | Lịch sử hội thoại (ephemeral 24h) | 6379 |
@@ -73,12 +73,13 @@ Image gateway đã qua **vòng lặp tối ưu chất lượng trả lời** (đ
 - **Data** (Qdrant/Neo4j, không nằm trong image): hiệu đính CVSS 123k CVE vs NVD, alias enrichment, fix q036 (CVE-2006-1547 DoS không phải Beanutils RCE).
 - **input-classifier** giữ nguyên (BẬT, `INPUT_CLASSIFIER_BLOCK_OFFTOPIC=false`).
 
-### ⚠️ Build source (two-scopes)
-Image build từ **`./gateway-image-src`** (bản `/app/src` đã kiểm thử: classifier + chat-opt), **KHÔNG** từ `../secai-agent-gateway` (nhánh exploit-advance THIẾU classifier → rebuild sẽ mất classifier). Xem `gateway-image-src/README.md`.
+### ✅ Build source (two-scopes ĐÃ GIẢI QUYẾT)
+Nhánh `feat/chat-harness-optimize` (@3c05a04) đã **merge classifier ⋈ exploit-advance ⋈ chat-opt** thành 1 tree.
+`docker compose build gateway` từ `../secai-agent-gateway` **tái tạo image đầy đủ** (classifier + guard + /ai/exploit + /ai/translate). Không còn cần workaround gateway-image-src.
 
 ### Rebuild / deploy
     cd secai-docker
     docker compose build gateway          # tái tạo image 0.2.4-chatopt-repro từ gateway-image-src
     docker compose up -d --no-build gateway   # hoặc dùng image có sẵn
 
-Còn treo (cycle sau): merge nhánh classifier ⋈ exploit-advance thành 1 tree; retrieval PoC fallback (q022/q025/q029); dọn synthetic CVE-2026-*.
+Còn treo (cycle sau): retrieval PoC fallback (q022/q025/q029); dọn synthetic CVE-2026-*.

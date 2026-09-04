@@ -78,14 +78,13 @@ services:
       start_period: 5s
 
   gateway:
-    # Image REPRODUCIBLE (2026-09-04): build tu ./gateway-image-src = ban /app/src da kiem thu
-    # (input-classifier + chat-opt guard chong-rong/meta/aggregate + prompt toi uu + q036 fix).
-    # KHONG build tu ../secai-agent-gateway (nhanh exploit-advance THIEU classifier -> mat classifier).
-    # Xem gateway-image-src/README.md. `docker compose build gateway` tai tao duoc image nay.
+    # Image REPRODUCIBLE (2026-09-04): two-scopes DA GIAI QUYET — nhanh feat/chat-harness-optimize
+    # (@3c05a04) hop nhat classifier + exploit-advance + chat-opt. `docker compose build gateway`
+    # tu ../secai-agent-gateway tai tao image day du (classifier + guard + /ai/exploit + /ai/translate).
     build:
-      context: ./gateway-image-src
+      context: ../secai-agent-gateway
       dockerfile: Dockerfile
-    image: secai-agent-gateway:0.2.4-chatopt-repro
+    image: secai-agent-gateway:0.3.0-merged
     container_name: secai-docker-gateway
     restart: unless-stopped
     env_file:
