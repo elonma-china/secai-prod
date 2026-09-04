@@ -49,12 +49,15 @@
   .err { color: var(--err); font-size: 13px; min-height: 18px; margin-top: 10px; }
 
   /* ── shell ─────────────────────────────────────────────────────────────── */
-  #app { display: none; min-height: 100vh; }
-  #app.on { display: grid; grid-template-columns: auto 1fr; }
+  #app { display: none; }
+  /* Exactly one viewport tall (not min-height): that is what bounds .table-wrap so the rows
+     scroll INSIDE it and the filter bar + pager stay pinned. With min-height the page grew
+     with the row count and the pager ended up below the fold. */
+  #app.on { display: grid; grid-template-columns: auto 1fr; height: 100vh; overflow: hidden; }
 
   aside { width: 236px; background: var(--panel); border-right: 1px solid var(--line);
           padding: 14px 12px; display: flex; flex-direction: column; gap: 18px;
-          transition: width .18s ease; overflow: hidden; }
+          transition: width .18s ease; overflow: hidden auto; }
   aside.collapsed { width: 58px; }
   /* Collapsed = "give the table the full width". The filter buttons are meaningless
      without their labels (and a column of label-less pills or bare counts reads as
@@ -75,7 +78,7 @@
   .side-btn.active .count { color: var(--accent); }
   .side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
 
-  main { display: flex; flex-direction: column; min-width: 0; }
+  main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
   .bar { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px;
          display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .bar input[type="datetime-local"], .bar input[type="search"], .bar select {
