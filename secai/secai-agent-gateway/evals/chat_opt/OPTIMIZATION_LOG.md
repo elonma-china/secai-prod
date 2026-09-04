@@ -55,3 +55,14 @@ _(các vòng tiếp theo ghi bên dưới: điểm, top failure bucket, thay đ�
 Tối ưu prompt **bão hoà** (162/200 y hệt, accuracy phẳng). Dừng đúng tiêu chí (grader ổn định + đã bắt & root-cause nhiều case). Xem **HANDOVER.md** cho tổng kết + hướng tiếp theo ưu tiên ([DATA] hiệu đính CVSS/version từ NVD là cao nhất).
 
 **Kết quả cuối:** 87.98 → 89.36 → 89.66. Customer 88→91.3 (đạt). Secpro 87.8→88.0 (chặn bởi data).
+
+## FIX DATA — hiệu đính CVSS/severity từ NVD (2026-09-04, sau khi user gõ "fix")
+**Root cause xác định:** backfill (`extract_cvss`) lấy CVSS metric ĐẦU TIÊN — thường là CNA/secondary (vd Microsoft cho Zerologon = 5.5) — thay vì nguồn `nvd@nist.gov` (10.0) khi CVE có nhiều metric.
+**Cơ chế fix (mở rộng, tái dùng):** `apply_cve_override` + `patch_cve_kb_overrides.py` giờ hỗ trợ `cvss_score/severity` (ghi payload Qdrant 2 collection + text "CVSS v3: X SEV" + Neo4j SET). Sửa cả `changed`-flag để payload cập nhật cả chunk core+context.
+**Audit test-set vs NVD** (ưu tiên Primary→nvd@nist.gov→max): 31 CVE → **4 lệch**, đã patch live:
+- Zerologon CVE-2020-1472: **5.5 MEDIUM → 10.0 CRITICAL**
+- Fortinet CVE-2018-13379: 9.1 → **9.8 CRITICAL**
+- ProxyLogon CVE-2021-26855: 9.1 → **9.8 CRITICAL**
+- Citrix Bleed CVE-2023-4966: 9.4 → **7.5 HIGH** (NVD base thật)
+**Verify:** Qdrant(2 chunk)+Neo4j+chatbot đều trả đúng NVD cho cả 4. Chatbot: "Zerologon CVSS 10.0 CRITICAL" ✓.
+**Còn lại (systemic):** đây mới sửa 4 CVE trong test-set. Toàn KB (~65k CVE) cần re-source CVSS từ NVD (prefer nvd@nist.gov) — dùng chính cơ chế audit này mở rộng cho toàn bộ (lớn hơn, pace NVD). Re-embed bị skip (URL embed trong secai-agent-gateway/.env đã cũ → nên trỏ lại `125.249.86.45:11461`); payload+BM25 đã đúng nên đáp án đúng.
