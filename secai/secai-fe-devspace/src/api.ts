@@ -124,6 +124,10 @@ export async function stream(
     dataLines = [];
     const ev = eventName;
     eventName = "message";
+    // Gateway terminates every SSE with `data: [DONE]`; it is a sentinel, not content.
+    // Without this guard it falls through to the default dispatch and gets appended to the
+    // visible answer as the literal text "[DONE]".
+    if (raw === "[DONE]") return;
     let payload: Record<string, unknown> = {};
     try {
       payload = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
@@ -176,15 +180,6 @@ function dispatch(ev: string, payload: Record<string, unknown>, h: StreamHandler
         String(payload.body ?? payload.content ?? ""),
         Boolean(payload.preview),
       );
-      break;
-    case "phase":
-    case "agent_start":
-    case "agent_end":
-    case "agent_replayed":
-      h.onPhase?.({ ...(payload as object), kind: (payload.kind as string) || ev } as never);
-      break;
-    case "log":
-      h.onLog?.(payload as { stream?: string; line?: string; run_id?: string });
       break;
     case "error":
       h.onError?.(String(payload.error ?? payload.message ?? "stream error"));
