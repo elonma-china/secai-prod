@@ -471,6 +471,190 @@ def classify_chat_grounding(prompt: str) -> ChatGroundingPlan:
     return ChatGroundingPlan("concept", False, False)
 
 
+# ── Deterministic chat-final guarantees (anti-empty / meta / aggregate) ──────
+# These REPLACE the model's final text via HookResult.mutate(final_text=...), which is
+# NOT bounded by the before-final reentry budget (linch's _MAX_FINAL_ANSWER_REENTRIES=1
+# is usually already spent by RequireChatGroundingHook's own force_continue). They are the
+# floor that keeps chat from ever shipping an empty/closer-only answer, a bare meta
+# deflection, or a false "highest CVSS" claim — the R2 failure modes prompt rules alone
+# did not stop (q022/q025/q026/q045/q046 empty; q006/q008/q011/q012 meta; q039 aggregate).
+
+# The closer line the chat persona ends substantive answers with. A final whose only
+# non-whitespace content is this line (or nothing at all) is the "empty answer" bug.
+_CHAT_CLOSER = "Bạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+
+# Bare/vague single-topic prompts ("cve", "lỗ hổng", "poc" …) → ask a clarifying question
+# instead of a generic not-found. Whole-string match so real questions are untouched.
+_VAGUE_PROMPT_RE = re.compile(
+    r"^\W*(cve|cwe|lỗ\s*hổng|lô\s*hông|vuln(?:erability)?|exploit|poc|payload|"
+    r"bảo\s*mật|an\s*toàn|giúp|help|hi|hello)\W*$",
+    re.I,
+)
+
+# Meta prompt families whose canonical answer already lives in chat.md::about_system.
+_META_UPDATE_RE = re.compile(
+    r"cập\s*nhật.{0,25}(khi\s*nào|đến|tới|bao\s*giờ|ngày\s*nào)"
+    r"|(từ\s*)?năm\s*nào.{0,25}(tới|đến|nay|hiện)"
+    r"|dữ\s*liệu.{0,20}(từ\s*)?năm\s*nào"
+    r"|độ\s*phủ|phạm\s*vi\s*(của\s*)?dữ\s*liệu"
+    r"|(bao\s*nhiêu|mấy)\s*năm",
+    re.I | re.S,
+)
+_META_MODEL_RE = re.compile(
+    r"(mô\s*hình|model|llm|kiến\s*trúc|công\s*nghệ\s*nền|nền\s*tảng|nhà\s*cung\s*cấp)"
+    r".{0,30}(nào|gì|chạy|dùng|sử\s*dụng)"
+    r"|(chạy|vận\s*hành)\s*(trên|bằng).{0,20}(mô\s*hình|model|gì|nào|ai\b)"
+    r"|bạn\s*(là|dùng|xài)\s*(con\s*)?(ai|gpt|model|mô\s*hình)",
+    re.I | re.S,
+)
+_META_PRIVACY_RE = re.compile(
+    r"(dữ\s*liệu|thông\s*tin|nội\s*dung).{0,40}(nhập|gõ|gửi|cung\s*cấp|tôi).{0,40}"
+    r"(lưu|giữ|thu\s*thập|huấn\s*luyện|train|riêng\s*tư|chia\s*sẻ)"
+    r"|(bị\s*)?(lưu|lưu\s*trữ|lưu\s*lại|ghi\s*lại)\b.{0,20}(không|chứ|lại)"
+    r"|quyền\s*riêng\s*tư",
+    re.I | re.S,
+)
+# Aggregate superlative narrowed to CVSS wording only, so year/count superlatives
+# (q037 count, q038 newest/oldest — already correct) are NOT intercepted.
+_AGG_CVSS_SUPERLATIVE_RE = re.compile(
+    r"(điểm\s*)?cvss.{0,25}(cao|thấp)\s*nhất"
+    r"|(cao|thấp)\s*nhất.{0,25}(điểm\s*)?cvss",
+    re.I | re.S,
+)
+# Deflection/refusal markers the model emits when it fails to answer from about_system.
+_DEFLECTION_RE = re.compile(
+    r"không\s*có\s*thông\s*tin\s*xác\s*thực"
+    r"|không\s*thuộc\s*phạm\s*vi"
+    r"|không\s*tìm\s*thấy\s*thông\s*tin",
+    re.I,
+)
+
+_META_UPDATE_ANSWER = (
+    "Dữ liệu được tổng hợp từ các nguồn công khai (NVD, MITRE, CAPEC, CISA KEV và catalog "
+    "PoC). Các lỗ hổng CVE trải dài từ khoảng **năm 1999 đến hiện tại** và được **cập nhật "
+    "hàng đêm**. Hệ thống chưa có công cụ đếm/thống kê chính xác tổng số bản ghi — nếu cần "
+    "con số chính thức, bạn có thể tham khảo NVD (nvd.nist.gov).\n\n" + _CHAT_CLOSER
+)
+_META_MODEL_ANSWER = (
+    "IAS.AI là trợ lý An toàn thông tin, phục vụ tra cứu và giải thích CVE/CWE/CAPEC/MITRE "
+    "ATT&CK, thông tin PoC/mã khai thác và tư vấn khắc phục. Chi tiết về mô hình nền, hạ "
+    "tầng hay nhà cung cấp không được công bố. Nếu bạn cần hỗ trợ tra cứu bảo mật cụ thể, "
+    "tôi có thể giúp ngay.\n\n" + _CHAT_CLOSER
+)
+_META_PRIVACY_ANSWER = (
+    "Nội dung bạn nhập được dùng để xử lý và trả lời truy vấn trong phiên hiện tại. Dữ liệu "
+    "này KHÔNG tự động dùng để huấn luyện lại mô hình và không chia sẻ cho bên thứ ba vì mục "
+    "đích không liên quan. Chính sách ghi nhật ký và thời hạn lưu trữ chi tiết do đơn vị vận "
+    "hành quy định — nếu cần cam kết chính thức, bạn vui lòng liên hệ quản trị hệ thống.\n\n"
+    + _CHAT_CLOSER
+)
+_AGG_CVSS_ANSWER = (
+    "Hệ thống hiện **chưa có công cụ thống kê/xếp hạng toàn bộ kho** để xác định chính xác "
+    "CVE có điểm CVSS cao nhất, nên tôi không thể kết luận một CVE cụ thể là 'cao nhất' từ "
+    "một mẻ tra cứu mẫu (mẫu không đại diện cho toàn bộ dữ liệu). Trên thực tế kho chứa "
+    "nhiều CVE ở mức tối đa **CVSS 10.0** — ví dụ Log4Shell (CVE-2021-44228), Zerologon "
+    "(CVE-2020-1472) và PAN-OS (CVE-2024-3400). Để xếp hạng chính xác, bạn nên tham khảo NVD "
+    "(nvd.nist.gov) với bộ lọc theo điểm CVSS.\n\n" + _CHAT_CLOSER
+)
+_CHAT_EMPTY_FALLBACK = (
+    "Xin lỗi, tôi chưa tổng hợp được câu trả lời từ dữ liệu nội bộ cho yêu cầu này. Bạn thử "
+    "nêu lại cụ thể hơn — ví dụ một mã CVE/CWE (như `CVE-2021-44228`, `CWE-89`), tên sản "
+    "phẩm, hoặc một khái niệm ATTT — để tôi tra cứu lại nhé.\n\n" + _CHAT_CLOSER
+)
+_CHAT_VAGUE_CLARIFY = (
+    "Bạn muốn tra cứu về vấn đề gì cụ thể? Ví dụ: một mã CVE (`CVE-2021-44228`), một loại "
+    "lỗ hổng/khái niệm (SQLi, SSRF, RCE), một mã CWE (`CWE-89`), hay lỗ hổng của một sản "
+    "phẩm cụ thể. Bạn nêu rõ hơn giúp tôi nhé.\n\n" + _CHAT_CLOSER
+)
+
+
+def _chat_body_is_empty(text: str) -> bool:
+    """True when the final has no substantive body — empty, whitespace, or ONLY the closer
+    line. This is the exact R2 empty-answer bug (the model emitted just the boilerplate
+    closer). Does NOT treat a real greeting or a legitimate not-found sentence as empty."""
+    stripped = (text or "").strip()
+    if not stripped:
+        return True
+    return not stripped.replace(_CHAT_CLOSER, "").strip()
+
+
+def _chat_final_guarantee(prompt: str, text: str) -> HookResult | None:
+    """Deterministic floor for a chat final answer. Returns a mutate-HookResult that
+    REPLACES the text, or None to leave the model's answer as-is. Checked before the
+    grounding enforcement so an empty/deflecting answer can never slip through."""
+    p = (prompt or "").strip()
+    body_empty = _chat_body_is_empty(text)
+    deflected = body_empty or bool(_DEFLECTION_RE.search(text or ""))
+
+    # (TOP-3) Aggregate CVSS-superlative — no whole-KB stats tool exists, so any specific
+    # "highest/lowest CVSS" claim from a retrieval sample is unreliable → answer honestly.
+    if _AGG_CVSS_SUPERLATIVE_RE.search(p):
+        return HookResult.mutate(final_text=_AGG_CVSS_ANSWER, reason="chat_agg_cvss_superlative")
+
+    # (TOP-2) Meta direct-answer repair — canonical answers live in about_system; when the
+    # small model deflects/refuses (or goes empty) on them, ship the canonical text.
+    if deflected:
+        if _META_UPDATE_RE.search(p):
+            return HookResult.mutate(final_text=_META_UPDATE_ANSWER, reason="chat_meta_update")
+        if _META_MODEL_RE.search(p):
+            return HookResult.mutate(final_text=_META_MODEL_ANSWER, reason="chat_meta_model")
+        if _META_PRIVACY_RE.search(p):
+            return HookResult.mutate(final_text=_META_PRIVACY_ANSWER, reason="chat_meta_privacy")
+
+    # (TOP-1) Anti-empty guarantee — never ship an empty / closer-only final.
+    if body_empty:
+        if _VAGUE_PROMPT_RE.search(p):
+            return HookResult.mutate(final_text=_CHAT_VAGUE_CLARIFY, reason="chat_vague_clarify")
+        return HookResult.mutate(final_text=_CHAT_EMPTY_FALLBACK, reason="chat_empty_fallback")
+    return None
+
+
+def chat_final_text(prompt: str, text: str) -> str:
+    """Text-returning twin of ``_chat_final_guarantee`` for the RELIABLE code path.
+
+    ``_chat_final_guarantee`` lives on ``RequireChatGroundingHook.on_before_final_answer``,
+    which the container's linch never dispatches — so that guard is INERT in production
+    (verified 2026-09: a stderr probe at the top of that method never printed). This helper
+    is what ``LinchRunner.complete()`` calls INSTEAD, post-processing the final answer TEXT
+    after the run loop. It reuses the exact same constants/regex as the hook and returns the
+    deterministic replacement string for an empty/closer-only answer, a meta deflection, or a
+    false CVSS-superlative claim — otherwise it returns ``text`` unchanged. The ONLY thing it
+    changes is the answer TEXT value; the caller's ``(final, metadata)`` return shape, the
+    metadata dict and every schema/SSE contract are untouched.
+
+    Kept as a standalone ladder (not routed through ``_chat_final_guarantee``) so it never
+    depends on ``HookResult``'s internal shape to recover the replacement text, and so the
+    same source of truth for the answers/regex constants is shared with no data duplication.
+    Decision order matches the hook: aggregate CVSS-superlative (unconditional) → meta
+    canonical repair (only when the model deflected/emptied) → anti-empty fallback/clarify."""
+    p = (prompt or "").strip()
+    body_empty = _chat_body_is_empty(text)
+    deflected = body_empty or bool(_DEFLECTION_RE.search(text or ""))
+
+    # (TOP-3) Aggregate CVSS-superlative — no whole-KB stats tool exists, so any specific
+    # "highest/lowest CVSS" claim from a retrieval sample is unreliable → answer honestly.
+    if _AGG_CVSS_SUPERLATIVE_RE.search(p):
+        return _AGG_CVSS_ANSWER
+
+    # (TOP-2) Meta direct-answer repair — canonical answers live in about_system; when the
+    # small model deflects/refuses (or goes empty) on them, ship the canonical text.
+    if deflected:
+        if _META_UPDATE_RE.search(p):
+            return _META_UPDATE_ANSWER
+        if _META_MODEL_RE.search(p):
+            return _META_MODEL_ANSWER
+        if _META_PRIVACY_RE.search(p):
+            return _META_PRIVACY_ANSWER
+
+    # (TOP-1) Anti-empty guarantee — never ship an empty / closer-only final.
+    if body_empty:
+        if _VAGUE_PROMPT_RE.search(p):
+            return _CHAT_VAGUE_CLARIFY
+        return _CHAT_EMPTY_FALLBACK
+
+    return text or ""
+
+
 class RequireChatGroundingHook:
     """Steer + enforce chat tool use: web for Top-N, KB for entities/ID lookup.
 
@@ -542,14 +726,27 @@ class RequireChatGroundingHook:
             return None
         if ctx.tool_name == "web_fetch":
             RequireSearchBeforeAnswerHook._mark(self._web, ctx.run_id)
-        elif ctx.tool_name in ("qdrant_search", "neo4j_search"):
+        elif ctx.tool_name in ("qdrant_search", "neo4j_search", "poc_search"):
+            # poc_search counts as KB grounding: a "does CVE-X have a public PoC?" question
+            # is grounded by the PoC catalog, so a redundant qdrant/neo4j retry is not forced
+            # (that forced regenerate is what spent the single reentry and drove the empty
+            # closer-only answer for q022/q025/q026).
             RequireSearchBeforeAnswerHook._mark(self._kb, ctx.run_id)
         return None
 
     async def on_before_final_answer(self, ctx: BeforeFinalAnswerContext) -> HookResult | None:
         if _profile_of(ctx) != self.profile:
             return None
-        plan = classify_chat_grounding(self._prompt_of(ctx))
+        prompt = self._prompt_of(ctx)
+
+        # Deterministic floor FIRST: never ship an empty/closer-only answer, a bare meta
+        # deflection, or a false "highest CVSS" claim. Replaces via mutate (unbounded by the
+        # single before-final reentry the grounding force_continue below usually spends).
+        guard = _chat_final_guarantee(prompt, ctx.final_text or "")
+        if guard is not None:
+            return guard
+
+        plan = classify_chat_grounding(prompt)
         if plan.route == "concept":
             return None
 

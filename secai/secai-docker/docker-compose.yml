@@ -1,0 +1,164 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  secai-docker — bộ Docker THỐNG NHẤT cho project SecAI/AIEngines (core stack).
+#
+#  Gộp BE gateway + Qdrant + Neo4j + Redis vào 1 compose project (network nội bộ
+#  `secai-net`), đấu nối qua TÊN SERVICE (không còn localhost). Model LLM/embedding/
+#  reranker VẪN gọi ra vast (202.122.49.242) qua HTTP — cấu hình trong .env.
+#
+#  Data dùng BIND-MOUNT thẳng vào dir local sẵn có (không nhân đôi ~20GB+):
+#     /home/ict/AIEngines/secai/secai-data/...
+#
+#  Dùng:   ./up.sh            (khuyến nghị — dừng stack cũ, build, up, in danh sách)
+#     hoặc: docker compose --env-file .env up -d --build
+#
+#  Gateway host port mặc định 8140 (coexist với native ias.id.vn :8131). Đổi bằng
+#  GATEWAY_HOST_PORT trong .env hoặc: GATEWAY_HOST_PORT=8131 docker compose up -d
+# ═══════════════════════════════════════════════════════════════════════════════
+name: secai-docker
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    container_name: secai-docker-qdrant
+    restart: unless-stopped
+    ulimits:                               # large collection opens many RocksDB .sst files
+      nofile: { soft: 262144, hard: 262144 }
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ${SECAI_DATA_ROOT}/_state/qdrant_storage:/qdrant/storage
+      - ${SECAI_DATA_ROOT}/qdrant:/qdrant/snapshots     # rw: Qdrant dọn snapshots/tmp lúc khởi động
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: secai-docker-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-secai2026}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 2g
+    volumes:
+      - ${SECAI_DATA_ROOT}/_state/neo4j_data:/data
+      - ${SECAI_DATA_ROOT}/_state/neo4j_logs:/logs
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: secai-docker-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - secai-redis-data:/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  gateway:
+    # Image REPRODUCIBLE (2026-09-04): build tu ./gateway-image-src = ban /app/src da kiem thu
+    # (input-classifier + chat-opt guard chong-rong/meta/aggregate + prompt toi uu + q036 fix).
+    # KHONG build tu ../secai-agent-gateway (nhanh exploit-advance THIEU classifier -> mat classifier).
+    # Xem gateway-image-src/README.md. `docker compose build gateway` tai tao duoc image nay.
+    build:
+      context: ./gateway-image-src
+      dockerfile: Dockerfile
+    image: secai-agent-gateway:0.2.4-chatopt-repro
+    container_name: secai-docker-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Re-pin path + service-name settings to in-container values so host-oriented
+    # values in .env can never leak into the container.
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      POC_CATALOG_DB: /srv/poc/catalog.db
+      POC_ARTIFACT_STORE: /srv/poc-store
+      POC_SOURCES_ROOT: /srv/poc-sources
+      INPUT_CLASSIFIER_ENABLED: "true"           # classifier BẬT (giữ chặn injection/PII)
+      INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"   # KHÔNG chặn offtopic → câu hỏi hệ thống/meta xuống LLM tự trả lời (hoặc "không biết"); tránh over-refusal — 2026-09-03
+      ELASTICSEARCH_URL: http://elasticsearch:9200   # activity log (service-name nội bộ)
+    ports:
+      - "${GATEWAY_HOST_PORT:-8140}:8131"
+    volumes:
+      - secai-gw-data:/app/data                                     # sessions/ledger (writable)
+      - ${SECAI_DATA_ROOT}/exploitdb:/srv/exploitdb:ro              # searchsploit corpus
+      - ${SECAI_DATA_ROOT}/poc:/srv/poc                             # catalog.db (WAL → rw)
+      - ${SECAI_DATA_ROOT}/poc/store:/srv/poc-store                 # fetched PoC artifacts
+      - ${SECAI_DATA_ROOT}/poc-sources:/srv/poc-sources:ro          # cloned PoC sources (12GB)
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks: [secai-net]
+
+  # Activity log store cho /logs (ghi log hội thoại AI: ai hỏi gì, lúc nào, từ IP nào,
+  # chức năng nào, mất bao lâu). Chỉ phục vụ nội bộ secai-net + loopback host để debug —
+  # KHÔNG mở ra 0.0.0.0 vì log chứa nội dung hội thoại nguyên văn.
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: secai-docker-es
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      # Tắt security: ES không expose ra ngoài (chỉ secai-net + 127.0.0.1), giữ cấu hình đơn
+      # giản. Bật lại bằng xpack.security.enabled=true + ELASTICSEARCH_USERNAME/PASSWORD ở
+      # gateway nếu sau này cần.
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"     # máy có 93GB khả dụng; 2g dư cho khối lượng log này
+      bootstrap.memory_lock: "true"
+      cluster.routing.allocation.disk.watermark.low: "92%"
+      cluster.routing.allocation.disk.watermark.high: "95%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "97%"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - ${SECAI_DATA_ROOT}/_state/elasticsearch:/usr/share/elasticsearch/data
+    ports:
+      - "127.0.0.1:9200:9200"           # CHỈ loopback — không để lộ log ra mạng ngoài
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    networks: [secai-net]
+
+networks:
+  secai-net:
+    driver: bridge
+
+volumes:
+  secai-gw-data:
+  secai-redis-data:

@@ -1,0 +1,50 @@
+{"id": "q001", "category": "system_overview", "q": "IAS.AI là hệ thống gì vậy?"}
+{"id": "q002", "category": "system_overview", "q": "Chatbot này chuyên về mảng nào trong an toàn thông tin?"}
+{"id": "q003", "category": "system_overview", "q": "Nền tảng này được xây để giải quyết vấn đề gì cho người dùng?"}
+{"id": "q004", "category": "capability", "q": "Bạn có thể tra cứu chi tiết một CVE cụ thể giúp tôi không?"}
+{"id": "q005", "category": "capability", "q": "Hệ thống có hỗ trợ tra CWE, CAPEC và MITRE ATT&CK không?"}
+{"id": "q006", "category": "data_coverage", "q": "Dữ liệu CVE của hệ thống cập nhật đến khi nào rồi?"}
+{"id": "q007", "category": "data_coverage", "q": "Cơ sở tri thức lấy dữ liệu từ nguồn nào, có phải NVD không?"}
+{"id": "q008", "category": "data_coverage", "q": "Hệ thống có dữ liệu CVE từ năm nào tới năm nào?"}
+{"id": "q009", "category": "usage", "q": "Muốn tra một CVE cụ thể thì nên hỏi thế nào cho đúng?"}
+{"id": "q010", "category": "usage", "q": "Cho tôi vài câu hỏi mẫu để bắt đầu dùng thử hệ thống."}
+{"id": "q011", "category": "meta_self", "q": "Bạn chạy trên mô hình AI nào vậy?"}
+{"id": "q012", "category": "meta_self", "q": "Dữ liệu tôi nhập vào hệ thống có bị lưu lại không?"}
+{"id": "q013", "category": "cve_lookup", "q": "CVE-2021-44228 (Log4Shell) là lỗ hổng gì?"}
+{"id": "q014", "category": "cve_lookup", "q": "CVE-2020-1472 (Zerologon) khai thác lỗ hổng gì trong Windows?"}
+{"id": "q015", "category": "cve_lookup", "q": "CVE-2017-0144 (EternalBlue) khai thác giao thức nào?"}
+{"id": "q016", "category": "cve_lookup", "q": "CVE-2023-34362 trong Progress MOVEit Transfer là lỗ hổng gì?"}
+{"id": "q017", "category": "cve_detail", "q": "Điểm CVSS và mức độ nghiêm trọng của CVE-2021-26855 (ProxyLogon) là bao nhiêu?"}
+{"id": "q018", "category": "cve_detail", "q": "CVE-2023-4966 (Citrix Bleed) thuộc loại CWE nào?"}
+{"id": "q019", "category": "cve_detail", "q": "CVE-2024-3400 trên Palo Alto PAN-OS có điểm CVSS bao nhiêu và ảnh hưởng sản phẩm nào?"}
+{"id": "q020", "category": "cve_detail", "q": "CVE-2018-13379 ảnh hưởng đến sản phẩm Fortinet nào cụ thể?"}
+{"id": "q021", "category": "cve_detail", "q": "CVE-2014-0160 (Heartbleed) có điểm CVSS là bao nhiêu?"}
+{"id": "q022", "category": "poc_availability", "q": "CVE-2021-44228 (Log4Shell) có PoC công khai trên GitHub không?"}
+{"id": "q023", "category": "poc_availability", "q": "CVE-2017-5638 (Struts2, vụ Equifax) đã có module Metasploit chưa?"}
+{"id": "q024", "category": "poc_availability", "q": "Có PoC khai thác cho CVE-2024-27198 (JetBrains TeamCity) không?"}
+{"id": "q025", "category": "poc_availability", "q": "CVE-2020-1472 (Zerologon) có script khai thác Python công khai không?"}
+{"id": "q026", "category": "remediation", "q": "Cách vá CVE-2021-44228 (Log4Shell) như thế nào?"}
+{"id": "q027", "category": "remediation", "q": "Khắc phục CVE-2017-0144 (EternalBlue) bằng cách nào?"}
+{"id": "q028", "category": "remediation", "q": "Cách xử lý CVE-2023-4966 (Citrix Bleed) trên NetScaler ra sao?"}
+{"id": "q029", "category": "remediation", "q": "Biện pháp giảm thiểu CVE-2024-3400 trên PAN-OS trước khi vá là gì?"}
+{"id": "q030", "category": "cwe_capec", "q": "CWE-79 (Cross-Site Scripting) là loại lỗ hổng gì?"}
+{"id": "q031", "category": "cwe_capec", "q": "CWE-89 (SQL Injection) khác gì với CWE-78 (OS Command Injection)?"}
+{"id": "q032", "category": "cwe_capec", "q": "CWE-918 (SSRF) là gì?"}
+{"id": "q033", "category": "cwe_capec", "q": "Kỹ thuật MITRE ATT&CK T1190 (Exploit Public-Facing Application) là gì?"}
+{"id": "q034", "category": "relation", "q": "Những CVE nào liên quan đến CWE-918 (SSRF) trong cơ sở dữ liệu?"}
+{"id": "q035", "category": "relation", "q": "Fortinet có những lỗ hổng SSL VPN nào đáng chú ý trong vài năm qua?"}
+{"id": "q036", "category": "relation", "q": "Apache Struts2 có những CVE nghiêm trọng nào nổi bật?"}
+{"id": "q037", "category": "aggregate_stats", "q": "Có bao nhiêu CVE mức độ CRITICAL được công bố trong năm 2024 trong hệ thống?"}
+{"id": "q038", "category": "aggregate_stats", "q": "CVE nào mới nhất và CVE nào cũ nhất có trong cơ sở dữ liệu?"}
+{"id": "q039", "category": "aggregate_stats", "q": "CVE nào có điểm CVSS cao nhất trong cơ sở dữ liệu hiện tại?"}
+{"id": "q040", "category": "concept", "q": "SSRF (Server-Side Request Forgery) là gì?"}
+{"id": "q041", "category": "concept", "q": "SQL Injection là gì và hoạt động như thế nào?"}
+{"id": "q042", "category": "concept", "q": "Zero-day vulnerability khác gì so với N-day vulnerability?"}
+{"id": "q043", "category": "edge_unknown", "q": "CVE-2035-99999 là lỗ hổng gì?"}
+{"id": "q044", "category": "edge_unknown", "q": "CVE-2028-00001 đã có PoC khai thác chưa?"}
+{"id": "q045", "category": "vague_messy", "q": "cve"}
+{"id": "q046", "category": "vague_messy", "q": "lỗ hổng"}
+{"id": "q047", "category": "random_offtopic", "q": "Hôm nay trời có mưa không bạn?"}
+{"id": "q048", "category": "random_offtopic", "q": "Cho tôi công thức nấu phở bò với."}
+{"id": "q049", "category": "greeting_chitchat", "q": "Chào bạn!"}
+{"id": "q050", "category": "greeting_chitchat", "q": "Cảm ơn bạn nhiều nha."}

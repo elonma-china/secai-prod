@@ -20,6 +20,7 @@ from ..state import RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
 from .factory import make_gateway_agent
+from .hooks import chat_final_text
 from .profiles import PROFILES, compose_system_prompt
 from .providers import build_llm_provider
 
@@ -185,6 +186,16 @@ class LinchRunner:
                     run_id = session.active_run_id or run_id
                     if isinstance(event, ResultEvent):
                         final = event.final_text or ""
+        if profile_name == "chat":
+            # Value-level chat floor — the RELIABLE path. The container's linch never
+            # dispatches on_before_final_answer, so RequireChatGroundingHook's guard
+            # (_chat_final_guarantee) is INERT. Post-process the final TEXT here instead:
+            # replace empty/closer-only, meta-deflection and false "highest-CVSS" finals with
+            # canonical/clarify/fallback text. ONLY the text VALUE changes — the (final,
+            # metadata) return tuple shape, the metadata dict keys and every schema are
+            # untouched. `prompt` here is the raw user prompt (same string classify_chat_
+            # grounding / last_user_prompt use), NOT the date-wrapped model turn.
+            final = chat_final_text(prompt, final)
         metadata = {"run_id": run_id, "profile": profile.name, "tool_registry": sorted(profile.tool_names)}
         if profile_name == "exploit_research":
             metadata.update(self.ledger.exploit_metadata(run_id))
