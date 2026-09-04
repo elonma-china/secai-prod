@@ -14,6 +14,7 @@ from ..config import get_settings
 from .bm25 import BM25_FANOUT, BM25_VECTOR, bm25_search, rrf_merge
 from .cve_overrides import apply_cve_override
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
+from .neo4j import NEO4J_DATABASE, _auth_header, _neo4j_http_url
 from .filters import ENTITY_ID_RES, boost, build_filter, passes_filter, upper_list
 
 _settings = get_settings()
@@ -134,6 +135,65 @@ async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[
     resp.raise_for_status()
     return {str(p["id"]): apply_cve_override(p.get("payload") or {})
             for p in resp.json().get("result", {}).get("points", [])}
+
+
+async def _graph_reverse_candidates(
+    client: httpx.AsyncClient, ids_by_field: dict[str, list[str]], limit: int = 15,
+) -> dict[str, dict[str, Any]]:
+    """Graph-augmented fusion. For a *class* query naming a CWE/CAPEC/ATT&CK id, pull the
+    CVEs the knowledge graph links to that class (KEV-first, then CVSS-desc) and fetch their
+    core chunks so famous class members enter the rerank window. Pure semantic search buries
+    these — a broad weakness class has no distinctive description text. Fail-open: any
+    Neo4j/Qdrant error returns {} and the hybrid pipeline stands alone."""
+    rel_by_field = {
+        "cwe_id": ("CWE", "HAS_WEAKNESS"),
+        "capec_id": ("CAPEC", "MAPS_TO_CAPEC"),
+        "technique_id": ("Technique", "EXPLOITS_TECHNIQUE"),
+    }
+    cve_ids: list[str] = []
+    for field, (label, rel) in rel_by_field.items():
+        vals = ids_by_field.get(field) or []
+        if not vals:
+            continue
+        cypher = (
+            f"MATCH (c:CVE)-[:{rel}]->(n:{label}) WHERE n.id IN $ids "
+            "RETURN c.id AS id "
+            "ORDER BY coalesce(c.is_in_kev,false) DESC, coalesce(c.cvss_score,0.0) DESC "
+            "LIMIT $n"
+        )
+        try:
+            resp = await client.post(
+                f"{_neo4j_http_url()}/db/{NEO4J_DATABASE}/tx/commit",
+                json={"statements": [{"statement": cypher, "parameters": {"ids": vals, "n": limit}}]},
+                headers={"Accept": "application/json", "Content-Type": "application/json",
+                         "Authorization": _auth_header()},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            for row in ((resp.json().get("results") or [{}])[0].get("data") or []):
+                r = row.get("row") or []
+                if r and r[0]:
+                    cve_ids.append(str(r[0]).upper())
+        except Exception:
+            continue
+    if not cve_ids:
+        return {}
+    seen: set[str] = set()
+    ordered = [c for c in cve_ids if not (c in seen or seen.add(c))]
+    try:
+        resp = await client.post(
+            f"{QDRANT_URL}/collections/{COLLECTION}/points/scroll",
+            json={"filter": {"must": [
+                {"key": "cve_id", "match": {"any": ordered}},
+                {"key": "chunk_kind", "match": {"value": "core"}},
+            ]}, "limit": len(ordered) + 5, "with_payload": True, "with_vector": False},
+            timeout=15,
+        )
+        resp.raise_for_status()
+    except Exception:
+        return {}
+    return {str(pt["id"]): apply_cve_override(pt.get("payload") or {})
+            for pt in resp.json().get("result", {}).get("points", [])}
 
 
 async def _qdrant_search(
@@ -277,6 +337,24 @@ async def _qdrant_search(
                 if pid not in merged_ids:
                     payloads[pid] = pl
                     merged.insert(0, (pid, 1.0))
+
+        # 4c. Graph-augmented fusion: bring the graph's CVEs for a named class (CWE/CAPEC/
+        # ATT&CK), KEV/CVSS-ranked, into the candidate pool so they reach rerank. Only fires
+        # for class queries — leaves alias/description/product/exact-id retrieval untouched.
+        if any(defn_ids_by_field.values()):
+            try:
+                graph_cands = await _graph_reverse_candidates(client, defn_ids_by_field)
+            except Exception:
+                graph_cands = {}
+            existing = {pid for pid, _ in merged}
+            add: list[tuple[str, float]] = []
+            for pid, pl in graph_cands.items():
+                if pid not in existing:
+                    payloads[pid] = pl
+                    add.append((pid, 0.9))
+                    existing.add(pid)
+            if add:
+                merged = add + merged
 
         # 5. Rerank the top fused candidates (best-effort; skipped without a reranker).
         rerank_scores: dict[str, float] = {}

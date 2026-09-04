@@ -185,6 +185,16 @@ def patch_neo4j(cve: str, ov: dict, new_pl: dict) -> None:
             "statement": "MATCH (c:CVE {id:$id}) SET c.is_in_kev = true RETURN c.id",
             "parameters": {"id": cve},
         })
+    if ov.get("cvss_score") is not None:
+        stmts.append({
+            "statement": "MATCH (c:CVE {id:$id}) SET c.cvss_score = $s RETURN c.id",
+            "parameters": {"id": cve, "s": float(ov["cvss_score"])},
+        })
+    if ov.get("severity") is not None:
+        stmts.append({
+            "statement": "MATCH (c:CVE {id:$id}) SET c.severity = $v RETURN c.id",
+            "parameters": {"id": cve, "v": str(ov["severity"]).upper()},
+        })
     if stmts:
         r = neo4j_tx(stmts)
         if r.get("errors"):
@@ -258,6 +268,8 @@ def main() -> int:
                     old.get("cwe_refs") != new.get("cwe_refs")
                     or old.get("products") != new.get("products")
                     or old.get("is_in_kev") != new.get("is_in_kev")
+                    or old.get("cvss_score") != new.get("cvss_score")
+                    or old.get("severity") != new.get("severity")
                     or old.get("text") != new.get("text")
                 )
                 kind = old.get("chunk_kind") or old.get("kind")

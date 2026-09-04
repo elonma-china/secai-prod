@@ -1,0 +1,3101 @@
+{
+  "overall": {
+    "recall@5": 0.675,
+    "recall@10": 0.675,
+    "MRR": 0.599,
+    "n": 117
+  },
+  "rows": [
+    {
+      "id": "alias-01",
+      "category": "alias",
+      "query": "Lỗ hổng Log4Shell là gì?",
+      "relevant_cves": [
+        "CVE-2021-44228"
+      ],
+      "got": [
+        "CVE-2021-45046",
+        "CVE-2021-44228",
+        "CVE-2026-34478",
+        "CVE-2026-34479",
+        "CVE-2026-47901",
+        "CVE-2026-40021",
+        "CVE-2023-23591",
+        "CVE-2012-5616",
+        "CVE-2019-25590",
+        "CVE-2026-32743"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "alias-02",
+      "category": "alias",
+      "query": "Lỗ hổng EternalBlue là gì?",
+      "relevant_cves": [
+        "CVE-2017-0144"
+      ],
+      "got": [
+        "CVE-2001-0277",
+        "CVE-2007-6377",
+        "CVE-2026-2809",
+        "CVE-2025-15584",
+        "CVE-2002-0402",
+        "CVE-2026-80186",
+        "CVE-2024-45433",
+        "CVE-2026-68440",
+        "CVE-2026-72184"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-03",
+      "category": "alias",
+      "query": "Lỗ hổng Zerologon là gì?",
+      "relevant_cves": [
+        "CVE-2020-1472"
+      ],
+      "got": [
+        "CVE-2023-1078",
+        "CVE-2026-47180",
+        "CVE-2026-47184",
+        "CVE-2026-48045",
+        "CVE-2026-48487",
+        "CVE-2005-0379",
+        "CVE-2026-47183"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-04",
+      "category": "alias",
+      "query": "Lỗ hổng ProxyShell là gì?",
+      "relevant_cves": [
+        "CVE-2021-34473"
+      ],
+      "got": [
+        "CVE-2021-34473",
+        "CVE-2021-34523",
+        "CVE-2021-31207",
+        "CVE-2022-41082",
+        "CVE-2026-48773",
+        "CVE-2026-48615",
+        "CVE-2026-48772",
+        "CVE-2017-11394",
+        "CVE-2026-48774"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-05",
+      "category": "alias",
+      "query": "Lỗ hổng ProxyLogon là gì?",
+      "relevant_cves": [
+        "CVE-2021-26855"
+      ],
+      "got": [
+        "CVE-2021-26855",
+        "CVE-2026-48615",
+        "CVE-2018-25313",
+        "CVE-2026-48773",
+        "CVE-2017-11394",
+        "CVE-2026-48772",
+        "CVE-2025-34188",
+        "CVE-2023-36648"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-06",
+      "category": "alias",
+      "query": "Lỗ hổng BlueKeep là gì?",
+      "relevant_cves": [
+        "CVE-2019-0708"
+      ],
+      "got": [
+        "CVE-2019-0708",
+        "CVE-2024-45433",
+        "CVE-2024-45431",
+        "CVE-2026-29613",
+        "CVE-2026-14704",
+        "CVE-2026-2809",
+        "CVE-2026-8305",
+        "CVE-2026-28526",
+        "CVE-2026-2810"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-07",
+      "category": "alias",
+      "query": "Lỗ hổng PrintNightmare là gì?",
+      "relevant_cves": [
+        "CVE-2021-34527"
+      ],
+      "got": [
+        "CVE-2021-34527",
+        "CVE-2013-0011",
+        "CVE-2024-8405",
+        "CVE-2018-1000052",
+        "CVE-2017-13058",
+        "CVE-2017-14042",
+        "CVE-2020-3990"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-08",
+      "category": "alias",
+      "query": "Lỗ hổng Follina là gì?",
+      "relevant_cves": [
+        "CVE-2022-30190"
+      ],
+      "got": [
+        "CVE-2025-0312",
+        "CVE-2025-53546",
+        "CVE-2025-0317",
+        "CVE-2026-7482",
+        "CVE-2024-12055",
+        "CVE-2026-78322",
+        "CVE-2026-65315",
+        "CVE-2026-28496"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-09",
+      "category": "alias",
+      "query": "Lỗ hổng Spring4Shell là gì?",
+      "relevant_cves": [
+        "CVE-2022-22965"
+      ],
+      "got": [
+        "CVE-2022-22965",
+        "CVE-2024-8023",
+        "CVE-2026-41849",
+        "CVE-2026-41717",
+        "CVE-2026-41729",
+        "CVE-2026-41719",
+        "CVE-2026-47888"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-10",
+      "category": "alias",
+      "query": "Lỗ hổng Citrix Bleed là gì?",
+      "relevant_cves": [
+        "CVE-2023-4966"
+      ],
+      "got": [
+        "CVE-2022-21827",
+        "CVE-2023-45806",
+        "CVE-2026-34425",
+        "CVE-2014-0160",
+        "CVE-2015-6012",
+        "CVE-2017-5135",
+        "CVE-2015-6010",
+        "CVE-2015-6011",
+        "CVE-2022-24975"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-11",
+      "category": "alias",
+      "query": "Lỗ hổng Heartbleed là gì?",
+      "relevant_cves": [
+        "CVE-2014-0160"
+      ],
+      "got": [
+        "CVE-2014-0160",
+        "CVE-2026-72184",
+        "CVE-2017-13682",
+        "CVE-2026-46167",
+        "CVE-2026-10649",
+        "CVE-2026-43102",
+        "CVE-2026-66788",
+        "CVE-2026-72344"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-12",
+      "category": "alias",
+      "query": "Lỗ hổng Shellshock là gì?",
+      "relevant_cves": [
+        "CVE-2014-6271"
+      ],
+      "got": [
+        "CVE-2014-6271",
+        "CVE-2026-44425",
+        "CVE-2026-44426",
+        "CVE-2026-44424",
+        "CVE-2026-44423",
+        "CVE-2026-49856"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-13",
+      "category": "alias",
+      "query": "Lỗ hổng Dirty COW là gì?",
+      "relevant_cves": [
+        "CVE-2016-5195"
+      ],
+      "got": [
+        "CVE-2016-5195",
+        "CVE-2026-46331",
+        "CVE-2026-64600",
+        "CVE-2017-1000405",
+        "CVE-2022-0847",
+        "CVE-2026-63811",
+        "CVE-2026-64432"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-14",
+      "category": "alias",
+      "query": "Lỗ hổng PwnKit là gì?",
+      "relevant_cves": [
+        "CVE-2021-4034"
+      ],
+      "got": [
+        "CVE-2021-4034",
+        "CVE-2025-14169",
+        "CVE-2025-12878",
+        "CVE-2016-6595",
+        "CVE-2025-13502",
+        "CVE-2026-33747",
+        "CVE-2023-50856",
+        "CVE-2026-61712",
+        "CVE-2026-61711",
+        "CVE-2021-32847"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-15",
+      "category": "alias",
+      "query": "Lỗ hổng Sudo Baron Samedit là gì?",
+      "relevant_cves": [
+        "CVE-2021-3156"
+      ],
+      "got": [
+        "CVE-2021-3156",
+        "CVE-2025-46718",
+        "CVE-2022-43995",
+        "CVE-2002-0184",
+        "CVE-2016-7076",
+        "CVE-2025-64517",
+        "CVE-2013-1775",
+        "CVE-2025-46717",
+        "CVE-2019-19234",
+        "CVE-2016-7091"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-16",
+      "category": "alias",
+      "query": "Lỗ hổng SMBGhost là gì?",
+      "relevant_cves": [
+        "CVE-2020-0796"
+      ],
+      "got": [
+        "CVE-2020-0796",
+        "CVE-2006-2374",
+        "CVE-2022-3077",
+        "CVE-2022-2873",
+        "CVE-2026-22597",
+        "CVE-2016-10154",
+        "CVE-2026-74521",
+        "CVE-2025-15687"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-17",
+      "category": "alias",
+      "query": "Lỗ hổng SIGRed là gì?",
+      "relevant_cves": [
+        "CVE-2020-1350"
+      ],
+      "got": [
+        "CVE-2020-1350",
+        "CVE-2021-21781",
+        "CVE-2026-58478",
+        "CVE-2026-2377",
+        "CVE-2025-66844",
+        "CVE-2021-26715",
+        "CVE-2024-5885",
+        "CVE-2024-47167",
+        "CVE-2026-49498"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-18",
+      "category": "alias",
+      "query": "Lỗ hổng Ghostcat là gì?",
+      "relevant_cves": [
+        "CVE-2020-1938"
+      ],
+      "got": [
+        "CVE-2019-14869",
+        "CVE-2026-28785",
+        "CVE-2026-28680",
+        "CVE-2026-47127",
+        "CVE-2010-4054",
+        "CVE-2016-7978",
+        "CVE-2026-78203",
+        "CVE-2024-29511",
+        "CVE-2026-78204"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-19",
+      "category": "alias",
+      "query": "Lỗ hổng backdoor XZ Utils là gì?",
+      "relevant_cves": [
+        "CVE-2024-3094"
+      ],
+      "got": [
+        "CVE-2024-3094",
+        "CVE-2026-14266",
+        "CVE-2025-31115",
+        "CVE-2024-47611",
+        "CVE-2026-34743",
+        "CVE-2022-41381",
+        "CVE-2022-40430",
+        "CVE-2022-41386"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-20",
+      "category": "alias",
+      "query": "Lỗ hổng Text4Shell là gì?",
+      "relevant_cves": [
+        "CVE-2022-42889"
+      ],
+      "got": [
+        "CVE-2021-45046",
+        "CVE-2022-42889",
+        "CVE-2018-10883",
+        "CVE-2018-10882",
+        "CVE-2022-30524",
+        "CVE-2008-5822",
+        "CVE-2022-44939",
+        "CVE-2021-41165",
+        "CVE-2024-48284",
+        "CVE-2022-27441"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "alias-21",
+      "category": "alias",
+      "query": "Lỗ hổng Meltdown là gì?",
+      "relevant_cves": [
+        "CVE-2017-5754"
+      ],
+      "got": [
+        "CVE-2017-5754",
+        "CVE-2018-19965",
+        "CVE-2022-42331",
+        "CVE-2018-7112",
+        "CVE-2026-72184",
+        "CVE-2017-13682",
+        "CVE-2026-74439",
+        "CVE-2025-54879"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-22",
+      "category": "alias",
+      "query": "Lỗ hổng Spectre là gì?",
+      "relevant_cves": [
+        "CVE-2017-5753"
+      ],
+      "got": [
+        "CVE-2024-2201",
+        "CVE-2026-43261",
+        "CVE-2026-31781",
+        "CVE-2026-68269",
+        "CVE-2026-34971",
+        "CVE-2019-9793",
+        "CVE-2023-3006",
+        "CVE-2019-15902",
+        "CVE-2022-25368",
+        "CVE-2020-10768"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "alias-23",
+      "category": "alias",
+      "query": "Lỗ hổng Dirty Pipe là gì?",
+      "relevant_cves": [
+        "CVE-2022-0847"
+      ],
+      "got": [
+        "CVE-2022-0847",
+        "CVE-2017-1000405",
+        "CVE-2026-53372",
+        "CVE-2026-43389",
+        "CVE-2026-72043",
+        "CVE-2026-64157",
+        "CVE-2016-5195",
+        "CVE-2026-64064"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-24",
+      "category": "alias",
+      "query": "Lỗ hổng regreSSHion là gì?",
+      "relevant_cves": [
+        "CVE-2024-6387"
+      ],
+      "got": [
+        "CVE-2024-6387",
+        "CVE-2026-15154",
+        "CVE-2025-3262",
+        "CVE-2025-24899",
+        "CVE-2025-66647",
+        "CVE-2024-10955",
+        "CVE-2024-10624",
+        "CVE-2025-3933",
+        "CVE-2025-24966"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-25",
+      "category": "alias",
+      "query": "Lỗ hổng Terrapin là gì?",
+      "relevant_cves": [
+        "CVE-2023-48795"
+      ],
+      "got": [
+        "CVE-2023-48795",
+        "CVE-2024-56802",
+        "CVE-2026-45099",
+        "CVE-2026-47358",
+        "CVE-2026-41422",
+        "CVE-2026-45749",
+        "CVE-2026-65706",
+        "CVE-2025-27150",
+        "CVE-2025-27402",
+        "CVE-2025-57798"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-26",
+      "category": "alias",
+      "query": "Lỗ hổng GHOST glibc là gì?",
+      "relevant_cves": [
+        "CVE-2015-0235"
+      ],
+      "got": [
+        "CVE-2026-53943",
+        "CVE-2017-15670",
+        "CVE-2018-6551",
+        "CVE-2015-0235",
+        "CVE-2017-1000366",
+        "CVE-2017-1000408",
+        "CVE-2026-53945",
+        "CVE-2025-14512",
+        "CVE-2026-53946",
+        "CVE-2023-4806"
+      ],
+      "rank": 4,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.25
+    },
+    {
+      "id": "alias-27",
+      "category": "alias",
+      "query": "Lỗ hổng Drupalgeddon2 là gì?",
+      "relevant_cves": [
+        "CVE-2018-7600"
+      ],
+      "got": [
+        "CVE-2018-7600",
+        "CVE-2018-7602",
+        "CVE-2025-31691",
+        "CVE-2024-22362",
+        "CVE-2026-55807",
+        "CVE-2025-12466",
+        "CVE-2022-25271",
+        "CVE-2025-13082",
+        "CVE-2014-9016",
+        "CVE-2010-3686"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-28",
+      "category": "alias",
+      "query": "Lỗ hổng Looney Tunables là gì?",
+      "relevant_cves": [
+        "CVE-2023-4911"
+      ],
+      "got": [
+        "CVE-2023-4911",
+        "CVE-2019-11477",
+        "CVE-2013-6436",
+        "CVE-2019-25369",
+        "CVE-2019-11479",
+        "CVE-2026-54876",
+        "CVE-2018-5743",
+        "CVE-2019-11478",
+        "CVE-2022-24713",
+        "CVE-2026-52940"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-29",
+      "category": "alias",
+      "query": "Lỗ hổng KRACK là gì?",
+      "relevant_cves": [
+        "CVE-2017-13077"
+      ],
+      "got": [
+        "CVE-2017-13077",
+        "CVE-2026-53213",
+        "CVE-2017-13682",
+        "CVE-2024-43373",
+        "CVE-2026-41453",
+        "CVE-2008-3077",
+        "CVE-2018-19568",
+        "CVE-2026-31765",
+        "CVE-2024-50354",
+        "CVE-2026-16102"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "alias-30",
+      "category": "alias",
+      "query": "Lỗ hổng Ripple20 là gì?",
+      "relevant_cves": [
+        "CVE-2020-11896"
+      ],
+      "got": [
+        "CVE-2020-11896",
+        "CVE-2026-72184",
+        "CVE-2026-64102",
+        "CVE-2026-74372",
+        "CVE-2026-64276",
+        "CVE-2020-14305",
+        "CVE-2026-68135",
+        "CVE-2026-68128"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-01",
+      "category": "description",
+      "query": "Lỗ hổng cho phép giả mạo là bộ điều khiển miền qua giao thức Netlogon",
+      "relevant_cves": [
+        "CVE-2020-1472"
+      ],
+      "got": [
+        "CVE-2020-1472",
+        "CVE-2019-1384",
+        "CVE-2021-38598",
+        "CVE-2025-49716",
+        "CVE-2026-50500",
+        "CVE-2019-1424",
+        "CVE-2016-3228",
+        "CVE-2015-0240",
+        "CVE-2016-3300",
+        "CVE-2026-41089"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-02",
+      "category": "description",
+      "query": "Lỗ hổng thực thi mã từ xa trong dịch vụ Windows Print Spooler",
+      "relevant_cves": [
+        "CVE-2021-34527"
+      ],
+      "got": [
+        "CVE-2021-34527",
+        "CVE-2021-34481",
+        "CVE-2026-50499",
+        "CVE-2005-1984",
+        "CVE-2013-0011",
+        "CVE-2009-0228",
+        "CVE-2012-1851",
+        "CVE-2013-1339",
+        "CVE-2010-2729",
+        "CVE-2009-0230"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-03",
+      "category": "description",
+      "query": "Lỗ hổng RCE không cần xác thực trong giao thức RDP của Windows",
+      "relevant_cves": [
+        "CVE-2019-0708"
+      ],
+      "got": [
+        "CVE-2026-58535",
+        "CVE-2026-58533",
+        "CVE-2026-32623",
+        "CVE-2019-9510",
+        "CVE-2026-57982",
+        "CVE-2026-50376",
+        "CVE-2026-58546",
+        "CVE-2015-0079",
+        "CVE-2012-0173",
+        "CVE-2026-8326"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-04",
+      "category": "description",
+      "query": "Lỗ hổng tràn bộ đệm đọc lộ nội dung bộ nhớ trong OpenSSL heartbeat",
+      "relevant_cves": [
+        "CVE-2014-0160"
+      ],
+      "got": [
+        "CVE-2014-0160",
+        "CVE-2025-59464",
+        "CVE-2026-54876",
+        "CVE-2026-30796",
+        "CVE-2014-3567",
+        "CVE-2026-41329",
+        "CVE-2008-1678",
+        "CVE-2006-3815",
+        "CVE-2006-3121",
+        "CVE-2015-0206"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-05",
+      "category": "description",
+      "query": "Lỗ hổng chèn lệnh qua biến môi trường trong Bash",
+      "relevant_cves": [
+        "CVE-2014-6271"
+      ],
+      "got": [
+        "CVE-2014-6271",
+        "CVE-2014-7169",
+        "CVE-2014-6278",
+        "CVE-2014-6277",
+        "CVE-2016-7543",
+        "CVE-2026-10214",
+        "CVE-2026-73036",
+        "CVE-2026-25063"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-06",
+      "category": "description",
+      "query": "Lỗ hổng deserialization JNDI trong thư viện logging Java",
+      "relevant_cves": [
+        "CVE-2021-44228"
+      ],
+      "got": [
+        "CVE-2021-45046",
+        "CVE-2026-27727",
+        "CVE-2019-14892",
+        "CVE-2019-14893",
+        "CVE-2025-10492",
+        "CVE-2026-27830",
+        "CVE-2026-55153",
+        "CVE-2020-10650",
+        "CVE-2022-23302",
+        "CVE-2022-24818"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-07",
+      "category": "description",
+      "query": "Lỗ hổng path traversal và RCE trong Apache HTTP Server 2.4.49",
+      "relevant_cves": [
+        "CVE-2021-41773"
+      ],
+      "got": [
+        "CVE-2021-41773",
+        "CVE-2021-42013",
+        "CVE-2024-38475",
+        "CVE-2024-38476",
+        "CVE-2020-11984",
+        "CVE-2026-7411",
+        "CVE-2026-23918",
+        "CVE-2007-4723",
+        "CVE-2025-9918",
+        "CVE-2004-0173"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-08",
+      "category": "description",
+      "query": "Lỗ hổng SSRF trên Microsoft Exchange dẫn tới chiếm quyền",
+      "relevant_cves": [
+        "CVE-2021-26855"
+      ],
+      "got": [
+        "CVE-2026-65801",
+        "CVE-2026-26137",
+        "CVE-2026-45504",
+        "CVE-2026-65813",
+        "CVE-2026-45501",
+        "CVE-2026-45502",
+        "CVE-2018-16793",
+        "CVE-2015-1764",
+        "CVE-2026-69851"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-09",
+      "category": "description",
+      "query": "Lỗ hổng leo thang đặc quyền cục bộ trong polkit pkexec",
+      "relevant_cves": [
+        "CVE-2021-4034"
+      ],
+      "got": [
+        "CVE-2021-4034",
+        "CVE-2025-6019",
+        "CVE-2013-4288",
+        "CVE-2011-1485",
+        "CVE-2013-4327",
+        "CVE-2013-4326",
+        "CVE-2013-1064",
+        "CVE-2014-5033",
+        "CVE-2013-1065",
+        "CVE-2013-4324"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-10",
+      "category": "description",
+      "query": "Lỗ hổng bỏ qua xác thực qua SQL injection trên JetBrains TeamCity",
+      "relevant_cves": [
+        "CVE-2024-27198"
+      ],
+      "got": [
+        "CVE-2026-63077",
+        "CVE-2024-27198",
+        "CVE-2023-42793",
+        "CVE-2024-36470",
+        "CVE-2025-59457",
+        "CVE-2019-15042",
+        "CVE-2022-36322",
+        "CVE-2019-15038",
+        "CVE-2026-65907"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "description-11",
+      "category": "description",
+      "query": "Lỗ hổng khai thác hàng loạt đánh cắp dữ liệu trên MOVEit Transfer",
+      "relevant_cves": [
+        "CVE-2023-34362"
+      ],
+      "got": [
+        "CVE-2023-34362",
+        "CVE-2024-5806",
+        "CVE-2023-36934",
+        "CVE-2019-16383",
+        "CVE-2023-35036",
+        "CVE-2023-35708",
+        "CVE-2025-11235",
+        "CVE-2025-10932",
+        "CVE-2026-8800",
+        "CVE-2024-0396"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-12",
+      "category": "description",
+      "query": "Lỗ hổng RCE trong OGNL của Apache Struts2 gây vụ rò rỉ Equifax",
+      "relevant_cves": [
+        "CVE-2017-5638"
+      ],
+      "got": [
+        "CVE-2017-5638",
+        "CVE-2012-0391",
+        "CVE-2021-31805",
+        "CVE-2012-0838",
+        "CVE-2013-2135",
+        "CVE-2013-2134",
+        "CVE-2013-1966",
+        "CVE-2013-1965",
+        "CVE-2016-4461",
+        "CVE-2016-3090"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-13",
+      "category": "description",
+      "query": "Lỗ hổng đọc trộm session token trên Citrix NetScaler ADC",
+      "relevant_cves": [
+        "CVE-2023-4966"
+      ],
+      "got": [
+        "CVE-2019-18225",
+        "CVE-2016-9028",
+        "CVE-2014-7140",
+        "CVE-2021-22927",
+        "CVE-2015-2829",
+        "CVE-2017-14602",
+        "CVE-2018-5314",
+        "CVE-2021-22919",
+        "CVE-2020-8247",
+        "CVE-2020-8246"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-14",
+      "category": "description",
+      "query": "Lỗ hổng chèn template MSDT trong tài liệu Office",
+      "relevant_cves": [
+        "CVE-2022-30190"
+      ],
+      "got": [
+        "CVE-2022-34713",
+        "CVE-2015-2466",
+        "CVE-2006-3864",
+        "CVE-2022-35743",
+        "CVE-2022-34478",
+        "CVE-2010-3142",
+        "CVE-2018-8310",
+        "CVE-2026-39904"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-15",
+      "category": "description",
+      "query": "Lỗ hổng ghi đè ánh xạ bộ nhớ copy-on-write trong nhân Linux",
+      "relevant_cves": [
+        "CVE-2016-5195"
+      ],
+      "got": [
+        "CVE-2022-2590",
+        "CVE-2026-53148",
+        "CVE-2026-64520",
+        "CVE-2026-63895",
+        "CVE-2026-68289",
+        "CVE-2026-72181"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-16",
+      "category": "description",
+      "query": "Lỗ hổng ghi trái phép vào pipe buffer trong nhân Linux",
+      "relevant_cves": [
+        "CVE-2022-0847"
+      ],
+      "got": [
+        "CVE-2022-0847",
+        "CVE-2026-74631",
+        "CVE-2026-10671",
+        "CVE-2022-2959",
+        "CVE-2015-1805",
+        "CVE-2026-46182",
+        "CVE-2010-4604",
+        "CVE-2016-2847",
+        "CVE-2016-0774",
+        "CVE-2017-5550"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-17",
+      "category": "description",
+      "query": "Lỗ hổng tràn số nguyên trong glibc gethostbyname",
+      "relevant_cves": [
+        "CVE-2015-0235"
+      ],
+      "got": [
+        "CVE-2021-43523",
+        "CVE-2015-0235",
+        "CVE-1999-0101",
+        "CVE-2016-3075",
+        "CVE-2025-1330",
+        "CVE-2004-1485",
+        "CVE-2026-4438",
+        "CVE-2015-1781",
+        "CVE-2023-4806",
+        "CVE-2023-4813"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "description-18",
+      "category": "description",
+      "query": "Lỗ hổng thực thi mã từ xa trước xác thực trong OpenSSH server",
+      "relevant_cves": [
+        "CVE-2024-6387"
+      ],
+      "got": [
+        "CVE-2026-60002",
+        "CVE-2002-0639",
+        "CVE-2025-26465",
+        "CVE-2006-5794",
+        "CVE-2026-59998",
+        "CVE-2019-16905",
+        "CVE-2026-59995",
+        "CVE-2014-2653",
+        "CVE-2023-48795",
+        "CVE-2026-56624"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-19",
+      "category": "description",
+      "query": "Lỗ hổng chèn OGNL trong Apache Struts2 qua Content-Type",
+      "relevant_cves": [
+        "CVE-2017-5638"
+      ],
+      "got": [
+        "CVE-2020-17530",
+        "CVE-2013-2251",
+        "CVE-2012-0391",
+        "CVE-2017-5638",
+        "CVE-2019-0230",
+        "CVE-2021-31805",
+        "CVE-2020-13942",
+        "CVE-2025-53192",
+        "CVE-2013-2135",
+        "CVE-2013-2134"
+      ],
+      "rank": 4,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.25
+    },
+    {
+      "id": "description-20",
+      "category": "description",
+      "query": "Lỗ hổng RCE trong Atlassian Confluence qua OGNL injection",
+      "relevant_cves": [
+        "CVE-2022-26134"
+      ],
+      "got": [
+        "CVE-2023-22527",
+        "CVE-2022-26134",
+        "CVE-2021-26084",
+        "CVE-2023-22515",
+        "CVE-2026-73498",
+        "CVE-2026-21579",
+        "CVE-2021-39114",
+        "CVE-2023-22522",
+        "CVE-2023-22508",
+        "CVE-2020-24897"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "description-21",
+      "category": "description",
+      "query": "Lỗ hổng đọc file tùy ý không cần xác thực trên Pulse Secure VPN",
+      "relevant_cves": [
+        "CVE-2019-11510"
+      ],
+      "got": [
+        "CVE-2019-11510",
+        "CVE-2021-22893",
+        "CVE-2018-6320",
+        "CVE-2014-2292",
+        "CVE-2018-20812",
+        "CVE-2018-7572",
+        "CVE-2010-0993",
+        "CVE-2020-8256",
+        "CVE-2020-8221",
+        "CVE-2020-8255"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-22",
+      "category": "description",
+      "query": "Lỗ hổng command injection zero-day trên Palo Alto PAN-OS GlobalProtect",
+      "relevant_cves": [
+        "CVE-2024-3400"
+      ],
+      "got": [
+        "CVE-2024-3400",
+        "CVE-2026-0257",
+        "CVE-2021-3064",
+        "CVE-2026-0273",
+        "CVE-2026-0286",
+        "CVE-2024-8691",
+        "CVE-2024-2550",
+        "CVE-2025-0114",
+        "CVE-2021-3059",
+        "CVE-2020-2034"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-23",
+      "category": "description",
+      "query": "Lỗ hổng RCE trên VMware vCenter qua plugin vSAN Health",
+      "relevant_cves": [
+        "CVE-2021-21985"
+      ],
+      "got": [
+        "CVE-2021-21985",
+        "CVE-2021-21972",
+        "CVE-2021-21973",
+        "CVE-2021-21986",
+        "CVE-2021-22049",
+        "CVE-2026-59309",
+        "CVE-2025-58126",
+        "CVE-2022-4441",
+        "CVE-2022-4041",
+        "CVE-2022-2637"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "description-24",
+      "category": "description",
+      "query": "Lỗ hổng leo thang đặc quyền qua GameOver(lay) OverlayFS Linux",
+      "relevant_cves": [
+        "CVE-2023-2640"
+      ],
+      "got": [
+        "CVE-2023-0386",
+        "CVE-2021-3493",
+        "CVE-2022-0185",
+        "CVE-2026-46054",
+        "CVE-2021-3847",
+        "CVE-2015-1328",
+        "CVE-2016-1576",
+        "CVE-2014-9922",
+        "CVE-2026-68448",
+        "CVE-2011-1017"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "description-25",
+      "category": "description",
+      "query": "Lỗ hổng tràn heap trong xử lý DNS SIG record trên Windows DNS Server",
+      "relevant_cves": [
+        "CVE-2020-1350"
+      ],
+      "got": [
+        "CVE-2018-8626",
+        "CVE-2006-3441",
+        "CVE-2002-1219",
+        "CVE-2007-1644",
+        "CVE-2001-1452",
+        "CVE-2008-1454",
+        "CVE-2026-5947",
+        "CVE-2026-41096",
+        "CVE-2020-25683",
+        "CVE-2020-25687"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-01",
+      "category": "product",
+      "query": "Lỗ hổng Fortinet FortiOS SSL VPN path traversal?",
+      "relevant_cves": [
+        "CVE-2018-13379"
+      ],
+      "got": [
+        "CVE-2025-64446",
+        "CVE-2018-13379",
+        "CVE-2022-41328",
+        "CVE-2018-13382",
+        "CVE-2018-13383",
+        "CVE-2019-15705",
+        "CVE-2022-41335",
+        "CVE-2023-45586",
+        "CVE-2017-7738",
+        "CVE-2023-46715"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "product-02",
+      "category": "product",
+      "query": "Lỗ hổng F5 BIG-IP iControl REST cho phép RCE?",
+      "relevant_cves": [
+        "CVE-2022-1388",
+        "CVE-2021-22986"
+      ],
+      "got": [
+        "CVE-2022-1388",
+        "CVE-2026-20916",
+        "CVE-2021-22974",
+        "CVE-2016-9251",
+        "CVE-2014-2928",
+        "CVE-2017-6167",
+        "CVE-2017-6145",
+        "CVE-2015-3628",
+        "CVE-2016-9256",
+        "CVE-2022-1468"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-03",
+      "category": "product",
+      "query": "Lỗ hổng Atlassian Confluence OGNL injection RCE?",
+      "relevant_cves": [
+        "CVE-2022-26134",
+        "CVE-2021-26084"
+      ],
+      "got": [
+        "CVE-2021-26084",
+        "CVE-2022-26134",
+        "CVE-2023-22515",
+        "CVE-2026-73498",
+        "CVE-2026-21579",
+        "CVE-2023-22512",
+        "CVE-2021-39114",
+        "CVE-2023-22522",
+        "CVE-2023-22508",
+        "CVE-2020-24897"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-04",
+      "category": "product",
+      "query": "Lỗ hổng Citrix ADC/Gateway (NetScaler) path traversal RCE?",
+      "relevant_cves": [
+        "CVE-2019-19781"
+      ],
+      "got": [
+        "CVE-2019-19781",
+        "CVE-2019-18225",
+        "CVE-2014-7140",
+        "CVE-2018-6810",
+        "CVE-2015-2829",
+        "CVE-2021-22919",
+        "CVE-2026-19489",
+        "CVE-2026-19490",
+        "CVE-2017-14602",
+        "CVE-2020-8246"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-05",
+      "category": "product",
+      "query": "Lỗ hổng Ivanti Connect Secure bỏ qua xác thực?",
+      "relevant_cves": [
+        "CVE-2023-46805",
+        "CVE-2024-21887"
+      ],
+      "got": [
+        "CVE-2023-35078",
+        "CVE-2024-21893",
+        "CVE-2025-4427",
+        "CVE-2022-36983",
+        "CVE-2022-36975",
+        "CVE-2025-55148",
+        "CVE-2025-55145",
+        "CVE-2025-5462",
+        "CVE-2024-37404",
+        "CVE-2025-5456"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-06",
+      "category": "product",
+      "query": "Lỗ hổng VMware vCenter Server RCE?",
+      "relevant_cves": [
+        "CVE-2021-21972",
+        "CVE-2021-22005",
+        "CVE-2021-21985"
+      ],
+      "got": [
+        "CVE-2024-38812",
+        "CVE-2024-37079",
+        "CVE-2021-21972",
+        "CVE-2021-21973",
+        "CVE-2021-22017",
+        "CVE-2024-37080",
+        "CVE-2023-20893",
+        "CVE-2023-20894",
+        "CVE-2023-20895",
+        "CVE-2017-4923"
+      ],
+      "rank": 3,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.3333333333333333
+    },
+    {
+      "id": "product-07",
+      "category": "product",
+      "query": "Lỗ hổng Palo Alto PAN-OS GlobalProtect command injection?",
+      "relevant_cves": [
+        "CVE-2024-3400"
+      ],
+      "got": [
+        "CVE-2024-3400",
+        "CVE-2026-0257",
+        "CVE-2021-3064",
+        "CVE-2026-0273",
+        "CVE-2024-8691",
+        "CVE-2026-0286",
+        "CVE-2024-2550",
+        "CVE-2025-0127",
+        "CVE-2025-0110",
+        "CVE-2021-3059"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-08",
+      "category": "product",
+      "query": "Lỗ hổng Pulse Secure VPN đọc file tùy ý?",
+      "relevant_cves": [
+        "CVE-2019-11510"
+      ],
+      "got": [
+        "CVE-2019-11510",
+        "CVE-2021-22893",
+        "CVE-2020-8260",
+        "CVE-2016-4787",
+        "CVE-2016-4791",
+        "CVE-2014-2292",
+        "CVE-2018-20812",
+        "CVE-2020-8256",
+        "CVE-2020-8221",
+        "CVE-2020-8255"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-09",
+      "category": "product",
+      "query": "Lỗ hổng GitLab RCE không cần xác thực qua ExifTool?",
+      "relevant_cves": [
+        "CVE-2021-22205"
+      ],
+      "got": [
+        "CVE-2026-42589",
+        "CVE-2026-43893",
+        "CVE-2026-42590",
+        "CVE-2026-7580",
+        "CVE-2022-23935",
+        "CVE-2026-40281"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-10",
+      "category": "product",
+      "query": "Lỗ hổng Apache Log4j2 RCE?",
+      "relevant_cves": [
+        "CVE-2021-44228"
+      ],
+      "got": [
+        "CVE-2021-45046",
+        "CVE-2017-5645",
+        "CVE-2023-50780",
+        "CVE-2026-34478",
+        "CVE-2020-1959",
+        "CVE-2025-68161",
+        "CVE-2026-34477",
+        "CVE-2026-59272",
+        "CVE-2021-44832",
+        "CVE-2021-45105"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-11",
+      "category": "product",
+      "query": "Lỗ hổng Microsoft SharePoint RCE?",
+      "relevant_cves": [
+        "CVE-2019-0604",
+        "CVE-2023-29357"
+      ],
+      "got": [
+        "CVE-2021-35211",
+        "CVE-2018-6885",
+        "CVE-2018-8300",
+        "CVE-2016-0183",
+        "CVE-2018-8635",
+        "CVE-2019-0558",
+        "CVE-2018-8426",
+        "CVE-2018-8149",
+        "CVE-2018-8168",
+        "CVE-2018-8568"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-12",
+      "category": "product",
+      "query": "Lỗ hổng Progress MOVEit Transfer SQL injection?",
+      "relevant_cves": [
+        "CVE-2023-34362"
+      ],
+      "got": [
+        "CVE-2023-34362",
+        "CVE-2023-35708",
+        "CVE-2023-36934",
+        "CVE-2023-35036",
+        "CVE-2021-38159",
+        "CVE-2019-18464",
+        "CVE-2019-16383",
+        "CVE-2017-6195",
+        "CVE-2026-8800",
+        "CVE-2021-33894"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-13",
+      "category": "product",
+      "query": "Lỗ hổng Cisco IOS XE web UI leo thang đặc quyền?",
+      "relevant_cves": [
+        "CVE-2023-20198"
+      ],
+      "got": [
+        "CVE-2023-20198",
+        "CVE-2025-20363",
+        "CVE-2017-12229",
+        "CVE-2018-0150",
+        "CVE-2017-12230",
+        "CVE-2017-3856",
+        "CVE-2026-20311",
+        "CVE-2020-3400",
+        "CVE-2019-1753",
+        "CVE-2018-0152"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-14",
+      "category": "product",
+      "query": "Lỗ hổng SolarWinds Orion supply chain SUNBURST?",
+      "relevant_cves": [
+        "CVE-2020-10148"
+      ],
+      "got": [
+        "CVE-2020-10148",
+        "CVE-2019-8917",
+        "CVE-2021-25274",
+        "CVE-2021-31475",
+        "CVE-2020-27871",
+        "CVE-2021-27277",
+        "CVE-2023-23836",
+        "CVE-2022-38111",
+        "CVE-2022-47507",
+        "CVE-2022-36957"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-15",
+      "category": "product",
+      "query": "Lỗ hổng Zoho ManageEngine ADSelfService Plus RCE?",
+      "relevant_cves": [
+        "CVE-2021-40539"
+      ],
+      "got": [
+        "CVE-2021-40539",
+        "CVE-2018-5353",
+        "CVE-2021-28958",
+        "CVE-2019-7162",
+        "CVE-2023-35854",
+        "CVE-2020-24786",
+        "CVE-2021-37417",
+        "CVE-2018-20664",
+        "CVE-2026-3183",
+        "CVE-2022-34829"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-16",
+      "category": "product",
+      "query": "Lỗ hổng Oracle WebLogic Server RCE qua T3/IIOP?",
+      "relevant_cves": [
+        "CVE-2020-14882",
+        "CVE-2019-2725"
+      ],
+      "got": [
+        "CVE-2026-60198",
+        "CVE-2026-60204",
+        "CVE-2026-60202",
+        "CVE-2023-22072",
+        "CVE-2024-20931",
+        "CVE-2024-21006",
+        "CVE-2024-21183",
+        "CVE-2025-30762",
+        "CVE-2023-22086",
+        "CVE-2023-21838"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "product-17",
+      "category": "product",
+      "query": "Lỗ hổng Apache Struts2 RCE Jakarta Multipart?",
+      "relevant_cves": [
+        "CVE-2017-5638"
+      ],
+      "got": [
+        "CVE-2017-5638",
+        "CVE-2011-3923",
+        "CVE-2025-66675",
+        "CVE-2025-64775",
+        "CVE-2016-1181",
+        "CVE-2012-1592",
+        "CVE-2016-4430",
+        "CVE-2026-73632",
+        "CVE-2012-1006",
+        "CVE-2008-6505"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-18",
+      "category": "product",
+      "query": "Lỗ hổng Microsoft Exchange ProxyNotShell?",
+      "relevant_cves": [
+        "CVE-2022-41040",
+        "CVE-2022-41082"
+      ],
+      "got": [
+        "CVE-2021-34473",
+        "CVE-2021-34523",
+        "CVE-2022-41082",
+        "CVE-2022-41040",
+        "CVE-2021-31207",
+        "CVE-2018-8581",
+        "CVE-2017-8621",
+        "CVE-2017-8559",
+        "CVE-2017-8560",
+        "CVE-2018-0924"
+      ],
+      "rank": 3,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.3333333333333333
+    },
+    {
+      "id": "product-19",
+      "category": "product",
+      "query": "Lỗ hổng PaperCut MF/NG bỏ qua xác thực RCE?",
+      "relevant_cves": [
+        "CVE-2023-27350"
+      ],
+      "got": [
+        "CVE-2023-27350",
+        "CVE-2023-27351",
+        "CVE-2026-81578",
+        "CVE-2026-82078",
+        "CVE-2023-39469",
+        "CVE-2024-4712",
+        "CVE-2024-3037",
+        "CVE-2024-8404",
+        "CVE-2026-6180",
+        "CVE-2023-3486"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "product-20",
+      "category": "product",
+      "query": "Lỗ hổng Barracuda Email Security Gateway command injection zero-day?",
+      "relevant_cves": [
+        "CVE-2023-2868"
+      ],
+      "got": [
+        "CVE-2025-20393",
+        "CVE-2023-2868",
+        "CVE-2024-3400",
+        "CVE-2023-2080",
+        "CVE-2014-2595",
+        "CVE-2025-20184",
+        "CVE-2023-26213",
+        "CVE-2017-6320",
+        "CVE-2018-10354",
+        "CVE-2012-10046"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "cwe-01",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng chèn và thực thi lệnh hệ điều hành (CWE-78)?",
+      "relevant_cves": [
+        "CVE-2014-6271",
+        "CVE-2024-3400",
+        "CVE-2023-2868"
+      ],
+      "got": [
+        "CVE-2026-25089",
+        "CVE-2026-9717",
+        "CVE-2026-44191",
+        "CVE-2025-41279",
+        "CVE-2021-21412",
+        "CVE-2023-28771",
+        "CVE-2026-1731",
+        "CVE-2021-36380",
+        "CVE-2024-1212"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-02",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng deserialization dữ liệu không tin cậy (CWE-502)?",
+      "relevant_cves": [
+        "CVE-2021-44228",
+        "CVE-2017-9805",
+        "CVE-2015-4852"
+      ],
+      "got": [
+        "CVE-2026-58644",
+        "CVE-2025-53770",
+        "CVE-2025-24016",
+        "CVE-2018-4939",
+        "CVE-2025-23006",
+        "CVE-2023-38203",
+        "CVE-2025-10035",
+        "CVE-2025-40551",
+        "CVE-2026-66713",
+        "CVE-2025-11739"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-03",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng path traversal (CWE-22)?",
+      "relevant_cves": [
+        "CVE-2021-41773",
+        "CVE-2018-13379",
+        "CVE-2019-19781"
+      ],
+      "got": [
+        "CVE-2026-34909",
+        "CVE-2026-48282",
+        "CVE-2018-13379",
+        "CVE-2024-0769",
+        "CVE-2021-20090",
+        "CVE-2021-41773",
+        "CVE-2019-19781",
+        "CVE-2019-3396",
+        "CVE-2025-34028"
+      ],
+      "rank": 3,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.3333333333333333
+    },
+    {
+      "id": "cwe-04",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng server-side request forgery SSRF (CWE-918)?",
+      "relevant_cves": [
+        "CVE-2021-26855",
+        "CVE-2021-21972"
+      ],
+      "got": [
+        "CVE-2026-15409",
+        "CVE-2021-27103",
+        "CVE-2020-7796",
+        "CVE-2026-20230",
+        "CVE-2021-22054",
+        "CVE-2021-21975",
+        "CVE-2024-21893",
+        "CVE-2026-13150",
+        "CVE-2026-45502"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-05",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng SQL injection (CWE-89)?",
+      "relevant_cves": [
+        "CVE-2024-27198",
+        "CVE-2023-34362"
+      ],
+      "got": [
+        "CVE-2025-25257",
+        "CVE-2018-7841",
+        "CVE-2026-21643",
+        "CVE-2020-29574",
+        "CVE-2023-48788",
+        "CVE-2019-12989",
+        "CVE-2020-5722",
+        "CVE-2021-20016",
+        "CVE-2016-2386"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-06",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng leo thang đặc quyền cục bộ Linux?",
+      "relevant_cves": [
+        "CVE-2021-4034",
+        "CVE-2021-3156",
+        "CVE-2016-5195",
+        "CVE-2022-0847"
+      ],
+      "got": [
+        "CVE-2023-0386",
+        "CVE-2025-6018",
+        "CVE-2026-64009",
+        "CVE-2023-2124",
+        "CVE-2021-4204",
+        "CVE-2022-0330",
+        "CVE-2021-3609",
+        "CVE-2021-4197",
+        "CVE-2023-3282",
+        "CVE-2022-0031"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-07",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng use-after-free (CWE-416)?",
+      "relevant_cves": [
+        "CVE-2021-21220",
+        "CVE-2022-0609"
+      ],
+      "got": [
+        "CVE-2014-1776",
+        "CVE-2024-9680",
+        "CVE-2015-0313",
+        "CVE-2015-5119",
+        "CVE-2015-5122",
+        "CVE-2015-5123",
+        "CVE-2022-26486",
+        "CVE-2020-3992",
+        "CVE-2025-24085"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-08",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng tràn bộ đệm heap (CWE-122)?",
+      "relevant_cves": [
+        "CVE-2015-0235",
+        "CVE-2020-0796"
+      ],
+      "got": [
+        "CVE-2023-27997",
+        "CVE-2026-48339",
+        "CVE-2026-10849",
+        "CVE-2026-50482",
+        "CVE-2026-54132",
+        "CVE-2021-3835",
+        "CVE-2021-21017",
+        "CVE-2015-3113",
+        "CVE-2020-16010",
+        "CVE-2025-24993"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-09",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng cross-site scripting XSS (CWE-79)?",
+      "relevant_cves": [
+        "CVE-2018-6389",
+        "CVE-2019-11043"
+      ],
+      "got": [
+        "CVE-2026-42897",
+        "CVE-2025-48700",
+        "CVE-2018-6882",
+        "CVE-2020-3580",
+        "CVE-2026-48320",
+        "CVE-2025-68385",
+        "CVE-2025-68387",
+        "CVE-2026-12619",
+        "CVE-2021-1879"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-10",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng out-of-bounds write (CWE-787)?",
+      "relevant_cves": [
+        "CVE-2019-0708",
+        "CVE-2020-1350"
+      ],
+      "got": [
+        "CVE-2025-24201",
+        "CVE-2025-43300",
+        "CVE-2025-9242",
+        "CVE-2025-21043",
+        "CVE-2023-34048",
+        "CVE-2015-3113",
+        "CVE-2026-48366",
+        "CVE-2026-48311",
+        "CVE-2026-48341",
+        "CVE-2026-13196"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-11",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng bỏ qua xác thực (CWE-287)?",
+      "relevant_cves": [
+        "CVE-2022-1388",
+        "CVE-2023-46805",
+        "CVE-2020-1472"
+      ],
+      "got": [
+        "CVE-2026-46817",
+        "CVE-2026-20182",
+        "CVE-2022-40684",
+        "CVE-2025-32975",
+        "CVE-2026-20127",
+        "CVE-2020-12812",
+        "CVE-2018-10561",
+        "CVE-2017-7921",
+        "CVE-2021-22893"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-12",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng OGNL/expression injection?",
+      "relevant_cves": [
+        "CVE-2017-5638",
+        "CVE-2022-26134",
+        "CVE-2022-22965"
+      ],
+      "got": [
+        "CVE-2013-2251",
+        "CVE-2021-26084",
+        "CVE-2022-26134",
+        "CVE-2012-0391",
+        "CVE-2018-25159",
+        "CVE-2025-53192",
+        "CVE-2012-0838",
+        "CVE-2016-3090",
+        "CVE-2021-39114",
+        "CVE-2010-1870"
+      ],
+      "rank": 3,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.3333333333333333
+    },
+    {
+      "id": "cwe-13",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng XML external entity XXE (CWE-611)?",
+      "relevant_cves": [
+        "CVE-2014-3529"
+      ],
+      "got": [
+        "CVE-2024-34102",
+        "CVE-2025-2776",
+        "CVE-2025-58360",
+        "CVE-2019-9670",
+        "CVE-2025-2775",
+        "CVE-2023-45727",
+        "CVE-2016-9563",
+        "CVE-2019-13608",
+        "CVE-2026-51080"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-14",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng thực thi mã từ xa qua JNDI/LDAP?",
+      "relevant_cves": [
+        "CVE-2021-44228"
+      ],
+      "got": [
+        "CVE-2026-27727",
+        "CVE-2021-42392",
+        "CVE-2022-25167",
+        "CVE-2022-34916",
+        "CVE-2022-40145",
+        "CVE-2023-27866",
+        "CVE-2016-9299",
+        "CVE-2026-84218",
+        "CVE-2024-45199",
+        "CVE-2007-4364"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "cwe-15",
+      "category": "cwe",
+      "query": "CVE nào là lỗ hổng chèn lệnh qua template (SSTI)?",
+      "relevant_cves": [
+        "CVE-2022-30190"
+      ],
+      "got": [
+        "CVE-2026-0685",
+        "CVE-2026-28496",
+        "CVE-2026-14453",
+        "CVE-2026-38431",
+        "CVE-2025-70830",
+        "CVE-2025-25362",
+        "CVE-2025-64087",
+        "CVE-2021-31635",
+        "CVE-2025-51991",
+        "CVE-2025-69516"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-01",
+      "category": "multi_hop",
+      "query": "CVE nào của Apache Struts2 liên quan OGNL bị khai thác thực tế?",
+      "relevant_cves": [
+        "CVE-2017-5638",
+        "CVE-2018-11776"
+      ],
+      "got": [
+        "CVE-2012-0391",
+        "CVE-2013-2251",
+        "CVE-2022-26134",
+        "CVE-2019-0230",
+        "CVE-2021-31805",
+        "CVE-2020-11975",
+        "CVE-2012-0838",
+        "CVE-2013-1965",
+        "CVE-2013-2135",
+        "CVE-2013-2134"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-02",
+      "category": "multi_hop",
+      "query": "Các CVE path traversal của Fortinet FortiOS?",
+      "relevant_cves": [
+        "CVE-2018-13379"
+      ],
+      "got": [
+        "CVE-2025-64446",
+        "CVE-2018-13379",
+        "CVE-2022-40684",
+        "CVE-2022-41328",
+        "CVE-2024-48884",
+        "CVE-2023-42791",
+        "CVE-2024-26009",
+        "CVE-2025-53844",
+        "CVE-2022-42476",
+        "CVE-2022-41335"
+      ],
+      "rank": 2,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.5
+    },
+    {
+      "id": "multi_hop-03",
+      "category": "multi_hop",
+      "query": "Những CVE nào trên Microsoft Exchange tạo thành chuỗi ProxyLogon?",
+      "relevant_cves": [
+        "CVE-2021-26855",
+        "CVE-2021-27065",
+        "CVE-2021-26857",
+        "CVE-2021-26858"
+      ],
+      "got": [
+        "CVE-2021-26855",
+        "CVE-2021-34473",
+        "CVE-2021-34523",
+        "CVE-2022-41082",
+        "CVE-2022-41040",
+        "CVE-2018-8581",
+        "CVE-2021-31207",
+        "CVE-2026-45503",
+        "CVE-2017-8559",
+        "CVE-2017-8560"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-04",
+      "category": "multi_hop",
+      "query": "CVE nào của Citrix cho phép chiếm phiên đăng nhập?",
+      "relevant_cves": [
+        "CVE-2023-4966"
+      ],
+      "got": [
+        "CVE-2024-8068",
+        "CVE-2026-53565",
+        "CVE-2021-22928",
+        "CVE-2010-2990",
+        "CVE-2021-22927",
+        "CVE-2020-8247",
+        "CVE-2020-8258",
+        "CVE-2020-8246",
+        "CVE-2022-21827",
+        "CVE-2002-0301"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-05",
+      "category": "multi_hop",
+      "query": "Các lỗ hổng RCE của Apache HTTP Server 2.4.49/2.4.50?",
+      "relevant_cves": [
+        "CVE-2021-41773",
+        "CVE-2021-42013"
+      ],
+      "got": [
+        "CVE-2021-41773",
+        "CVE-2021-42013",
+        "CVE-2024-38476",
+        "CVE-2020-11984",
+        "CVE-2026-23918",
+        "CVE-2026-34356",
+        "CVE-2026-44631",
+        "CVE-2024-39884",
+        "CVE-2019-0197",
+        "CVE-2019-0196"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-06",
+      "category": "multi_hop",
+      "query": "CVE deserialization nào trong Oracle WebLogic?",
+      "relevant_cves": [
+        "CVE-2019-2725",
+        "CVE-2020-14882"
+      ],
+      "got": [
+        "CVE-2026-60205",
+        "CVE-2026-21962",
+        "CVE-2025-47784",
+        "CVE-2023-40571",
+        "CVE-2026-60196",
+        "CVE-2026-60527",
+        "CVE-2026-60528",
+        "CVE-2025-50073",
+        "CVE-2017-10147",
+        "CVE-2022-29936"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-07",
+      "category": "multi_hop",
+      "query": "Lỗ hổng nào của SonicWall SMA bị khai thác zero-day?",
+      "relevant_cves": [
+        "CVE-2021-20016"
+      ],
+      "got": [
+        "CVE-2021-20016",
+        "CVE-2019-7481",
+        "CVE-2019-7482",
+        "CVE-2022-2915",
+        "CVE-2019-7485",
+        "CVE-2019-7486",
+        "CVE-2021-20044",
+        "CVE-2021-20043",
+        "CVE-2020-5129",
+        "CVE-2021-20017"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-08",
+      "category": "multi_hop",
+      "query": "CVE nào của VMware vCenter cho phép RCE không cần xác thực?",
+      "relevant_cves": [
+        "CVE-2021-21972",
+        "CVE-2021-22005"
+      ],
+      "got": [
+        "CVE-2021-21972",
+        "CVE-2021-21973",
+        "CVE-2026-59309",
+        "CVE-2017-4919",
+        "CVE-2023-20893",
+        "CVE-2022-22972",
+        "CVE-2014-3790",
+        "CVE-2016-7459",
+        "CVE-2025-41241",
+        "CVE-2022-2637"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-09",
+      "category": "multi_hop",
+      "query": "Chuỗi CVE ProxyNotShell trên Exchange gồm những gì?",
+      "relevant_cves": [
+        "CVE-2022-41040",
+        "CVE-2022-41082"
+      ],
+      "got": [
+        "CVE-2021-34523",
+        "CVE-2021-34473",
+        "CVE-2021-26855",
+        "CVE-2022-41082",
+        "CVE-2022-41040",
+        "CVE-2021-31207",
+        "CVE-2017-8560",
+        "CVE-2017-8559",
+        "CVE-2018-0924",
+        "CVE-2017-8621"
+      ],
+      "rank": 4,
+      "hit5": true,
+      "hit10": true,
+      "rr": 0.25
+    },
+    {
+      "id": "multi_hop-10",
+      "category": "multi_hop",
+      "query": "Lỗ hổng leo thang đặc quyền nhân Linux OverlayFS?",
+      "relevant_cves": [
+        "CVE-2021-3493",
+        "CVE-2023-0386",
+        "CVE-2023-2640"
+      ],
+      "got": [
+        "CVE-2023-0386",
+        "CVE-2021-3493",
+        "CVE-2018-14634",
+        "CVE-2022-0185",
+        "CVE-2026-46054",
+        "CVE-2021-3847",
+        "CVE-2016-1576",
+        "CVE-2015-1328",
+        "CVE-2014-9922",
+        "CVE-2012-0055"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-11",
+      "category": "multi_hop",
+      "query": "CVE nào trên Ivanti Connect Secure bị chuỗi để RCE?",
+      "relevant_cves": [
+        "CVE-2023-46805",
+        "CVE-2024-21887"
+      ],
+      "got": [
+        "CVE-2025-22457",
+        "CVE-2024-21893",
+        "CVE-2024-39711",
+        "CVE-2024-39712",
+        "CVE-2024-37404",
+        "CVE-2025-5462",
+        "CVE-2025-55147",
+        "CVE-2025-55148",
+        "CVE-2025-55145",
+        "CVE-2024-22052"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-12",
+      "category": "multi_hop",
+      "query": "Lỗ hổng nào của Zimbra bị khai thác để RCE?",
+      "relevant_cves": [
+        "CVE-2022-27925",
+        "CVE-2022-41352"
+      ],
+      "got": [
+        "CVE-2022-41352",
+        "CVE-2022-27924",
+        "CVE-2018-20160",
+        "CVE-2024-45518",
+        "CVE-2026-73570",
+        "CVE-2024-27442",
+        "CVE-2024-45517",
+        "CVE-2026-33372",
+        "CVE-2025-54390",
+        "CVE-2012-1213"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-13",
+      "category": "multi_hop",
+      "query": "CVE nào của Cisco ASA/FTD bị khai thác VPN?",
+      "relevant_cves": [
+        "CVE-2020-3452",
+        "CVE-2018-0101"
+      ],
+      "got": [
+        "CVE-2025-20333",
+        "CVE-2023-20269",
+        "CVE-2026-20039",
+        "CVE-2026-20105",
+        "CVE-2026-20103",
+        "CVE-2025-20251",
+        "CVE-2022-20759",
+        "CVE-2024-20382",
+        "CVE-2024-20341",
+        "CVE-2018-0227"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "multi_hop-14",
+      "category": "multi_hop",
+      "query": "Lỗ hổng RCE của Spring Framework/Spring Cloud?",
+      "relevant_cves": [
+        "CVE-2022-22965",
+        "CVE-2022-22963"
+      ],
+      "got": [
+        "CVE-2022-22963",
+        "CVE-2026-47884",
+        "CVE-2016-1000027",
+        "CVE-2026-47836",
+        "CVE-2026-59282",
+        "CVE-2026-47888",
+        "CVE-2026-59313",
+        "CVE-2026-40989",
+        "CVE-2022-22979"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "multi_hop-15",
+      "category": "multi_hop",
+      "query": "CVE nào của Windows SMBv3 cho phép RCE wormable?",
+      "relevant_cves": [
+        "CVE-2020-0796"
+      ],
+      "got": [
+        "CVE-2020-0796",
+        "CVE-2017-0148",
+        "CVE-2017-0145",
+        "CVE-2017-0143",
+        "CVE-2017-0146",
+        "CVE-2017-0147",
+        "CVE-2024-43447",
+        "CVE-2025-54101",
+        "CVE-2022-32230",
+        "CVE-2020-1206"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-01",
+      "category": "exact_id",
+      "query": "CVE-2021-44228 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2021-44228"
+      ],
+      "got": [
+        "CVE-2021-44228"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-02",
+      "category": "exact_id",
+      "query": "CVE-2017-0144 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2017-0144"
+      ],
+      "got": [
+        "CVE-2017-0144"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-03",
+      "category": "exact_id",
+      "query": "CVE-2020-1472 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2020-1472"
+      ],
+      "got": [
+        "CVE-2020-1472"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-04",
+      "category": "exact_id",
+      "query": "CVE-2019-0708 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2019-0708"
+      ],
+      "got": [
+        "CVE-2019-0708"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-05",
+      "category": "exact_id",
+      "query": "CVE-2018-13379 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2018-13379"
+      ],
+      "got": [
+        "CVE-2018-13379"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-06",
+      "category": "exact_id",
+      "query": "CVE-2023-4966 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2023-4966"
+      ],
+      "got": [
+        "CVE-2023-4966"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-07",
+      "category": "exact_id",
+      "query": "CVE-2024-3094 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2024-3094"
+      ],
+      "got": [
+        "CVE-2024-3094"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-08",
+      "category": "exact_id",
+      "query": "CVE-2022-30190 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2022-30190"
+      ],
+      "got": [
+        "CVE-2022-30190"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-09",
+      "category": "exact_id",
+      "query": "CVE-2021-34473 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2021-34473"
+      ],
+      "got": [
+        "CVE-2021-34473"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-10",
+      "category": "exact_id",
+      "query": "CVE-2014-0160 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2014-0160"
+      ],
+      "got": [
+        "CVE-2014-0160"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-11",
+      "category": "exact_id",
+      "query": "CVE-2024-3400 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2024-3400"
+      ],
+      "got": [
+        "CVE-2024-3400"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "exact_id-12",
+      "category": "exact_id",
+      "query": "CVE-2023-34362 là lỗ hổng gì?",
+      "relevant_cves": [
+        "CVE-2023-34362"
+      ],
+      "got": [
+        "CVE-2023-34362"
+      ],
+      "rank": 1,
+      "hit5": true,
+      "hit10": true,
+      "rr": 1.0
+    },
+    {
+      "id": "aggregate-01",
+      "category": "aggregate",
+      "query": "Cơ sở tri thức có tổng cộng bao nhiêu CVE?",
+      "expected": "count_total",
+      "got": [
+        "CVE-2008-1247",
+        "CVE-2018-3649",
+        "CVE-2024-42435",
+        "CVE-2017-5729",
+        "CVE-2021-3519",
+        "CVE-2019-6169",
+        "CVE-2024-12940",
+        "CVE-2024-12497",
+        "CVE-2024-12946",
+        "CVE-2024-12927"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-02",
+      "category": "aggregate",
+      "query": "CVE cũ nhất trong hệ thống là năm nào?",
+      "expected": "min_year~1999",
+      "got": [
+        "CVE-2010-0232",
+        "CVE-1999-0662",
+        "CVE-2018-3655",
+        "CVE-2021-45042",
+        "CVE-2016-2208",
+        "CVE-2017-6400",
+        "CVE-2010-1425",
+        "CVE-2017-6407",
+        "CVE-2017-6399",
+        "CVE-2016-4358"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-03",
+      "category": "aggregate",
+      "query": "CVE mới nhất được ghi nhận là gì?",
+      "expected": "max_recent",
+      "got": [
+        "CVE-2026-51947",
+        "CVE-2021-47220",
+        "CVE-2021-46059",
+        "CVE-2017-100012",
+        "CVE-2018-558213",
+        "CVE-2021-37960",
+        "CVE-2017-171479",
+        "CVE-2017-5772",
+        "CVE-2021-47615",
+        "CVE-2021-31291"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-04",
+      "category": "aggregate",
+      "query": "Có bao nhiêu CVE năm 2024?",
+      "expected": "count_year_2024",
+      "got": [
+        "CVE-2024-9194",
+        "CVE-2025-43768",
+        "CVE-2024-37051",
+        "CVE-2024-32595",
+        "CVE-2025-23385",
+        "CVE-2025-3639",
+        "CVE-2025-43735",
+        "CVE-2025-43819",
+        "CVE-2025-24737",
+        "CVE-2024-2038"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-05",
+      "category": "aggregate",
+      "query": "Có bao nhiêu CVE mức CRITICAL?",
+      "expected": "count_severity_critical",
+      "got": [
+        "CVE-2026-73390",
+        "CVE-2026-59503",
+        "CVE-2026-59507",
+        "CVE-2025-32743",
+        "CVE-2025-9953",
+        "CVE-2025-42937",
+        "CVE-2025-41723",
+        "CVE-2025-57754",
+        "CVE-2024-55976",
+        "CVE-2022-50935"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-06",
+      "category": "aggregate",
+      "query": "Dữ liệu bao phủ từ năm nào đến năm nào?",
+      "expected": "range_1999_2026",
+      "got": [
+        "CVE-2025-46643",
+        "CVE-2006-1304",
+        "CVE-2019-16274",
+        "CVE-2026-46684",
+        "CVE-2011-0731",
+        "CVE-2022-29945",
+        "CVE-2018-8209",
+        "CVE-2017-0191",
+        "CVE-2026-9836",
+        "CVE-2018-8472"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-07",
+      "category": "aggregate",
+      "query": "Có bao nhiêu CVE nằm trong danh sách KEV của CISA?",
+      "expected": "count_kev",
+      "got": [
+        "CVE-2025-3928",
+        "CVE-2026-60137",
+        "CVE-2026-63030",
+        "CVE-2026-6687",
+        "CVE-2026-43510",
+        "CVE-2026-6686",
+        "CVE-2026-6684",
+        "CVE-2026-6683",
+        "CVE-2026-48897",
+        "CVE-2026-48896"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-08",
+      "category": "aggregate",
+      "query": "Bao nhiêu CVE của năm 2021 có mức nghiêm trọng cao?",
+      "expected": "count_year_severity",
+      "got": [
+        "CVE-2021-45511",
+        "CVE-2022-26507",
+        "CVE-2021-45977",
+        "CVE-2021-38692",
+        "CVE-2023-32260",
+        "CVE-2023-46614",
+        "CVE-2024-32595",
+        "CVE-2021-25020",
+        "CVE-2021-39409",
+        "CVE-2021-47847"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-09",
+      "category": "aggregate",
+      "query": "Sản phẩm nào có nhiều CVE nhất trong KB?",
+      "expected": "top_product",
+      "got": [
+        "CVE-2025-3928",
+        "CVE-2023-30762",
+        "CVE-2023-30764",
+        "CVE-2023-30766",
+        "CVE-2022-23676",
+        "CVE-2025-32390",
+        "CVE-2022-23677",
+        "CVE-2025-24741"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-10",
+      "category": "aggregate",
+      "query": "Có bao nhiêu CVE liên quan CWE-79?",
+      "expected": "count_cwe79",
+      "got": [
+        "CVE-2026-42897",
+        "CVE-2020-26799",
+        "CVE-2017-20097",
+        "CVE-2021-1879",
+        "CVE-2025-48700",
+        "CVE-2024-37383",
+        "CVE-2023-43770",
+        "CVE-2024-43573",
+        "CVE-2024-11182"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-11",
+      "category": "aggregate",
+      "query": "CVE nào có điểm CVSS cao nhất (10.0)?",
+      "expected": "list_cvss10",
+      "got": [
+        "CVE-2019-10883",
+        "CVE-2018-0809",
+        "CVE-2018-0952",
+        "CVE-2018-8233",
+        "CVE-2018-8347",
+        "CVE-2021-42297",
+        "CVE-2021-36945",
+        "CVE-2021-27070",
+        "CVE-2016-10766",
+        "CVE-2016-0329"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-12",
+      "category": "aggregate",
+      "query": "Trung bình mỗi năm có bao nhiêu CVE?",
+      "expected": "avg_per_year",
+      "got": [
+        "CVE-2024-2050",
+        "CVE-2022-26364",
+        "CVE-2024-43590",
+        "CVE-2024-32595",
+        "CVE-2023-46614",
+        "CVE-2025-10425",
+        "CVE-2024-20277",
+        "CVE-2025-10424",
+        "CVE-2026-41524",
+        "CVE-2017-8812"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-13",
+      "category": "aggregate",
+      "query": "Bao nhiêu CVE được cập nhật trong 30 ngày qua?",
+      "expected": "count_recent_update",
+      "got": [
+        "CVE-2022-30526",
+        "CVE-2024-2051",
+        "CVE-2022-2030",
+        "CVE-2024-32595",
+        "CVE-2023-46614",
+        "CVE-2021-31291",
+        "CVE-2026-54828",
+        "CVE-2026-58407",
+        "CVE-2025-24737",
+        "CVE-2021-31888"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "aggregate-14",
+      "category": "aggregate",
+      "query": "Năm nào có nhiều CVE nhất?",
+      "expected": "peak_year",
+      "got": [
+        "CVE-2021-1057",
+        "CVE-2021-1085",
+        "CVE-2025-59499",
+        "CVE-2016-8941",
+        "CVE-2025-11206",
+        "CVE-2023-25517",
+        "CVE-2025-20162",
+        "CVE-2024-37331",
+        "CVE-2024-37327",
+        "CVE-2024-37323"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-01",
+      "category": "edge",
+      "query": "CVE-2030-99999 là gì?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-02",
+      "category": "edge",
+      "query": "CVE-2099-00001 mô tả lỗ hổng nào?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-03",
+      "category": "edge",
+      "query": "CVE-ABCD-1234 là gì?",
+      "relevant_cves": [],
+      "got": [
+        "CVE-2024-8410",
+        "CVE-2024-8409",
+        "CVE-2024-8411",
+        "CVE-2004-1234",
+        "CVE-2001-1234",
+        "CVE-2024-12343",
+        "CVE-2015-8382"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-04",
+      "category": "edge",
+      "query": "Lỗ hổng CVE-2045-55555 nghiêm trọng ra sao?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-05",
+      "category": "edge",
+      "query": "CVE-2027-12345 ảnh hưởng sản phẩm nào?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-06",
+      "category": "edge",
+      "query": "CVE-2020-9999999 có PoC không?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-07",
+      "category": "edge",
+      "query": "Lỗ hổng FooBarShell năm 2035 là gì?",
+      "relevant_cves": [],
+      "got": [
+        "CVE-2025-32139",
+        "CVE-2025-14958",
+        "CVE-2012-2035",
+        "CVE-2019-2035",
+        "CVE-2004-2035",
+        "CVE-2006-2035",
+        "CVE-2007-2035",
+        "CVE-2021-2035",
+        "CVE-2026-2035",
+        "CVE-2002-2035"
+      ],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    },
+    {
+      "id": "edge-08",
+      "category": "edge",
+      "query": "CVE-1990-0001 là gì?",
+      "relevant_cves": [],
+      "got": [],
+      "rank": null,
+      "hit5": false,
+      "hit10": false,
+      "rr": 0.0
+    }
+  ]
+}

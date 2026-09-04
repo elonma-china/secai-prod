@@ -1,0 +1,100 @@
+{"id":"sec-001","category":"cve_lookup","q":"CVE-2024-27198 là lỗ hổng gì trong JetBrains TeamCity?"}
+{"id":"sec-002","category":"cve_lookup","q":"Hãy mô tả CVE-2021-44228 (Log4Shell) cho tôi."}
+{"id":"sec-003","category":"cve_lookup","q":"CVE-2021-41773 ảnh hưởng đến phần mềm nào và là loại lỗ hổng gì?"}
+{"id":"sec-004","category":"cve_lookup","q":"CVE-2017-0144 (EternalBlue) khai thác giao thức nào?"}
+{"id":"sec-005","category":"cve_lookup","q":"CVE-2019-0708 (BlueKeep) là gì?"}
+{"id":"sec-006","category":"cve_lookup","q":"CVE-2018-13379 liên quan đến sản phẩm Fortinet nào?"}
+{"id":"sec-007","category":"cve_lookup","q":"CVE-2022-1388 trên F5 BIG-IP là lỗ hổng loại gì?"}
+{"id":"sec-008","category":"cve_lookup","q":"CVE-2023-34362 trong MOVEit Transfer là gì?"}
+{"id":"sec-009","category":"cve_lookup","q":"Mô tả ngắn gọn CVE-2021-26855 (ProxyLogon) giúp tôi."}
+{"id":"sec-010","category":"cve_lookup","q":"CVE-2017-5638 trong Apache Struts2 là gì, vụ Equifax liên quan thế nào?"}
+{"id":"sec-011","category":"cve_lookup","q":"CVE-2020-1472 (Zerologon) là lỗ hổng gì?"}
+{"id":"sec-012","category":"cve_detail","q":"Điểm CVSS của CVE-2021-44228 là bao nhiêu và mức độ nghiêm trọng thế nào?"}
+{"id":"sec-013","category":"cve_detail","q":"CVE-2024-27198 có CWE liên quan là gì?"}
+{"id":"sec-014","category":"cve_detail","q":"Những phiên bản sản phẩm nào bị ảnh hưởng bởi CVE-2021-41773?"}
+{"id":"sec-015","category":"cve_detail","q":"CVE-2022-1388 có điểm CVSS v3 là bao nhiêu?"}
+{"id":"sec-016","category":"cve_detail","q":"CVE-2023-4966 (Citrix Bleed) thuộc loại CWE nào?"}
+{"id":"sec-017","category":"cve_detail","q":"Mức độ nghiêm trọng CVSS của CVE-2019-19781 là gì?"}
+{"id":"sec-018","category":"cve_detail","q":"CVE-2020-0601 (CurveBall) ảnh hưởng phiên bản Windows nào?"}
+{"id":"sec-019","category":"cve_detail","q":"CVE-2022-30190 (Follina) có điểm CVSS bao nhiêu?"}
+{"id":"sec-020","category":"cve_detail","q":"CVE-2021-34527 (PrintNightmare) có mức độ nghiêm trọng CRITICAL không?"}
+{"id":"sec-021","category":"cve_detail","q":"CVE-2023-27350 trong PaperCut có CWE nào liên quan (bypass xác thực)?"}
+{"id":"sec-022","category":"cve_detail","q":"CVE-2024-3094 (XZ Utils backdoor) ảnh hưởng những phiên bản liblzma nào?"}
+{"id":"sec-023","category":"poc_availability","q":"CVE-2021-44228 có PoC công khai trên GitHub không?"}
+{"id":"sec-024","category":"poc_availability","q":"CVE-2017-5638 (Struts2) đã có module trong Metasploit chưa?"}
+{"id":"sec-025","category":"poc_availability","q":"CVE-2023-34362 (MOVEit) có mã khai thác trên exploit-db không?"}
+{"id":"sec-026","category":"poc_availability","q":"Có PoC khai thác cho CVE-2024-27198 (TeamCity) không?"}
+{"id":"sec-027","category":"poc_availability","q":"CVE-2021-26855 (ProxyLogon) có exploit chain công khai ở đâu không?"}
+{"id":"sec-028","category":"poc_availability","q":"CVE-2022-26134 (Confluence OGNL) có sẵn PoC không?"}
+{"id":"sec-029","category":"poc_availability","q":"CVE-2020-1472 (Zerologon) có script khai thác Python công khai không?"}
+{"id":"sec-030","category":"poc_availability","q":"CVE-2019-19781 (Citrix ADC) đã có exploit trên exploit-db chưa?"}
+{"id":"sec-031","category":"poc_availability","q":"CVE-2023-3519 có module Metasploit chưa?"}
+{"id":"sec-032","category":"poc_availability","q":"CVE-2024-23897 (Jenkins CLI) có PoC công khai không?"}
+{"id":"sec-033","category":"poc_availability","q":"CVE-2018-7600 (Drupalgeddon2) có exploit sẵn dùng ở đâu không?"}
+{"id":"sec-034","category":"remediation","q":"Cách vá CVE-2021-44228 (Log4Shell) như thế nào?"}
+{"id":"sec-035","category":"remediation","q":"Làm sao khắc phục CVE-2021-41773 trên Apache HTTP Server?"}
+{"id":"sec-036","category":"remediation","q":"Biện pháp mitigate CVE-2019-0708 (BlueKeep) khi chưa vá được ngay là gì?"}
+{"id":"sec-037","category":"remediation","q":"Cách khắc phục CVE-2022-1388 trên F5 BIG-IP như thế nào?"}
+{"id":"sec-038","category":"remediation","q":"Vá CVE-2020-1472 (Zerologon) cần làm những bước nào?"}
+{"id":"sec-039","category":"remediation","q":"Cách xử lý CVE-2023-4966 (Citrix Bleed) ra sao?"}
+{"id":"sec-040","category":"remediation","q":"Khắc phục CVE-2017-0144 (EternalBlue) bằng cách nào?"}
+{"id":"sec-041","category":"remediation","q":"Biện pháp giảm thiểu CVE-2022-30190 (Follina) trước khi có bản vá là gì?"}
+{"id":"sec-042","category":"remediation","q":"Cách vá lỗ hổng CVE-2024-3094 trong XZ Utils như thế nào?"}
+{"id":"sec-043","category":"remediation","q":"Khắc phục CVE-2023-27350 (PaperCut) như thế nào?"}
+{"id":"sec-044","category":"remediation","q":"Vá CVE-2021-34527 (PrintNightmare) cần cấu hình thêm gì?"}
+{"id":"sec-045","category":"cwe_capec","q":"CWE-79 là loại lỗ hổng gì?"}
+{"id":"sec-046","category":"cwe_capec","q":"CWE-89 (SQL Injection) khác gì với CWE-78 (OS Command Injection)?"}
+{"id":"sec-047","category":"cwe_capec","q":"CWE-787 (Out-of-bounds Write) là gì và thường gặp trong loại phần mềm nào?"}
+{"id":"sec-048","category":"cwe_capec","q":"CAPEC-66 mô tả kỹ thuật tấn công nào?"}
+{"id":"sec-049","category":"cwe_capec","q":"Kỹ thuật MITRE ATT&CK T1190 (Exploit Public-Facing Application) là gì?"}
+{"id":"sec-050","category":"cwe_capec","q":"CWE-502 (Deserialization of Untrusted Data) là gì?"}
+{"id":"sec-051","category":"cwe_capec","q":"CAPEC liên quan đến tấn công SSRF là CAPEC nào?"}
+{"id":"sec-052","category":"cwe_capec","q":"T1059 trong MITRE ATT&CK là kỹ thuật gì?"}
+{"id":"sec-053","category":"cwe_capec","q":"CWE-22 (Path Traversal) hoạt động như thế nào?"}
+{"id":"sec-054","category":"cwe_capec","q":"CWE-918 (SSRF) khác gì so với CWE-611 (XXE)?"}
+{"id":"sec-055","category":"cwe_capec","q":"Tactic MITRE ATT&CK Initial Access bao gồm những kỹ thuật nào?"}
+{"id":"sec-056","category":"aggregate_stats","q":"Trong cơ sở dữ liệu hiện có bao nhiêu CVE liên quan đến Apache Struts?"}
+{"id":"sec-057","category":"aggregate_stats","q":"CVE nào mới nhất được ghi nhận trong hệ thống?"}
+{"id":"sec-058","category":"aggregate_stats","q":"CVE nào cũ nhất có trong cơ sở dữ liệu?"}
+{"id":"sec-059","category":"aggregate_stats","q":"Có bao nhiêu CVE mức độ CRITICAL được công bố trong năm 2024?"}
+{"id":"sec-060","category":"aggregate_stats","q":"Có bao nhiêu CVE liên quan đến Fortinet trong hệ thống?"}
+{"id":"sec-061","category":"aggregate_stats","q":"Những CVE nào hiện đang nằm trong danh sách KEV (Known Exploited Vulnerabilities) của CISA?"}
+{"id":"sec-062","category":"aggregate_stats","q":"Có bao nhiêu CVE liên quan đến CWE-89 (SQL Injection) trong cơ sở dữ liệu?"}
+{"id":"sec-063","category":"aggregate_stats","q":"Năm nào có số lượng CVE mức CRITICAL được công bố nhiều nhất?"}
+{"id":"sec-064","category":"aggregate_stats","q":"Có bao nhiêu CVE trong hệ thống hiện có sẵn PoC công khai?"}
+{"id":"sec-065","category":"aggregate_stats","q":"CVE nào có điểm CVSS cao nhất trong cơ sở dữ liệu hiện tại?"}
+{"id":"sec-066","category":"aggregate_stats","q":"Có bao nhiêu CVE liên quan đến sản phẩm Microsoft Exchange?"}
+{"id":"sec-067","category":"concept","q":"SQL Injection là gì và hoạt động như thế nào?"}
+{"id":"sec-068","category":"concept","q":"Cross-Site Scripting (XSS) khác gì so với CSRF?"}
+{"id":"sec-069","category":"concept","q":"SSRF (Server-Side Request Forgery) là gì?"}
+{"id":"sec-070","category":"concept","q":"RCE (Remote Code Execution) nghĩa là gì?"}
+{"id":"sec-071","category":"concept","q":"Insecure Deserialization là lỗ hổng như thế nào?"}
+{"id":"sec-072","category":"concept","q":"Khái niệm privilege escalation trong an toàn thông tin là gì?"}
+{"id":"sec-073","category":"concept","q":"Zero-day vulnerability khác gì so với N-day vulnerability?"}
+{"id":"sec-074","category":"concept","q":"Buffer overflow xảy ra như thế nào và vì sao nguy hiểm?"}
+{"id":"sec-075","category":"concept","q":"Supply chain attack là gì, cho ví dụ minh họa?"}
+{"id":"sec-076","category":"concept","q":"Path traversal attack hoạt động ra sao?"}
+{"id":"sec-077","category":"concept","q":"Khái niệm authentication bypass là gì?"}
+{"id":"sec-078","category":"relation","q":"Những CVE nào liên quan đến CWE-89 (SQL Injection) trong cơ sở dữ liệu?"}
+{"id":"sec-079","category":"relation","q":"Apache có những CVE nghiêm trọng nào nổi bật gần đây?"}
+{"id":"sec-080","category":"relation","q":"Fortinet có những lỗ hổng nào đáng chú ý trong vài năm qua?"}
+{"id":"sec-081","category":"relation","q":"Sản phẩm Citrix có những CVE nào liên quan đến RCE?"}
+{"id":"sec-082","category":"relation","q":"Những CVE nào liên quan đến CWE-787 (Out-of-bounds Write)?"}
+{"id":"sec-083","category":"relation","q":"Microsoft Exchange có những CVE nổi bật nào liên quan ProxyLogon/ProxyShell?"}
+{"id":"sec-084","category":"relation","q":"Struts framework có bao nhiêu CVE nghiêm trọng được biết đến?"}
+{"id":"sec-085","category":"relation","q":"CVE nào liên quan đến kỹ thuật MITRE ATT&CK T1190?"}
+{"id":"sec-086","category":"relation","q":"VMware có những CVE RCE nào đáng chú ý?"}
+{"id":"sec-087","category":"relation","q":"Ivanti Connect Secure có những CVE nào đáng chú ý gần đây?"}
+{"id":"sec-088","category":"relation","q":"Jenkins có những lỗ hổng bảo mật nào được công bố gần đây?"}
+{"id":"sec-089","category":"edge_unknown","q":"CVE-2030-99999 là lỗ hổng gì?"}
+{"id":"sec-090","category":"edge_unknown","q":"Cho tôi biết chi tiết về CVE-9999-00001."}
+{"id":"sec-091","category":"edge_unknown","q":"CVE-2027-12345 ảnh hưởng đến sản phẩm nào?"}
+{"id":"sec-092","category":"edge_unknown","q":"CVE-2021-999999 có tồn tại trong hệ thống không?"}
+{"id":"sec-093","category":"edge_unknown","q":"CVE-ABCD-1234 là gì?"}
+{"id":"sec-094","category":"edge_unknown","q":"Có PoC cho CVE-2035-00001 không?"}
+{"id":"sec-095","category":"edge_unknown","q":"CVE-2026-88888 đã được vá chưa?"}
+{"id":"sec-096","category":"edge_unknown","q":"CVE-2020-00000 có thật không?"}
+{"id":"sec-097","category":"edge_unknown","q":"CVE-2024-999999999 là lỗ hổng gì?"}
+{"id":"sec-098","category":"edge_unknown","q":"Lỗ hổng có tên CVE-Log4Shell-2 là gì?"}
+{"id":"sec-099","category":"edge_unknown","q":"CVE-2031-45678 có điểm CVSS bao nhiêu?"}
+{"id":"sec-100","category":"edge_unknown","q":"CVE-2019-XXXXX là lỗ hổng gì?"}

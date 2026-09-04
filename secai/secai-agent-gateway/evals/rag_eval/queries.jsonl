@@ -1,0 +1,40 @@
+{"id": "q01", "query": "Lỗ hổng Log4Shell là gì và tại sao nó nguy hiểm?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "q02", "query": "EternalBlue là lỗ hổng gì, mã độc WannaCry đã khai thác nó như thế nào?", "relevant_cves": ["CVE-2017-0144"]}
+{"id": "q03", "query": "Zerologon cho phép kẻ tấn công làm gì với Active Directory?", "relevant_cves": ["CVE-2020-1472"]}
+{"id": "q04", "query": "ProxyShell là chuỗi lỗ hổng gì trên Microsoft Exchange Server?", "relevant_cves": ["CVE-2021-34473"]}
+{"id": "q05", "query": "BlueKeep là lỗ hổng RDP nghiêm trọng như thế nào?", "relevant_cves": ["CVE-2019-0708"]}
+{"id": "q06", "query": "Backdoor trong thư viện nén XZ Utils (xz-utils) là lỗ hổng CVE nào?", "relevant_cves": ["CVE-2024-3094"]}
+{"id": "q07", "query": "Heartbleed khai thác lỗi gì trong OpenSSL?", "relevant_cves": ["CVE-2014-0160"]}
+{"id": "q08", "query": "Shellshock là lỗ hổng gì trong Bash shell?", "relevant_cves": ["CVE-2014-6271"]}
+{"id": "q09", "query": "PrintNightmare ảnh hưởng tới dịch vụ Windows Print Spooler như thế nào?", "relevant_cves": ["CVE-2021-34527"]}
+{"id": "q10", "query": "Follina là lỗ hổng zero-day nào liên quan tới Microsoft Office và MSDT?", "relevant_cves": ["CVE-2022-30190"]}
+{"id": "q11", "query": "Spring4Shell là lỗ hổng RCE trong framework Java nào?", "relevant_cves": ["CVE-2022-22965"]}
+{"id": "q12", "query": "Citrix Bleed là lỗ hổng gì trên Citrix NetScaler ADC/Gateway?", "relevant_cves": ["CVE-2023-4966"]}
+{"id": "q13", "query": "ProxyLogon là chuỗi lỗ hổng nào bị khai thác trên Exchange Server đầu năm 2021?", "relevant_cves": ["CVE-2021-26855", "CVE-2021-27065"]}
+{"id": "q14", "query": "CVE nghiêm trọng nhất của Fortinet FortiOS SSL VPN cho phép đọc file hệ thống không cần xác thực là gì?", "relevant_cves": ["CVE-2018-13379"]}
+{"id": "q15", "query": "Lỗ hổng RCE nào trong Apache Struts2 đã gây ra vụ rò rỉ dữ liệu Equifax năm 2017?", "relevant_cves": ["CVE-2017-5638"]}
+{"id": "q16", "query": "CVE nào cho phép bỏ qua xác thực trên giao diện quản trị FortiOS/FortiProxy của Fortinet?", "relevant_cves": ["CVE-2022-40684"]}
+{"id": "q17", "query": "Lỗ hổng nghiêm trọng nào trong Atlassian Confluence cho phép chèn mã OGNL để thực thi mã từ xa?", "relevant_cves": ["CVE-2022-26134"]}
+{"id": "q18", "query": "Ivanti Connect Secure có lỗ hổng bỏ qua xác thực nào bị khai thác thực tế trong tự nhiên?", "relevant_cves": ["CVE-2023-46805"]}
+{"id": "q19", "query": "Citrix ADC/Gateway có lỗ hổng path traversal nghiêm trọng nào (còn gọi là Shitrix)?", "relevant_cves": ["CVE-2019-19781"]}
+{"id": "q20", "query": "GitLab bị lỗ hổng RCE không cần xác thực nào thông qua xử lý ảnh (ExifTool)?", "relevant_cves": ["CVE-2021-22205"]}
+{"id": "q21", "query": "JetBrains TeamCity có lỗ hổng bỏ qua xác thực nào dẫn tới chiếm quyền server CI/CD?", "relevant_cves": ["CVE-2024-27198"]}
+{"id": "q22", "query": "Progress MOVEit Transfer bị khai thác hàng loạt bởi nhóm ransomware Cl0p qua lỗ hổng nào?", "relevant_cves": ["CVE-2023-34362"]}
+{"id": "q23", "query": "F5 BIG-IP có lỗ hổng iControl REST nào cho phép thực thi mã từ xa không cần xác thực?", "relevant_cves": ["CVE-2022-1388"]}
+{"id": "q24", "query": "CVE nào liên quan tới lỗi JNDI injection dẫn đến thực thi mã từ xa trong Apache Log4j?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "q25", "query": "Lỗ hổng deserialization (CWE-502) nghiêm trọng nào được tìm thấy trong Log4j?", "relevant_cves": ["CVE-2021-44228"]}
+{"id": "q26", "query": "Lỗ hổng buffer overflow trong lệnh sudo trên Linux cho phép leo thang đặc quyền lên root là CVE nào?", "relevant_cves": ["CVE-2021-3156"]}
+{"id": "q27", "query": "CVE nào là lỗi type confusion trong Oracle Java SE bị các exploit kit khai thác để thoát sandbox?", "relevant_cves": ["CVE-2012-1723"]}
+{"id": "q28", "query": "Lỗ hổng SSRF trong Microsoft Exchange Server dẫn tới RCE khi kết hợp với lỗi ghi file tuỳ ý là những CVE nào?", "relevant_cves": ["CVE-2021-26855", "CVE-2021-27065"]}
+{"id": "q29", "query": "CVE nào khai thác lỗi tràn số nguyên trong xử lý header Range của HTTP.sys trên Windows?", "relevant_cves": ["CVE-2015-1635"]}
+{"id": "q30", "query": "Cuộc tấn công DROWN khai thác lỗ hổng nào trong giao thức SSLv2 của OpenSSL?", "relevant_cves": ["CVE-2016-0800"]}
+{"id": "q31", "query": "CVE nào cho phép giả mạo chữ ký chứng chỉ ECC do lỗi trong Windows CryptoAPI (bị NSA phát hiện, còn gọi CurveBall)?", "relevant_cves": ["CVE-2020-0601"]}
+{"id": "q32", "query": "Lỗ hổng command injection zero-day trong Barracuda Email Security Gateway (ESG) là CVE nào?", "relevant_cves": ["CVE-2023-2868"]}
+{"id": "q33", "query": "Lỗ hổng cho phép kẻ tấn công từ xa không cần xác thực chiếm quyền điều khiển hoàn toàn máy chủ Windows thông qua giao thức Remote Desktop", "relevant_cves": ["CVE-2019-0708"]}
+{"id": "q34", "query": "Lỗ hổng trong giao thức chia sẻ file SMB phiên bản 1 của Windows bị các mã độc tống tiền lây lan hàng loạt trên toàn cầu khai thác", "relevant_cves": ["CVE-2017-0144"]}
+{"id": "q35", "query": "Sự cố chuỗi cung ứng phần mềm: một thư viện nén dữ liệu mã nguồn mở phổ biến bị cài backdoor bí mật, ảnh hưởng tới quá trình xác thực SSH", "relevant_cves": ["CVE-2024-3094"]}
+{"id": "q36", "query": "Lỗ hổng cho phép kẻ tấn công giả mạo là bộ điều khiển miền (Domain Controller) và đặt lại mật khẩu máy tính trong miền Active Directory mà không cần thông tin xác thực", "relevant_cves": ["CVE-2020-1472"]}
+{"id": "q37", "query": "Lỗ hổng cho phép leo thang đặc quyền lên hệ thống (SYSTEM) thông qua dịch vụ hàng đợi in ấn trên Windows", "relevant_cves": ["CVE-2021-34527"]}
+{"id": "q38", "query": "Lỗ hổng cho phép đọc trộm nội dung bộ nhớ máy chủ, rò rỉ dữ liệu nhạy cảm như khóa riêng và mật khẩu, thông qua tính năng heartbeat của giao thức TLS", "relevant_cves": ["CVE-2014-0160"]}
+{"id": "q39", "query": "Lỗ hổng cho phép chèn và thực thi lệnh hệ điều hành tùy ý thông qua cách xử lý biến môi trường của một trình shell dòng lệnh phổ biến trên Linux/Unix", "relevant_cves": ["CVE-2014-6271"]}
+{"id": "q40", "query": "Lỗ hổng zero-click trong ứng dụng email trên Windows cho phép kẻ tấn công đánh cắp hash NTLM của người dùng chỉ bằng cách gửi một lời nhắc lịch hẹn độc hại", "relevant_cves": ["CVE-2023-23397"]}
