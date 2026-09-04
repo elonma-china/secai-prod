@@ -16,7 +16,13 @@ from fastapi import Cookie, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
 from . import auth
-from .query import SEARCHABLE_FIELDS, TERM_FILTERS, build_facets_body, build_search_body
+from .query import (
+    MAX_RESULT_WINDOW,
+    SEARCHABLE_FIELDS,
+    TERM_FILTERS,
+    build_facets_body,
+    build_search_body,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,24 +116,33 @@ def register_logs_ui(app: FastAPI, state: Any) -> None:
     async def logs_search(request: Request, date_from: str | None = None,
                           date_to: str | None = None, q: str | None = None,
                           field: str = "all", blocked: str | None = None,
-                          error: str | None = None, size: int = 50,
-                          after: str | None = None,
+                          error: str | None = None, size: int = 50, page: int = 1,
                           secai_logs_session: str | None = Cookie(default=None)) -> dict[str, Any]:
         _require_session(secai_logs_session)
-        try:
-            search_after = json.loads(after) if after else None
-        except ValueError:
-            search_after = None
+        size = max(10, min(int(size), 200))
+        page = max(1, int(page))
+        # Elasticsearch rejects from+size past max_result_window, so the reachable page count
+        # is capped. Clamp here (and report it) instead of letting the query 500.
+        max_page = max(1, (MAX_RESULT_WINDOW - size) // size + 1)
+        capped = page > max_page
+        page = min(page, max_page)
         body = build_search_body(date_from=date_from, date_to=date_to, q=q, field=field,
                                  filters=_filters_from(request), blocked=_tribool(blocked),
-                                 error=_tribool(error), size=size, search_after=search_after)
+                                 error=_tribool(error), size=size, offset=(page - 1) * size)
         raw = await _search(body)
         hits = raw.get("hits", {}).get("hits", [])
+        total = (raw.get("hits", {}).get("total") or {}).get("value", 0)
+        reachable = min(total, MAX_RESULT_WINDOW)
         return {
-            "total": (raw.get("hits", {}).get("total") or {}).get("value", 0),
+            "total": total,
+            "page": page,
+            "size": size,
+            "pages": max(1, -(-reachable // size)),      # ceil
+            "capped": capped or total > MAX_RESULT_WINDOW,
             "rows": [{"id": h.get("_id"), "sort": h.get("sort"), **(h.get("_source") or {})}
                      for h in hits],
-            "next": json.dumps(hits[-1]["sort"]) if hits else None,
+            # Anchor for the realtime tail: the newest row currently on screen.
+            "newest": hits[0]["sort"] if hits else None,
         }
 
     @app.get("/logs/api/facets", include_in_schema=False)

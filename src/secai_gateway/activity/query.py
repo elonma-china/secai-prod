@@ -26,6 +26,10 @@ SEARCHABLE_FIELDS: dict[str, str] = {
 TERM_FILTERS = ("function", "profile", "endpoint", "user_id", "conversation_id",
                 "client_ip", "server_hostname", "request_id", "run_id")
 
+# Elasticsearch refuses `from + size` beyond index.max_result_window (default 10k). The
+# pager clamps to this and tells the user to narrow the filter rather than returning a 500.
+MAX_RESULT_WINDOW = 10_000
+
 _FULLTEXT_FIELDS = ["question^2", "answer", "user_agent.text"]
 _KEYWORD_FIELDS = {"user_id", "conversation_id", "request_id", "run_id", "client_ip",
                    "server_hostname"}
@@ -41,6 +45,7 @@ def build_search_body(
     blocked: bool | None = None,
     error: bool | None = None,
     size: int = 50,
+    offset: int = 0,
     search_after: list[Any] | None = None,
     ascending: bool = False,
 ) -> dict[str, Any]:
@@ -93,10 +98,16 @@ def build_search_body(
         "size": max(1, min(int(size), 500)),
         "query": {"bool": {"must": must or [{"match_all": {}}], "filter": filt}},
         "sort": [{"@timestamp": order}, {"request_id": order}],
-        "track_total_hits": 10_000,
+        # Exact total: the pager needs a real page count, not a capped estimate. Affordable
+        # here because retention is 30 days and the index stays small.
+        "track_total_hits": True,
     }
+    # `from`/`size` for the pager (lets the user jump to a page), `search_after` for the
+    # realtime tail (which only ever walks forward). Never both.
     if search_after:
         body["search_after"] = search_after
+    elif offset:
+        body["from"] = max(0, int(offset))
     return body
 
 
