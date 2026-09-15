@@ -1,0 +1,1522 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "SecAI Showcase — API nghiệm thu AI",
+  "version": "1.0",
+  "description": "API phục vụ hiển thị hồ sơ nghiệm thu mô-đun AI lên giao diện (chỉ đọc, trừ /ai/sanitize-demo)."
+ },
+ "paths": {
+  "/showcase-api/finetune/datasets": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "List Datasets",
+    "operationId": "list_datasets_ai_finetune_datasets_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response List Datasets Ai Finetune Datasets Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/datasets/{dataset_id}/sample": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Dataset Sample",
+    "operationId": "dataset_sample_ai_finetune_datasets__dataset_id__sample_get",
+    "parameters": [
+     {
+      "name": "dataset_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Dataset Id"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 20,
+       "minimum": 1,
+       "default": 5,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Dataset Sample Ai Finetune Datasets  Dataset Id  Sample Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/runs/{run_id}/log": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Run Log",
+    "operationId": "run_log_ai_finetune_runs__run_id__log_get",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "granularity",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(epoch|step)$",
+       "default": "step",
+       "title": "Granularity"
+      }
+     },
+     {
+      "name": "max_points",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 10,
+       "default": 300,
+       "title": "Max Points"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Run Log Ai Finetune Runs  Run Id  Log Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/runs/{run_id}/charts": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Run Charts",
+    "operationId": "run_charts_ai_finetune_runs__run_id__charts_get",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Run Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Run Charts Ai Finetune Runs  Run Id  Charts Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/kpi-baseline": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Kpi Baseline",
+    "operationId": "kpi_baseline_ai_finetune_kpi_baseline_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Kpi Baseline Ai Finetune Kpi Baseline Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/data-processing": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Data Processing",
+    "description": "Làm sạch + gán nhãn dữ liệu huấn luyện — gom từ 4 file trong hồ sơ gốc, giữ nguyên số:\ndatasets/manifest.json            → danh mục bước chuẩn hoá + trường gán nhãn\nfinetuning/reports/preprocessing-report.json → pipeline, seed, dedup, split, rò rỉ\nfinetuning/reports/eda-summary.json         → phân bố nhãn, số CVE/CWE duy nhất\ndatasets/processed/manifest.json            → schema + số bản ghi từng split mỗi dataset",
+    "operationId": "data_processing_ai_finetune_data_processing_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Data Processing Ai Finetune Data Processing Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/finetune/dataset-appendix": {
+   "get": {
+    "tags": [
+     "showcase-finetune"
+    ],
+    "summary": "Dataset Appendix",
+    "description": "Phụ lục kỹ thuật bộ dữ liệu — trả NGUYÊN VĂN file trong hồ sơ gốc (split train/val/test,\nSHA-256 từng file, schema, dedup, phân bố ngôn ngữ/nguồn, quy tắc nghiệm thu).",
+    "operationId": "dataset_appendix_ai_finetune_dataset_appendix_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Dataset Appendix Ai Finetune Dataset Appendix Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/model-info": {
+   "get": {
+    "tags": [
+     "showcase-model-info"
+    ],
+    "summary": "Get Model Info",
+    "operationId": "get_model_info_ai_model_info_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Get Model Info Ai Model Info Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/kpi-bench/groups": {
+   "get": {
+    "tags": [
+     "showcase-kpi-bench"
+    ],
+    "summary": "List Groups",
+    "operationId": "list_groups_ai_kpi_bench_groups_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response List Groups Ai Kpi Bench Groups Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/kpi-bench/groups/{group_id}/tests": {
+   "get": {
+    "tags": [
+     "showcase-kpi-bench"
+    ],
+    "summary": "List Tests",
+    "operationId": "list_tests_ai_kpi_bench_groups__group_id__tests_get",
+    "parameters": [
+     {
+      "name": "group_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Group Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response List Tests Ai Kpi Bench Groups  Group Id  Tests Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/kpi-bench/tests/{test_id}/result": {
+   "get": {
+    "tags": [
+     "showcase-kpi-bench"
+    ],
+    "summary": "Get Result",
+    "operationId": "get_result_ai_kpi_bench_tests__test_id__result_get",
+    "parameters": [
+     {
+      "name": "test_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Test Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Get Result Ai Kpi Bench Tests  Test Id  Result Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/sanitize-demo": {
+   "post": {
+    "tags": [
+     "showcase-sanitize-demo"
+    ],
+    "summary": "Sanitize Demo",
+    "operationId": "sanitize_demo_ai_sanitize_demo_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SanitizeDemoRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Sanitize Demo Ai Sanitize Demo Post"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/source-dossier/tree": {
+   "get": {
+    "tags": [
+     "showcase-source-dossier"
+    ],
+    "summary": "Tree",
+    "operationId": "tree_ai_source_dossier_tree_get",
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "Đường dẫn tương đối trong hồ sơ gốc",
+       "default": "",
+       "title": "Path"
+      },
+      "description": "Đường dẫn tương đối trong hồ sơ gốc"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Tree Ai Source Dossier Tree Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/source-dossier/file": {
+   "get": {
+    "tags": [
+     "showcase-source-dossier"
+    ],
+    "summary": "File",
+    "operationId": "file_ai_source_dossier_file_get",
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "minLength": 1,
+       "title": "Path"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response File Ai Source Dossier File Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/source-dossier/raw": {
+   "get": {
+    "tags": [
+     "showcase-source-dossier"
+    ],
+    "summary": "Raw",
+    "description": "Trả file thô (dùng cho ảnh chart trong hồ sơ gốc).",
+    "operationId": "raw_ai_source_dossier_raw_get",
+    "parameters": [
+     {
+      "name": "path",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "minLength": 1,
+       "title": "Path"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/evidence": {
+   "get": {
+    "tags": [
+     "showcase-evidence"
+    ],
+    "summary": "List Evidence",
+    "operationId": "list_evidence_ai_evidence_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response List Evidence Ai Evidence Get"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/evidence/match": {
+   "get": {
+    "tags": [
+     "showcase-evidence"
+    ],
+    "summary": "Match Evidence",
+    "description": "Khớp EQUALS theo dòng 1. Một chỉ tiêu trong sheet thường trải trên nhiều dòng (ô gộp),\nmỗi dòng là 1 file kết quả — nên trả về TẤT CẢ file khớp, không chỉ file mới nhất.",
+    "operationId": "match_evidence_ai_evidence_match_get",
+    "parameters": [
+     {
+      "name": "contract_text",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "minLength": 1,
+       "title": "Contract Text"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Match Evidence Ai Evidence Match Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/showcase-api/evidence/{evidence_id}": {
+   "get": {
+    "tags": [
+     "showcase-evidence"
+    ],
+    "summary": "Get Evidence",
+    "operationId": "get_evidence_ai_evidence__evidence_id__get",
+    "parameters": [
+     {
+      "name": "evidence_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Evidence Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Get Evidence Ai Evidence  Evidence Id  Get"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "BughuntRequest": {
+    "properties": {
+     "target": {
+      "type": "string",
+      "title": "Target"
+     },
+     "scope_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scope Note"
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Run Id"
+     },
+     "enable_exploit": {
+      "type": "boolean",
+      "title": "Enable Exploit",
+      "default": false
+     },
+     "run_cve_sweep": {
+      "type": "boolean",
+      "title": "Run Cve Sweep",
+      "default": true
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "target"
+    ],
+    "title": "BughuntRequest",
+    "description": "POST /ai/bughunt/stream — a target-only BugHunter run."
+   },
+   "ExecRequest": {
+    "properties": {
+     "cmd": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cmd"
+     },
+     "shell": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Shell"
+     },
+     "timeout_s": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Timeout S"
+     },
+     "privileged": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Privileged"
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "title": "ExecRequest",
+    "description": "POST /ai/exec — deliberately privileged raw executor API."
+   },
+   "ExploitAdvanceReplyRequest": {
+    "properties": {
+     "run_id": {
+      "type": "string",
+      "title": "Run Id",
+      "description": "run_id từ event `question` (adv:xxx)."
+     },
+     "answer": {
+      "type": "string",
+      "title": "Answer",
+      "description": "Câu trả lời/thông tin bổ sung từ user (endpoint, protocol, credential...)."
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id",
+      "description": "Định danh người gọi (audit)."
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "run_id",
+     "answer"
+    ],
+    "title": "ExploitAdvanceReplyRequest",
+    "description": "POST /ai/exploit-advance/reply — cung cấp thông tin bổ sung cho lane1 đang paused."
+   },
+   "ExploitAdvanceRequest": {
+    "properties": {
+     "cve": {
+      "type": "string",
+      "title": "Cve",
+      "description": "Mã CVE cần khai thác, ví dụ CVE-2017-5638."
+     },
+     "target": {
+      "type": "string",
+      "title": "Target",
+      "description": "Target: host | host:port | URL (vd 10.0.0.5, 10.0.0.5:8080, http://10.0.0.5:8080)."
+     },
+     "port": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Port",
+      "description": "Cổng target (nếu không suy ra được từ `target`)."
+     },
+     "command": {
+      "type": "string",
+      "title": "Command",
+      "description": "Lệnh chứng minh RCE khi khai thác thành công (vd `id`, `cat /flag`).",
+      "default": "id"
+     },
+     "auth": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Auth",
+      "description": "Xác thực cho target cần đăng nhập: {headers?, cookies?, token?}."
+     },
+     "scope_note": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scope Note",
+      "description": "Ghi chú phạm vi/uỷ quyền (audit)."
+     },
+     "max_steps": {
+      "type": "integer",
+      "maximum": 20.0,
+      "minimum": 1.0,
+      "title": "Max Steps",
+      "description": "Số vòng exploit→verify→sửa tối đa.",
+      "default": 5
+     },
+     "step_timeout_s": {
+      "type": "integer",
+      "maximum": 1800.0,
+      "minimum": 10.0,
+      "title": "Step Timeout S",
+      "description": "Timeout mỗi bước (giây).",
+      "default": 180
+     },
+     "total_timeout_s": {
+      "type": "integer",
+      "maximum": 7200.0,
+      "minimum": 30.0,
+      "title": "Total Timeout S",
+      "description": "Timeout toàn cục (giây).",
+      "default": 900
+     },
+     "use_proxy": {
+      "type": "boolean",
+      "title": "Use Proxy",
+      "description": "Định tuyến qua proxy khai thác nội bộ (kt).",
+      "default": true
+     },
+     "extra": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Extra",
+      "description": "Tham số phụ (rport/path/payload override) cho engine."
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id",
+      "description": "Định danh người gọi (audit)."
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Run Id",
+      "description": "Gán run_id cố định để truy vết; bỏ trống sẽ tự sinh."
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "cve",
+     "target"
+    ],
+    "title": "ExploitAdvanceRequest",
+    "description": "POST /ai/exploit-advance[/stream] — khai thác ĐA-BƯỚC một CVE vào TARGET thật, có vòng\nverify→sửa và stream tiến trình. Chỉ hoạt động khi ops bật POC_EXPLOIT_ENABLED + target thuộc\nallowlist (VERIFY_ALLOWED_TARGETS / VERIFY_ALLOW_ALL). Mọi field optional có mô tả để FE dựng form\n(đọc qua /openapi.json hoặc GET /ai/exploit-advance/fields)."
+   },
+   "ExploitRunRequest": {
+    "properties": {
+     "target": {
+      "type": "string",
+      "title": "Target"
+     },
+     "cve": {
+      "type": "string",
+      "title": "Cve"
+     },
+     "port": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Port"
+     },
+     "command": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Command",
+      "default": "id"
+     },
+     "use_proxy": {
+      "type": "boolean",
+      "title": "Use Proxy",
+      "default": true
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "target",
+     "cve"
+    ],
+    "title": "ExploitRunRequest",
+    "description": "POST /ai/exploit/run — deterministic 5568 exploit runner."
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "LegacyRequest": {
+    "properties": {
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     },
+     "message": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Message"
+     },
+     "question": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Question"
+     },
+     "prompt": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Prompt"
+     },
+     "content": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Content"
+     },
+     "text": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Text"
+     },
+     "messages": {
+      "anyOf": [
+       {
+        "items": {
+         "additionalProperties": true,
+         "type": "object"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Messages"
+     },
+     "language": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Language"
+     },
+     "data": {
+      "title": "Data"
+     },
+     "vulnerability_type": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Vulnerability Type"
+     },
+     "target_system": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target System"
+     },
+     "context": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Context"
+     },
+     "target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target"
+     },
+     "cve": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cve"
+     },
+     "port": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Port"
+     },
+     "command": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Command"
+     },
+     "poc_strategy": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Poc Strategy"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "title": "LegacyRequest",
+    "description": "Permissive adapter for deployed IAS v1 clients with field-name drift."
+   },
+   "SanitizeDemoRequest": {
+    "properties": {
+     "text": {
+      "type": "string",
+      "title": "Text"
+     }
+    },
+    "type": "object",
+    "required": [
+     "text"
+    ],
+    "title": "SanitizeDemoRequest"
+   },
+   "ToolRequest": {
+    "properties": {
+     "tool": {
+      "type": "string",
+      "title": "Tool"
+     },
+     "target": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target"
+     },
+     "ports": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ports"
+     },
+     "query": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Query"
+     },
+     "wordlist": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Wordlist"
+     },
+     "threads": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Threads"
+     },
+     "service": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Service"
+     },
+     "username": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Username"
+     },
+     "password": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Password"
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "tool"
+    ],
+    "title": "ToolRequest",
+    "description": "POST /ai/tool — a scoped, validated pentest tool invocation."
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   },
+   "VerifyRequest": {
+    "properties": {
+     "target": {
+      "type": "string",
+      "title": "Target"
+     },
+     "cve": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cve"
+     },
+     "ref": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ref"
+     },
+     "source": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source"
+     },
+     "rport": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Rport"
+     },
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     }
+    },
+    "additionalProperties": true,
+    "type": "object",
+    "required": [
+     "target"
+    ],
+    "title": "VerifyRequest",
+    "description": "POST /ai/verify — verify a catalog PoC against an authorized target."
+   }
+  }
+ }
+}

@@ -3,7 +3,7 @@
 #
 #  Gộp BE gateway + Qdrant + Neo4j + Redis vào 1 compose project (network nội bộ
 #  `secai-net`), đấu nối qua TÊN SERVICE (không còn localhost). Model LLM/embedding/
-#  reranker VẪN gọi ra vast (202.122.49.242) qua HTTP — cấu hình trong .env.
+#  reranker VẪN gọi ra vast (23.127.144.217) qua HTTP — cấu hình trong .env.
 #
 #  Data dùng BIND-MOUNT thẳng vào dir local sẵn có (không nhân đôi ~20GB+):
 #     /home/ict/AIEngines/secai/secai-data/...
@@ -87,6 +87,9 @@ services:
     image: secai-agent-gateway:0.3.0-merged
     container_name: secai-docker-gateway
     restart: unless-stopped
+    # Cho container phân giải host.docker.internal → IP host (để reverse-proxy /tb tới TensorBoard :6006 trên host).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
       - .env
     # Re-pin path + service-name settings to in-container values so host-oriented
@@ -103,6 +106,26 @@ services:
       INPUT_CLASSIFIER_ENABLED: "true"           # classifier BẬT (giữ chặn injection/PII)
       INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"   # KHÔNG chặn offtopic → câu hỏi hệ thống/meta xuống LLM tự trả lời (hoặc "không biết"); tránh over-refusal — 2026-09-03
       ELASTICSEARCH_URL: http://elasticsearch:9200   # activity log (service-name nội bộ)
+      # ── Showcase nghiệm thu (/showcase-demo/ + /ai/finetune|model-info|kpi-bench|evidence|kb|deploy).
+      # Đường dẫn host mặc định trong config.py không tồn tại trong container → trỏ lại paths được mount.
+      SHOWCASE_HOSOGOC_DIR: /srv/showcase/hosogoc
+      SHOWCASE_FINETUNE_DOSSIER_DIR: /srv/showcase/hosogoc/01. Ho_so_huan_luyen/finetuning
+      SHOWCASE_FINETUNE_SOURCE_DIR: /srv/showcase/hosogoc/01. Ho_so_huan_luyen
+      SHOWCASE_KPI_RESULTS_DIR: /srv/showcase/hosogoc/03. Kpi_results
+      SHOWCASE_FT_BUILD_DIR: /srv/showcase/hosogoc/02. Bo_build_finetuning
+      SHOWCASE_SANITIZER_DETECTOR: /srv/showcase/hosogoc/03. Kpi_results/Santization/Evaluation_code/detector.py
+      SHOWCASE_EVIDENCE_DIR: /app/evidence
+      SHOWCASE_HELM_DIR: /app/deploy/helm/secai-gateway
+      SHOWCASE_HARDWARE_CHECK: /srv/showcase/hardware-check.json
+      SHOWCASE_KB_SYNC_LOG: /srv/showcase/sync_cve.log
+      SHOWCASE_DOCKER_COMPOSE: /srv/showcase/docker-compose.yml
+      SHOWCASE_KPI_LOG: /app/data/kpi-bench-live.log            # ghi vào volume (writable)
+      # TensorBoard đi ké qua chính gateway (:8131) — khách xem same-origin, KHÔNG cần mở cổng/CF/ZT.
+      # Link tương đối /showcase-tb; gateway reverse-proxy /showcase-tb/* tới TB trên HOST qua
+      # host.docker.internal:6006 (TB chạy với --path_prefix=/showcase-tb). Cùng tiền tố /showcase
+      # với trang + API nên FE chỉ cần proxy một dòng /showcase.
+      SHOWCASE_TENSORBOARD_BASE_URL: /showcase-tb
+      SHOWCASE_TENSORBOARD_UPSTREAM: http://host.docker.internal:6006
     ports:
       - "${GATEWAY_HOST_PORT:-8140}:8131"
     volumes:
@@ -111,6 +134,14 @@ services:
       - ${SECAI_DATA_ROOT}/poc:/srv/poc                             # catalog.db (WAL → rw)
       - ${SECAI_DATA_ROOT}/poc/store:/srv/poc-store                 # fetched PoC artifacts
       - ${SECAI_DATA_ROOT}/poc-sources:/srv/poc-sources:ro          # cloned PoC sources (12GB)
+      # ── Showcase (read-only): SPA + evidence + helm baked-in bị Dockerfile bỏ qua → bind từ host.
+      - /home/ict/AIEngines/secai/secai-agent-gateway/demo:/app/demo:ro                 # trang SPA showcase
+      - /home/ict/AIEngines/secai/secai-agent-gateway/evidence:/app/evidence:ro         # evidence dong-N.md
+      - /home/ict/AIEngines/secai/secai-agent-gateway/deploy/helm:/app/deploy/helm:ro   # Helm chart (tab Triển khai)
+      - /home/ict/AIEngines/secai/secai-agent-gateway/data/hardware-check.json:/srv/showcase/hardware-check.json:ro
+      - /home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI:/srv/showcase/hosogoc:ro      # hồ sơ gốc (dossier+KPI+build)
+      - /home/ict/Downloads/CVE-DB/sync_cve.log:/srv/showcase/sync_cve.log:ro           # log cập nhật KB
+      - /home/ict/AIEngines/secai/secai-docker/docker-compose.yml:/srv/showcase/docker-compose.yml:ro
     depends_on:
       qdrant:
         condition: service_healthy

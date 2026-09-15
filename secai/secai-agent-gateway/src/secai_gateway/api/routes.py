@@ -16,6 +16,7 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from linch.events import ResultEvent, SystemEvent
 
@@ -862,14 +863,107 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return stream("chat", text, session_id, build_final)
 
-    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
-        """Split the input and enforce the max-chunk cap (413) so one request can't fan out
-        into unbounded model calls. Returns (chunks, src, tgt)."""
-        src, tgt = translate_langs(body)
-        chunks = split_for_translation(body.supplied_text(), state.settings.translate_chunk_chars)
-        if len(chunks) > state.settings.translate_max_chunks:
+    # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
+    # occasionally echoes its own instruction preamble back verbatim instead of only
+    # translating past it. Reproduced 2026-09-12 on a >1MB CVE-detail-JSON translate
+    # input — each per-chunk echo landed mid-string after rejoin, splitting words in
+    # half (e.g. "...ji[Hôm nay là ...]\nDịch văn bản sau...:\n\nffies..."). Applied
+    # per-chunk (inside render(), below) so a leak never survives into the join.
+    # Two independent fragments can leak, together or alone (observed both: the date
+    # bracket alone with no instruction line, and the full "date + instruction" combo
+    # mid-chunk) — stripped as two separate passes rather than one combined pattern so
+    # either survives without the other.
+    _DATE_BRACKET_RE = re.compile(r"\[Hôm nay là [^\]]*\]\s*")
+    _INSTRUCTION_RE = re.compile(r"Dịch văn bản sau\b.{0,400}?\n\n?", re.DOTALL)
+
+    def _strip_prompt_echo(text: str) -> str:
+        return _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+
+    # A caller can post a whole JSON record as the text to translate — the ias.id.vn
+    # datalake page sends the entire "cves_detail" object. Round-tripping that through
+    # the model as ONE string is what produced garbled output: the same description is
+    # mirrored 6-9× across nvd_json/mitre_json/kb_json/history (measured: 17-50 total
+    # occurrences behind only 4-18 DISTINCT strings), so every copy was re-translated,
+    # and at that size the model also lost the instruction/content boundary. Instead,
+    # walk the object and translate every prose value wherever it sits in the tree,
+    # deduplicated — one model call per distinct string, reused at each occurrence —
+    # then splice the results back into the original structure. Identifiers, enums,
+    # URLs, versions, CVSS vectors, CPEs and timestamps stay byte-identical; translating
+    # those would corrupt the record.
+    _PROSE_KEYS = frozenset({"title", "description", "value", "summary", "new", "old", "data"})
+    _NON_PROSE_PREFIXES = ("http://", "https://", "cpe:", "CVSS:", "/")
+
+    def _is_prose(text: str) -> bool:
+        """Prose = long enough to be a sentence AND multi-word. Timestamps, ids, enums,
+        severities, versions, hashes and single-token paths all fail one of the two."""
+        stripped = text.strip()
+        return (len(stripped) >= 12 and " " in stripped
+                and not stripped.startswith(_NON_PROSE_PREFIXES))
+
+    def _collect_prose(node: Any, key: str | None, seen: set[str], out: list[str]) -> None:
+        if isinstance(node, dict):
+            for child_key, value in node.items():
+                _collect_prose(value, child_key, seen, out)
+        elif isinstance(node, list):
+            for item in node:  # a list inherits its parent's key ("descriptions": [...])
+                _collect_prose(item, key, seen, out)
+        elif isinstance(node, str) and key in _PROSE_KEYS and _is_prose(node) and node not in seen:
+            seen.add(node)
+            out.append(node)
+
+    def _replace_prose(node: Any, key: str | None, translated: dict[str, str]) -> Any:
+        if isinstance(node, dict):
+            return {k: _replace_prose(v, k, translated) for k, v in node.items()}
+        if isinstance(node, list):
+            return [_replace_prose(item, key, translated) for item in node]
+        if isinstance(node, str) and key in _PROSE_KEYS:
+            return translated.get(node, node)
+        return node
+
+    def _prose_values(text: str) -> tuple[dict[str, Any], list[str]] | None:
+        """(parsed object, distinct prose values) for JSON-object input, else None."""
+        try:
+            obj = json.loads(text)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        if not isinstance(obj, dict):
+            return None
+        seen: set[str] = set()
+        values: list[str] = []
+        _collect_prose(obj, None, seen, values)
+        return (obj, values) if values else None
+
+    def _guard_chunk_cap(count: int) -> None:
+        """One request must not fan out into unbounded model calls."""
+        if count > state.settings.translate_max_chunks:
             raise HTTPException(413, f"Văn bản quá dài để dịch (>{state.settings.translate_max_chunks} "
                                      "khối). Vui lòng chia nhỏ yêu cầu.")
+
+    # Chunks below this aren't worth the per-call overhead and start costing coherence
+    # (each chunk is translated without its neighbours' context).
+    _MIN_CHUNK_CHARS = 800
+
+    def _chunk_budget(text_len: int) -> int:
+        """Size chunks to fill the concurrency budget in ONE wave instead of always cutting
+        at the configured ceiling: a 4k-char value at ceiling 6000 is a single sequential
+        call (measured 13.9s), while the same value split into ~concurrency pieces
+        translates in parallel (4.0s). Short text still returns the ceiling, so it stays a
+        single call — and the ceiling still bounds very long input, so the max translatable
+        size (max_chunks × ceiling) is unchanged."""
+        ceiling = state.settings.translate_chunk_chars
+        if text_len <= _MIN_CHUNK_CHARS:
+            return ceiling
+        target = text_len // max(1, state.settings.translate_chunk_concurrency)
+        return max(_MIN_CHUNK_CHARS, min(ceiling, target))
+
+    def _split_adaptive(text: str) -> list[tuple[str, str]]:
+        return split_for_translation(text, _chunk_budget(len(text)))
+
+    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
+        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt)."""
+        src, tgt = translate_langs(body)
+        chunks = _split_adaptive(body.supplied_text())
+        _guard_chunk_cap(len(chunks))
         return chunks, src, tgt
 
     async def translate_assemble(body: LegacyRequest) -> tuple[str, dict[str, Any]]:
@@ -877,24 +971,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
         a translation past its output-token cap (which would truncate). Each chunk runs the
         full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
         separators. complete() already sanitizes; we unmask each chunk's literals here."""
-        chunks, src, tgt = _translate_chunks(body)
+        src, tgt = translate_langs(body)
+        sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
 
         async def render(chunk_text: str) -> str:
             prompt, literals = build_translate_prompt(chunk_text, src, tgt)
             out, _meta = await complete("translate", body, prompt_override=prompt)
-            return unmask_literals(out, literals)
-
-        if len(chunks) == 1:
-            return await render(chunks[0][0]), base_meta("translate", None)
-
-        sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
+            return _strip_prompt_echo(unmask_literals(out, literals))
 
         async def render_bounded(chunk_text: str) -> str:
             async with sem:
                 return await render(chunk_text)
 
-        outs = await asyncio.gather(*(render_bounded(c) for c, _ in chunks))
-        final = "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
+        async def render_chunks(chunks: list[tuple[str, str]]) -> str:
+            """Translate one value's chunks concurrently and rejoin on the exact separators."""
+            outs = await asyncio.gather(*(render_bounded(c) for c, _sep in chunks))
+            return "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
+
+        record = _prose_values(body.supplied_text())
+        if record is not None:
+            obj, values = record
+            plans = [_split_adaptive(v) for v in values]
+            _guard_chunk_cap(sum(len(plan) for plan in plans))
+            outs = await asyncio.gather(*(render_chunks(plan) for plan in plans))
+            meta = base_meta("translate", None)
+            meta["prose_values_translated"] = len(values)
+            return json.dumps(_replace_prose(obj, None, dict(zip(values, outs))), ensure_ascii=False), meta
+
+        chunks, _src, _tgt = _translate_chunks(body)
+        if len(chunks) == 1:
+            return await render(chunks[0][0]), base_meta("translate", None)
+        final = await render_chunks(chunks)
         meta = base_meta("translate", None)
         meta["chunks"] = len(chunks)
         return final, meta
@@ -904,23 +1011,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         text, metadata = await translate_assemble(body)
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
-    @app.post("/ai/translate/stream")
-    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
-        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
-
-        if len(chunks) <= 1:
-            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
-
-            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-                # Restore literals in the authoritative `final` event (token deltas may still
-                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
-                final = unmask_literals(final, literals)
-                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
-
-            return stream("translate", prompt, None, build_final)
-
-        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
-        # True token streaming is traded for guaranteed completeness (no truncated tail).
+    def _sse_assemble_stream(body: LegacyRequest) -> AsyncIterator[bytes]:
+        """Assemble via translate_assemble() (chunked-translate or CVE-record path) and
+        emit as one token+final SSE frame. True token streaming is traded for guaranteed
+        completeness (no truncated tail, no per-chunk partial JSON)."""
         async def gen() -> AsyncIterator[bytes]:
             try:
                 final, meta = await translate_assemble(body)
@@ -932,8 +1026,34 @@ def register_routes(app: FastAPI, state: Any) -> None:
             yield sse_frame("final", {"content": final, "translation": final,
                                       "translated_text": final, "metadata": meta})
             yield b"data: [DONE]\n\n"
+        return gen()
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+    @app.post("/ai/translate/stream")
+    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
+        record = _prose_values(body.supplied_text())
+        if record is not None:
+            # Same cap check as the plain-text path below, done BEFORE opening the stream —
+            # otherwise an oversized JSON record would 200+SSE-error mid-stream instead of a
+            # clean 413, breaking the "413 before streaming starts" contract for this path only.
+            _, values = record
+            _guard_chunk_cap(sum(len(_split_adaptive(v)) for v in values))
+            return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
+
+        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
+
+        if len(chunks) <= 1:
+            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
+
+            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+                # Restore literals in the authoritative `final` event (token deltas may still
+                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
+                final = _strip_prompt_echo(unmask_literals(final, literals))
+                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
+
+            return stream("translate", prompt, None, build_final)
+
+        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
+        return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
 
     @app.post("/ai/generate-report")
     async def report(body: LegacyRequest) -> dict[str, Any]:
@@ -1988,3 +2108,57 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not expected or x_api_key != expected:
             raise HTTPException(401, "Invalid admin API key")
         return {"status": "ok", "refreshed": True}
+
+    _register_showcase_routes(app, state)
+
+
+def _register_showcase_routes(app: FastAPI, state: Any) -> None:
+    """Nhóm F/D/K/L/E (docs/nghiem-thu-showcase/) — read-only evidence APIs for the
+    nghiệm-thu demo, Stage 1 (KB + S — hồ sơ gốc browser — deliberately not included yet).
+    None of these need ``state`` (no LLM/KB calls, no closures) — kept as a separate
+    function purely so this block stays easy to lift out later if the showcase moves repos.
+    """
+    from .showcase import finetune as showcase_finetune
+    from .showcase import kpi_bench as showcase_kpi_bench
+    from .showcase import model_info as showcase_model_info
+    from .showcase import sanitize_demo as showcase_sanitize_demo
+    from .showcase import source_dossier as showcase_source_dossier
+    from .showcase import kb as showcase_kb
+    from .showcase import deploy as showcase_deploy
+    from .showcase import tb_proxy as showcase_tb_proxy
+    from .showcase import testset as showcase_testset
+
+    app.include_router(showcase_finetune.router)
+    app.include_router(showcase_model_info.router)
+    app.include_router(showcase_kpi_bench.router)
+    app.include_router(showcase_sanitize_demo.router)
+    app.include_router(showcase_source_dossier.router)
+    app.include_router(showcase_kb.router)
+    app.include_router(showcase_deploy.router)
+    app.include_router(showcase_tb_proxy.router)  # /tb/* → TensorBoard (đi ké qua :8131)
+    app.include_router(showcase_testset.router)
+
+    try:
+        from .showcase import evidence as showcase_evidence
+    except ImportError:
+        logger.warning("showcase evidence router (nhóm E) chưa sẵn sàng — bỏ qua /ai/evidence/*")
+    else:
+        app.include_router(showcase_evidence.router)
+
+    # StaticFiles gửi Cache-Control: no-cache → trình duyệt LUÔN revalidate qua ETag (304 nếu
+    # không đổi, tải mới ngay khi file đổi). Tránh kẹt module JS/CSS cũ mỗi lần cập nhật showcase.
+    class _NoCacheStatic(StaticFiles):
+        def file_response(self, *args: Any, **kwargs: Any):
+            resp = super().file_response(*args, **kwargs)
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+            return resp
+
+    finetune_figures_dir = Path(state.settings.showcase_finetune_dossier_dir) / "dashboards" / "figures"
+    if finetune_figures_dir.is_dir():
+        app.mount("/showcase-api/finetune/assets", _NoCacheStatic(directory=str(finetune_figures_dir)),
+                  name="showcase-finetune-assets")
+
+    # Serve the throwaway demo page same-origin (no CORS needed) — repo_root/demo/showcase/.
+    demo_dir = Path(__file__).resolve().parents[3] / "demo" / "showcase"
+    if demo_dir.is_dir():
+        app.mount("/showcase-demo", _NoCacheStatic(directory=str(demo_dir), html=True), name="showcase-demo")

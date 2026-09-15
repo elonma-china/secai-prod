@@ -1,0 +1,402 @@
+{
+ "tabs": [
+  {
+   "label": "Finetuning",
+   "hash": "#finetune"
+  },
+  {
+   "label": "Model & phần cứng",
+   "hash": "#model-info"
+  },
+  {
+   "label": "KPI Bench",
+   "hash": "#kpi-bench"
+  },
+  {
+   "label": "Sanitize demo",
+   "hash": "#sanitize-demo"
+  },
+  {
+   "label": "Evidence",
+   "hash": "#evidence"
+  },
+  {
+   "label": "Hồ sơ gốc",
+   "hash": "#source-dossier"
+  }
+ ],
+ "evidence": [
+  {
+   "id": "dong-493",
+   "dong": 493,
+   "title": "Danh mục mô hình runtime phục vụ hệ thống",
+   "hash": "#evidence/dong-493"
+  },
+  {
+   "id": "dong-494",
+   "dong": 494,
+   "title": "Chatbot hỏi đáp CVE/CWE và truy vấn kho tri thức",
+   "hash": "#evidence/dong-494"
+  },
+  {
+   "id": "dong-495",
+   "dong": 495,
+   "title": "Hỗ trợ Pentest: Hỗ trợ định hướng và tư vấn Pentest",
+   "hash": "#evidence/dong-495"
+  },
+  {
+   "id": "dong-496",
+   "dong": 496,
+   "title": "Tư vấn khắc phục: Đề xuất biện pháp khắc phục lỗ hổng",
+   "hash": "#evidence/dong-496"
+  },
+  {
+   "id": "dong-497",
+   "dong": 497,
+   "title": "Hồ sơ phương pháp, phạm vi và hạ tầng huấn luyện tổng hợp",
+   "hash": "#evidence/dong-497"
+  },
+  {
+   "id": "dong-498",
+   "dong": 498,
+   "title": "Hồ sơ dataset huấn luyện, nhóm dữ liệu và nguồn dữ liệu",
+   "hash": "#evidence/dong-498"
+  },
+  {
+   "id": "dong-499",
+   "dong": 499,
+   "title": "Phạm vi CWE Top 25",
+   "hash": "#evidence/dong-499"
+  },
+  {
+   "id": "dong-500",
+   "dong": 500,
+   "title": "Phạm vi OWASP Top 10",
+   "hash": "#evidence/dong-500"
+  },
+  {
+   "id": "dong-501",
+   "dong": 501,
+   "title": "Phạm vi Memory Safety",
+   "hash": "#evidence/dong-501"
+  },
+  {
+   "id": "dong-502",
+   "dong": 502,
+   "title": "Phạm vi Injection",
+   "hash": "#evidence/dong-502"
+  },
+  {
+   "id": "dong-503",
+   "dong": 503,
+   "title": "Phạm vi Input Validation & Data Sanitization",
+   "hash": "#evidence/dong-503"
+  },
+  {
+   "id": "dong-504",
+   "dong": 504,
+   "title": "Phạm vi Authentication & Authorization",
+   "hash": "#evidence/dong-504"
+  },
+  {
+   "id": "dong-505",
+   "dong": 505,
+   "title": "Phạm vi Cryptographic Weaknesses",
+   "hash": "#evidence/dong-505"
+  },
+  {
+   "id": "dong-506",
+   "dong": 506,
+   "title": "Phạm vi Logic & Business Logic Errors",
+   "hash": "#evidence/dong-506"
+  },
+  {
+   "id": "dong-507",
+   "dong": 507,
+   "title": "Phạm vi Configuration & Deployment Weaknesses",
+   "hash": "#evidence/dong-507"
+  },
+  {
+   "id": "dong-508",
+   "dong": 508,
+   "title": "Nhiệm vụ cụ thể:",
+   "hash": "#evidence/dong-508"
+  },
+  {
+   "id": "dong-509",
+   "dong": 509,
+   "title": "Tỷ lệ phát hiện & phân loại chính xác ≥ 85%",
+   "hash": "#evidence/dong-509"
+  },
+  {
+   "id": "dong-510",
+   "dong": 510,
+   "title": "Tỷ lệ giải thích đúng logic & đầy đủ ≥ 85%",
+   "hash": "#evidence/dong-510"
+  },
+  {
+   "id": "dong-511",
+   "dong": 511,
+   "title": "Tỷ lệ đề xuất bản vá hợp lệ ≥ 60%",
+   "hash": "#evidence/dong-511"
+  },
+  {
+   "id": "dong-513",
+   "dong": 513,
+   "title": "Xác nhận Base Model",
+   "hash": "#evidence/dong-513"
+  },
+  {
+   "id": "dong-518",
+   "dong": 518,
+   "title": "Hồ sơ phương pháp và phạm vi fine-tuning",
+   "hash": "#evidence/dong-518"
+  },
+  {
+   "id": "dong-519",
+   "dong": 519,
+   "title": "Đối với các mô hình BGE-M3 embedding, BGE-Reranker, Qwen LLM và LLaMA3, đơn vị triển khai cung cấp đầy đủ Training Logs thể hiện Loss curve, Learning rate và số vòng lặp huấn luyện (Epochs); đồng thời cung cấp ảnh chụp màn hình/Dashboard từ công cụ giám sát (TensorBoard, Weights & Biases) thể hiện quá trình huấn luyện và mức độ khớp dữ liệu.",
+   "hash": "#evidence/dong-519"
+  },
+  {
+   "id": "dong-520",
+   "dong": 520,
+   "title": "Hạ tầng huấn luyện sử dụng 02 GPU NVIDIA A100 80GB; tổng thời gian huấn luyện/fine-tuning thực tế được ghi nhận và đối soát trong quá trình triển khai.",
+   "hash": "#evidence/dong-520"
+  },
+  {
+   "id": "dong-521",
+   "dong": 521,
+   "title": "Bộ dữ liệu huấn luyện gồm các nhóm dữ liệu ATTT (thuật ngữ chuyên ngành, tài liệu RAG, instruction tuning, dữ liệu song ngữ, báo cáo và phân tích lỗ hổng), được chuẩn hóa và phân bổ riêng cho từng mô hình BGE-M3 embedding, BGE-Reranker và Qwen LLM. Thông tin chi tiết, số liệu chính xác (tên tập dữ liệu, số lượng bản ghi, dung lượng, nguồn, ngày công bố) và dữ liệu mẫu được cung cấp đầy đủ tại phụ lục kỹ thuật và khi nghiệm thu.",
+   "hash": "#evidence/dong-521"
+  },
+  {
+   "id": "dong-522",
+   "dong": 522,
+   "title": "Chỉ số đánh giá và nghiệm thu: Thời gian huấn luyện/fine-tuning trên từng tập dữ liệu được ghi nhận cụ thể theo cấu hình phần cứng triển khai (GPU) và đối soát trong quá trình huấn luyện.",
+   "hash": "#evidence/dong-522"
+  },
+  {
+   "id": "dong-524",
+   "dong": 524,
+   "title": "Faithfulness (RAGAS/NLI) > 98%, Answer Relevance > 90%, Entity Precision = 100%, Hallucination < 2%",
+   "hash": "#evidence/dong-524"
+  },
+  {
+   "id": "dong-526",
+   "dong": 526,
+   "title": "Faithfulness (RAGAS/NLI) > 98%, Answer Relevance > 90%, Entity Precision = 100%, Hallucination < 2%",
+   "hash": "#evidence/dong-526"
+  },
+  {
+   "id": "dong-530",
+   "dong": 530,
+   "title": "Step-by-step reasoning – Có giải thích logic từng bước",
+   "hash": "#evidence/dong-530"
+  },
+  {
+   "id": "dong-531",
+   "dong": 531,
+   "title": "Diện tích bao phủ Radar > 90% so với KPI cam kết",
+   "hash": "#evidence/dong-531"
+  },
+  {
+   "id": "dong-532",
+   "dong": 532,
+   "title": "Hybrid Search trong hệ thống",
+   "hash": "#evidence/dong-532"
+  },
+  {
+   "id": "dong-533",
+   "dong": 533,
+   "title": "Bộ test đánh giá cho Embedding/Reranking/LLM",
+   "hash": "#evidence/dong-533"
+  },
+  {
+   "id": "dong-534",
+   "dong": 534,
+   "title": "Raw Logs đánh giá chi tiết cho từng mẫu",
+   "hash": "#evidence/dong-534"
+  },
+  {
+   "id": "dong-535",
+   "dong": 535,
+   "title": "Evaluation Code tái lập kết quả đánh giá",
+   "hash": "#evidence/dong-535"
+  },
+  {
+   "id": "dong-536",
+   "dong": 536,
+   "title": "Báo cáo phân tích sai, False Positive và kế hoạch cải thiện",
+   "hash": "#evidence/dong-536"
+  },
+  {
+   "id": "dong-537",
+   "dong": 537,
+   "title": "Quy trình cập nhật được thiết lập để tiếp nhận và tích hợp lỗ hổng 0-day và kỹ thuật tấn công mới từ các nguồn tình báo ATTT:",
+   "hash": "#evidence/dong-537"
+  },
+  {
+   "id": "dong-538",
+   "dong": 538,
+   "title": "Cung cấp nhân sự kỹ thuật phối hợp với Chủ đầu tư để hướng dẫn và tổng hợp 01 bộ test mới cho từng loại mô hình Embedding, Reranking và LLM, phục vụ đánh giá độc lập độ chính xác. Kết quả đánh giá chấp nhận khi sai lệch không vượt quá 5% so với các chỉ số đã công bố; trường hợp sai lệch vượt ngưỡng, bên cung cấp cam kết fine-tune/điều chỉnh (code hssd đi kèm - tự config điều chỉnh tham số) mô hình miễn phí trước khi nghiệm thu.",
+   "hash": "#evidence/dong-538"
+  },
+  {
+   "id": "dong-540",
+   "dong": 540,
+   "title": "Context Window tối đa: 16K tokens",
+   "hash": "#evidence/dong-540"
+  },
+  {
+   "id": "dong-541",
+   "dong": 541,
+   "title": "Effective Context: Duy trì độ chính xác đến 12K tokens",
+   "hash": "#evidence/dong-541"
+  },
+  {
+   "id": "dong-542",
+   "dong": 542,
+   "title": "- Hiệu năng đạt 20–35 tokens/giây (TPS), - TTFT 900–1500 ms trên hạ tầng suy luận.",
+   "hash": "#evidence/dong-542"
+  },
+  {
+   "id": "dong-543",
+   "dong": 543,
+   "title": "Cấu hình phần cứng:",
+   "hash": "#evidence/dong-543"
+  },
+  {
+   "id": "dong-547",
+   "dong": 547,
+   "title": "Requests Per Second (RPS): ~0,6 RPS",
+   "hash": "#evidence/dong-547"
+  },
+  {
+   "id": "dong-548",
+   "dong": 548,
+   "title": "Concurrent Users (CCU): Hỗ trợ ~30 người dùng đồng thời",
+   "hash": "#evidence/dong-548"
+  },
+  {
+   "id": "dong-549",
+   "dong": 549,
+   "title": "Evaluation speed & hiệu năng suy luận: Được đo trên hạ tầng GPU NVIDIA A100 80GB, trong môi trường triển khai thực tế (chatflow đầy đủ gồm Hybrid Search, Reranking và LLM inference). Hiệu năng đạt 20–35 tokens/s, TTFT ~900–1500 ms với context tối đa 16k token. Bên cung cấp cam kết bàn giao đầy đủ evaluation code và kết quả đo thực nghiệm khi nghiệm thu.",
+   "hash": "#evidence/dong-549"
+  },
+  {
+   "id": "dong-550",
+   "dong": 550,
+   "title": "KPI mô hình Embedding: throughput đạt 1.200 embedding/s",
+   "hash": "#evidence/dong-550"
+  },
+  {
+   "id": "dong-551",
+   "dong": 551,
+   "title": "KPI mô hình Reranking: throughput đạt 180 rerank/s",
+   "hash": "#evidence/dong-551"
+  },
+  {
+   "id": "dong-552",
+   "dong": 552,
+   "title": "KPI mô hình LLM: throughput đạt 28 tokens/s",
+   "hash": "#evidence/dong-552"
+  },
+  {
+   "id": "dong-553",
+   "dong": 553,
+   "title": "Toàn luồng chatflow: 25 tokens/s",
+   "hash": "#evidence/dong-553"
+  },
+  {
+   "id": "dong-554",
+   "dong": 554,
+   "title": "Cơ chế Sanitization trước Embedding/LLM",
+   "hash": "#evidence/dong-554"
+  },
+  {
+   "id": "dong-555",
+   "dong": 555,
+   "title": "KPI Sanitization Email Address",
+   "hash": "#evidence/dong-555"
+  },
+  {
+   "id": "dong-556",
+   "dong": 556,
+   "title": "Bên cung cấp bàn giao đầy đủ tập dữ liệu test, bảng kết quả đánh giá, confusion matrix, raw logs (True/Predicted label), evaluation code, giải thích các trường hợp sai (đặc biệt False Positive) và kế hoạch cập nhật cải thiện.",
+   "hash": "#evidence/dong-556"
+  },
+  {
+   "id": "dong-557",
+   "dong": 557,
+   "title": "Cung cấp nhân sự miễn phí để kiểm chứng độc lập với 01 bộ test mới; sai lệch kết quả không vượt quá 5%, vượt ngưỡng sẽ fine-tune mô hình miễn phí trước nghiệm thu.",
+   "hash": "#evidence/dong-557"
+  },
+  {
+   "id": "dong-558",
+   "dong": 558,
+   "title": "Triển khai: Hệ thống hỗ trợ on-premise, yêu cầu GPU NVIDIA A100 80GB, RAM ≥128GB, SSD ≥2TB. Hỗ trợ air-gapped, vận hành không cần kết nối Internet.",
+   "hash": "#evidence/dong-558"
+  },
+  {
+   "id": "dong-559",
+   "dong": 559,
+   "title": "Docker image:",
+   "hash": "#evidence/dong-559"
+  },
+  {
+   "id": "dong-561",
+   "dong": 561,
+   "title": "Chính sách retraining tự động và ngưỡng suy giảm chất lượng",
+   "hash": "#evidence/dong-561"
+  },
+  {
+   "id": "dong-564",
+   "dong": 564,
+   "title": "- Minh chứng Fine-tune mô hình thực hiện theo chính sách kiểm soát khi cần thiết: Là phần giải pháp tự động phát hiện suy giảm độ chính xác qua pipeline đánh giá định kỳ (bên trên)",
+   "hash": "#evidence/dong-564"
+  },
+  {
+   "id": "dong-566",
+   "dong": 566,
+   "title": "Hỗ trợ truy xuất thông tin",
+   "hash": "#evidence/dong-566"
+  },
+  {
+   "id": "dong-567",
+   "dong": 567,
+   "title": "Gợi ý phương pháp khai thác tối ưu",
+   "hash": "#evidence/dong-567"
+  },
+  {
+   "id": "dong-568",
+   "dong": 568,
+   "title": "Tạo báo cáo lỗ hổng theo yêu cầu trên giao diện",
+   "hash": "#evidence/dong-568"
+  },
+  {
+   "id": "dong-569",
+   "dong": 569,
+   "title": "Nhớ ngữ cảnh: Duy trì ngữ cảnh hội thoại qua các lượt tương tác",
+   "hash": "#evidence/dong-569"
+  },
+  {
+   "id": "dong-570",
+   "dong": 570,
+   "title": "Dịch Anh-Việt chuyên ngành ATTT: Dịch văn bản chuyên ngành An toàn thông tin Anh ↔ Việt",
+   "hash": "#evidence/dong-570"
+  },
+  {
+   "id": "dong-571",
+   "dong": 571,
+   "title": "đặt lịch báo cáo định kỳ hoặc tuỳ chỉnh",
+   "hash": "#evidence/dong-571"
+  },
+  {
+   "id": "dong-572",
+   "dong": 572,
+   "title": "Tự động sinh mã khai thác: Tự động xây dựng mã khai thác cho các lỗ hổng đơn giản",
+   "hash": "#evidence/dong-572"
+  }
+ ]
+}
