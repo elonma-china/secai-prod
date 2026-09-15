@@ -78,6 +78,21 @@ def _dated_prompt(prompt: str) -> str:
     return f"[Hôm nay là {weekday}, ngày {today} (giờ Việt Nam)]\n{prompt}"
 
 
+def _maybe_dated_prompt(profile_name: str, prompt: str) -> str:
+    """Skip the date-prefix for ``translate``: it's a pure text-transformation task
+    with no need for date context, and unlike other profiles the model is told to
+    reproduce/transform the ENTIRE user turn — so a leaked or (worse) paraphrased
+    copy of the injected preamble can land in the output verbatim. Reproduced
+    2026-09-12: the model rendered ``[Hôm nay là Thứ 7, ngày 12/09/2026 (giờ Việt
+    Nam)]`` as ``[Tuần thứ 7, ngày 12/09/2026 (giờ Việt Nam)]`` inside a translated
+    CVE title — a paraphrase, not a literal echo, so no fixed regex can reliably
+    strip every variant after the fact. Removing the date from the prompt entirely
+    is the only fix that closes every variant at once."""
+    if profile_name == "translate":
+        return prompt
+    return _dated_prompt(prompt)
+
+
 class CompletionRunner(Protocol):
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]: ...
     def stream(self, profile_name: str, prompt: str, session_id: str | None = None) -> AsyncIterator[Any]: ...
@@ -174,7 +189,7 @@ class LinchRunner:
             self._apply_profile(session, profile_name, prompt)
             final = ""
             run_id = None
-            async for event in session.run(_dated_prompt(prompt)):
+            async for event in session.run(_maybe_dated_prompt(profile_name, prompt)):
                 run_id = session.active_run_id or run_id
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
@@ -213,7 +228,7 @@ class LinchRunner:
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
             turn_limited = False
-            async for event in session.run(_dated_prompt(prompt)):
+            async for event in session.run(_maybe_dated_prompt(profile_name, prompt)):
                 got_text = got_text or _has_text(event)
                 if salvageable and _is_turn_limit(event):
                     # Swallow the max_turns terminal (guard → error → empty result);
