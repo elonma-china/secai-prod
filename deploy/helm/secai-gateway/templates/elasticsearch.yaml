@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: elasticsearch, namespace: {{ include "secai.namespace" . }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: elasticsearch } }
+  template:
+    metadata: { labels: { app: elasticsearch } }
+    spec:
+      containers:
+        - name: elasticsearch
+          image: {{ .Values.elasticsearch.image }}
+          env:
+            - { name: discovery.type, value: single-node }
+            - { name: xpack.security.enabled, value: "false" }
+            - { name: ES_JAVA_OPTS, value: "{{ .Values.elasticsearch.javaOpts }}" }
+          ports: [{ containerPort: {{ .Values.elasticsearch.port }} }]
+          volumeMounts:
+            - { name: data, mountPath: /usr/share/elasticsearch/data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: elasticsearch-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: elasticsearch, namespace: {{ include "secai.namespace" . }} }
+spec:
+  selector: { app: elasticsearch }
+  ports: [{ port: {{ .Values.elasticsearch.port }}, targetPort: {{ .Values.elasticsearch.port }} }]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: elasticsearch-pvc, namespace: {{ include "secai.namespace" . }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: {{ .Values.elasticsearch.storage }} } }

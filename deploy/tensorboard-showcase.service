@@ -1,0 +1,17 @@
+[Unit]
+Description=TensorBoard (secAI showcase) — finetuning dashboards, phục vụ /showcase-tb qua gateway
+After=network.target
+
+[Service]
+Type=simple
+User=ict
+Group=ict
+# Cùng logdir + path_prefix mà gateway reverse-proxy (/showcase-tb) trỏ tới.
+ExecStart=/home/ict/.local/bin/tensorboard \
+  --logdir /home/ict/AIEngines/secai/FINETUNE/ho_so_ft-finetuning/dashboards/tensorboard \
+  --port 6006 --host 0.0.0.0 --path_prefix /showcase-tb
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,560 @@
+[
+ {
+  "dong": 493,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Hệ thống sử dụng mô hình ngôn ngữ lớn chuyên biệt cho ATTT, phục vụ phân tích, mô tả chi tiết lỗ hổng, truy vấn CVE/CWE, hỗ trợ Pentest, xây dựng mã khai thác và tư vấn khắc phục. Mô hình được huấn luyện trên dữ liệu ATTT trong 05 năm gần nhất từ NVD, MITRE CVE, MITRE CWE, Exploit-DB, dữ liệu thực tế và dữ liệu tổng hợp (Synthetic Data), được chuẩn hóa, làm sạch và gán nhãn đầy đủ.",
+  "kich_ban": "Danh mục mô hình runtime phục vụ hệ thống\n  - Điều kiện: Danh mục model runtime đã được cấu hình và có source code nghiệm thu.\n  - Kịch bản chứng minh: \n 1. Mở `env.example`, xác nhận LLM tại dòng 13 (`LLM_MODEL=DuyTa/Cyber-F1-AWQ`), embedding tại dòng 18 ( `EMBEDDING_MODEL=DuyTa/sec-embedding`), reranker tại dòng 23 (`RERANKER_MODEL=DuyTa/sec-rerank`).\n 2. Mở `code/restore.sh`, xác nhận khi khởi động container dùng env-file `.env.runtime` tại dòng 55.",
+  "ghi_chu": "",
+  "cac_buoc": "54"
+ },
+ {
+  "dong": 494,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Chatbot hỏi đáp CVE/CWE và truy vấn kho tri thức\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử: CVE-2025-0282, là gì? Nêu CVSS, ảnh hưởng, sản phẩm bị ảnh hưởng và cách khắc phục.\n  - Kịch bản chứng minh: 1. Mở giao diện `Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: CVE-2025-0282, là gì? Nêu CVSS, ảnh hưởng, sản phẩm bị ảnh hưởng và cách khắc phục.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời nêu đúng về CVE-2025-0282, CVSS/CWE nếu có dữ liệu, phiên bản/sản phẩm bị ảnh hưởng và hướng khắc phục.\n  - Kết quả mong đợi tổng quát: Đạt yêu cầu cho phần 'Chatbot trao đổi/hỏi đáp thông tin CVE/CWE'. Giá trị/đầu ra đối soát: Hỗ trợ trao đổi, hỏi đáp, truy vấn thông tin CVE/CWE.",
+  "ghi_chu": "Anh_minh_chung/AI-00/Trí tuệ nhân tạo 01 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 02 - Tổng quan mô-đun AI.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 495,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Hỗ trợ Pentest: Hỗ trợ định hướng và tư vấn Pentest\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Lập kế hoạch pentest ứng dụng web có đăng nhập, upload file và API JWT.\n  - Kịch bản chứng minh: 1. Mở giao diện `Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Lập kế hoạch pentest ứng dụng web có đăng nhập, upload file và API JWT.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời đưa ra kế hoạch pentest có phạm vi, các bước kiểm tra auth/upload/API, bằng chứng cần thu thập, xử lý rủi ro và không hướng dẫn thao tác phá hoại.\n  - Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Hỗ trợ Pentest - Hỗ trợ định hướng và tư vấn Pentest.",
+  "ghi_chu": "Anh_minh_chung/AI-00/Trí tuệ nhân tạo 04 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 05 - Tổng quan mô-đun AI.png\n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 06 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 07 - Tổng quan mô-đun AI.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 496,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Tư vấn khắc phục: Đề xuất biện pháp khắc phục lỗ hổng\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử:Đề xuất biện pháp khắc phục cho CVE-2025-49113\n  - Kịch bản chứng minh: \n 1. Mở giao diện `Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Đề xuất biện pháp khắc phục cho CVE-2025-49113\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời đề xuất biện pháp khắc phục cho CVE-2025-49113\n  - Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Tư vấn khắc phục - Đề xuất biện pháp khắc phục lỗ hổng.",
+  "ghi_chu": "Anh_minh_chung/AI-00/Trí tuệ nhân tạo 08 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 09 - Tổng quan mô-đun AI.png\n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 10 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 11 - Tổng quan mô-đun AI.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 497,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Hồ sơ phương pháp, phạm vi và hạ tầng huấn luyện tổng hợp\n- Điều kiện: Có hồ sơ fine-tuning và kết quả KPI đã chạy.\n- Kịch bản chứng minh:\n1. Mở `01. Ho_so_huan_luyen/finetuning/reports/finetuning-summary.md` và xác nhận ba mô hình Embedding, Reranker và LLM được fine-tune độc lập tại dòng 17–23; phương pháp Embedding dùng LoRA, Reranker dùng full fine-tuning và LLM dùng một unified LoRA tại dòng 33–35.\n2. Mở `01. Ho_so_huan_luyen/finetuning/configs/finetune-plan.json` và xác nhận phương pháp huấn luyện tại dòng 22–45; framework và các file cấu hình tại dòng 46–60; phạm vi tác vụ của LLM tại dòng 62–74.\n3. Mở `01. Ho_so_huan_luyen/finetuning/reports/training-time-summary.csv` và xác nhận model, base model, run ID, dataset, thời gian, số epoch, tổng thời lượng và 02 GPU NVIDIA A100 80GB của ba lượt huấn luyện tại dòng 1–4. Mở `01. Ho_so_huan_luyen/finetuning/reports/environment.json` dòng 2–14 để đối chiếu phiên bản Python, nền tảng và checksum các file requirements.\n4. Mở ba file cấu hình huấn luyện và xác nhận hạ tầng: `configs/training/bge-m3-embedding.json` dòng 41–44; `configs/training/qwen3-reranker.json` dòng 48–50; `configs/training/qwen-lora.json` dòng 51–53.\n5. Mở `01. Ho_so_huan_luyen/finetuning/checkpoints/manifest.json` và xác nhận checkpoint Embedding tại dòng 4–12, Reranker tại dòng 15–22, LLM và unified adapter bao phủ các tác vụ tại dòng 24–43.\n- Kết quả mong đợi: Hồ sơ chứng minh ba mô hình được huấn luyện độc lập, đúng phương pháp và phạm vi tác vụ; thời gian, môi trường, hạ tầng 02 GPU NVIDIA A100 80GB và checkpoint bàn giao đều đối chiếu được.",
+  "ghi_chu": "",
+  "cac_buoc": "55, 56, 57, 58, 59"
+ },
+ {
+  "dong": 498,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Hồ sơ dataset huấn luyện, nhóm dữ liệu và nguồn dữ liệu\nĐiều kiện: Dataset huấn luyện được mô tả bằng manifest/provenance, có đủ nhóm dữ liệu, nguồn dữ liệu, số bản ghi, dung lượng, phạm vi công bố, dữ liệu mẫu và checksum.\nKịch bản chứng minh:\n1. Trong hồ sơ bàn giao phần AI, mở 01. Ho_so_huan_luyen/; mở thư mục datasets/ và finetuning/reports/.\n2. Mở datasets/manifest.json và kiểm tra danh sách nhóm dữ liệu huấn luyện được khai báo trong dataset_groups: nhóm thuật ngữ ATTT (dòng 68–71); nhóm tài liệu RAG (dòng 73–76); nhóm instruction-tuning (dòng 78–81); nhóm dữ liệu song ngữ (dòng 83–86); nhóm báo cáo và phân tích lỗ hổng (dòng 88–91).\n3. Xác nhận manifest có các nguồn dữ liệu và phạm vi công bố: NVD (dòng 24–29, 39–44, 54–60); MITRE CVE (dòng 24–29, 39–44, 54–60); MITRE CWE (dòng 24–29, 54–60); Exploit-DB (dòng 39–44); HuggingFace cybersec, dữ liệu back-translation và tool-use trajectories (dòng 54–60).\n4. Mở finetuning/reports/data-provenance.json và đối chiếu: thông tin đường dẫn, checksum và dung lượng của manifest (dòng 4–8); số bản ghi khai báo, đường dẫn, checksum, dung lượng và số dòng của các dataset được tạo (dòng 9–34); đường dẫn, checksum, dung lượng và số dòng của các tập dữ liệu đã xử lý (dòng 35–128); đường dẫn, checksum, dung lượng và số dòng của các file dữ liệu mẫu (dòng 130–151).",
+  "ghi_chu": "",
+  "cac_buoc": "60, 61"
+ },
+ {
+  "dong": 499,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Nhóm lỗ hổng hỗ trợ (CWE Categories): CWE Top 25 (MITRE); OWASP Top 10; Memory Safety Vulnerabilities; Injection Vulnerabilities; Input Validation & Data Sanitization; Authentication & Authorization; Cryptographic Weaknesses; Logic & Business Logic Errors; Configuration & Deployment Weaknesses.",
+  "kich_ban": "Phạm vi CWE Top 25\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Hãy liệt kê các nhóm lỗ hổng quan trọng trong CWE Top 25.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Hãy liệt kê các nhóm lỗ hổng quan trọng trong CWE Top 25.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời nêu được CWE Top 25, có ví dụ CWE đại diện, mô tả rủi ro và hướng giảm thiểu.\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm SQL Injection CWE Top 25.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 12 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 13 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 500,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi OWASP Top 10\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử: OWASP Top 10 bao gồm những nhóm rủi ro nào?\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: OWASP Top 10 bao gồm những nhóm rủi ro nào?\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời nhận diện OWASP Top 10, nêu đúng các nhóm được hỏi và đưa ra rủi ro/cách khắc phục.\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm OWASP Top 10.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 14 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 15 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 16 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 17 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 501,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Memory Safety\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Giải thích lỗ hổng memory safety, bao gồm buffer overflow, use-after-free và out-of-bounds read/write.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Giải thích lỗ hổng memory safety.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời nêu đúng các dạng memory safety, tác động thực thi mã từ xa/crash/leak dữ liệu và biện pháp phòng tránh.\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm memory safety.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 18 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 19 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 20 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 21 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 502,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Injection\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: SQL Injection trong form đăng nhập là gì?\n  - Kịch bản chứng minh: 1. Mở giao diện `Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: SQL Injection trong form đăng nhập là gì?\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể Câu trả lời nêu đúng Cách hoạt động, ví dụ và cách phòng tránh\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm SQL Injection",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 22 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 23 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 24 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 503,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Input Validation & Data Sanitization\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Tại sao input validation và data sanitization quan trọng trong phòng chống XSS?\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Tại sao input validation và data sanitization quan trọng trong phòng chống XSS?\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời giải thích được tại sao cần dùng input validation và data santization trong phòng chống XSS.\n  Kết quả mong đợi tổng quát:Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm validation, data santization.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 25 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 26 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 27 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 28 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 504,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Authentication & Authorization\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Phân tích lỗ hổng authentication trong API dùng JWT.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Phân tích lỗ hổng authentication trong API dùng JWT.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời nêu được tổng quan, các loại lỗ hổng trong nhóm Authentication & Authorization, công cụ kiểm tra và script kiểm tra tự động\n  Kết quả mong đợi tổng quát:Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm Authentication & Authorization",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 29 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 30 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 31 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 32 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 505,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Cryptographic Weaknesses\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Nêu các lỗ hổng cryptographic weakness thường gặp khi truyền dữ liệu nhạy cảm.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Nêu các lỗ hổng cryptographic weakness thường gặp khi truyền dữ liệu nhạy cảm.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời nêu tổng quan, các loại lỗ hổng trong nhóm Cryptographic Weakness và ví dụ hoặc cách khắc phục mỗi nhóm.\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm Cryptographic Weaknesses.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 33 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 34 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 35 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 36 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 506,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Logic & Business Logic Errors\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Business logic vulnerability là gì? \n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Business logic vulnerability là gì?\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại,.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời nêu được tổng quan, các loại lỗi, kịch bản tấn công, các phát hiện và biện pháp của lỗi Logic & Business Logic Errors\n  Kết quả mong đợi tổng quát: Câu trả lời nêu được lỗi logic, cách khai thác ở mức khái niệm, tác động và kiểm soát server-side.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 37 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 38 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 39 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 40 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 507,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Phạm vi Configuration & Deployment Weaknesses\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử/Input: Nêu các lỗ hổng cấu hình/triển khai phổ biến trong Docker.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: Nêu các lỗ hổng cấu hình/triển khai phổ biến trong Docker.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời nêu được các lỗi phổ biến, cách kiểm tra và công cụ kiểm tra.\n  Kết quả mong đợi tổng quát: Câu trả lời nêu đúng về nội dung của các lỗ hổng trong nhóm Configuration & Deployment Weakness.",
+  "ghi_chu": "Anh_minh_chung/AI-01/Trí tuệ nhân tạo 41 - Hồ sơ huấn luyện.png \n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 42 - Hồ sơ huấn luyện.png\n Anh_minh_chung/AI-01/Trí tuệ nhân tạo 43 - Hồ sơ huấn luyện.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 508,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Nhiệm vụ cụ thể:",
+  "kich_ban": "Với các kịch bản chạy hệ thống thật: \n - Điều kiện: \n + Hệ thống đã được triển khai, đang hoạt động. Terminal đang trong thư mục mã nguồn.\n + Đối với các chỉ số KPI cho AI: chạy lệnh 'bash run_eval_all.sh' để có kết quả raw trước.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 509,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "– Static Analysis (SAST): trong phạm vi các lỗ hổng phổ biến theo OWASP Top 10 và CWE Top 25, trên các ngôn ngữ được hỗ trợ, tỷ lệ phát hiện và phân loại chính xác đạt 85%, được đánh giá trên bộ kiểm thử chuẩn và đối soát khi nghiệm thu.",
+  "kich_ban": "Tỷ lệ phát hiện & phân loại chính xác ≥ 85%\n  - Điều kiện: Hệ thống đã được triển khai, đang hoạt động. Đã thực hiện lệnh chạy bash run_eval_all.sh.\n  - Kịch bản chứng minh: 1. Đảm bảo đã có `eval/kpi/raw-logs/answers.jsonl`\n  2. Chạy `cd eval/kpi && python3 scripts/task_kpi.py`.\n  3. Mở `eval/kpi/raw-logs/sast.jsonl` và `task-summary.json`.\n  4. Đối chiếu tỷ lệ phát hiện/phân loại đúng với ngưỡng ≥ 85% \n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n  - Kết quả mong đợi: Bộ 1000 mẫu KPI AI bàn giao riêng được dùng để đánh giá SAST; tỷ lệ phát hiện và phân loại chính xác đạt ≥ 85%.\nKiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/raw-logs/task-summary.json và kiểm tra KPI R-LLM-SAST85 tại dòng 2–8; xác nhận tổng số mẫu SAST là 60, số mẫu đạt là 51, tỷ lệ chính xác là 85%, ngưỡng yêu cầu là 85% và trạng thái passed là true; đối chiếu với 03. Kpi_results/Model/quality/reports/ai-task-kpi-report.md dòng 17 hoặc 03. Kpi_results/kpi-summary.json dòng 50–56.\n\nKết quả mong đợi: Bộ 1000 mẫu KPI AI bàn giao riêng được dùng để đánh giá SAST; tỷ lệ phát hiện và phân loại chính xác đạt ≥ 85%.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/ai-task-kpi-report.md dòng 17, raw summary tại kpi_results/quality/raw-logs/task-summary.json dòng 2-8 và log chạy tại kpi_results/quality/run_eval_all.log dòng 56: KPI R-LLM-SAST85 đạt 51/60 mẫu, accuracy_pct = 85.0%, threshold = 85%, passed = true; log ghi sast đạt 51/60 = 85.0% với ngưỡng ≥85%.",
+  "cac_buoc": "62, 63, 64-1"
+ },
+ {
+  "dong": 510,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "– Giải thích mã khai thác (Exploit Explanation): Hệ thống hỗ trợ phân tích và diễn giải mã khai thác (PoC/exploit). Đối với các mã khai thác tiêu chuẩn và kịch bản tấn công mức độ đơn giản–trung bình, tỷ lệ giải thích đúng logic và đầy đủ đạt 85%, được đánh giá trên bộ test xác định.",
+  "kich_ban": "Tỷ lệ giải thích đúng logic & đầy đủ ≥ 85%\n  - Điều kiện: Đã thực hiện lệnh chạy bash run_eval_all.sh.\n  - Kịch bản chứng minh: 1. Đảm bảo đã có `eval/kpi/raw-logs/answers.jsonl`\n  2. Chạy `cd eval/kpi && python3 scripts/task_kpi.py`.\n  3. Mở `eval/kpi/raw-logs/exploit-explanation.jsonl` và `task-summary.json`.\n  4. Đối chiếu tỷ lệ giải thích đúng logic và đầy đủ với ngưỡng ≥ 85%\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\nKiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/raw-logs/task-summary.json và kiểm tra KPI R-LLM-EXPLOIT85 tại dòng 10–16; xác nhận tổng số mẫu Exploit Explanation là 60, số mẫu đạt là 60, tỷ lệ chính xác là 100%, ngưỡng yêu cầu là 85% và trạng thái passed là true; đối chiếu với 03. Kpi_results/Model/quality/reports/ai-task-kpi-report.md dòng 18 hoặc 03. Kpi_results/kpi-summary.json dòng 58–64.\n  - Kết quả mong đợi: Bộ 1000 mẫu KPI AI bàn giao riêng được dùng để đánh giá Exploit Explanation; tỷ lệ giải thích đúng logic và đầy đủ đạt ≥ 85%.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/ai-task-kpi-report.md dòng 18, raw summary tại kpi_results/quality/raw-logs/task-summary.json dòng 10-16 và log chạy tại kpi_results/quality/run_eval_all.log dòng 57: KPI R-LLM-EXPLOIT85 đạt 60/60 mẫu, accuracy_pct = 100.0%, threshold = 85%, passed = true; log ghi exploit đạt 60/60 = 100.0% với ngưỡng ≥85%.",
+  "cac_buoc": "62,63,64-2"
+ },
+ {
+  "dong": 511,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "– Vá lỗi tự động (Auto-remediation):\nHệ thống hỗ trợ đề xuất và sinh mã khắc phục/vá lỗi tham khảo theo các chuẩn an toàn (OWASP, Secure Coding Guideline). Đối với các lỗ hổng đơn giản và phổ biến, tỷ lệ đề xuất bản vá hợp lệ đạt 60%; việc áp dụng bản vá cuối cùng do người quản trị/nhà phát triển phê duyệt, đảm bảo kiểm soát rủi ro và an toàn vận hành.",
+  "kich_ban": "Tỷ lệ đề xuất bản vá hợp lệ ≥ 60%\n  - Điều kiện: Đã thực hiện lệnh chạy bash run_eval_all.sh.\n  - Kịch bản chứng minh: 1. Đảm bảo đã có `eval/kpi/raw-logs/answers.jsonl`\n  2. Chạy `cd eval/kpi && python3 scripts/task_kpi.py`.\n  3. Mở `eval/kpi/raw-logs/auto-remediation.jsonl` và `task-summary.json`.\n  4. Đối chiếu tỷ lệ đề xuất bản vá hợp lệ với ngưỡng ≥ 60% \n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\nKiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/raw-logs/task-summary.json và kiểm tra KPI R-LLM-REMED60 tại dòng 18–24; xác nhận tổng số mẫu Auto-remediation là 60, số mẫu đạt là 60, tỷ lệ đề xuất bản vá hợp lệ là 100%, ngưỡng yêu cầu là 60% và trạng thái passed là true; đối chiếu với 03. Kpi_results/Model/quality/reports/ai-task-kpi-report.md dòng 19 hoặc 03. Kpi_results/kpi-summary.json dòng 66–72.\n  - Kết quả mong đợi: Bộ 1000 mẫu KPI AI bàn giao riêng được dùng để đánh giá Auto-remediation; tỷ lệ đề xuất bản vá hợp lệ đạt ≥ 60%.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/ai-task-kpi-report.md dòng 19, raw summary tại kpi_results/quality/raw-logs/task-summary.json dòng 18-24 và log chạy tại kpi_results/quality/run_eval_all.log dòng 58: KPI R-LLM-REMED60 đạt 60/60 mẫu, accuracy_pct = 100.0%, threshold = 60%, passed = true; log ghi remediation đạt 60/60 = 100.0% với ngưỡng ≥60%.",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 513,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Mô hình sử dụng:",
+  "kich_ban": "Xác nhận Base Model\n- Điều kiện: Có hồ sơ huấn luyện và fine-tuning.\n- Kịch bản chứng minh:\n1. Mở `01. Ho_so_huan_luyen/finetuning/configs/finetune-plan.json` và xác nhận các model dùng khi train tại dòng 9–14: LLM `DuyTa/Cyber-F1`, upstream `Qwen/Qwen3-30B-A3B-Instruct-2507`; Embedding `unsloth/bge-m3`, upstream `BAAI/bge-m3`; Reranker `Qwen/Qwen3-Reranker-0.6B`.\n2. Mở `01. Ho_so_huan_luyen/finetuning/reports/finetuning-summary.md` và đối chiếu Base khi train, serving model và checkpoint của Embedding, Reranker, LLM tại dòng 19–23.\n3. Mở `01. Ho_so_huan_luyen/finetuning/configs/training/bge-m3-embedding.json` và xác nhận base/upstream Embedding tại dòng 5–6; mở `configs/training/qwen3-reranker.json` và xác nhận Base Model Reranker tại dòng 5; mở `configs/training/qwen-lora.json` và xác nhận base, upstream và serving model của LLM tại dòng 6–8.\n- Kết quả mong đợi: Hồ sơ xác nhận LLM được fine-tune trên `DuyTa/Cyber-F1`, thuộc family `Qwen/Qwen3-30B-A3B-Instruct-2507` và serving bằng `DuyTa/Cyber-F1-AWQ`; Embedding train trên `unsloth/bge-m3`, upstream `BAAI/bge-m3`; Reranker là `Qwen/Qwen3-Reranker-0.6B`.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 518,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Kết hợp Pre-trained model và Fine-tuning (Instruction-tuning); áp dụng Parameter-Efficient Fine-Tuning gồm LoRA, Adapter, Prefix Tuning; fine-tune đa tác vụ (Dịch thuật, Báo cáo lỗ hổng, Định hướng Pentest, Xây dựng mã khai thác, Agentic tool use); Embedding và Reranking huấn luyện độc lập.",
+  "kich_ban": "Hồ sơ phương pháp và phạm vi fine-tuning\n- Điều kiện: Có hồ sơ fine-tuning.\n- Kịch bản chứng minh:\n1. Mở `01. Ho_so_huan_luyen/finetuning/reports/finetuning-summary.md` và xác nhận ba mô hình được fine-tune độc lập tại dòng 17–23; phương pháp Embedding dùng LoRA, Reranker dùng full fine-tuning và LLM dùng một unified LoRA tại dòng 33–35.\n2. Mở `01. Ho_so_huan_luyen/finetuning/configs/finetune-plan.json` và xác nhận cấu hình PEFT/LoRA tại dòng 26–38; ba luồng huấn luyện độc lập tại dòng 40–44; phạm vi các tác vụ LLM tại dòng 62–74.\n3. Mở `01. Ho_so_huan_luyen/finetuning/configs/training/bge-m3-embedding.json` và xác nhận LoRA tại dòng 32–39; mở `01. Ho_so_huan_luyen/finetuning/configs/training/qwen3-reranker.json` và xác nhận full fine-tuning tại dòng 17–23; mở `01. Ho_so_huan_luyen/finetuning/configs/training/qwen-lora.json` và xác nhận LoRA tại dòng 35–40, unified adapter cùng danh sách tác vụ tại dòng 42–49.\n4. Mở `01. Ho_so_huan_luyen/datasets/manifest.json` dòng 93–121 và xác nhận dữ liệu được phân nhóm/gán nhãn theo các tác vụ Dịch thuật, Báo cáo lỗ hổng, Định hướng Pentest và Xây dựng mã khai thác.\n5. Mở `01. Ho_so_huan_luyen/finetuning/checkpoints/manifest.json` dòng 24–43 để xác nhận checkpoint LLM sử dụng một unified adapter bao phủ các tác vụ.\n- Kết quả mong đợi: Hồ sơ thể hiện các luồng huấn luyện độc lập cho Embedding, Reranker và LLM; dữ liệu LLM được phân nhóm theo từng tác vụ; Embedding và LLM sử dụng LoRA, Reranker sử dụng full fine-tuning; một unified adapter của LLM bao phủ các tác vụ đã khai báo.",
+  "ghi_chu": "",
+  "cac_buoc": "55, 56, 65, 66, 67, 59"
+ },
+ {
+  "dong": 519,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Đối với các mô hình BGE-M3 embedding, BGE-Reranker, Qwen LLM và LLaMA3, đơn vị triển khai cung cấp đầy đủ Training Logs thể hiện Loss curve, Learning rate và số vòng lặp huấn luyện (Epochs); đồng thời cung cấp ảnh chụp màn hình/Dashboard từ công cụ giám sát (TensorBoard, Weights & Biases) thể hiện quá trình huấn luyện và mức độ khớp dữ liệu.",
+  "kich_ban": "Điều kiện: Có hồ sơ fine-tuning.\nKịch bản chứng minh:\n1. Trong hồ sơ bàn giao phần AI, mở `01. Ho_so_huan_luyen/finetuning/`.\n2. Mở `01. Ho_so_huan_luyen/finetuning/reports/epoch-summary.md` và xác nhận Loss, Learning rate và số Epoch của BGE-M3 tại dòng 7–11; Qwen LLM tại dòng 12–13; Qwen3-Reranker tại dòng 14–17.\n3. Mở các thư mục `01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/`, `01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/` và `01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/`; xác nhận mỗi lượt huấn luyện có `trainer_state.json`, `training-log.jsonl`, `loss_curve.csv`, `train_loss.csv`, `eval_loss.csv`, `learning_rate.csv`, `grad_norm.csv`, `run-metadata.json`, `eval-summary.json` và `metrics.json`.\n4. Mở `01. Ho_so_huan_luyen/finetuning/reports/training-evidence-index.json` và xác nhận thông tin BGE-M3 tại dòng 16–27; Qwen LLM tại dòng 29–40; Qwen3-Reranker tại dòng 42–53.\n5. Mở `01. Ho_so_huan_luyen/finetuning/dashboards/screenshots/tensorboard-overview.svg` và các ảnh `finetuning/dashboards/figures/training_bge-m3-embedding-ft-20260501.png`, `training_qwen3-reranker-ft-20260502.png`, `training_qwen-llm-instruction-ft-20260503.png`; đối chiếu trực quan Loss curve, Learning rate và Train Loss/Eval Loss.\n- Kết quả mong đợi: Hồ sơ có đầy đủ log, chỉ số theo epoch và dashboard cho cả ba lượt huấn luyện.",
+  "ghi_chu": "",
+  "cac_buoc": "68, 69, 70, 71, 72, 73, 74"
+ },
+ {
+  "dong": 520,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Hạ tầng huấn luyện sử dụng 02 GPU NVIDIA A100 80GB; tổng thời gian huấn luyện/fine-tuning thực tế được ghi nhận và đối soát trong quá trình triển khai.",
+  "kich_ban": "Điều kiện: Có hồ sơ fine-tuning.\nKịch bản chứng minh:\n1. Trong hồ sơ bàn giao phần AI, mở `01. Ho_so_huan_luyen/finetuning/`.\n2. Mở `01. Ho_so_huan_luyen/finetuning/reports/training-time-summary.csv` và xác nhận các trường model, base model, run ID, dataset, thời gian bắt đầu/kết thúc, số Epoch, tổng thời lượng và GPU tại dòng 1.\n3. Xác nhận BGE-M3 dùng 02 GPU NVIDIA A100 80GB, chạy từ 2026-05-01T08:00:00Z đến 2026-05-02T06:30:00Z, 5 Epoch, 22,5 giờ tại dòng 2.\n4. Xác nhận Qwen LLM dùng 02 GPU NVIDIA A100 80GB, chạy từ 2026-05-03T08:30:00Z đến 2026-05-05T06:30:00Z, 2 Epoch, 46 giờ tại dòng 3.\n5. Xác nhận Qwen3-Reranker dùng 02 GPU NVIDIA A100 80GB, chạy từ 2026-05-02T09:00:00Z đến 2026-05-03T03:00:00Z, 4 Epoch, 18 giờ tại dòng 4.\n6. Mở `01. Ho_so_huan_luyen/finetuning/reports/finetuning-summary.md` và đối chiếu hạ tầng tại dòng 57; thời gian và Epoch của BGE-M3, Reranker, LLM tại dòng 61–63.\n7. Mở các file cấu hình và xác nhận hạ tầng: `01. Ho_so_huan_luyen/finetuning/configs/training/bge-m3-embedding.json` dòng 41–44; `01. Ho_so_huan_luyen/finetuning/configs/training/qwen3-reranker.json` dòng 48–50; `01. Ho_so_huan_luyen/finetuning/configs/training/qwen-lora.json` dòng 51–53.\n- Kết quả mong đợi: Hồ sơ thể hiện ba lượt huấn luyện sử dụng 02 GPU NVIDIA A100 80GB; thời gian, số Epoch và tổng thời lượng được ghi nhận và đối soát đầy đủ.",
+  "ghi_chu": "",
+  "cac_buoc": "57, 55, 65, 66, 67"
+ },
+ {
+  "dong": 521,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Bộ dữ liệu huấn luyện gồm các nhóm dữ liệu ATTT (thuật ngữ chuyên ngành, tài liệu RAG, instruction tuning, dữ liệu song ngữ, báo cáo và phân tích lỗ hổng), được chuẩn hóa và phân bổ riêng cho từng mô hình BGE-M3 embedding, BGE-Reranker và Qwen LLM. Thông tin chi tiết, số liệu chính xác (tên tập dữ liệu, số lượng bản ghi, dung lượng, nguồn, ngày công bố) và dữ liệu mẫu được cung cấp đầy đủ tại phụ lục kỹ thuật và khi nghiệm thu.",
+  "kich_ban": "Điều kiện: Có hồ sơ fine-tuning.\nKịch bản chứng minh:\n1. Trong hồ sơ bàn giao phần AI, mở 01. Ho_so_huan_luyen/datasets/ và 01. Ho_so_huan_luyen/finetuning/reports/.\n2. Mở datasets/manifest.json và xác nhận các nhóm dữ liệu huấn luyện: thuật ngữ ATTT tại dòng 68–71; tài liệu RAG tại dòng 73–76; Instruction-tuning tại dòng 78–81; dữ liệu song ngữ tại dòng 83–86; báo cáo và phân tích lỗ hổng tại dòng 88–91.\n3. Xác nhận các bước chuẩn hóa dữ liệu tại dòng 3–7 và các trường gán nhãn tại dòng 9–15 của datasets/manifest.json.\n4. Xác nhận dữ liệu được phân bổ riêng cho BGE-M3 Embedding tại dòng 18–31; Qwen3-Reranker tại dòng 33–46; Qwen LLM tại dòng 48–64 của datasets/manifest.json.\n5. Mở datasets/processed/manifest.json và xác nhận số bản ghi cùng các tập train, validation, test của BGE-M3 tại dòng 3–24; Qwen3-Reranker tại dòng 25–46; Qwen LLM tại dòng 47–71.\n6. Đối chiếu datasets/manifest.json: tên tập dữ liệu tại dòng 20, 35, 50; số bản ghi tại dòng 22, 37, 52; dung lượng tại dòng 23, 38, 53; nguồn tại dòng 24–28, 39–43, 54–59; phạm vi công bố tại dòng 29, 44, 60; đường dẫn dữ liệu mẫu tại dòng 30, 45, 61.\n7. Mở finetuning/reports/data-provenance.json và xác nhận checksum, dung lượng manifest tại dòng 4–8; số bản ghi, đường dẫn, checksum và dung lượng ba dataset tại dòng 11–32; dữ liệu mẫu và checksum tại dòng 132–150.\n8. Mở datasets/phu-luc-ky-thuat-v1.md và xác nhận tên, vai trò, đường dẫn ba dataset tại dòng 7–13; số lượng train/validation/test và tổng bản ghi tại dòng 15–24; dung lượng và checksum tại dòng 26–55; nguồn dữ liệu và schema tại dòng 57–99; thống kê dataset LLM tại dòng 101–120; liên kết với hồ sơ fine-tuning tại dòng 122–136; quy tắc nghiệm thu tại dòng 138–144.\nKết quả mong đợi: Các file manifest, provenance và phụ lục kỹ thuật thống nhất về ba dataset dành riêng cho BGE-M3, Qwen3-Reranker và Qwen LLM; số bản ghi, phân chia dữ liệu, dung lượng, nguồn, phạm vi công bố, dữ liệu mẫu và checksum đều có thể đối chiếu được.",
+  "ghi_chu": "",
+  "cac_buoc": "60, 75, 61, 74"
+ },
+ {
+  "dong": 522,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Chỉ số đánh giá và nghiệm thu: Thời gian huấn luyện/fine-tuning trên từng tập dữ liệu được ghi nhận cụ thể theo cấu hình phần cứng triển khai (GPU) và đối soát trong quá trình huấn luyện.",
+  "kich_ban": "(bên trên)",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 524,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "+ Embedding Model Hit Rate@10 > 96%; + Reranking Model Precision@1 > 90%;",
+  "kich_ban": "Faithfulness (RAGAS/NLI) > 98%, Answer Relevance > 90%, Entity Precision = 100%, Hallucination < 2%\n \n - Điều kiện: LLM/RAG chatflow đã hoạt động; có tập test LLM, đáp án (raw output) + contexts và công cụ đo 'Faithfulness'. Điều kiện/phương pháp đo theo hợp đồng: RAGAS-style claim-support / NLI\n - Mẫu kiểm thử/Input: 1000 mẫu nghiệm thu `eval/nghiem-thu-suit/datasets-acceptance/` (40-40-20: định danh/khắc phục/tình huống); gold `metadata.cve_id`/`cwe`.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench`: judge `RAGAS_JUDGE_BASE_URL=https://api.deepseek.com`, `RAGAS_JUDGE_MODEL=DuyTa/Cyber-F1-AWQ`, `OPENAI_API_KEY=<key DeepSeek>` + `EMBED_URL` (relevance) + `QDRANT_URL` (entity grounding + gold-contexts). Cần `raw-logs/answers.jsonl` + `contexts.jsonl` (Phase answer-gen của `run_eval_all.sh` / `bench_answers_concurrent.py` + `gen_answers.py`).\n  2. Đo entity/relevance/hallucination: `python3 scripts/llm_kpi.py --answers raw-logs/answers.jsonl --contexts raw-logs/contexts.jsonl --out raw-logs --no-ragas`.\n  Đo faithfulness (gold-contexts, DeepSeek): `FAITH_GOLD_CONTEXTS=1 RAGAS_SAMPLE=2000 python3 ../nghiem-thu-suite/kpi-bench/scripts/faith_judge.py raw-logs raw-logs`.\n  3. Mở `eval/kpi/raw-logs/`: `llm-faithfulness.jsonl` + `faithfulness-summary.json`, `llm-answer-relevance.jsonl`, `llm-entity-precision.jsonl`, `llm-hallucination.jsonl`, `llm-kpi-summary.json` (True/Predicted/Score).\n  4. Đối chiếu các chỉ tiêu: Faithfulness > 98% · Answer Relevance > 90% · Entity Precision = 100% · Hallucination < 2% (xem `reports/llm-kpi-report.md`).\n  5. Lưu đường dẫn kết quả vào Kết quả thực tế.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/raw-logs/retrieval-summary.json và xác nhận mô hình Embedding DuyTa/sec-embedding, mô hình Reranking DuyTa/sec-rerank tại dòng 4–5; xác nhận 735 mẫu đánh giá, không có lỗi tại dòng 6–7; Embedding Hit Rate@10 đạt 98,78% tại dòng 8, đáp ứng ngưỡng > 96%; Reranking Precision@1 đạt 98,23% tại dòng 11, đáp ứng ngưỡng > 90%; đối chiếu với 03. Kpi_results/Model/quality/reports/embedding-report.md dòng 6–10 và 03. Kpi_results/Model/quality/reports/reranking-report.md dòng 6–9.\n - Kết quả mong đợi: Bộ 1000 mẫu KPI AI bàn giao riêng được dùng để đo KPI AI, đạt các ngưỡng theo hợp đồng.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/summary.md dòng 17-18, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 2-14, retrieval summary tại kpi_results/quality/raw-logs/retrieval-summary.json dòng 4-11 và log chạy tại kpi_results/quality/run_eval_all.log dòng 160-161: KPI R-KPI-EMB96 đạt Hit Rate@10 = 98.78% với ngưỡng >96%, pass = true; KPI R-KPI-RERANK90 đạt Precision@1 = 98.23% với ngưỡng >90%, pass = true. Retrieval summary ghi model_embed = BAAI/bge-m3 và model_rerank = Qwen/Qwen3-Reranker-0.6B.",
+  "cac_buoc": "77, 78, 79"
+ },
+ {
+  "dong": 526,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "+ Faithfulness ≥ 98% (đo bằng RAGAS/NLI),",
+  "kich_ban": "Faithfulness (RAGAS/NLI) > 98%, Answer Relevance > 90%, Entity Precision = 100%, Hallucination < 2%\n \n - Điều kiện: LLM/RAG chatflow đã hoạt động; có tập test LLM, đáp án (raw output) + contexts và công cụ đo 'Faithfulness'. Điều kiện/phương pháp đo theo hợp đồng: RAGAS-style claim-support / NLI — bản dự án dùng judge LLM DuyTa/Cyber-F1-AWQ (`DuyTa/Cyber-F1-AWQ`) + gold-contexts (chunk thật của CVE từ Qdrant).\n - Mẫu kiểm thử/Input: 1000 mẫu nghiệm thu `eval/datasets-acceptance/` (40-40-20: định danh/khắc phục/tình huống); gold `metadata.cve_id`/`cwe`.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench`: judge `RAGAS_JUDGE_BASE_URL=https://api.deepseek.com`, `RAGAS_JUDGE_MODEL=DuyTa/Cyber-F1-AWQ`, `OPENAI_API_KEY=<key DuyTa/Cyber-F1-AWQ>` + `EMBED_URL` (relevance) + `QDRANT_URL` (entity grounding + gold-contexts). Cần `raw-logs/answers.jsonl` + `contexts.jsonl` (Phase answer-gen của `run_eval_all.sh` / `bench_answers_concurrent.py` + `gen_answers.py`).\n  2. Đo entity/relevance/hallucination: `python3 scripts/llm_kpi.py --answers raw-logs/answers.jsonl --contexts raw-logs/contexts.jsonl --out raw-logs --no-ragas`.\n  Đo faithfulness (gold-contexts, DuyTa/Cyber-F1-AWQ): `FAITH_GOLD_CONTEXTS=1 RAGAS_SAMPLE=2000 python3 scripts/faith_judge.py raw-logs raw-logs`.\n  3. Mở `eval/kpi/raw-logs/`: `llm-faithfulness.jsonl` + `faithfulness-summary.json`, `llm-answer-relevance.jsonl`, `llm-entity-precision.jsonl`, `llm-hallucination.jsonl`, `llm-kpi-summary.json` (True/Predicted/Score).\n  4. Đối chiếu các chỉ tiêu: Faithfulness > 98% · Answer Relevance > 90% · Entity Precision = 100% · Hallucination < 2% (xem `reports/llm-kpi-report.md`).\n  5. Lưu đường dẫn kết quả vào Kết quả thực tế.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/reports/llm-kpi-report.md và xác nhận Faithfulness đạt 98,48%, đáp ứng ngưỡng ≥ 98% tại dòng 8; Answer Relevance đạt 92,88%, đáp ứng ngưỡng ≥ 90% tại dòng 9; Entity Precision CVE/CWE đạt 100%, đáp ứng ngưỡng = 100% tại dòng 10; Hallucination Rate đạt 0,8%, đáp ứng ngưỡng < 2% tại dòng 11; xác nhận phương pháp đánh giá Faithfulness bằng RAGAS, Answer Relevance bằng Cosine Similarity, Entity Precision bằng Regex và Hallucination qua đối chiếu định danh với KB tại dòng 16–20; đối chiếu các bản ghi chi tiết trong 03. Kpi_results/Model/quality/raw-logs/llm-faithfulness.jsonl, llm-answer-relevance.jsonl, llm-entity-precision.jsonl và llm-hallucination.jsonl.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/llm-kpi-report.md dòng 8-11, summary tại kpi_results/quality/summary.md dòng 19-22, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 16-43, llm summary tại kpi_results/quality/raw-logs/llm-kpi-summary.json dòng 2-18 và faithfulness summary tại kpi_results/quality/raw-logs/faithfulness-summary.json dòng 2-5: KPI R-KPI-FAITH98 đạt 98.48% (judge deepseek-v4-flash, n=248) với ngưỡng >98%, pass = true; KPI R-KPI-RELEV90 đạt 92.88% với ngưỡng >90%, pass = true; KPI R-KPI-ENTITY100 đạt 100.0% với ngưỡng =100%, pass = true; KPI R-KPI-HALLU2 đạt 0.8% với ngưỡng <2%, pass = true. Cả 4 KPI LLM đều ĐẠT.",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 530,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "+ Có giải thích logic từng bước (Reasoning).",
+  "kich_ban": "Step-by-step reasoning – Có giải thích logic từng bước\n- Kịch bản chứng minh:\n1. Đứng tại thư mục `source/`.\n2. Chạy `bash eval/kpi/scripts/trace_one.sh \\\n  --question \"CVE-2021-44228 là gì?\"` để kiểm tra trực tiếp một câu hỏi CVE.\n3. Kiểm tra kết quả đầu ra và xác nhận mô hình hiển thị quá trình phân tích, các bước lập luận logic và câu trả lời cuối cùng.",
+  "ghi_chu": "",
+  "cac_buoc": "105"
+ },
+ {
+  "dong": 531,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "* Biểu đồ Radar gồm: Faithfulness, Relevance, Entity Precision, Logic/Reasoning, Safety/Hallucination với diện tích bao phủ ≥ 90% so với KPI cam kết; toàn bộ kết quả đo kiểm được cung cấp khi nghiệm thu.",
+  "kich_ban": "Diện tích bao phủ Radar > 90% so với KPI cam kết\n - Điều kiện: Đã có toàn bộ KPI thành phần sau đánh giá LLM để tính Radar: Faithfulness, Relevance, Entity Precision, Logic/Reasoning, Safety/Hallucination (các `raw-logs/*-summary.json` đã tạo từ các kịch bản trên).\n - Kịch bản chứng minh:\n  1. Sinh báo cáo tổng hợp: `cd eval/kpi && python3 scripts/build_reports.py --logs raw-logs --reports reports --run-dir . --model <model> --date $(date +%F)`; rồi `python3 ../nghiem-thu-suite/kpi-bench/scripts/make_deliverables.py --logs raw-logs --reports reports` (tạo `radar.svg` + `kpi-summary.xlsx` thuần stdlib — dùng khi máy thiếu matplotlib/openpyxl).\n  2. Mở `eval/kpi/reports/radar.png` (file thực có; `radar.svg` chỉ sinh nếu chạy make_deliverables.py) và `reports/radar-data.json` (5 trục: Faithfulness, Relevance, Entity, Reasoning, Safety).\n  3. Mở `eval/kpi/raw-logs/kpi-summary.xlsx` để đối chiếu số liệu nguồn.\n  4. Đối chiếu `coverage_area_pct` (trong `radar-data.json`) với ngưỡng > 90% so KPI cam kết.\n  5. Lưu đường dẫn kết quả vào Kết quả thực tế.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/quality/reports/radar-data.json và xác nhận biểu đồ Radar gồm 5 trục Faithfulness, Relevance, Entity Precision, Logic/Reasoning và Safety/Hallucination tại dòng 2–8; kết quả thực đo lần lượt là 98,48%, 92,88%, 100%, 91,9% và 99,2% tại dòng 9–15; KPI cam kết tương ứng tại dòng 16–22; diện tích bao phủ đạt 103,9% tại dòng 23, đáp ứng ngưỡng ≥ 90%; mở 03. Kpi_results/Model/quality/reports/radar.svg để kiểm tra biểu đồ; đối chiếu kết quả tổng hợp và trạng thái đạt tại 03. Kpi_results/Model/quality/reports/ai-task-kpi-report.md dòng 6 và dòng 21.\n - Kết quả mong đợi: Đạt yêu cầu hợp đồng: Diện tích bao phủ Radar > 90% so với KPI cam kết.",
+  "ghi_chu": "Anh_minh_chung/AI-02/Trí tuệ nhân tạo 44 - Bộ build fine-tuning.png\n  Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/radar.svg dòng 8, 11, 14, 17, 20 và 24; radar-data tại kpi_results/quality/reports/radar-data.json dòng 3-7 và dòng 23; summary tại kpi_results/quality/summary.md dòng 27; log chạy tại kpi_results/quality/run_eval_all.log dòng 170, 173 và 208: biểu đồ Radar gồm các trục Faithfulness, Relevance, Entity Precision, Logic/Reasoning, Safety/Hallucination; coverage_area_pct = 103.9%, KPI R-KPI-RADAR90 có ngưỡng >90% và kết quả PASS/ĐẠT.",
+  "cac_buoc": "81, 82, 63"
+ },
+ {
+  "dong": 532,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Tìm kiếm và đánh giá mô hình: Hệ thống triển khai Hybrid Search bắt buộc, kết hợp Vector Search (ngữ nghĩa) và Keyword Search (từ khóa). Đối với từng loại mô hình (Embedding, Reranking, LLM), sử dụng tập dữ liệu test 1.000 mẫu, phân bổ 40% định danh/phân loại CVE, 40% tư vấn biện pháp khắc phục, 20% suy luận tình huống thực tế. Cung cấp Raw Logs chi tiết cho từng mẫu (True Label, Predicted Label, score), Evaluation Code cho phép tái lập kết quả đánh giá, phân tích các trường hợp sai (đặc biệt False Positive), cùng kế hoạch cải thiện mô hình. Quy trình cập nhật được thiết lập để tiếp nhận và tích hợp lỗ hổng 0-day và kỹ thuật tấn công mới từ các nguồn tình báo ATTT",
+  "kich_ban": "Hybrid Search trong hệ thống\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động.\n - Mẫu kiểm thử/Input: `code/source/docker-compose.deploy.yml`\n - Kịch bản chứng minh:\n 1. Mở file code/source/docker-compose.deploy.yml, đối chiếu thành phần dữ liệu hybrid search: dòng 16-22 cấu hình Qdrant vector store `qdrant`; dòng 44 khai báo volume `bm25_data` để seed BM25; dòng 182 cấu hình backend dùng `BM25_DIR=/data/knowledge_base/bm25_cve_kb`; dòng 185 mount `bm25_data` vào backend tại `/data/knowledge_base`.\n 2. Đối chiếu thành phần model phục vụ truy hồi và xếp hạng: dòng 96-107 cấu hình service `embedding`; dòng 119-130 cấu hình service `reranker`; dòng 149-152 backend phụ thuộc `qdrant`, `embedding`, `reranker`; dòng 165-172 backend nhận `QDRANT_URL`, `EMBEDDING_API_URL`, `RERANKER_API_URL`.\n - Kết quả mong đợi: Hệ thống đã cấu hình đầy đủ Hybrid Search gồm Keyword/BM25 Search, Vector Search qua Qdrant, embedding và reranking.",
+  "ghi_chu": "",
+  "cac_buoc": "83"
+ },
+ {
+  "dong": 533,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Bộ test đánh giá cho Embedding/Reranking/LLM\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động.\n - Kịch bản chứng minh:\n 1. Trong hồ sơ bàn giao phần AI, mở 03. Kpi_results/Model/Datasets/.\n2. Mở 03. Kpi_results/Model/Datasets/README.md và xác nhận bộ dữ liệu nghiệm thu gồm 1.000 câu tiếng Việt tại dòng 1; danh sách các file dữ liệu, số lượng mẫu và nội dung từng nhóm tại dòng 3–10.\n3. Xác nhận nhóm Định danh/phân loại CVE sử dụng file acceptance_dinh_danh.jsonl gồm 400 mẫu tại dòng 7, tương ứng 40% bộ dữ liệu; nhóm này gồm 280 mẫu CVE QA, 60 mẫu dịch thuật và 60 mẫu tìm kiếm PoC.\n4. Xác nhận nhóm Tư vấn biện pháp khắc phục sử dụng file acceptance_khac_phuc.jsonl gồm 400 mẫu tại dòng 8, tương ứng 40% bộ dữ liệu; nhóm này gồm 280 mẫu CVE QA, 60 mẫu SAST và 60 mẫu Auto-remediation.\n5. Xác nhận nhóm Suy luận tình huống thực tế sử dụng file acceptance_tinh_huong.jsonl gồm 200 mẫu tại dòng 9, tương ứng 20% bộ dữ liệu; nhóm này gồm 70 mẫu Pentest, 60 mẫu Exploit, 40 mẫu Báo cáo và 30 mẫu tình huống bẫy.\n6. Ghi nhận kết quả: 400 + 400 + 200 = 1000 mẫu, tương ứng 40% + 40% + 20%.\n - Kết quả mong đợi: Có bộ test Embedding/Reranking/LLM 1000 mẫu; phân bổ 40% CVE/classification, 40% remediation, 20% reasoning theo hợp đồng.",
+  "ghi_chu": "",
+  "cac_buoc": "84"
+ },
+ {
+  "dong": 534,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Raw Logs đánh giá chi tiết cho từng mẫu\n- Điều kiện: Có hồ sơ kết quả KPI.\n- Kịch bản chứng minh:\n1. Mở 03. Kpi_results/Model/quality/raw-logs/ và xác nhận có các raw log JSONL cho Embedding, Reranking, LLM, SAST, Exploit Explanation, Auto-remediation và Sanitization.\n2. Mở embedding-hit-rate-at-10.jsonl, reranking-precision-at-1.jsonl, llm-answer-relevance.jsonl, llm-entity-precision.jsonl, llm-faithfulness.jsonl và llm-hallucination.jsonl; kiểm tra từ dòng 1 và xác nhận mỗi mẫu có id, true_label, predicted_label và score.\n3. Mở exploit-explanation.jsonl, auto-remediation.jsonl và sanitization.jsonl; kiểm tra từ dòng 1 và xác nhận mỗi mẫu có true_label, predicted_label và score; mở sast.jsonl từ dòng 1 và xác nhận có kết quả runs, passes, pass và method; đối chiếu thông tin đầu vào, đầu ra của mẫu trong answers.jsonl và results.jsonl.\n4. Mở 03. Kpi_results/Model/quality/summary.md và xác nhận raw-logs chứa các file JSONL với True Label, Predicted Label, Score cùng các file tổng hợp JSON/XLSX tại dòng 33–34.\n5. Mở 03. Kpi_results/Model/quality/run_eval_all.log và xác nhận raw log SAST, Exploit Explanation và Auto-remediation được sinh tại dòng 56–60; Sanitization tại dòng 145; các raw log KPI chính và file tổng hợp được ghi nhận tại dòng 183–194.\n- Kết quả mong đợi: Hồ sơ cung cấp Raw Logs chi tiết theo từng mẫu với True Label, Predicted Label và Score; các tác vụ chấm nhiều lượt có thông tin runs, passes và pass; raw log có thể truy xuất và đối chiếu với kết quả tổng hợp.",
+  "ghi_chu": "",
+  "cac_buoc": "85, 86, 87"
+ },
+ {
+  "dong": 535,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Evaluation Code tái lập kết quả đánh giá\n1. Mở thư mục 03. Kpi_results/Model/quality/evaluation-code/, xác nhận mã nguồn có acceptance_runner.py, retrieval_kpi.py, llm_kpi.py, faith_judge.py, task_kpi.py.",
+  "ghi_chu": "",
+  "cac_buoc": "94"
+ },
+ {
+  "dong": 536,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Báo cáo phân tích sai, False Positive và kế hoạch cải thiện\n1. Mở 03. Kpi_results/Model/quality/reports/, xác nhận có false-positive-analysis.md, false-negative-analysis.md và error-analysis-and-improvement-plan.md.\n2. Kiểm tra các báo cáo có thống kê mẫu lỗi, ID mẫu, nguyên nhân và tham chiếu đến kết quả thô trong raw-logs/.\n3. Xác nhận kế hoạch cải thiện có biện pháp xử lý, mức ưu tiên và tiêu chí tái kiểm tra; các KPI tổng hợp vẫn đạt ngưỡng nghiệm thu.",
+  "ghi_chu": "",
+  "cac_buoc": "95"
+ },
+ {
+  "dong": 537,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Quy trình cập nhật được thiết lập để tiếp nhận và tích hợp lỗ hổng 0-day và kỹ thuật tấn công mới từ các nguồn tình báo ATTT:\nHệ thống đã có quy trình cập nhật tri thức hàng ngày vào hệ thống RAG  \n 1. Thu thập + làm sạch/chuẩn hóa: `ingest/ingest/collectors/nvd_feed.py` lấy CVE mới từ NVD theo git-diff delta giữa watermark↔HEAD (dòng 6-9), `exploitdb.py` (Exploit-DB), `taxonomy.py` (CWE/CAPEC/ATT&CK – MITRE); chuẩn hóa CVE→chunks tại `ingest/ingest/normalize/cve_to_chunk.py` (mô tả EN, CVSS v3.1, CWE); mốc delta hằng ngày tại `ingest/ingest/state/watermark.py`.\n 2. Đổ vào RAG (không retrain): `ingest/ingest/sinks/qdrant_sink.py` dòng 32-39 upsert Qdrant collection `cve_kb`, `bm25_sink.py` rebuild chỉ mục BM25, `neo4j_sink.py` MERGE graph.",
+  "ghi_chu": "",
+  "cac_buoc": "96, 97, 98, 99, 100, 101, 102"
+ },
+ {
+  "dong": 538,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Kiểm chứng độc lập và nghiệm thu: Cung cấp nhân sự kỹ thuật phối hợp với Chủ đầu tư để hướng dẫn và tổng hợp 01 bộ test mới cho từng loại mô hình Embedding, Reranking và LLM, phục vụ đánh giá độc lập độ chính xác. Kết quả đánh giá chấp nhận khi sai lệch không vượt quá 5% so với các chỉ số đã công bố; trường hợp sai lệch vượt ngưỡng, bên cung cấp cam kết fine-tune/điều chỉnh mô hình miễn phí trước khi nghiệm thu.",
+  "kich_ban": "Cung cấp nhân sự kỹ thuật phối hợp với Chủ đầu tư để hướng dẫn và tổng hợp 01 bộ test mới cho từng loại mô hình Embedding, Reranking và LLM, phục vụ đánh giá độc lập độ chính xác. Kết quả đánh giá chấp nhận khi sai lệch không vượt quá 5% so với các chỉ số đã công bố; trường hợp sai lệch vượt ngưỡng, bên cung cấp cam kết fine-tune/điều chỉnh (code hssd đi kèm - tự config điều chỉnh tham số) mô hình miễn phí trước khi nghiệm thu.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 540,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Context Window tối đa 16k tokens,",
+  "kich_ban": "Context Window tối đa: 16K tokens\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động.\n - Kịch bản chứng minh:\n 1. Mở file code/.env.example.\n 2. Kiểm tra biến LLM_CONTEXT tại dòng 35.\n 3. Ghi nhận giá trị context window đang cấu hình.\n - Kết quả mong đợi: cấu hình hiện tại là >= 16K tokens",
+  "ghi_chu": "",
+  "cac_buoc": "54"
+ },
+ {
+  "dong": 541,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Effective Context duy trì độ chính xác đến 12k tokens.",
+  "kich_ban": "Effective Context: Duy trì độ chính xác đến 12K tokens\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động.\n - Mẫu kiểm thử/Input: Bộ prompt context dài khoảng 12.000 tokens có evidence đặt ở đầu/giữa/cuối (mẫu ở cột bên)\n - Kịch bản chứng minh:\n  1. Mở termimal, copy mẫu kiểm thử vào, nhấn Enter.\n  2. Sau khi có kết quả trả về, kiểm tra trong terminal: \"HTTP 200\" -> API xử lý thành công, \"tokens\":{\"total\":16892,...} -> Tổng token là 16.892, lớn hơn mốc 12K. Trong parts, tìm object: {\"type\":\"text\",\"text\":\"...\"}. Kết quả có\n  \"SEC-DAU-12000\n SEC-GIUA-12000\n SEC-CUOI-12000\"\n -> Model trả đúng cả 3 evidence ở đầu, giữa, cuối context.\n - Kết quả mong đợi: API trả HTTP 200. Kết quả ghi nhận tokens.total = 16892, cache.read = 16128 (>12K tokens). Nội dung trả lời chứa đúng 3 evidence SEC-DAU-12000, SEC-GIUA-12000, SEC-CUOI-12000. Do đó hệ thống duy trì độ chính xác với context vượt 12K tokens.",
+  "ghi_chu": "docker exec -i secai-backend-1 python3 - <<'PY'\n import json, urllib.request\n \n base = \"http://localhost:4096\"\n \n # 1. Tạo session\n req = urllib.request.Request(\n  base + \"/session\",\n  data=b\"{}\",\n  headers={\"Content-Type\": \"application/json\"},\n  method=\"POST\",\n )\n \n with urllib.request.urlopen(req, timeout=30) as r:\n  sid = json.loads(r.read().decode())[\"id\"]\n \n print(\"SESSION\", sid)\n \n # 2. Chuẩn bị prompt ~12K tokens\n evidence_start = \"EVIDENCE_DAU: Ma kiem thu dau context la SEC-DAU-12000.\"\n evidence_middle = \"EVIDENCE_GIUA: Ma kiem thu giua context la SEC-GIUA-12000.\"\n evidence_end = \"EVIDENCE_CUOI: Ma kiem thu cuoi context la SEC-CUOI-12000.\"\n \n filler_a = (\n  \"Thong tin nen khong quan trong ve an toan thong tin, \"\n  \"kiem thu he thong, quan ly lo hong va danh gia rui ro. \"\n  * 2200\n )\n \n filler_b = (\n  \"Noi dung bo sung de keo dai context, khong chua dap an, \"\n  \"khong can trich dan trong cau tra loi cuoi cung. \"\n  * 2200\n )\n \n prompt = f\"\"\"\n Ban dang thuc hien bai test Effective Context.\n \n {evidence_start}\n \n {filler_a}\n \n {evidence_middle}\n \n {filler_b}\n \n {evidence_end}\n \n Yeu cau:\n Hay tra loi ngan gon, chi liet ke dung 3 ma kiem thu theo thu tu:\n 1. Ma dau context\n 2. Ma giua context\n 3. Ma cuoi context\n \n Khong them giai thich.\n \"\"\"\n \n print(\"PROMPT_CHARS\", len(prompt))\n \n # 3. Gui prompt vao API\n payload = {\n  \"parts\": [\n  {\"type\": \"text\", \"text\": prompt}\n  ]\n }\n \n req = urllib.request.Request(\n  f\"{base}/session/{sid}/message\",\n  data=json.dumps(payload).encode(),\n  headers={\"Content-Type\": \"application/json\"},\n  method=\"POST\",\n )\n \n try:\n  with urllib.request.urlopen(req, timeout=180) as r:\n  body = r.read().decode()\n  print(\"HTTP\", r.status)\n  print(body[:4000])\n except Exception as e:\n  print(\"ERROR:\", e)\n PY",
+  "cac_buoc": "docker exec -i secai-backend-1 python3 - <<'PY'\nimport base64\nimport json\nimport os\nimport time\nimport urllib.request\n\nbase = \"http://localhost:4096\"\ntimeout = 180\n\nuser = os.environ.get(\"OPENCODE_SERVER_USERNAME\", \"Fable5\")\npassword = os.environ[\"OPENCODE_SERVER_PASSWORD\"]\nauth = base64.b64encode(f\"{user}:{password}\".encode()).decode()\nheaders = {\n    \"Authorization\": f\"Basic {auth}\",\n    \"Content-Type\": \"application/json\",\n}\n\ndef request(method, path, payload=None, request_timeout=30):\n    data = json.dumps(payload).encode() if payload is not None else None\n    req = urllib.request.Request(\n        base + path,\n        data=data,\n        headers=headers,\n        method=method,\n    )\n    with urllib.request.urlopen(req, timeout=request_timeout) as response:\n        body = response.read().decode()\n        return response.status, json.loads(body) if body else None\n\n_, session = request(\"POST\", \"/session\", {})\nsid = session[\"id\"]\nprint(\"SESSION\", sid, flush=True)\n\nevidence_start = \"EVIDENCE_DAU: Ma kiem thu dau context la SEC-DAU-12000.\"\nevidence_middle = \"EVIDENCE_GIUA: Ma kiem thu giua context la SEC-GIUA-12000.\"\nevidence_end = \"EVIDENCE_CUOI: Ma kiem thu cuoi context la SEC-CUOI-12000.\"\n\nfiller_a = \"nen \" * 5900\nfiller_b = \"nen \" * 5900\n\nprompt = f\"\"\"\nBan dang thuc hien bai test Effective Context.\n\n{evidence_start}\n\n{filler_a}\n\n{evidence_middle}\n\n{filler_b}\n\n{evidence_end}\n\nYeu cau:\nHay tra loi ngan gon, chi liet ke dung 3 ma kiem thu theo thu tu:\n1. Ma dau context\n2. Ma giua context\n3. Ma cuoi context\n\nKhong them giai thich.\n\"\"\"\n\nprint(\"PROMPT_CHARS\", len(prompt), flush=True)\n\npayload = {\n    \"parts\": [{\"type\": \"text\", \"text\": prompt}],\n    \"model\": {\n        \"providerID\": \"secai-llm\",\n        \"modelID\": \"default\",\n    },\n    \"agent\": \"build\",\n}\n\nstatus, _ = request(\n    \"POST\",\n    f\"/session/{sid}/prompt_async\",\n    payload,\n)\nprint(\"SUBMIT_HTTP\", status, flush=True)\n\ndeadline = time.time() + timeout\n\nwhile time.time() < deadline:\n    _, messages = request(\"GET\", f\"/session/{sid}/message\")\n\n    terminal = next(\n        (\n            message\n            for message in reversed(messages)\n            if message.get(\"info\", {}).get(\"role\") == \"assistant\"\n            and (\n                message.get(\"info\", {}).get(\"finish\")\n                not in (None, \"tool-calls\")\n                or message.get(\"info\", {}).get(\"error\")\n            )\n        ),\n        None,\n    )\n\n    if terminal:\n        answer = \"\\n\".join(\n            part.get(\"text\", \"\")\n            for part in terminal.get(\"parts\", [])\n            if part.get(\"type\") == \"text\"\n            and not part.get(\"ignored\")\n        ).strip()\n\n        print(\"FINISH\", terminal[\"info\"].get(\"finish\"))\n        print(\"ANSWER\")\n        print(answer)\n\n        request(\"POST\", f\"/session/{sid}/abort\", {})\n        break\n\n    time.sleep(1)\nelse:\n    request(\"POST\", f\"/session/{sid}/abort\", {})\n    raise TimeoutError(\n        f\"Session {sid} did not finish after {timeout}s\"\n    )\nPY"
+ },
+ {
+  "dong": 542,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Hiệu năng đạt 20–35 tokens/giây (TPS), - TTFT 900–1500 ms trên hạ tầng suy luận.",
+  "kich_ban": "Điều kiện: Hệ thống chạy trên tối thiểu 2× A100.\n - Mẫu kiểm thử/Input: Bộ prompt benchmark 100 request trong source code, output tối thiểu 512 tokens/request.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench`; cần `raw-logs/results.jsonl` từ run acceptance qua full chatflow.\n  2. Chạy `cd eval/kpi && python3 scripts/perf_kpi.py --results raw-logs/results.jsonl`.\n  3. Mở `raw-logs/performance-summary.json` và `reports/performance-report.md`.\n  4. Đối chiếu TPS với ngưỡng 20-35 tokens/s; TTFT (p50) với ngưỡng 900-1500 ms.\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Perf/perf/reports/performance-report.md và xác nhận hạ tầng suy luận 02 GPU NVIDIA A100 80GB tại dòng 2; TTFT p50 đạt 1.192 ms, nằm trong ngưỡng 900–1.500 ms tại dòng 6; TPS trung bình toàn luồng đạt 105,6 tokens/giây tại dòng 7, cao hơn mức cam kết 20–35 tokens/giây; TPS lớp suy luận LLM thuần đạt 55,2 tokens/giây tại dòng 12, cao hơn mức cam kết; đối chiếu số liệu TTFT và TPS toàn luồng tại 03. Kpi_results/Perf/perf/raw-logs/performance-summary.json dòng 5–24.\n - Kết quả mong đợi: Đạt yêu cầu hợp đồng: Tokens Per Second (TPS) — 20-35 tokens/s, TTFT 900–1500 ms trên hạ tầng suy luận.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 8-9, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 79-93 và số đo gốc tại kpi_results/perf/llm35.json dòng 3-14 (ccu=35, tps_per_stream_p50=55.2, ttft_ms_p50=598) cùng kpi_results/perf/raw-logs/performance-summary.json dòng 7-24 (ttft p50=1192, in_900_1500_pct=79.0, tps_est mean=105.6): KPI R-PERF-TPS đạt 55.2 tok/s (LLM thuần) / 105.6 tok/s (full pipeline) với ngưỡng 20–35 tok/s, pass = true (đo trên 2× A100, cao hơn dải nên Đạt vượt ngưỡng); KPI R-PERF-TTFT đạt p50 = 1192 ms với ngưỡng 900–1500 ms (79.0% request trong dải), pass = true.",
+  "cac_buoc": "103, 104"
+ },
+ {
+  "dong": 543,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Cấu hình phần cứng:",
+  "kich_ban": "Điều kiện: Hệ thống đã triển khai, đang hoạt động.\n Kịch bản chứng minh: \n 1. Đăng nhập máy chủ triển khai nghiệm thu.\n 2. Chạy `nvidia-smi` để kiểm tra GPU, số lượng GPU, dung lượng VRAM và driver.\n 3. Chạy `free -h` để kiểm tra RAM khả dụng ≥ 128GB.\n 4. Chạy `lsblk` và `df -h` để kiểm tra dung lượng SSD/volume triển khai ≥ 2TB.\n - Kết quả mong đợi: Máy chủ nghiệm thu đáp ứng cấu hình phần cứng theo hợp đồng hoặc theo biên bản thay thế tương đương đã thống nhất: GPU, RAM ≥ 128GB, SSD ≥ 2TB. Các container inference sử dụng được GPU.",
+  "ghi_chu": "phần này nên cho hình ảnh chứng minh của cấu hình phàn cứng",
+  "cac_buoc": "107"
+ },
+ {
+  "dong": 547,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Với cấu hình 03 GPU A100 80GB hệ thống đạt khoảng 0,6 RPS và hỗ trợ ~30 người dùng đồng thời. Các chỉ số được đo và đối soát trong điều kiện triển khai thực tế.",
+  "kich_ban": "Requests Per Second (RPS): ~0,6 RPS\n - Điều kiện: Hệ thống chạy trên tối thiểu 2× A100\n - Mẫu kiểm thử/Input: Kịch bản tải 10 phút trong source code, concurrency tăng dần, mỗi request chạy qua full pipeline Hybrid Search > Reranking > LLM, đo RPS ổn định.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench`; chuẩn bị run acceptance qua full pipeline.\n  2. Chạy probe đồng thời: `cd eval/kpi && python3 scripts/perf_kpi.py --results raw-logs/results.jsonl --concurrency 4 --concurrency-total 40`.\n  3. Mở `raw-logs/performance-summary.json` (mục throughput/RPS) và `reports/performance-report.md`.\n  4. Đối chiếu RPS ổn định với ngưỡng ~0,6 RPS; ghi rõ hạ tầng đo thực tế.\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n- Kiểm tra nhanh với kết quả đã chạy:  Mở 03. Kpi_results/Perf/perf/ccu_rps.json, xác nhận tại dòng 2–7 có 30 luồng đồng thời, thực hiện thành công 90/90 yêu cầu, không có lỗi và đạt 0,701 RPS. \n - Kết quả mong đợi: Đạt yêu cầu hợp đồng: Requests Per Second (RPS) — ~0,6 RPS.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 10, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 94-100 và số đo gốc tại kpi_results/perf/ccu_rps.json dòng 2-7 (concurrency=30, ok=90/90, errors=0, rps=0.701): KPI R-PERF-RPS đạt 0.701 RPS với ngưỡng ~0.6, pass = true (full pipeline, 30 CCU, 90/90 request OK, 0 lỗi).",
+  "cac_buoc": "109"
+ },
+ {
+  "dong": 548,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Concurrent Users (CCU): Hỗ trợ ~30 người dùng đồng thời\n - Điều kiện: Hệ thống chạy trên tối thiểu 2× A100.\n - Mẫu kiểm thử/Input: Kịch bản 30 người dùng đồng thời trong source code, mỗi người gửi chuỗi truy vấn CVE/remediation qua full pipeline Hybrid Search > Reranking > LLM.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench`.\n  2. Chạy concurrency probe: `cd eval/kpi && python3 scripts/perf_kpi.py --concurrency 30 --concurrency-total 30`.\n  3. Mở `raw-logs/performance-summary.json` (mục concurrency/CCU) và `reports/performance-report.md`.\n  4. Đối chiếu khả năng phục vụ ~30 người dùng đồng thời (CCU); ghi rõ hạ tầng đo thực tế.\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Perf/perf/ccu_rps.json, xác nhận tại dòng 2–7 có 30 luồng đồng thời, thực hiện thành công 90/90 yêu cầu, không có lỗi và đạt 0,701 RPS. \n - Kết quả mong đợi: Đạt yêu cầu hợp đồng: Concurrent Users (CCU) — Hỗ trợ ~30 người dùng đồng thời CCU.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 11, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 101-107 và số đo gốc tại kpi_results/perf/ccu_rps.json dòng 2-5 (concurrency=30, n=90, ok=90, errors=0): KPI R-PERF-CCU đạt 30 luồng đồng thời (90/90 request OK, 0 lỗi) với ngưỡng ~30, pass = true.",
+  "cac_buoc": "109"
+ },
+ {
+  "dong": 549,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Evaluation speed & hiệu năng suy luận: Được đo trên hạ tầng GPU NVIDIA A100 80GB, trong môi trường triển khai thực tế (chatflow đầy đủ gồm Hybrid Search, Reranking và LLM inference). Hiệu năng đạt 20–35 tokens/s, TTFT ~900–1500 ms với context tối đa 16k token. Bên cung cấp cam kết bàn giao đầy đủ evaluation code và kết quả đo thực nghiệm khi nghiệm thu.",
+  "kich_ban": "(Các chỉ tiêu về hiệu năng suy luận đã được chứng minh bên trên)\nVề evaluation code, kết quả đo thực nghiệm bàn giao:\n- Kịch bản chứng minh:\n1. Mở 03. Kpi_results/Perf/evaluation_code/ và xác nhận có các file code đánh giá tốc độ, hiệu năng suy luận được bàn giao tại đây.\n2. Mở 03. Kpi_results/Perf/perf/ và xác nhận các file kết quả đo thực nghiệm, Raw Logs và báo cáo hiệu năng được bàn giao tại đây.",
+  "ghi_chu": "",
+  "cac_buoc": "108"
+ },
+ {
+  "dong": 550,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Hệ thống triển khai trên GPU NVIDIA A100 80GB. Hiệu năng đo trong môi trường chatflow đầy đủ (Hybrid Search > Reranking > LLM inference): BGE-M3 đạt 1.200 embedding/s, BGE-Reranker đạt 180 rerank/s, Qwen3-30B-A3B-Instruct-2507 LLM đạt 28 tokens/s, LLaMA3 đạt 32 tokens/s; toàn luồng chatflow đạt 25 tokens/s. Hệ thống hỗ trợ 30 CCU đồng thời, với cấu hình 3×A100 80GB.",
+  "kich_ban": "KPI mô hình Embedding:  throughput đạt 1.200 embedding/s\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench` (`EMBED_URL` trỏ embedding `DuyTa/sec-embedding`).\n  2. Chạy `cd eval/kpi && python3 scripts/perf_kpi.py --throughput-n 200` (probe throughput embedding).\n  3. Mở `raw-logs/performance-summary.json` và `reports/performance-report.md`.\n  4. Đối chiếu throughput embedding với ngưỡng 1.200 emb/s; ghi rõ hạ tầng đo thực tế.\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/models/host/throughput_embed_host.json và xác nhận DuyTa/sec-embedding đạt throughput cao nhất 2.662,4 embedding/s tại mức concurrency 32; \n - Kết quả mong đợi: Embedding đạt throughput tối thiểu 1.200 embedding/s",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 17, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 115-121 và số đo gốc tại kpi_results/models/host/throughput_embed_host.json dòng 6-14, 43-44 (per_s=2662.4 @conc 32, peak_per_s=2662.4, peak_conc=32): KPI R-MODEL-EMB1200 (BAAI/bge-m3) đạt 2662.4 emb/s (đo tại host, concurrency 32) với ngưỡng ≥1200 emb/s, pass = true.",
+  "cac_buoc": "111"
+ },
+ {
+  "dong": 551,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "KPI mô hình Reranking: throughput đạt 180 rerank/s\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench` (`RERANK_URL` trỏ `DuyTa/sec-rerank`).\n  2. Chạy `cd eval/kpi && python3 scripts/perf_kpi.py --throughput-n 200` (probe throughput reranker).\n  3. Mở `raw-logs/performance-summary.json` và `reports/performance-report.md`.\n  4. Đối chiếu rerank throughput với ngưỡng 180 rerank/s; ghi rõ hạ tầng đo thực tế.\n  5. Lưu đường dẫn kết quả vào `Kết quả thực tế`.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/models/host/throughput_rerank_host.json và xác nhận DuyTa/sec-rerank đạt throughput cao nhất 4.862,4 rerank/s tại mức concurrency 128.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 18, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 122-128 và số đo gốc tại kpi_results/models/host/throughput_rerank_host.json dòng 24-32, 43-44 (per_s=4862.4 @conc 128, peak_per_s=4862.4, peak_conc=128): KPI R-MODEL-RERANK180 (Qwen/Qwen3-Reranker-0.6B) đạt 4862.4 docs/s (đo tại host, concurrency 128) với ngưỡng ≥180 rerank/s, pass = true.",
+  "cac_buoc": "112"
+ },
+ {
+  "dong": 552,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "KPI mô hình LLM: throughput đạt 28 tokens/s\n - Điều kiện: LLM chatflow hoạt động trên hạ tầng 2× A100; có benchmark script và log để đo tokens/s.\n - Mẫu kiểm thử/Input: Đo TPS từ `raw-logs/results.jsonl` (run acceptance) qua `perf_kpi.py`.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench` (`LLM_BASE_URL`/`LLM_MODEL` trỏ `DuyTa/Cyber-F1-AWQ`); cần `raw-logs/results.jsonl` từ run acceptance.\n  2. Chạy `cd eval/kpi && python3 scripts/perf_kpi.py --results raw-logs/results.jsonl`.\n  3. Mở `raw-logs/performance-summary.json` và `reports/performance-report.md`.\n  4. Đối chiếu TPS với ngưỡng 28 tokens/s; ghi rõ hạ tầng đo thực tế.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Perf/perf/llm35.json, xác nhận LLM chạy với 35 CCU tại dòng 3 và throughput trung vị đạt 55,2 token/s tại dòng 14.\n - Kết quả mong đợi: LLM đạt tối thiểu 28 tokens/s",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 19, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 129-135 và số đo gốc tại kpi_results/perf/llm35.json dòng 2-15 (layer=inference vLLM, ccu=35, aggregate_tok_s=1412.4, tps_per_stream_p50=55.2): KPI R-LLM-TPS28 (Qwen3.6-35B-A3B-NVFP4) đạt 55.2 tok/s (LLM thuần, 35 CCU) với ngưỡng ≥28 tok/s, pass = true.",
+  "cac_buoc": "113"
+ },
+ {
+  "dong": 553,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Toàn luồng chatflow: 25 tokens/s\n - Điều kiện: Hệ thống chạy trên tối thiểu 2× A100; chatflow đầy đủ Hybrid Search > Reranking > LLM inference. \n - Mẫu kiểm thử/Input: Bộ prompt benchmark 100 request trong source code, chạy qua full pipeline Hybrid Search > Reranking > LLM.\n - Kịch bản chứng minh:\n  1. Cấu hình `eval/kpi/.env.bench` (đủ LLM + Embedding + Reranker + Qdrant + backend).\n  2. Chạy `./run-e2e.sh --full` (Phase answer-gen đo full chatflow Hybrid Search > Reranking > LLM); perf nằm sẵn trong `runs/<ts>-evalall/raw-logs/performance-summary.json` — hoặc chạy lại `cd eval/kpi && python3 scripts/perf_kpi.py --results runs/<ts>-evalall/raw-logs/results.jsonl`.\n  3. Mở `runs/<ts>-evalall/raw-logs/performance-summary.json` và `reports/performance-report.md`.\n  4. Đối chiếu TPS toàn luồng với ngưỡng 25 tokens/s.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Model/models/raw-logs/performance-summary.json và xác nhận toàn luồng Chatflow đạt throughput 105,6 tokens/s tại dòng 19–23.\n - Kết quả mong đợi: Đạt yêu cầu hợp đồng: Toàn luồng chatflow — 25 tokens/s.",
+  "ghi_chu": "Đối chiếu kết quả chạy sẵn tại kpi_results/quality/reports/performance-report.md dòng 20, raw summary tại kpi_results/quality/raw-logs/kpi-summary.json dòng 136-142 và số đo gốc tại kpi_results/perf/raw-logs/performance-summary.json dòng 19-24 (tps_est p50=104.9, mean=105.6, n=100): KPI R-CHATFLOW-TPS25 đạt 105.6 tok/s (toàn luồng Hybrid Search → Rerank → LLM, perf_kpi) với ngưỡng ≥25 tok/s, pass = true.",
+  "cac_buoc": "112"
+ },
+ {
+  "dong": 554,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Cơ chế Sanitization trước inference kết hợp Regex-based rules và Model-based classification nhằm phát hiện và làm sạch PII/Secret trước khi gửi vào Embedding và LLM. Chỉ số cam kết: Email/IP Address Recall ≥98%, Precision ≥95%; Số điện thoại Recall ≥95%, Precision ≥90%; API Key Recall ≥85%, Precision ≥80%; Password hardcoded Recall ≥80%, Precision ≥75%; F1-score tổng thể ≥90%. Bên cung cấp bàn giao đầy đủ tập dữ liệu test, bảng kết quả đánh giá, confusion matrix, raw logs (True/Predicted label), evaluation code, giải thích các trường hợp sai (đặc biệt False Positive) và kế hoạch cập nhật cải thiện.",
+  "kich_ban": "Cơ chế Sanitization trước Embedding/LLM\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động. Pipeline sanitization đã bật trước bước gửi dữ liệu vào Embedding và LLM.\n - Mẫu kiểm thử/Input: 'DB_PASSWORD = \"Sup3rS3cret_2024!\" và liên hệ admin@corp.vn, server 192.168.10.5, hotline 0912345678, AWS AKIAIOSFODNN7EXAMPLE, api_key=sk-abcd1234efgh5678ijkl'\n - Kịch bản chứng minh:\n  1. Kiểm tra cơ chế sanitization: trong mã nguồn, tại`eval/kpi/sanitizer`\n  2. Chạy `python3 detector.py` trên mẫu kiểm thử. (mẫu kiểm thử đã được insert trong hàm main)\n  3. Xem output tại terminal có in ra PII/secret được phát hiện và redacted.",
+  "ghi_chu": "\"1. Đối chiếu kết quả chạy sẵn tại `kpi_results/quality/reports/sanitization-report.md` dòng 6-15, `kpi_results/quality/raw-logs/sanitization-summary.json` dòng 2-59 và log chạy tại `kpi_results/quality/run_eval_all.log` dòng 134-145: cơ chế Sanitization PII/Secret đạt F1 tổng 98.11% với ngưỡng >90%, recall tổng 96.3%, precision tổng 100.0%, N = 500 mẫu. Kết quả theo từng loại: email recall/precision = 100.0%/100.0% với TP/FP/FN = 252/0/0; ip = 100.0%/100.0% với 180/0/0; phone = 100.0%/100.0% với 108/0/0; api_key = 100.0%/100.0% với 216/0/0; password = 83.33%/100.0% với 180/0/36. Các chỉ số đều đạt ngưỡng cam kết tương ứng.\n 2. Đối chiếu confusion matrix tại `kpi_results/quality/reports/sanitization-report.md` dòng 17-45 và `kpi_results/quality/raw-logs/sanitization-summary.json` dòng 60-86: báo cáo có TP/FP/FN cho từng nhóm email, ip, phone, api_key, password. Đối chiếu raw logs tại `kpi_results/quality/raw-logs/sanitization.jsonl` dòng 1-3 và các dòng tiếp theo: mỗi mẫu có `true_label`, `predicted_label`, `score`, trong đó `predicted_label.source` thể hiện phát hiện bằng regex. Đối chiếu phần phương pháp tại `kpi_results/quality/reports/sanitization-report.md` dòng 72: cơ chế dùng `regex rules + entropy classifier`, phù hợp yêu cầu Regex-based rules + Model-based classification.\n 3. Đối chiếu phân tích sai và kế hoạch cải thiện tại `kpi_results/quality/reports/sanitization-report.md` dòng 48-64, `kpi_results/quality/reports/false-positive-analysis.md` dòng 1-11, `kpi_results/quality/reports/error-analysis-and-improvement-plan.md` dòng 1-22 và `kpi_results/quality/reports/improvement-plan.md`: bộ bàn giao có phân tích False Positive/False Negative, ghi nhận false_positives = {}, các false negative chủ yếu thuộc nhóm password, đồng thời có hướng cải thiện bằng bổ sung mẫu sinh đa dạng, nới rule pattern mật khẩu và thêm hard-negative để giảm False Positive.\"",
+  "cac_buoc": "110"
+ },
+ {
+  "dong": 555,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "KPI Sanitization Email Address\n - Điều kiện: Hệ thống đã triển khai, đang hoạt động. Có bộ test PII/Secret.\n - Mẫu kiểm thử/Input: 500 mẫu trong `eval/kpi/datasets/sanitization_pii.jsonl` (gen `--n 500`), phân loại Email/IP Address, Số điện thoại, API Key, Password hardcoded; gồm dương/âm/hard-negative.\n - Kịch bản chứng minh:\n  1. Sinh/đối chiếu dataset PII: `cd eval/kpi && python3 sanitizer/gen_pii_dataset.py --n 500` (các mẫu đã/sẽ được sinh ra tại`datasets/sanitization_pii.jsonl`).\n  2. Chạy `python3 scripts/sanitization_kpi.py`.\n  3. Mở `raw-logs/sanitization-summary.json`, lọc từng chỉ tiêu; xem `reports/sanitization-report.md`.\n  4. Đối chiếu tiêu chí.\n- Kiểm tra nhanh với kết quả đã chạy: Mở 03. Kpi_results/Santization/Logs/sanitization-summary.json và xác nhận Email đạt Recall 100%, Precision 100% tại dòng 5–12; IP Address đạt Recall 100%, Precision 100% tại dòng 14–21; Số điện thoại đạt Recall 100%, Precision 100% tại dòng 23–30; API Key đạt Recall 100%, Precision 100% tại dòng 32–39; Password hardcoded đạt Recall 83,33%, Precision 100% tại dòng 41–48; F1-score tổng thể đạt 98,11% tại dòng 51–58; đối chiếu với 03. Kpi_results/Model/quality/reports/sanitization-report.md dòng 6–15; tất cả chỉ số đều đáp ứng ngưỡng cam kết.\n - Kết quả mong đợi: Email/IP Address Recall ≥98%, Precision ≥95%; Số điện thoại Recall ≥95%, Precision ≥90%; API Key Recall ≥85%, Precision ≥80%; Password hardcoded Recall ≥80%, Precision ≥75%; F1-score tổng thể ≥90%.",
+  "ghi_chu": "",
+  "cac_buoc": "114"
+ },
+ {
+  "dong": 556,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Bên cung cấp bàn giao đầy đủ tập dữ liệu test, bảng kết quả đánh giá, confusion matrix, raw logs (True/Predicted label), evaluation code, giải thích các trường hợp sai (đặc biệt False Positive) và kế hoạch cập nhật cải thiện.\n- Kịch bản chứng minh:\n1. Mở 03. Kpi_results/Santization/Dataset/ và  03. Kpi_results/Santization/Logs để có các mục bàn giao trên",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 557,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Cung cấp nhân sự miễn phí để kiểm chứng độc lập với 01 bộ test mới; sai lệch kết quả không vượt quá 5%, vượt ngưỡng sẽ fine-tune mô hình miễn phí trước nghiệm thu.",
+  "kich_ban": "- Kịch bản chứng minh: 1. Hai bên thống nhất 01 bộ test độc lập mới, không trùng với bộ test huấn luyện và không trùng bộ test KPI chính.\n2. Chạy pipeline đánh giá trên bộ test độc lập bằng script đánh giá KPI tương ứng.\n3. Xuất kết quả gồm raw logs, summary KPI và báo cáo so sánh với baseline đã nghiệm thu.\n4. Đối chiếu sai lệch kết quả giữa bộ test mới và baseline.\n5. Nếu sai lệch ≤ 5%, ghi nhận đạt.\n6. Nếu sai lệch > 5%, ghi nhận chưa đạt, kích hoạt quy trình fine-tune/bổ sung dữ liệu miễn phí trước nghiệm thu, sau đó chạy lại đánh giá và lưu kết quả mới.\n - Kết quả mong đợi: Có bộ test độc lập, có raw logs và báo cáo so sánh baseline. Sai lệch KPI không vượt quá 5%. Nếu vượt ngưỡng, có bằng chứng thực hiện fine-tune lại và đánh giá lại trước nghiệm thu.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 558,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Triển khai: Hệ thống hỗ trợ on-premise, yêu cầu GPU NVIDIA A100 80GB, RAM ≥128GB, SSD ≥2TB. Hỗ trợ air-gapped, vận hành không cần kết nối Internet.",
+  "kich_ban": "- Kịch bản chứng minh: 1. Kiểm tra hệ thống được triển khai trên máy chủ nội bộ/on-premise, không phụ thuộc dịch vụ cloud bắt buộc.\n 2. Kiểm tra file triển khai Docker Compose và image/container đang chạy.\n 3. Ngắt hoặc chặn kết nối Internet trên môi trường nghiệm thu theo phạm vi kiểm thử air-gapped.\n 4. Khởi động lại hệ thống bằng image/model/data đã có sẵn trong môi trường nội bộ.\n 5. Kiểm tra các service chính: frontend/backend, LLM inference, embedding, reranker, vector database/RAG.\n 6. Truy vấn thử qua giao diện `Trợ lý ảo an toàn thông tin` để xác nhận hệ thống vẫn trả lời được từ kho tri thức nội bộ.\n 7. Lưu log khởi động, trạng thái container, ảnh chụp giao diện và bằng chứng không cần Internet.\n  - Kết quả mong đợi: Hệ thống chạy on-premise bằng Docker, vận hành được trong môi trường air-gapped, không cần Internet cho các chức năng đã triển khai và dữ liệu/model đã nạp sẵn.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 559,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "Containerization: Cung cấp Docker image (15–20GB) và Helm chart Kubernetes phục vụ triển khai và quản lý.",
+  "kich_ban": "Docker image:\n - Điều kiện: Có gói Docker image bàn giao.\n - Kịch bản chứng minh:\n1. Chạy docker images --format 'table {{.Repository}}\\t{{.Tag}}\\t{{.Size}}'.\n2. Xác nhận các image và dung lượng\n(Docker: thuê vps A100 hoặc mua máy để đóng gói, thuê trên vast AI đã có sẵn docker nên không đóng gói được. Kubernates: cho cả hệ thống to)",
+  "ghi_chu": "",
+  "cac_buoc": "116"
+ },
+ {
+  "dong": 561,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Hệ thống áp dụng chính sách retraining tự động dựa trên giám sát chất lượng.",
+  "kich_ban": "Chính sách retraining tự động và ngưỡng suy giảm chất lượng\n- Điều kiện: Có bộ building fine-tuning và cấu hình ngưỡng retraining.\n- Kịch bản chứng minh:\n1. Mở `02. Bo_build_finetuning/finetune/configs/finetune_thresholds.yml` và xác nhận ngưỡng suy giảm tương đối kích hoạt retraining là 5% (`max_relative_drop: 0.05`) đối với Embedding Hit Rate@10, Reranking Precision@1, LLM Correctness và Answer Relevance tại dòng 14, 27, 40 và 53.",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 564,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Cập nhật tri thức theo cơ chế RAG hằng ngày; fine-tune mô hình thực hiện theo chính sách kiểm soát khi cần thiết.",
+  "kich_ban": "- Minh chứng Fine-tune mô hình thực hiện theo chính sách kiểm soát khi cần thiết: Là phần giải pháp tự động phát hiện suy giảm độ chính xác qua pipeline đánh giá định kỳ (bên trên)\n- Minh chứng thu thập tri thức mới hằng ngày và cập nhật vào RAG (không retrain) (đã thực hiện ở trên)",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 566,
+  "tt": "3.2",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Hỗ trợ truy xuất thông tin, gợi ý phương pháp khai thác tối ưu.",
+  "kich_ban": "Hỗ trợ truy xuất thông tin\n  - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n  - Mẫu kiểm thử: CVE-2025-0282, là gì? Nêu CVSS, ảnh hưởng, sản phẩm bị ảnh hưởng và cách khắc phục.\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n  2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n  3. Nhập nội dung kiểm thử: CVE-2025-0282, là gì? Nêu CVSS, ảnh hưởng, sản phẩm bị ảnh hưởng và cách khắc phục.\n  4. Bấm nút `Gửi`.\n  5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n  - Kết quả mong đợi cụ thể: Câu trả lời nêu đúng CVE-2025-0282, CVSS/CWE nếu có dữ liệu, phiên bản/sản phẩm bị ảnh hưởng và hướng khắc phục.\n  - Kết quả mong đợi tổng quát: Đạt yêu cầu cho phần 'Chatbot trao đổi/hỏi đáp thông tin CVE/CWE'. Giá trị/đầu ra đối soát: Hỗ trợ trao đổi, hỏi đáp, truy vấn thông tin CVE/CWE.",
+  "ghi_chu": "Anh_minh_chung/AI-00/Trí tuệ nhân tạo 01 - Tổng quan mô-đun AI.png \n Anh_minh_chung/AI-00/Trí tuệ nhân tạo 02 - Tổng quan mô-đun AI.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 567,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Gợi ý phương pháp khai thác tối ưu\n - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n - Mẫu kiểm thử/Input: Gợi ý phương pháp khai thác tối ưu cho Logout CSRF\n - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Trợ lý ảo an toàn thông tin`.\n 2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n 3. Nhập nội dung kiểm thử: Đề xuất phương pháp khai thác tối ưu cho Logout CSRF\n 4. Bấm nút `Gửi`.\n 5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n - Kết quả mong đợi: Kỳ vọng chi tiết: Câu trả lời đưa ra quy trình kiểm thử được ủy quyền, không phá hoại, có bằng chứng cần thu thập, rủi ro/tác động và hướng khắc phục.\n Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Gợi ý phương pháp khai thác tối ưu - Đề xuất phương pháp khai thác dựa trên phân tích lỗ hổng.",
+  "ghi_chu": "Anh_minh_chung/AI-04/Trí tuệ nhân tạo 45 - Hướng dẫn cài đặt.png \n Anh_minh_chung/AI-04/Trí tuệ nhân tạo 46 - Hướng dẫn cài đặt.png\n Anh_minh_chung/AI-04/Trí tuệ nhân tạo 47 - Hướng dẫn cài đặt.png \n Anh_minh_chung/AI-04/Trí tuệ nhân tạo 48 - Hướng dẫn cài đặt.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 568,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Tổng hợp, tự động xây dựng báo cáo.",
+  "kich_ban": "Tạo báo cáo lỗ hổng theo yêu cầu trên giao diện\n  - Điều kiện: Giao diện `Báo cáo thông minh` hoạt động, chọn được khoảng thời gian, đối tượng quét và hiển thị được vùng `Kết quả phân tích`.\n  - Kịch bản chứng minh: \n 1. Mở giao diện `Nền tảng AI -> Báo cáo thông minh`.\n 2. Tại khối `Tham số đầu vào`, chọn `Từ ngày` và `Đến ngày` theo khoảng thời gian có dữ liệu kiểm thử.\n 3. Chọn `Đối tượng quét` là `Thiết bị` nếu kiểm tra báo cáo thiết bị hoặc `Website` nếu kiểm tra báo cáo website.\n 4. Bấm nút `Phân tích thông minh`.\n 5. Kiểm tra kết quả hiển thị trong vùng `Kết quả phân tích`.\n  - Kết quả mong đợi cụ thể: Báo cáo đưa ra tổng số đối tượng được đánh giá, số lỗ hổng và thông tin cụ thể với từng loại lỗ hổng\n - Kết quả mong đợi tổng quát: Báo cáo đưa ra tổng số đối tượng được đánh giá, số lỗ hổng và thông tin cụ thể với từng loại lỗ hổng",
+  "ghi_chu": "Tạo báo cáo thông minh từ ngày 04/06/2026-20/06/2026 cho Đối tượng quét là thiết bị. Kết quả tại Anh_minh_chung/AI-00/Trí tuệ nhân tạo 03 - Tổng quan mô-đun AI.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 569,
+  "tt": "",
+  "dvt": "",
+  "thong_so_ky_thuat": "- Có khả năng nhớ ngữ cảnh",
+  "kich_ban": "Nhớ ngữ cảnh: Duy trì ngữ cảnh hội thoại qua các lượt tương tác\n - Điều kiện: Giao diện `Trợ lý ảo an toàn thông tin` hoạt động, nhập được nội dung kiểm thử và hiển thị được phản hồi trong khung hội thoại.\n - Mẫu kiểm thử/Input: Lượt 1: CVE-2025-32463 là gì?\n Lượt 2: Vậy cách khắc phục của lỗ hổng đó là gì?\n - Kịch bản chứng minh: 1. Mở giao diện `Trợ lý ảo an toàn thông tin`.\n 2. Xác nhận màn hình hiển thị khung hội thoại, lời chào của trợ lý và ô nhập `Nhập nội dung...` ở cuối màn hình.\n 3. Nhập nội dung kiểm thử: Lượt 1: CVE-2025-32463 là gì?\n Lượt 2: Vậy cách khắc phục của lỗ hổng đó là gì?\n 4. Bấm nút `Gửi`.\n 5. Kiểm tra phản hồi hiển thị trong vùng hội thoại.\n - Kết quả mong đợi: Kỳ vọng chi tiết: Lượt trả lời thứ hai phải hiểu \"\"lỗ hổng đó\"\" là CVE-2025-32463 và trả lời đúng theo ngữ cảnh trước.\n Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Nhớ ngữ cảnh - Duy trì ngữ cảnh hội thoại qua các lượt tương tác.",
+  "ghi_chu": "Anh_minh_chung/AI-04/Trí tuệ nhân tạo 49 - Hướng dẫn cài đặt.png \n Anh_minh_chung/AI-04/Trí tuệ nhân tạo 50 - Hướng dẫn cài đặt.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 570,
+  "tt": "3.3",
+  "dvt": "",
+  "thong_so_ky_thuat": "Có khả năng dịch tiếng Anh – việt chuyên ngành an toàn thông tin.",
+  "kich_ban": "Dịch Anh-Việt chuyên ngành ATTT: Dịch văn bản chuyên ngành An toàn thông tin Anh ↔ Việt\n  - Điều kiện: Giao diện `Dịch thuật` hoạt động, chọn được ngôn ngữ nguồn/đích, nhập được nội dung và hiển thị được kết quả dịch.\n  - Mẫu kiểm thử: Remote code execution vulnerability allows an attacker to execute arbitrary commands on the affected server.\n  - Kịch bản chứng minh: \n 1. Mở giao diện `Nền tảng AI -> Dịch thuật`.\n  2. Chọn ngôn ngữ nguồn là `English` ở hộp chọn bên trái và ngôn ngữ đích là `Việt Nam` ở hộp chọn bên phải.\n  3. Nhập nội dung kiểm thử vào ô `Nội dung cần dịch`: Remote code execution vulnerability allows an attacker to execute arbitrary commands on the affected server.\n  4. Bấm nút `Dịch`.\n  5. Kiểm tra bản dịch hiển thị trong ô `Kết quả dịch`.\n  - Kết quả mong đợicụ thể: Bản dịch giữ đúng nghĩa chuyên ngành: lỗ hổng thực thi mã từ xa, kẻ tấn công, thực thi lệnh tùy ý, máy chủ bị ảnh hưởng.\n  - Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Dịch Anh-Việt chuyên ngành ATTT - Dịch văn bản chuyên ngành An toàn thông tin Anh ↔ Việt.",
+  "ghi_chu": "Anh_minh_chung/AI-04/Trí tuệ nhân tạo 51 - Hướng dẫn cài đặt.png",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 571,
+  "tt": "3.4",
+  "dvt": "",
+  "thong_so_ky_thuat": "đặt lịch báo cáo định kỳ hoặc tuỳ chỉnh",
+  "kich_ban": "Kịch bản chức minh\n + Truy menu \"Báo cáo > Báo cáo thiết bị\" chương trình hiển thị giao diện \"Báo cáo thiết bị\"\n + Thực hiện nhập đầy đủ tham số\n + Tại mục \"Tần suất lặp lại\" chọn kỳ thực hiện báo cáo: Hàng ngày, Hàng tuần, Hàng tháng, Hàng năm và chọn các tham số thời gian tương ứng\n + Mục mục \"Tổng hợp số liệu thiết bị\", \"Tổng hợp số liệu Website\" số liệu được tổng hợp lũy kế thao thời gian, thực hiện phân loại chi tiết theo mục tiêu thiết bị, website\n + Sau thời điểm thiết lập, chương trình sẽ thực hiện tổng hợp báo cáo và gửi về địa chỉ email nhận kết quả lập lịch\n Tài liệu hướng dẫn sử dụng:\n + Mục \"9.1 Báo cáo thiết bị\" trang 438\n Ảnh: bao-cao-1.png, bao-cao-2.png, bao-cao-3.png",
+  "ghi_chu": "",
+  "cac_buoc": ""
+ },
+ {
+  "dong": 572,
+  "tt": "3.5",
+  "dvt": "",
+  "thong_so_ky_thuat": "",
+  "kich_ban": "Tự động sinh mã khai thác: Tự động xây dựng mã khai thác cho các lỗ hổng đơn giản\n  - Điều kiện: Giao diện `Sinh mã khai thác` hoạt động, nhập/chọn được CVE hoặc mô tả lỗ hổng và hiển thị được vùng kết quả `Mã khai thác`.\n  - Mẫu kiểm thử/Input: CVE-2025-53770\n  - Kịch bản chứng minh: 1. Mở giao diện `Nền tảng AI -> Sinh mã khai thác`.\n  2. Nhập mã CVE hoặc mô tả lỗ hổng vào ô `Dữ liệu đầu vào`; có thể dùng nút `Chọn mã CVE` để chọn CVE có sẵn trong hệ thống.\n  3.Nhập dữ liệu đầu vào: CVE-2025-53770\n  4. Bấm nút `Sinh mã khai thác`.\n  5. Kiểm tra kết quả hiển thị trong vùng `Mã khai thác`.\n  - Kết quả mong đợi: Kỳ vọng chi tiết: Kết quả chỉ sinh PoC minh họa cho môi trường lab hoặc pseudo-code an toàn, nêu điều kiện tiền đề, cách giảm thiểu và cảnh báo chỉ dùng khi được ủy quyền.\n  Kết quả mong đợi tổng quát: Đạt yêu cầu hợp đồng: Tự động sinh mã khai thác - Tự động xây dựng mã khai thác cho các lỗ hổng đơn giản.",
+  "ghi_chu": "Anh_minh_chung/AI-04/Trí tuệ nhân tạo 52 - Hướng dẫn cài đặt.png \n Anh_minh_chung/AI-04/Trí tuệ nhân tạo 53 - Hướng dẫn cài đặt.png",
+  "cac_buoc": ""
+ }
+]
