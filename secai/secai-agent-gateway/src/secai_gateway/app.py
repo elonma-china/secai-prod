@@ -13,6 +13,10 @@ from .config import Settings, get_settings
 from .sanitize.classifier import load_head, startup_head_check
 from .state import FixedWindowRateLimiter
 
+# Without this, the root logger defaults to WARNING and every `logger.info(...)` in the
+# codebase (input-sanitize decisions, github lookups, ...) is silently dropped — only
+# .warning()/.exception() ever reached the process's stderr via logging's last-resort handler.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 

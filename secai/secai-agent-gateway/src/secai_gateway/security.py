@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 _SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----", re.I),
@@ -102,6 +105,17 @@ def redact_public_input(value: Any) -> Redaction:
 def require_public_input(value: Any) -> str:
     result = redact_public_input(value)
     if result.changed:
+        # Blocks silently otherwise: the client only ever sees a bare 422 (or, on
+        # /ai/chat/stream, a generic "can't connect" fallback since the FE's SSE reader
+        # can't parse a plain-JSON error) — no server-side trace of why. Log the shape of
+        # what tripped it (never the raw matched text) so this is diagnosable in prod.
+        raw = value if isinstance(value, str) else str(value)
+        logger.info(
+            "input-sanitize action=block_public_input input_len=%d redacted_secret=%d "
+            "redacted_identifier=%d digest=%s",
+            len(raw), result.text.count("[REDACTED_SECRET]"),
+            result.text.count("[REDACTED_IDENTIFIER]"), result.digest,
+        )
         raise HTTPException(422, "Only public or pre-redacted input may be sent to the gateway")
     return result.text
 
