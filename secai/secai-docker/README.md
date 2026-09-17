@@ -2,7 +2,7 @@
 
 Gộp toàn bộ **core** của dự án vào **một** docker-compose project (`secai-docker`) chạy trên máy
 local, đấu nối qua network nội bộ `secai-net`. Phần **model (LLM / embedding / reranker) vẫn gọi ra
-vast** (`202.122.49.242`) qua HTTP — không serve local, không đụng GPU.
+vast** (`23.127.144.217`) qua HTTP — không serve local, không đụng GPU.
 
 ## Thành phần (4 container)
 
@@ -57,7 +57,7 @@ docker compose down            # dừng stack (data ở bind-mount + named volum
 ## Ghi chú
 
 - **Model vẫn ở vast**: `QWEN_BASE_URL` / `EMBEDDING_API_URL` / `RERANKER_API_URL` trong `.env` trỏ
-  `202.122.49.242`. Stack này KHÔNG tự serve model.
+  `23.127.144.217`. Stack này KHÔNG tự serve model.
 - **Core only**: không kèm SearXNG (`WEB_SEARCH_ENABLED=false`), không kèm kali-executor
   (`VERIFY_ENABLED=false`, `EXEC_ENABLED=false`), không kèm FE.
 - **Relocate sang host khác**: vì dùng bind-mount, phải copy kèm cả `secai-data/` (đổi

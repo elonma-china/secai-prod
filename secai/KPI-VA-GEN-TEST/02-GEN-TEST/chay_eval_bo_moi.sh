@@ -16,8 +16,9 @@
 # Dùng:
 #   ./chay_eval_bo_moi.sh --dataset ./testset-v2 [--workers 2] [--limit N] [--no-faith]
 #
-# Yêu cầu: source/eval/kpi/.env.bench đã điền (LLM/embed/rerank + key judge).
-# Kết quả: source/eval/kpi/runs/<NGÀY-GIỜ>-evalindep/{raw-logs,reports,summary.md}
+# Yêu cầu: KPI-VA-GEN-TEST/.env.bench đã điền (LLM/embed/rerank + key judge).
+# Kết quả: KPI-VA-GEN-TEST/runs/<NGÀY-GIỜ>-evalindep/{raw-logs,reports,summary.md}
+# (KPI_DIR mặc định = thư mục KPI-VA-GEN-TEST; export KPI_DIR=<path khác> để đổi.)
 # ============================================================================
 set -o pipefail
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -44,13 +45,14 @@ echo "[$(date +%T)] 0a. cổng chất lượng bộ đề..."
 python3 "$HERE/validate_testset.py" "$DS" || {
   echo "✗ Bộ đề CHƯA ĐẠT cổng chất lượng — sửa xong hãy chạy eval."; exit 1; }
 
-KPI_DIR="${KPI_DIR:-$REPO/source/eval/kpi}"
+KPI_DIR="${KPI_DIR:-$HERE/..}"
 cd "$KPI_DIR" || { echo "Không thấy thư mục kpi: $KPI_DIR"; exit 1; }
 [ -f .env.bench ] || { echo "Thiếu $KPI_DIR/.env.bench"; exit 1; }
 set -a; . .env.bench; set +a; export DATA_ROOT="${DATA_ROOT:-/opt/secai/data}"
 
 TS=$(date +%Y-%m-%d-%H%M%S); RUN=runs/${TS}-evalindep; RAW=$RUN/raw-logs; REP=$RUN/reports
 mkdir -p "$RAW" "$REP"; LOG="$RUN/run_eval_indep.log"
+ln -sfn "$(basename "$RUN")" runs/latest   # xem log luôn qua runs/latest/run_eval_indep.log, không cần tìm timestamp
 exec > >(tee -a "$LOG") 2>&1
 echo "[$(date +%T)] ===== EVAL BỘ ĐỀ ĐỘC LẬP · run=$RUN · ds=$DS · workers=$W $LIMARG ====="
 

@@ -31,11 +31,12 @@
 # Dùng:
 #   ./chay_eval_gateway_moi.sh --dataset ./testset-v2 [--workers 2] [--limit N] [--no-faith]
 #
-# Yêu cầu: source/eval/kpi/.env.bench đã điền — bao gồm các biến gateway mới
+# Yêu cầu: KPI-VA-GEN-TEST/.env.bench đã điền — bao gồm các biến gateway mới
 #   ACC_BASE=http://127.0.0.1:8131  ACC_PROVIDER=secai-gateway
 #   ACC_MODEL=DuyTa/Cyber-F1-AWQ    ACC_AGENT=chat
 #   (không còn OPENCODE_SERVER_USERNAME/PASSWORD, không còn ACC_AGENT=build)
-# Kết quả: source/eval/kpi/runs/<NGÀY-GIỜ>-evalindep/{raw-logs,reports,summary.md}
+# Kết quả: KPI-VA-GEN-TEST/runs/<NGÀY-GIỜ>-evalindep/{raw-logs,reports,summary.md}
+# (KPI_DIR mặc định = thư mục KPI-VA-GEN-TEST; export KPI_DIR=<path khác> để đổi.)
 # ============================================================================
 set -o pipefail
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -62,21 +63,24 @@ echo "[$(date +%T)] 0a. cổng chất lượng bộ đề..."
 python3 "$HERE/validate_testset.py" "$DS" || {
   echo "✗ Bộ đề CHƯA ĐẠT cổng chất lượng — sửa xong hãy chạy eval."; exit 1; }
 
-KPI_DIR="${KPI_DIR:-$REPO/source/eval/kpi}"
+KPI_DIR="${KPI_DIR:-$HERE/..}"
 cd "$KPI_DIR" || { echo "Không thấy thư mục kpi: $KPI_DIR"; exit 1; }
 [ -f .env.bench ] || { echo "Thiếu $KPI_DIR/.env.bench"; exit 1; }
 set -a; . .env.bench; set +a; export DATA_ROOT="${DATA_ROOT:-/opt/secai/data}"
 
 TS=$(date +%Y-%m-%d-%H%M%S); RUN=runs/${TS}-evalindep; RAW=$RUN/raw-logs; REP=$RUN/reports
 mkdir -p "$RAW" "$REP"; LOG="$RUN/run_eval_indep.log"
+ln -sfn "$(basename "$RUN")" runs/latest   # xem log luôn qua runs/latest/run_eval_indep.log, không cần tìm timestamp
 exec > >(tee -a "$LOG") 2>&1
 echo "[$(date +%T)] ===== EVAL BỘ ĐỀ ĐỘC LẬP (gateway) · run=$RUN · ds=$DS · workers=$W $LIMARG ====="
 
-echo "[$(date +%T)] 0b. preflight endpoints..."
-for pair in "$LLM_BASE_URL/models|LLM" "$EMBED_URL/v1/models|embed" "$RERANK_URL/v1/models|rerank" "$QDRANT_URL/collections/$QDRANT_COLLECTION|qdrant"; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" -m 8 "${pair%%|*}" 2>/dev/null)
-  echo "   ${pair##*|}: HTTP $code"
-done
+echo "[$(date +%T)] 0b. preflight: SMOKE gateway (bench đi qua gateway :8131) + qdrant..."
+GW="${GATEWAY_BASE:-http://localhost:8131}"
+hc=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$GW/health" 2>/dev/null); echo "   gateway /health: HTTP $hc"
+sc=$(curl -s -o /dev/null -w "%{http_code}" -m 60 -X POST "$GW/ai/chat" -H "Content-Type: application/json" -d '{"user_id":"preflight","message":"CVE-2021-44228 la gi? Tra loi ngan."}' 2>/dev/null); echo "   gateway /ai/chat smoke: HTTP $sc"
+qc=$(curl -s -o /dev/null -w "%{http_code}" -m 8 "$QDRANT_URL/collections/$QDRANT_COLLECTION" 2>/dev/null); echo "   qdrant: HTTP $qc"
+[ "$sc" = "200" ] || { echo "   X Gateway KHONG phan hoi (HTTP $sc) -> DUNG, khong bench."; exit 1; }
+echo "   OK gateway phan hoi -> vao bench."
 
 echo "[$(date +%T)] 1. answer-gen qua gateway (workers=$W)..."
 python3 "$HERE/adapters/bench_answers_gateway.py" --dataset "$DS" --out "$RAW/results.jsonl" --workers "$W" $LIMARG || exit 1
