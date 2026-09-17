@@ -1,0 +1,305 @@
+/**
+ * IAS dark-teal theme — ported pixel-close from the Claude Design handoff
+ * `IAS - Nền tảng AI.dc.html` (the "Nền tảng AI" group of the IAS platform shell), blended
+ * with the "Industry" design-system conventions (`_ds/industry-…/styles.css` + readme.md):
+ * Barlow Condensed headings / Barlow body, square-cornered hairline-bordered cards, blueprint
+ * "+" corner registration marks, Lucide icons at stroke-width 1.5, teal focus-visible ring.
+ *
+ * Scoped entirely under `.ias` (the app root, see App.tsx) so it never collides with the
+ * legacy `styles.css` (kept for the Markdown/file-card renderer — see main.tsx import order).
+ */
+
+html, body, #root { height: 100%; margin: 0; }
+body { background: #0a1622; }
+
+.ias {
+  /* ── palette — exact tokens from the design handoff ── */
+  --bg: #0a1622;
+  --head: #060d16;
+  --side: #070f19;
+  --panel: #0e2134;
+  --panel2: #0c1b2b;
+  --input: #0d1d2e;
+  --line: rgba(255, 255, 255, 0.08);
+  --line2: rgba(255, 255, 255, 0.05);
+  --teal: #17aec7;
+  --teal-h: #149bb0;
+  --tealb: #3fd0e2;
+  --teal-dim: rgba(23, 174, 199, 0.1);
+  --teal-line: rgba(23, 174, 199, 0.45);
+  --text: #e3ecf3;
+  --muted: #8695a6;
+  --muted2: #5f7183;
+  --danger: #e05c50;
+  --danger-dim: rgba(224, 92, 80, 0.12);
+  --danger-line: rgba(224, 92, 80, 0.45);
+  --warn: #e6b048;
+  --warn-dim: rgba(230, 170, 60, 0.1);
+  --warn-line: rgba(230, 170, 60, 0.45);
+  --ok: #39c07e;
+  --ok-dim: rgba(57, 192, 126, 0.1);
+  --ok-line: rgba(57, 192, 126, 0.4);
+
+  /* Industry DS: condensed headings over body sans, loaded via index.html <link> */
+  --font-heading: "Barlow Condensed", system-ui, sans-serif;
+  --font-body: "Barlow", system-ui, sans-serif;
+
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+.ias, .ias * { box-sizing: border-box; }
+.ias ::-webkit-scrollbar { width: 9px; height: 9px; }
+.ias ::-webkit-scrollbar-thumb { background: #1c3550; }
+.ias ::-webkit-scrollbar-track { background: transparent; }
+/* Industry DS: themed keyboard focus, never the browser default ring. */
+.ias :focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.ias h1, .ias h2, .ias h3, .ias h4 { font-family: var(--font-heading); font-weight: 600; color: var(--text); margin: 0; }
+.ias .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.ias button { font-family: inherit; }
+
+.ias .blink { animation: iasblink 1.05s steps(2) infinite; }
+@keyframes iasblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+.ias .ias-spin { animation: iasspin 1s linear infinite; }
+@keyframes iasspin { to { transform: rotate(360deg); } }
+
+/* ── primitives — ported verbatim from the design's embedded <style> ── */
+.iasbtn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+  font-family: var(--font-heading); font-weight: 600; font-size: 14px; border: none; border-radius: 6px;
+  padding: 9px 18px; background: var(--teal); color: #04222a; white-space: nowrap;
+}
+.iasbtn:hover { background: var(--teal-h); }
+.iasbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.iasbtn.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+.iasbtn.ghost:hover { border-color: var(--teal-line); color: var(--tealb); }
+.iasbtn.danger { background: var(--danger); color: #2a0a08; }
+.iasbtn.sm { padding: 6px 12px; font-size: 12.5px; }
+
+.iasin {
+  width: 100%; background: var(--input); border: 1px solid var(--line); border-radius: 7px;
+  color: var(--text); font: inherit; font-size: 14px; padding: 11px 13px; outline: none;
+}
+.iasin:focus { border-color: var(--teal-line); }
+.iasin::placeholder { color: var(--muted2); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 11px;
+  border-radius: 20px; border: 1px solid var(--line); color: var(--muted); background: var(--panel2);
+}
+.chip.click { cursor: pointer; }
+.chip.click:hover { border-color: var(--teal-line); color: var(--tealb); }
+.chip.ok { border-color: var(--ok-line); color: #5fd39a; background: var(--ok-dim); }
+.chip.warn { border-color: var(--warn-line); color: var(--warn); background: var(--warn-dim); }
+.chip.crit { border-color: var(--danger-line); color: #f0897c; background: var(--danger-dim); font-weight: 600; }
+.chip.accent { border-color: var(--teal-line); color: var(--tealb); background: var(--teal-dim); }
+
+.iascard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; }
+.iascard-head {
+  display: flex; align-items: center; gap: 8px; padding: 11px 15px;
+  border-bottom: 1px solid var(--line2); font-size: 12.5px; color: var(--muted);
+}
+
+.iasseg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel2); }
+.iasseg .opt { padding: 8px 16px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.iasseg .opt.on { background: var(--teal-dim); color: var(--tealb); }
+.iasseg .opt + .opt { border-left: 1px solid var(--line); }
+
+/* ── blueprint frame — Industry DS: square, hairline, "+" registration marks ──
+   Ported from _ds/industry-…/styles.css `.blueprint`/`.corner`, retinted for the dark ground. */
+.blueprint { position: relative; border: 1px solid var(--line); border-radius: 0; }
+.blueprint > .corner { position: absolute; width: 11px; height: 11px; color: var(--muted2); pointer-events: none; }
+.blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
+.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.blueprint > .corner::after { top: 5px; left: 0; width: 100%; height: 1px; }
+.blueprint > .corner.tl { top: -6px; left: -6px; }
+.blueprint > .corner.tr { top: -6px; right: -6px; }
+.blueprint > .corner.bl { bottom: -6px; left: -6px; }
+.blueprint > .corner.br { bottom: -6px; right: -6px; }
+/* A blueprint-framed card keeps its own rounded corners (IAS chrome) on the inner surface;
+   the corner marks are a decorative accent layered outside the box, not a shape override. */
+.blueprint.iascard { border-radius: 10px; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   App shell — header + product nav + main
+   ══════════════════════════════════════════════════════════════════════ */
+.ias-header {
+  display: flex; align-items: center; gap: 24px; padding: 0 22px; height: 62px;
+  background: var(--head); border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.ias-brand { display: flex; align-items: center; gap: 11px; width: 226px; flex-shrink: 0; }
+.ias-brand .mark {
+  width: 30px; height: 30px; border: 1.5px solid var(--teal); border-radius: 50%;
+  display: grid; place-items: center; color: var(--teal); flex: none;
+}
+.ias-brand .name { font-family: var(--font-heading); font-weight: 600; font-size: 19px; letter-spacing: 0.02em; color: #fff; }
+.ias-search { flex: 1; max-width: 760px; margin: 0 auto; position: relative; }
+.ias-search input { background: var(--panel2); padding-right: 52px; border-radius: 8px; height: 42px; }
+.ias-search button { position: absolute; right: 4px; top: 4px; height: 34px; width: 44px; padding: 0; border-radius: 6px; }
+.ias-status { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.ias-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.ias-status .dot.bad { background: var(--danger); }
+.ias-user { display: flex; align-items: center; gap: 16px; }
+.ias-user .avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex: none;
+  background: linear-gradient(135deg, #1d3a52, #0e2134); border: 1px solid var(--line);
+  display: grid; place-items: center; color: var(--muted);
+}
+.ias-uid {
+  width: 120px; padding: 6px 9px; font-size: 12px; background: var(--panel2);
+  border: 1px solid var(--line); border-radius: 6px; color: var(--text);
+}
+
+.ias-body { display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 0; flex: 1; }
+
+.ias-sidebar { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.ias-sidebar-scroll { flex: 1; overflow: auto; padding: 8px 0; }
+.iasnav {
+  display: flex; align-items: center; gap: 11px; padding: 11px 18px; cursor: default;
+  color: var(--muted); font-size: 14.5px; border-left: 2px solid transparent; user-select: none;
+}
+.iasnav.inert:hover { background: rgba(255, 255, 255, 0.02); }
+.iasnav.group { color: #fff; font-weight: 600; margin-top: 6px; border-left-color: var(--teal); }
+.iassub {
+  display: flex; align-items: center; gap: 10px; margin: 2px 12px; padding: 9px 12px;
+  cursor: pointer; color: var(--muted); font-size: 13.5px; border: 1px solid transparent; border-radius: 7px;
+}
+.iassub:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+.iassub .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--teal); flex: none; opacity: 0.7; }
+.iassub.on { color: var(--tealb); background: var(--teal-dim); border-color: var(--teal-line); }
+.iassub.on .dot { opacity: 1; box-shadow: 0 0 6px var(--teal); }
+.ias-sidebar-foot {
+  display: flex; align-items: center; gap: 11px; padding: 11px 18px; border-top: 1px solid var(--line);
+  color: var(--muted); font-size: 14.5px; cursor: pointer; flex-shrink: 0;
+}
+.ias-sidebar-foot:hover { color: var(--text); }
+
+.ias-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); overflow: hidden; }
+.stub-screen { flex: 1; display: grid; place-items: center; color: var(--muted); text-align: center; }
+
+/* ══════════════════════════════════════════════════════════════════════
+   ChatbotScreen — "Trợ lý ảo ATTT"
+   ══════════════════════════════════════════════════════════════════════ */
+.chat-screen { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.chat-topbar { padding: 16px 26px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.chat-topbar h3 { font-size: 21px; color: var(--tealb); }
+
+.chat-body { flex: 1; display: grid; grid-template-columns: 222px minmax(0, 1fr); min-height: 0; }
+.chat-body.rail-collapsed { grid-template-columns: 52px minmax(0, 1fr); }
+
+.rail { border-right: 1px solid var(--line); background: var(--panel2); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.rail-head { display: flex; align-items: center; gap: 8px; padding: 10px 10px; border-bottom: 1px solid var(--line2); flex-shrink: 0; }
+.rail-search { position: relative; flex: 1; }
+.rail-search svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted2); }
+.rail-search input { padding: 6px 8px 6px 24px; font-size: 12.5px; min-height: 0; background: var(--input); }
+.rail-collapse-btn { padding: 6px; width: 26px; height: 26px; flex: none; }
+.rail-list { flex: 1; overflow: auto; padding: 4px 8px 10px; }
+.rail-new { width: 100%; padding: 8px 0; font-size: 13px; margin: 4px 2px 6px; }
+.rail-new-row { display: flex; gap: 6px; margin: 4px 2px 6px; }
+.rail-new-row input { flex: 1; font-size: 12.5px; padding: 7px 9px; min-height: 0; }
+.rail-project { display: flex; align-items: center; gap: 6px; padding: 7px 6px; font-size: 13.5px; color: var(--text); cursor: pointer; border-radius: 6px; }
+.rail-project:hover { background: rgba(255, 255, 255, 0.03); }
+.rail-project .name { font-family: var(--font-heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.rail-project .icon-btn { flex: none; cursor: pointer; color: var(--muted); background: none; border: none; padding: 2px; display: grid; place-items: center; }
+.rail-project .icon-btn:hover { color: var(--tealb); }
+.rail-sessions { padding-left: 16px; display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
+.rail-session {
+  display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: 13px; cursor: pointer;
+  border-radius: 6px; color: var(--muted); border: 1px solid transparent;
+}
+.rail-session:hover { color: var(--text); background: rgba(255, 255, 255, 0.03); }
+.rail-session.on { color: var(--tealb); background: var(--teal-dim); border-color: var(--teal-line); }
+.rail-session .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.rail-empty { padding: 10px 8px; color: var(--muted2); font-size: 12px; }
+.rail-collapsed-list { flex: 1; overflow: auto; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 0; }
+.rail-collapsed-item {
+  width: 32px; height: 32px; display: grid; place-items: center; border-radius: 7px; color: var(--muted); cursor: pointer;
+}
+.rail-collapsed-item.on { color: var(--tealb); background: var(--teal-dim); border: 1px solid var(--teal-line); }
+.rail-collapsed-new { color: var(--teal); border: 1px dashed var(--line); }
+
+.thread-wrap { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.thread { flex: 1; overflow: auto; padding: 26px 26px 12px; min-width: 0; }
+.thread-inner { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.thread-empty-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.thread-empty {
+  max-width: 340px; text-align: center; border: 1px solid var(--line); padding: 28px; position: relative;
+}
+.thread-empty .icon {
+  width: 48px; height: 48px; margin: 0 auto 14px; border: 1.5px solid var(--line); border-radius: 50%;
+  display: grid; place-items: center; color: var(--teal);
+}
+.thread-empty h4 { font-size: 19px; margin: 0 0 6px; }
+.thread-empty p { color: var(--muted); margin: 0 0 16px; font-size: 13.5px; }
+.thread-empty .actions { display: flex; gap: 10px; justify-content: center; }
+
+.msg-row { display: flex; gap: 12px; }
+.msg-row.user { justify-content: flex-end; }
+.msg-avatar {
+  width: 30px; height: 30px; flex: none; border: 1.5px solid var(--teal); border-radius: 50%;
+  display: grid; place-items: center; color: var(--teal);
+}
+.bubble-user {
+  background: var(--teal-dim); border: 1px solid var(--teal-line); border-radius: 12px 2px 12px 12px;
+  padding: 13px 16px; font-size: 14.5px; line-height: 1.55; max-width: 600px; white-space: pre-wrap; word-break: break-word;
+}
+.bubble-assistant {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 2px 12px 12px 12px;
+  padding: 13px 16px; font-size: 14.5px; line-height: 1.55; max-width: 720px;
+}
+.msg-col { flex: 1; max-width: 720px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+
+.timeline-card .iascard-head { cursor: pointer; padding: 10px 14px 10px 22px; }
+.timeline-card .iascard-head .label { font-family: var(--font-heading); font-weight: 600; font-size: 13px; color: var(--text); }
+.timeline-rows { padding: 6px 13px 10px; border-top: 1px solid var(--line2); display: flex; flex-direction: column; font-size: 12.5px; }
+.timeline-row { display: flex; align-items: center; gap: 9px; padding: 5px 0; min-width: 0; }
+.timeline-row .tname { color: var(--tealb); flex: none; }
+.timeline-row .tsum { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-row.err .tsum { color: var(--danger); }
+
+.phase-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.phase-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 5px 11px; border-radius: 20px; border: 1px solid var(--line); color: var(--muted); background: var(--panel2); }
+.phase-chip.done { border-color: var(--ok-line); color: #5fd39a; background: var(--ok-dim); }
+.phase-chip.active { border-color: var(--teal-line); color: var(--tealb); background: var(--teal-dim); }
+.phase-chip.pending { opacity: 0.55; }
+.phase-sep { color: var(--muted2); flex: none; }
+
+.cve-card { border-radius: 2px 12px 12px 12px; padding: 16px 18px; font-size: 14.5px; line-height: 1.62; max-width: 720px; }
+.cve-card h4 { font-size: 18px; margin: 0 0 10px; color: var(--tealb); }
+.cve-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+
+.msg-foot { display: flex; align-items: center; gap: 12px; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line2); font-size: 12px; }
+.msg-foot .runid { color: var(--muted2); }
+.msg-foot .actions { margin-left: auto; display: flex; gap: 12px; }
+.msg-foot .actions span { display: flex; align-items: center; gap: 5px; color: var(--muted); cursor: pointer; }
+.msg-foot .actions span:hover { color: var(--tealb); }
+
+.banner-row { display: flex; justify-content: center; }
+.banner-422 {
+  display: flex; gap: 12px; max-width: 720px; width: 100%; background: var(--danger-dim);
+  border: 1px solid var(--danger-line); border-left: 3px solid var(--danger); padding: 13px 15px;
+}
+.banner-422 strong { color: #f0897c; font-family: var(--font-heading); }
+.banner-422 .icon { flex: none; margin-top: 1px; }
+
+.composer-wrap { padding: 12px 26px 18px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.composer-inner { max-width: 900px; margin: 0 auto; min-width: 0; }
+.composer-suggest { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.composer-box { position: relative; background: var(--input); border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: flex-end; }
+.composer-box:focus-within { border-color: var(--teal-line); }
+.composer-box textarea {
+  border: none; background: transparent; resize: none; min-height: 56px; padding: 15px 16px;
+  width: 100%; color: var(--text); font: inherit; font-size: 14.5px; outline: none; line-height: 1.5;
+}
+.composer-actions { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
+.composer-hint { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted2); }
+
+@media (max-width: 900px) {
+  .ias-body { grid-template-columns: 64px minmax(0, 1fr); }
+  .ias-brand .name { display: none; }
+  .chat-body { grid-template-columns: 52px minmax(0, 1fr); }
+}

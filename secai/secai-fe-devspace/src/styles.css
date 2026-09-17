@@ -1,18 +1,22 @@
+/* Retinted to the IAS dark-teal palette (see theme.css) so the Markdown/file-card renderer
+ * (still used by ChatbotScreen via components/Markdown.tsx) reads as one system with the new
+ * shell. These variables are legacy-scoped (this file predates theme.css's `.ias` tokens) —
+ * kept under `:root` on purpose so old unused panel-component selectors below still resolve. */
 :root {
-  --bg: #0b0f14;
-  --bg-2: #10161f;
-  --panel: #131b26;
-  --panel-2: #0e141d;
-  --border: #1e2a38;
-  --text: #e6edf3;
-  --muted: #8b98a5;
-  --accent: #22d3ee;
-  --accent-2: #34d399;
-  --danger: #f87171;
-  --warn: #fbbf24;
+  --bg: #0a1622;
+  --bg-2: #070f19;
+  --panel: #0e2134;
+  --panel-2: #0c1b2b;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #e3ecf3;
+  --muted: #8695a6;
+  --accent: #17aec7;
+  --accent-2: #3fd0e2;
+  --danger: #e05c50;
+  --warn: #e6b048;
   --radius: 10px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --sans: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }

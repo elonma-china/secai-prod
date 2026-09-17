@@ -84,7 +84,10 @@ services:
     build:
       context: ../secai-agent-gateway
       dockerfile: Dockerfile
-    image: secai-agent-gateway:0.3.0-merged
+    # 0.4.0-session (feat/session): + project/session mgmt + durable SQLite session store
+    # (SESSION_STORE_BACKEND=sqlite, sessions.db trong volume secai-gw-data). Ảnh cũ
+    # 0.3.0-merged giữ nguyên để rollback (đổi lại image: + `docker compose up -d gateway`).
+    image: secai-agent-gateway:0.4.0-session
     container_name: secai-docker-gateway
     restart: unless-stopped
     # Cho container phân giải host.docker.internal → IP host (để reverse-proxy /tb tới TensorBoard :6006 trên host).
@@ -99,6 +102,11 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       REDIS_URL: redis://redis:6379
       GATEWAY_DB_PATH: /app/data/gateway.db
+      # ── Bộ nhớ hội thoại (feat/session): SQLite bền, hết TTL 24h. sessions.db nằm trong
+      # volume secai-gw-data (/app/data) → sống qua restart/recreate. Muốn giữ hành vi cũ
+      # (Redis, thread reset 24h) thì đổi SESSION_STORE_BACKEND: redis.
+      SESSION_STORE_BACKEND: sqlite
+      SESSION_DB_PATH: /app/data/sessions.db
       EXPLOITDB_ROOT: /srv/exploitdb
       POC_CATALOG_DB: /srv/poc/catalog.db
       POC_ARTIFACT_STORE: /srv/poc-store

@@ -6,3 +6,7 @@ dist-ssr
 .DS_Store
 .vite
 *.tsbuildinfo
+
+# design handoff (không commit)
+*.zip
+design-ref/
