@@ -17,6 +17,12 @@ def hermetic_env(monkeypatch):
     """
     monkeypatch.setenv("REDIS_URL", "")
     monkeypatch.setenv("AIRGAP", "false")
+    # The default session store backend is now `sqlite` (durable, config.Settings default),
+    # which would otherwise write a real ./data/sessions.db during a test run (or a
+    # tmp_path one via test_airgap.py's LinchRunner) — unit tests must stay hermetic and
+    # not touch disk-persisted conversation state. Force in-memory here; production is
+    # unaffected since it never sets this env var and keeps the durable sqlite default.
+    monkeypatch.setenv("SESSION_STORE_BACKEND", "memory")
     # The chat input-sanitization classifier embeds via the sec-embedding endpoint. Since
     # .env now points EMBEDDING_MODEL at the shipped head's model, an un-mocked /ai/chat in a
     # unit test would make a real network embed call. Point the head at a nonexistent dir so

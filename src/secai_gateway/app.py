@@ -70,6 +70,8 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     )
     configure_middleware(app, state)
     register_routes(app, state)
+    from .api import projects as _projects_router
+    app.include_router(_projects_router.router)
     return app
 
 

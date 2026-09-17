@@ -164,3 +164,30 @@ class LegacyRequest(BaseModel):
         if isinstance(self.data, str) and self.data.strip():
             return self.data
         return ""
+
+
+class CreateProjectRequest(BaseModel):
+    """POST /projects — create a project owned by user_id (anonymous if omitted)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    user_id: str | None = None
+
+
+class RenameProjectRequest(BaseModel):
+    """PATCH /projects/{pid} — rename a project; user_id must match the owner."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    user_id: str | None = None
+
+
+class CreateSessionRequest(BaseModel):
+    """POST /projects/{pid}/sessions — create a session scoped to a project."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | None = None
+    title: str | None = None

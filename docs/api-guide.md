@@ -11,6 +11,7 @@ Toàn bộ API AI **đang chạy thật trên production** (`main`, deploy 2026-
 ## Mục lục
 0. [SSE — quy ước dùng chung cho mọi endpoint `/stream`](#0-sse--quy-ước-dùng-chung)
 1. [Chat](#1-chat)
+   - [1.1 Chat theo session cụ thể — `/sessions/{sid}/chat`](#11-chat-theo-session-cụ-thể--sessionssidchat)
 2. [Hội thoại có lịch sử — `/ai/conversations/*`](#2-hội-thoại-có-lịch-sử--aiconversations)
 3. [Dịch](#3-dịch--aitranslate)
 4. [Báo cáo](#4-báo-cáo--aigenerate-report)
@@ -95,6 +96,33 @@ POST /ai/chat/stream
 **Ví dụ curl:**
 ```bash
 curl -X POST http://<gateway>:8131/ai/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"user_id": "user-42", "message": "SQL injection là gì?"}'
+```
+
+### 1.1 Chat theo session cụ thể — `/sessions/{sid}/chat`
+
+```
+POST /sessions/{sid}/chat
+POST /sessions/{sid}/chat/stream
+```
+
+Biến thể của mục 1 khi caller **tự chỉ định session id** trên URL thay vì để gateway tự suy ra một luồng riêng từ `user_id` băm. Dùng khi cần nhiều cuộc hội thoại độc lập, có thể gắn với 1 project — tạo session trước bằng `POST /projects/{pid}/sessions`, nhận về `session_id` dạng `proj:{pid}:sess:{uuid}`, rồi chat vào đúng `sid` đó.
+
+**Request:** giống hệt khung ở mục 1 (`message`/`question`/`prompt`/`content`/`text`, `user_id` tuỳ chọn) — `sid` nằm trên URL, không lặp lại trong body:
+```json
+{ "user_id": "user-42", "message": "SQL injection là gì?" }
+```
+
+**Response 200 (non-stream) / `final` frame (stream):** cùng khung `{"response"/"content","answer","message","metadata"}` như mục 1 — dùng chung cổng lọc đầu vào (ngôn ngữ không hỗ trợ, prompt-injection, PII) và bước làm sạch đầu ra với `/ai/chat`, chỉ khác bộ nhớ hội thoại đi vào đúng `sid` thay vì luồng theo `user_id`.
+
+**404 `{"detail": "session not found"}`** nếu `sid` chưa tồn tại — endpoint này **không tự tạo session mồ côi**; phải tạo qua `POST /projects/{pid}/sessions` trước. Với bản `/stream`, lỗi 404 trả về trước khi stream bắt đầu (không phải một SSE `error` frame).
+
+**Tiêu đề & hoạt động:** mỗi lượt chat thành công (kể cả khi bị chặn bởi cổng lọc và trả lời từ chối) cập nhật `last_activity` trên session; nếu session chưa có `title`, tự đặt bằng ~60 ký tự đầu của tin nhắn — chỉ lần đầu, không ghi đè tiêu đề đã có (kể cả tiêu đề đặt thủ công). Việc cập nhật này là best-effort: một lỗi lưu meta không làm hỏng câu trả lời.
+
+**Ví dụ:**
+```bash
+curl -X POST http://<gateway>:8131/sessions/proj:p1:sess:abc123/chat \
   -H 'Content-Type: application/json' \
   -d '{"user_id": "user-42", "message": "SQL injection là gì?"}'
 ```
