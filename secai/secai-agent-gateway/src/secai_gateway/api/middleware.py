@@ -25,13 +25,18 @@ def route_limit(path: str) -> int:
         return 5
     if path in {"/ai/translate", "/ai/generate-report", "/ai/generate-statistical-report"}:
         return 10
+    # /projects* and /sessions* (api/projects.py) are plain CRUD over local SQLite — far
+    # lighter than an LLM call — so they just inherit the shared default below.
     return 15
 
 
 def configure_middleware(app: FastAPI, state: Any) -> None:
     app.add_middleware(
         CORSMiddleware, allow_origins=state.settings.cors_origins, allow_credentials=False,
-        allow_methods=["POST", "GET"], allow_headers=["Content-Type", "X-API-Key"],
+        # DELETE/PATCH added for the Project/Session CRUD surface (api/projects.py) — without
+        # them the browser's CORS preflight (OPTIONS) rejects those verbs before the request
+        # ever reaches the route.
+        allow_methods=["POST", "GET", "DELETE", "PATCH"], allow_headers=["Content-Type", "X-API-Key"],
     )
 
     @app.middleware("http")

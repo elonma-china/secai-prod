@@ -10,13 +10,14 @@ from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
 from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent
+from linch.sessions.sqlite import SqliteSessionStore
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
 
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
 from ..retrieval import build_reference_tools, neo4j_search, qdrant_search, web_fetch, web_search
-from ..state import RedisSessionStore, SqliteLedger
+from ..state import ProjectStore, RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
 from .factory import make_gateway_agent
@@ -105,6 +106,7 @@ class LinchRunner:
         root = Path(database_path).parent
         root.mkdir(parents=True, exist_ok=True)
         self.ledger = SqliteLedger(database_path)
+        self.project_store = ProjectStore(database_path)
         # PoC (searchsploit/Exploit-DB) runs in-process as a plain tool.
         self.poc = LocalPocBackend()
         self.tools: dict[str, Any] = {
@@ -121,11 +123,24 @@ class LinchRunner:
             **build_poc_tools(self.poc, self.ledger, get_settings()),
             **build_bughunt_tools(),
         }
-        # Conversation memory is unified in Redis via linch's own session store (messages +
-        # compaction snapshots). No Redis configured → in-memory (dev/test). The run-event
-        # trace is not persisted (prod: traces not retained) — the run store is telemetry-only.
-        redis_url = get_settings().redis_url
-        self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
+        # Conversation memory backend is config-selectable (SESSION_STORE_BACKEND):
+        #   sqlite (default) — linch's own SqliteSessionStore, durable on local disk, no
+        #     expiry. Fixes the old "24h TTL loses the thread on restart" behavior.
+        #   redis — legacy back-compat; falls back to in-memory if REDIS_URL is unset.
+        #   memory (or anything else) — in-memory only, dev/test.
+        # The run-event trace is not persisted (prod: traces not retained) — the run store
+        # is telemetry-only regardless of the session backend chosen above.
+        settings = get_settings()
+        backend = settings.session_store_backend
+        if backend == "sqlite":
+            session_db_path = Path(settings.session_db_path)
+            session_db_path.parent.mkdir(parents=True, exist_ok=True)
+            self.session_store = SqliteSessionStore(session_db_path)
+        elif backend == "redis":
+            redis_url = settings.redis_url
+            self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
+        else:
+            self.session_store = InMemorySessionStore()
         # InMemory is enough for Phase 0 journal; durable SQLite can land with Phase 4 resume.
         self.run_store = InMemoryRunStore()
         # linch's Session is single-flight (Session.run() raises ConfigError if a run is

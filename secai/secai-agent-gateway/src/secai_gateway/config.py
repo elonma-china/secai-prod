@@ -162,6 +162,15 @@ class Settings(BaseSettings):
     admin_api_key: str = ""
     allowed_origins: str = ""
 
+    # ── Project/session durability (P0) ─────────────────────────────────────────
+    # Conversation memory used to live only in Redis with a 24h TTL — a restart or an
+    # idle user lost the thread. `sqlite` (default) switches the runner onto linch's
+    # shipped SqliteSessionStore, which persists sessions/messages/snapshots to disk
+    # with no expiry. `redis` keeps the legacy behavior (back-compat); `memory` is
+    # dev/test-only and never persists. See agent/runner.py's LinchRunner.__init__.
+    session_store_backend: str = "sqlite"
+    session_db_path: str = "./data/sessions.db"
+
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào
     # target" gated ở đây; gỡ tính năng = để flag false. Xem docs/poc-verify-architecture.md.

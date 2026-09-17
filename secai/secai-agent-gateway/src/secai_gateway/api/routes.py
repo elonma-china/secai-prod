@@ -9,6 +9,7 @@ import time
 import unicodedata
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
@@ -54,6 +55,7 @@ from ..security import (
     wrap_untrusted_content,
 )
 from .literal_mask import unmask_literals
+from .projects import _norm_owner
 from .messages import (
     build_translate_prompt, parse_statistical, report_prompt, statistical_prompt,
     translate_langs, translate_prompt,
@@ -862,6 +864,67 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, session_id, build_final)
+
+    async def _stamp_session_activity(sid: str, rec: Any, body: LegacyRequest) -> None:
+        """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
+        and backfill a ``title`` from the first ~60 chars of the user's message if the
+        session doesn't already have one. ``rec`` is the SessionRecord loaded BEFORE the
+        turn ran (so ``rec.meta`` reflects the pre-turn title). Wrapped in try/except —
+        a session-store hiccup here must never turn a good reply into a failed request."""
+        try:
+            updates: dict[str, Any] = {"last_activity": datetime.now(timezone.utc).isoformat()}
+            if not (rec.meta or {}).get("title"):
+                title = (body.supplied_text() or "").strip().replace("\n", " ")[:60]
+                if title:
+                    updates["title"] = title
+            await state.runner.session_store.update_meta(sid, updates)
+        except Exception:
+            logger.exception("session meta stamp failed for sid=%s", sid)
+
+    @app.post("/sessions/{sid}/chat")
+    async def session_chat(sid: str, body: LegacyRequest) -> dict[str, Any]:
+        """Session-scoped sibling of ``/ai/chat``: the caller picks the linch session id
+        explicitly via the URL (instead of it being derived from a hashed ``user_id``), so
+        multiple sessions per user/project are addressable. 404s on an unknown session
+        rather than silently creating one — sessions are provisioned via
+        ``POST /projects/{pid}/sessions`` (see api/projects.py). 403s on an owner
+        mismatch — mutation (a chat turn is appended to the session) — so a caller
+        holding someone else's ``sid`` can't inject turns / exfiltrate context."""
+        rec = await state.runner.session_store.load(sid)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        if (rec.meta or {}).get("owner") != _norm_owner(body.user_id):
+            raise HTTPException(status_code=403, detail="not the session owner")
+        text, metadata = await complete("chat", body, session_id=sid)
+        await _stamp_session_activity(sid, rec, body)
+        return {"response": text, "answer": text, "message": text, "metadata": metadata}
+
+    @app.post("/sessions/{sid}/chat/stream")
+    async def session_chat_stream(sid: str, body: LegacyRequest) -> StreamingResponse:
+        """Session-scoped sibling of ``/ai/chat/stream`` — same SSE framing, same input
+        gate, but ``sid`` (from the URL) is the runner session id. The existence check
+        happens before any streaming starts (mirrors how ``require_public_input`` already
+        raises before this handler's non-streaming counterpart above does), so an unknown
+        session gets a clean 404 instead of a 200 SSE stream carrying an error frame. The
+        owner check (403 on mismatch) happens right alongside it, before any streaming
+        starts, for the same reason."""
+        rec = await state.runner.session_store.load(sid)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        if (rec.meta or {}).get("owner") != _norm_owner(body.user_id):
+            raise HTTPException(status_code=403, detail="not the session owner")
+        text = require_public_input(body.supplied_text())
+        gated = await _chat_gate(text)
+        if gated is not None:  # model classifier short-circuited before the agent runs
+            return _short_circuit_stream(gated[0], gated[1])
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            # linch persists the turn to its session store during the run — only the
+            # meta bookkeeping (title/last_activity) is left to do here, best-effort.
+            await _stamp_session_activity(sid, rec, body)
+            return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
+
+        return stream("chat", text, sid, build_final)
 
     # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
     # occasionally echoes its own instruction preamble back verbatim instead of only
@@ -2093,14 +2156,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if store is not None and hasattr(store, "ping"):
             redis_status = "connected" if await store.ping() else "unreachable"
         else:
-            redis_status = "memory-dev"
+            redis_status = "ok"
+        session_backend = state.settings.session_store_backend
         # Ư4: surface the input-classifier fail-open rate here too, not just as a WARNING log
         # line — this is exactly the CLAUDE.md-documented failure mode (guard silently disabled,
         # /health said ok) that fail-open observability was built to catch. A high unknown_rate
         # over a real sample means the guard is bypassed on most requests right now.
         sanitize_stats = verdict_stats()
         status = _health_status(qwen_ok, sanitize_stats)
-        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:
