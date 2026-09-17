@@ -87,7 +87,7 @@ if not API_PASS:
     API_PASS = _ENV.get("AUTOSCAN_PASS", "")
 if not os.environ.get("AUTOSCAN_USER") and _ENV.get("AUTOSCAN_USER"):
     API_USER = _ENV["AUTOSCAN_USER"]
-EMBED_URL = _ENV.get("EMBEDDING_API_URL", "http://117.18.102.42:37893").rstrip("/") + "/v1/embeddings"
+EMBED_URL = _ENV.get("EMBEDDING_API_URL", "http://23.127.144.217:18906").rstrip("/") + "/v1/embeddings"
 EMBED_KEY = _ENV.get("EMBEDDING_API_KEY", "")
 EMBED_MODEL = _ENV.get("EMBEDDING_MODEL", "BAAI/bge-m3")
 NEO4J_AUTH = (_ENV.get("NEO4J_USER", "neo4j"), _ENV.get("NEO4J_PASSWORD", "secai2026"))

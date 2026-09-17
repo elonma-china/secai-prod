@@ -1,0 +1,184 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  secai-onebox — MỘT KHỐI Docker duy nhất: model serving (GPU) + DB + gateway.
+#
+#  Gom hết những gì đang rải rác (serving trên vast + DB/gateway trên máy local nối
+#  qua SSH tunnel) vào 1 docker-compose chạy trên MỘT máy vast.ai VM. Không còn
+#  tunnel — mọi service gọi nhau qua tên service nội bộ.
+#
+#    secai-serving (N GPU tự phát hiện, xem serving/Dockerfile)  ┐
+#                     nginx LB nội bộ 8001/8000/8002             ┘
+#    qdrant:6333  neo4j:7687  redis:6379   ──► gateway:8131 ─► EXPOSE ra ngoài (DUY NHẤT)
+#
+#  Data (qdrant/neo4j/redis/poc) bind-mount vào ${DATA_ROOT} = điểm mount Local Volume
+#  của vast (sống qua destroy instance). Chỉ gateway publish port ra ngoài.
+#
+#  Chạy:  docker compose up -d --build
+#  Serving = 1 service duy nhất `secai-serving`, KHÔNG hard-code số GPU: image build
+#  từ serving/Dockerfile bake nguyên on_start_cyber_f1.sh (đã chạy LIVE, validate
+#  trên vast instance 48438534, 2×A100 SXM4) — script tự dò NUM_GPUS=nvidia-smi -L
+#  | wc -l, launch N×(llm/embedding/reranker) full-replica (TP=1, zero NCCL) rồi tự
+#  sinh nginx upstream N-thành-viên (least_conn). GPU reservation dùng `count: all`
+#  (không ghi device_ids) → container thấy hết GPU vast cấp, script tự chia — chạy
+#  đúng với 2, 4, hay N GPU bất kỳ, cả Ampere (A100, sm_80) lẫn Blackwell (RTX PRO
+#  6000 WS, sm_120) đã verify thực tế (torch cu130 + CompressedTensors WNA16 Marlin
+#  MoE load thành công trên 48436187).
+# ═══════════════════════════════════════════════════════════════════════════════
+name: secai-onebox
+
+services:
+  # ─────────── Serving: N-GPU tự phát hiện, LLM+embedding+reranker+nginx LB ──
+  secai-serving:
+    build:
+      context: ..
+      dockerfile: secai-onebox/serving/Dockerfile
+      args:
+        VLLM_BASE_IMAGE: ${VLLM_IMAGE:-vllm/vllm-openai:v0.25.1}
+    image: secai-serving:local
+    container_name: secai-serving
+    restart: unless-stopped
+    ipc: host                                   # vLLM cần shared memory lớn
+    environment:
+      HF_HOME: /hf-cache
+      HF_HUB_ENABLE_HF_TRANSFER: "${HF_HUB_ENABLE_HF_TRANSFER:-1}"
+      HUGGING_FACE_HUB_TOKEN: "${HF_TOKEN:-}"
+      # Air-gap: khi hf-cache đã seed đủ (xem AIR-GAP mục B1), set 1 để không bao
+      # giờ gọi ra HF Hub kể cả khi cache thiếu (fail rõ ràng thay vì lặng lẽ ra net).
+      HF_HUB_OFFLINE: "${HF_HUB_OFFLINE:-0}"
+      API_KEY: ${API_KEY:-sk-secai2026}
+      LLM_MODEL: ${LLM_MODEL:-DuyTa/Cyber-F1-AWQ}
+      EMBED_MODEL: ${EMBED_MODEL:-DuyTa/sec-embedding}
+      RERANK_MODEL: ${RERANK_MODEL:-DuyTa/sec-rerank}
+      LLM_MAX_MODEL_LEN: ${LLM_MAX_MODEL_LEN:-65536}
+      LLM_GPU_UTIL: ${LLM_GPU_UTIL:-0.80}
+      EMBED_GPU_UTIL: ${EMBED_GPU_UTIL:-0.05}
+      RERANK_GPU_UTIL: ${RERANK_GPU_UTIL:-0.06}
+      # NUM_GPUS: để trống = tự dò (nvidia-smi -L). Override qua .env chỉ khi cần
+      # giới hạn số GPU dùng — mặc định KHÔNG set (linh hoạt theo GPU thật cấp).
+      NUM_GPUS: ${NUM_GPUS:-}
+    volumes:
+      - ${DATA_ROOT:-/data/secai}/hf-cache:/hf-cache   # bind-mount (Local Volume) — pre-seed để air-gap
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: all, capabilities: [gpu]}]
+    healthcheck:
+      # nginx chỉ lên SAU KHI toàn bộ N replica healthy (cuối on_start script) →
+      # đây là tín hiệu "cả khối serving đã sẵn sàng" duy nhất cần theo dõi.
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health',timeout=5).status==200 else 1)"]
+      interval: 20s
+      timeout: 10s
+      retries: 90
+      start_period: 1800s        # cold pull ~24GB weights lần đầu rất lâu
+    networks: [secai-net]
+
+  # ─────────────────────────── Datastores (Local Volume) ────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    container_name: secai-qdrant
+    restart: unless-stopped
+    ulimits:
+      nofile: {soft: 262144, hard: 262144}
+    volumes:
+      - ${DATA_ROOT:-/data/secai}/qdrant_storage:/qdrant/storage
+      - ${DATA_ROOT:-/data/secai}/qdrant_snapshots:/qdrant/snapshots
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: secai-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-secai2026}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 2g
+    volumes:
+      - ${DATA_ROOT:-/data/secai}/neo4j_data:/data
+      - ${DATA_ROOT:-/data/secai}/neo4j_logs:/logs
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: secai-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - ${DATA_ROOT:-/data/secai}/redis:/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # ─────────────────────────── Gateway (service DUY NHẤT expose ra ngoài) ────
+  gateway:
+    build:
+      context: ../secai-agent-gateway
+      dockerfile: Dockerfile
+    image: secai-agent-gateway:0.2.0
+    container_name: secai-gateway
+    restart: unless-stopped
+    env_file:
+      - .env
+    # Re-pin path + endpoint nội bộ để giá trị host trong .env không rò vào container.
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      QWEN_BASE_URL: http://secai-serving:8001/v1
+      EMBEDDING_API_URL: http://secai-serving:8000
+      RERANKER_API_URL: http://secai-serving:8002
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      POC_CATALOG_DB: /srv/poc/catalog.db
+      POC_ARTIFACT_STORE: /srv/poc-store
+      POC_SOURCES_ROOT: /srv/poc-sources
+      # ── AIR-GAP master switch: airgap=true (mặc định trong config.py) tự ép mọi
+      # flag internet off (Settings._enforce_airgap, layer 1) + backstop hard-refusal
+      # ở mỗi fetcher (airgap.assert_online_fetch_allowed, layer 2). Pin tường minh ở
+      # đây để khối serving air-gap không phụ thuộc default ngầm. ĐỪNG đặt false trên
+      # box này — chỉ false trên máy build/sync có internet (nightly KB sync).
+      AIRGAP: "true"
+      # Các flag dưới là dư (airgap=true đã tự tắt) nhưng giữ làm defense-in-depth +
+      # cho BUGHUNT_RECON_ENGINE (không nằm trong _enforce_airgap).
+      WEB_FETCH_ENABLED: "false"
+      FETCH_REFERENCE_ENABLED: "false"
+      WEB_SEARCH_ENABLED: "false"
+      GITHUB_ADVISORY_ENABLED: "false"
+      POC_GITHUB_ONDEMAND_ENABLED: "false"
+      BUGHUNT_RECON_ENGINE: "false"
+    ports:
+      - "${GATEWAY_HOST_PORT:-8131}:8131"
+    volumes:
+      - ${DATA_ROOT:-/data/secai}/gw-data:/app/data                # sessions/ledger (rw)
+      - ${DATA_ROOT:-/data/secai}/exploitdb:/srv/exploitdb:ro      # searchsploit corpus
+      - ${DATA_ROOT:-/data/secai}/poc:/srv/poc                     # catalog.db (WAL → rw)
+      - ${DATA_ROOT:-/data/secai}/poc/store:/srv/poc-store         # fetched PoC artifacts
+      - ${DATA_ROOT:-/data/secai}/poc-sources:/srv/poc-sources:ro  # cloned PoC sources (~13GB)
+      # fastembed Qdrant/bm25 offline fallback — bm25.py check đúng path tuyệt đối
+      # này (hardcode trong source); mount ro để _load_sparse_model() không gọi HF.
+      - ${DATA_ROOT:-/data/secai}/bm25_local_model:/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model:ro
+    depends_on:
+      secai-serving: {condition: service_healthy}
+      qdrant: {condition: service_healthy}
+      neo4j: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    networks: [secai-net]
+
+networks:
+  secai-net:
+    driver: bridge

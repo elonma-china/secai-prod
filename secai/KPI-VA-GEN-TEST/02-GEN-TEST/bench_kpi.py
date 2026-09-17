@@ -51,12 +51,12 @@ HERE = Path(__file__).resolve().parent
 
 # ── cấu hình mặc định — override qua env hoặc .env.bench đã dùng thành công trước đó ──
 GATEWAY_BASE = os.environ.get("ACC_BASE", "http://127.0.0.1:8131").rstrip("/")
-LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://80.188.223.202:11444/v1").rstrip("/")
+LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "http://23.127.144.217:18191/v1").rstrip("/")
 LLM_MODEL = os.environ.get("LLM_MODEL", "DuyTa/Cyber-F1-AWQ")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "sk-secai2026")
-EMBED_URL = os.environ.get("EMBED_URL", "http://80.188.223.202:11469").rstrip("/")
+EMBED_URL = os.environ.get("EMBED_URL", "http://23.127.144.217:18906").rstrip("/")
 EMBED_MODEL = os.environ.get("EMBED_MODEL", "DuyTa/sec-embedding")
-RERANK_URL = os.environ.get("RERANK_URL", "http://80.188.223.202:11441").rstrip("/")
+RERANK_URL = os.environ.get("RERANK_URL", "http://23.127.144.217:17846").rstrip("/")
 RERANK_MODEL = os.environ.get("RERANK_MODEL", "DuyTa/sec-rerank")
 
 PERF_BENCH_DATASET = Path(
