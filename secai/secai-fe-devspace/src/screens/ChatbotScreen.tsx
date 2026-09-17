@@ -21,12 +21,14 @@ import {
   ShieldX,
   Sparkles,
   Square,
+  Trash2,
 } from "lucide-react";
 import {
   ApiError,
   chatStream,
   createProject,
   createSession,
+  deleteProject,
   getSessionMessages,
   listProjects,
   listSessions,
@@ -258,6 +260,23 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     }
   }
 
+  async function deleteProj(pid: string, name: string) {
+    if (!window.confirm(`Xoá dự án "${name}" và toàn bộ phiên bên trong? Không thể hoàn tác.`)) return;
+    try {
+      await deleteProject(pid, userId);
+      setProjects((prev) => prev.filter((p) => p.project_id !== pid));
+      setSessionsByProject((prev) => {
+        const next = { ...prev };
+        delete next[pid];
+        return next;
+      });
+      if (openProjectId === pid) setOpenProjectId(null);
+      if (selected?.pid === pid) setSelected(null);
+    } catch (e) {
+      window.alert(`Không xoá được dự án: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   /** Empty-state "Tạo phiên" / "Hỏi mẫu": get the user into a working session with the
    * fewest clicks — reuse an already-open project if there is one, else spin up a default. */
   async function quickStartSession(prefill?: string) {
@@ -470,6 +489,18 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
                         }}
                       >
                         <Plus size={13} strokeWidth={1.5} />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        aria-label="Xoá dự án"
+                        title="Xoá dự án"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteProj(p.project_id, p.name);
+                        }}
+                      >
+                        <Trash2 size={12} strokeWidth={1.5} />
                       </button>
                     </div>
                     {open && (

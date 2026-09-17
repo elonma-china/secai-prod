@@ -206,6 +206,7 @@ body { background: #0a1622; }
 .rail-project .name { font-family: var(--font-heading); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
 .rail-project .icon-btn { flex: none; cursor: pointer; color: var(--muted); background: none; border: none; padding: 2px; display: grid; place-items: center; }
 .rail-project .icon-btn:hover { color: var(--tealb); }
+.rail-project .icon-btn.danger:hover { color: var(--danger); }
 .rail-sessions { padding-left: 16px; display: flex; flex-direction: column; gap: 1px; margin-bottom: 6px; }
 .rail-session {
   display: flex; align-items: center; gap: 7px; padding: 7px 8px; font-size: 13px; cursor: pointer;
