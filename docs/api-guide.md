@@ -119,7 +119,8 @@ Biến thể của mục 1 khi caller **tự chỉ định session id** trên UR
 
 **404 `{"detail": "session not found"}`** nếu `sid` chưa tồn tại — endpoint này **không tự tạo session mồ côi**; phải tạo trước qua `POST /sessions` (standalone) hoặc `POST /projects/{pid}/sessions` (trong project). Với bản `/stream`, lỗi 404 trả về trước khi stream bắt đầu (không phải một SSE `error` frame).
 
-**Tiêu đề & hoạt động:** mỗi lượt chat thành công (kể cả khi bị chặn bởi cổng lọc và trả lời từ chối) cập nhật `last_activity` trên session; nếu session chưa có `title`, tự đặt bằng ~60 ký tự đầu của tin nhắn — chỉ lần đầu, không ghi đè tiêu đề đã có (kể cả tiêu đề đặt thủ công). Việc cập nhật này là best-effort: một lỗi lưu meta không làm hỏng câu trả lời.
+**Tiêu đề & hoạt động:** mỗi lượt chat hợp lệ (kể cả khi bị chặn bởi cổng lọc và trả lời từ chối) cập nhật `last_activity` trên session; nếu session chưa có `title`, tự đặt bằng ~60 ký tự đầu của tin nhắn — chỉ lần đầu, không ghi đè tiêu đề đã có (kể cả tiêu đề đặt thủ công). Chỉ tin nhắn bị `422` (vd chứa bí mật) mới KHÔNG cập nhật gì — mọi trường hợp còn lại đều được coi là "đã có lượt chat".
+Với bản `/stream`: việc cập nhật này diễn ra **ngay khi tin nhắn được chấp nhận, trước cả cổng lọc đầu vào và trước khi bắt đầu stream** — không đợi tới lúc stream kết thúc. Lý do: FE có thể huỷ kết nối SSE giữa chừng (vd người dùng chuyển sang cuộc trò chuyện khác), khi đó phần code chạy sau khi stream xong sẽ không bao giờ chạy — nếu chỉ cập nhật ở đó, lượt chat đầu tiên bị ngắt giữa chừng sẽ mãi mãi không có tiêu đề/`last_activity` và tải lại sẽ hiện "Cuộc trò chuyện mới". Việc cập nhật này là best-effort: một lỗi lưu meta không làm hỏng câu trả lời.
 
 **Ví dụ:**
 ```bash
