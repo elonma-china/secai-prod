@@ -1,6 +1,6 @@
 # IAS.AI Gateway — API Reference
 
-Toàn bộ API AI **đang chạy thật trên production** (`main`, deploy 2026-09-02). Base URL: `http://<gateway>:8131`.
+Toàn bộ API AI **đang chạy thật trên production**. Base URL: `http://<gateway>:8131`. Nền tảng chat: deploy 2026-09-02; bổ sung quản lý cuộc trò chuyện kiểu ChatGPT (§1.2) deploy 2026-09-18 (image `secai-agent-gateway:0.4.0-session`, nhánh `feat/session`).
 
 **Không cần header xác thực** cho các endpoint AI (trừ `/admin/refresh-models`). **Không CORS-preflight** — chỉ `POST`/`GET`, header `Content-Type: application/json`.
 
@@ -33,11 +33,12 @@ Mọi endpoint có hậu tố `/stream` trả `text/event-stream`. Dùng `fetch`
 | `token` | `{"delta": "..."}` | Nối vào bong bóng trả lời (typewriter) |
 | `tool_call` | `{"id","name","input","summary"}` | Đang tra cứu — hiện chip trạng thái nếu muốn |
 | `tool_result` | `{"id","name","is_error","duration_ms","result"}` | Kết quả tra cứu (cắt ở 4000 ký tự) |
+| `regenerate` | `{"hook": "...", "reason": "..."}` | Bản nháp vừa stream bị hook nội bộ loại (vd trả lời chưa tra KB) — model viết lại từ đầu. **FE phải xoá sạch buffer `token` đã tích luỹ** khi nhận frame này (các `token` tiếp theo là câu trả lời mới) |
 | `error` | `{"error": "..."}` | Lỗi runtime — vẫn có `token`+`final` theo sau |
 | `final` | *(khác nhau theo endpoint — xem từng mục)* | **Nguồn chân lý** — luôn thay toàn bộ text đã render bằng nội dung `final` |
 | — | `data: [DONE]` | Đóng stream |
 
-⚠️ **Xem [§9](#9-ghi-chú-vận-hành--giới-hạn-đã-biết) — không có frame `regenerate`**: một số trường hợp hiếm token của bản nháp bị huỷ có thể dính liền với bản viết lại, không có ranh giới báo hiệu. Luôn tin `final`, không tự ghép `token` làm nguồn hiển thị cuối.
+⚠️ Khi hook grounding buộc model viết lại (thường gặp với câu hỏi CVE/CWE model trả lời mà chưa tra KB), stream phát 1 frame **`regenerate`** rồi bắt đầu lại chuỗi `token` mới. FE phải reset buffer khi thấy `regenerate`, nếu không bản nháp bị loại sẽ dính liền với bản viết lại. Dù vậy vẫn **luôn tin `final`**, không tự ghép `token` làm nguồn hiển thị/lưu cuối cùng.
 
 **Mẫu parse JS (dùng chung mọi endpoint stream):**
 ```javascript
@@ -318,9 +319,10 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 | Mã | Khi nào | Body |
 |---|---|---|
-| `400` | Thiếu `user_id`/`title` ở endpoint quản lý hội thoại | `{"detail": "..."}` |
-| `404` | Hội thoại không tồn tại/không đúng chủ; **hoặc endpoint đã bị gỡ** (§6) | `{"detail": "..."}` |
-| `422` | Request rỗng — thiếu mọi field text hợp lệ | `{"detail": "One of message, question, ..."}` |
+| `400` | Quản lý session (§1.2): thiếu `name`/`title`, `title` > 200 ký tự, `POST /sessions` có `project_id` khác null, hoặc PATCH không có gì để cập nhật | `{"error","message"}` |
+| `403` | Sửa/xoá session/project không phải của mình (mutate sai chủ — §1.2) | `{"error","message"}` |
+| `404` | Session/project không tồn tại hoặc đọc sai chủ (không tiết lộ tồn tại); PATCH lên row hội thoại cũ (`chat:`/`exploit:`); **hoặc endpoint đã bị gỡ** (`/ai/conversations/*`, §2) | `{"detail"}` hoặc `{"error","message"}` |
+| `422` | Request rỗng — thiếu mọi field text hợp lệ; hoặc `scope` không hợp lệ ở `GET /sessions` | `{"detail": "..."}` |
 | `429` | Vượt rate limit | `{"detail": "rate limit exceeded"}` |
 | `503` | Model tạm thời không phản hồi | `{"detail": "AI service unavailable: ..."}` |
 
@@ -337,6 +339,8 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 - **Rate limit** (mỗi IP): `/ai/chat`, `/sessions/{sid}/chat[/stream]` = **90 req/60s**; `/sessions`, `/projects`, và mọi path bắt đầu bằng `/projects/`/`/sessions/` (ngoại trừ chat ở trên) = **120 req/60s** (xem [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)); `/ai/exploit` = 20/60s; `/ai/translate`, `/ai/generate-report`, `/ai/generate-statistical-report` = 10/60s; còn lại = 15/60s mặc định. `/stream` tính chung hạn ngạch với bản không-stream.
 - **Air-gap:** hệ thống **không gọi internet** khi trả lời (không `web_fetch`, không tra OWASP/CWE Top-N từ web) — toàn bộ dựa trên KB nội bộ (Qdrant/Neo4j) + kiến thức model.
-- **⚠️ SSE chưa có frame `regenerate`:** khi hook nội bộ buộc model viết lại câu trả lời (force-continue), phần `token` của bản nháp bị huỷ **có thể** nối liền với bản viết lại trên luồng `token`, không có ranh giới đánh dấu. Xảy ra không thường xuyên (chỉ khi hook grounding/search kích hoạt lại). **Khuyến nghị FE:** không dùng chuỗi `token` ghép lại làm nội dung cuối cùng để lưu/hiển thị persistent — luôn ghi đè bằng `final.content` khi nhận được. *(Đã có bản vá cho vấn đề này ở nhánh dev nội bộ, chưa port sang production — xem phần theo dõi riêng.)*
-- **Bộ nhớ chat thường (mục 1):** Redis, 24h, 1 luồng/`user_id`. Hội thoại có lịch sử (mục 2): Redis 24h (bộ nhớ sống, tự nén khi dài) + SQLite bền vô thời hạn (đọc lại luôn từ đây).
+- **SSE `regenerate`:** khi hook grounding buộc model viết lại (force-continue, thường khi câu hỏi CVE/CWE được trả lời mà chưa tra KB), stream phát 1 frame `regenerate` `{"hook","reason"}` đánh dấu ranh giới, rồi stream lại `token` mới. FE reset buffer khi nhận frame này (xem [§0](#0-sse--quy-ước-dùng-chung)); và bất kể có `regenerate` hay không, luôn ghi đè bằng `final.content` làm nội dung persistent — đừng dùng chuỗi `token` ghép lại.
+- **Bộ nhớ hội thoại:**
+  - Chat theo `user_id` (`/ai/chat`, mục 1): 1 luồng/`user_id`, TTL 24h.
+  - Chat theo session (`/sessions/{sid}/chat`, mục [1.1](#11-chat-theo-session-cụ-thể--sessionssidchat)/[1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)): **SQLite bền, không hết hạn 24h** — mỗi cuộc trò chuyện (standalone hoặc trong project) là 1 session riêng, tải lại vẫn còn. Đây là cơ chế thay cho `/ai/conversations/*` (mục 2, không có trong build này).
 - **Không cần API key** cho endpoint AI — chỉ `/admin/refresh-models` yêu cầu `X-API-Key` khớp biến môi trường `ADMIN_API_KEY`.
