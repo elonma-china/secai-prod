@@ -60,6 +60,20 @@ CVE_OVERRIDES: dict[str, dict[str, Any]] = {
     "CVE-2023-4966": {  # Citrix Bleed: NVD base 7.5 HIGH (KB có 9.4 từ nguồn phụ)
         "cvss_score": 7.5, "severity": "HIGH",
     },
+    # ── Misclass/hallucination flag (eval q036, web-verified 2026-09-04) ──────────
+    # CVE-2006-1547 = **DoS** trong Struts ActionForm (getMultipartRequestHandler,
+    # multipart/form-data), Struts < 1.2.9 — CVSS v2 5.0 MEDIUM. KB đang gán SAI nhãn
+    # "Commons Beanutils RCE / CAPEC-500 / HIGH" → bot bịa "Beanutils RCE".
+    # Nguồn: https://www.cvedetails.com/cve/CVE-2006-1547/ · https://nvd.nist.gov/vuln/detail/CVE-2006-1547
+    # LƯU Ý: apply_cve_override chỉ vá được cwe_refs + cvss/severity (+ products/KEV);
+    # nhãn tiêu đề/mô tả sai "Beanutils RCE" và capec_refs=[CAPEC-500] nằm ở FIELD text/
+    # capec của bản ghi mà cơ chế override HIỆN KHÔNG rewrite → cần patch bản ghi KB
+    # (title/description/capec_refs) hoặc thêm field override 'title'/'capec_refs' để xoá
+    # hẳn hallucination. Entry này hạ severity + sửa CWE về lớp DoS làm bước giảm thiểu.
+    "CVE-2006-1547": {  # Struts ActionForm DoS (<1.2.9) — KHÔNG phải Beanutils RCE
+        "cwe_refs": ["CWE-400"],  # Uncontrolled Resource Consumption (DoS)
+        "cvss_score": 5.0, "severity": "MEDIUM",
+    },
 }
 
 # ── Bulk CVSS overlay (durability) ────────────────────────────────────────────

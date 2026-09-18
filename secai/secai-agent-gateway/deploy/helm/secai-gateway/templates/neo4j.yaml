@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: neo4j, namespace: {{ include "secai.namespace" . }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: neo4j } }
+  template:
+    metadata: { labels: { app: neo4j } }
+    spec:
+      containers:
+        - name: neo4j
+          image: {{ .Values.neo4j.image }}
+          env:
+            - { name: NEO4J_AUTH, value: "neo4j/{{ .Values.neo4j.password }}" }
+            - { name: NEO4J_PLUGINS, value: "[\"apoc\"]" }
+            - { name: NEO4J_server_memory_heap_max__size, value: "{{ .Values.neo4j.heapMax }}" }
+          ports:
+          {{- range .Values.neo4j.ports }}
+            - containerPort: {{ . }}
+          {{- end }}
+          volumeMounts:
+            - { name: data, mountPath: /data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: neo4j-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: neo4j, namespace: {{ include "secai.namespace" . }} }
+spec:
+  selector: { app: neo4j }
+  ports:
+  {{- range .Values.neo4j.ports }}
+    - { name: "p{{ . }}", port: {{ . }}, targetPort: {{ . }} }
+  {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: neo4j-pvc, namespace: {{ include "secai.namespace" . }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: {{ .Values.neo4j.storage }} } }

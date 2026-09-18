@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: gateway, namespace: {{ include "secai.namespace" . }} }
+spec:
+  replicas: {{ .Values.gateway.replicas }}
+  selector: { matchLabels: { app: gateway } }
+  template:
+    metadata: { labels: { app: gateway } }
+    spec:
+      containers:
+        - name: gateway
+          image: {{ .Values.gateway.image }}
+          ports: [{ containerPort: {{ .Values.gateway.port }} }]
+          envFrom:
+            - secretRef: { name: secai-gateway-env }   # serving endpoints + API keys
+          env:
+          {{- range $k, $v := .Values.gateway.env }}
+            - { name: {{ $k }}, value: "{{ $v }}" }
+          {{- end }}
+          resources: {{ toYaml .Values.gateway.resources | nindent 12 }}
+          volumeMounts:
+            - { name: data, mountPath: /app/data }
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: gateway-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: gateway, namespace: {{ include "secai.namespace" . }} }
+spec:
+  type: ClusterIP
+  selector: { app: gateway }
+  ports: [{ name: http, port: {{ .Values.gateway.port }}, targetPort: {{ .Values.gateway.port }} }]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: gateway-pvc, namespace: {{ include "secai.namespace" . }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 10Gi } }

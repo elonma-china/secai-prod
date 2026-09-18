@@ -1,0 +1,36 @@
+{
+  "mode": "embed",
+  "url": "http://80.188.223.202:11469",
+  "model": "DuyTa/sec-embedding",
+  "levels": [
+    {
+      "conc": 8,
+      "batch": 64,
+      "reqs": 64,
+      "embeddings": 4096,
+      "seconds": 36.99,
+      "per_s": 110.7,
+      "ok_reqs": 64
+    },
+    {
+      "conc": 16,
+      "batch": 64,
+      "reqs": 64,
+      "embeddings": 4096,
+      "seconds": 19.58,
+      "per_s": 209.2,
+      "ok_reqs": 64
+    },
+    {
+      "conc": 32,
+      "batch": 64,
+      "reqs": 64,
+      "embeddings": 4096,
+      "seconds": 11.16,
+      "per_s": 366.9,
+      "ok_reqs": 64
+    }
+  ],
+  "peak_per_s": 366.9,
+  "peak_conc": 32
+}

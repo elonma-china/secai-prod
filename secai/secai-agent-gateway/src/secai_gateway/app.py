@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 
 from .agent import CompletionRunner, LinchRunner
 from .api import configure_middleware, register_routes
 from .config import Settings, get_settings
+from .sanitize.classifier import load_head, startup_head_check
 from .state import FixedWindowRateLimiter
+
+# Without this, the root logger defaults to WARNING and every `logger.info(...)` in the
+# codebase (input-sanitize decisions, github lookups, ...) is silently dropped — only
+# .warning()/.exception() ever reached the process's stderr via logging's last-resort handler.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 class GatewayState:
@@ -20,6 +29,12 @@ class GatewayState:
         self.runner = runner or LinchRunner(self.settings.gateway_db_path)
         self.rate_limiter = FixedWindowRateLimiter()
         self.started_at = time.monotonic()
+        # Process-wide HTTP client, set during lifespan (below). Reused so the
+        # input-sanitization classifier's embed hop keeps its connection alive across chat
+        # requests instead of paying a fresh TCP+TLS handshake each time. None outside a
+        # running app (e.g. unit tests using ASGITransport, which does not fire lifespan) —
+        # callers fall back to a per-call client.
+        self.http_client: httpx.AsyncClient | None = None
 
 
 def create_app(runner: CompletionRunner | None = None) -> FastAPI:
@@ -28,7 +43,21 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.gateway = state
-        yield
+        # Boot-time self-check: warn loudly if the input classifier will silently fail open
+        # (missing/untrained head, or head trained on a different embedding model than the one
+        # this deployment sends). Otherwise the guard is quietly OFF while /health says ok.
+        if getattr(state.settings, "input_classifier_enabled", True):
+            warn = startup_head_check(load_head(state.settings),
+                                      getattr(state.settings, "embedding_model", ""))
+            if warn:
+                logger.warning(warn)
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0),
+            limits=httpx.Limits(max_keepalive_connections=32, keepalive_expiry=60.0),
+        ) as client:
+            state.http_client = client
+            yield
+            state.http_client = None
 
     app = FastAPI(
         title="SECAI Agent Gateway",
@@ -41,6 +70,8 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     )
     configure_middleware(app, state)
     register_routes(app, state)
+    from .api import projects as _projects_router
+    app.include_router(_projects_router.router)
     return app
 
 

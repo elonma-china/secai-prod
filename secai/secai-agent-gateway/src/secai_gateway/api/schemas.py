@@ -164,3 +164,48 @@ class LegacyRequest(BaseModel):
         if isinstance(self.data, str) and self.data.strip():
             return self.data
         return ""
+
+
+class CreateProjectRequest(BaseModel):
+    """POST /projects — create a project owned by user_id (anonymous if omitted)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    user_id: str | None = None
+
+
+class RenameProjectRequest(BaseModel):
+    """PATCH /projects/{pid} — rename a project; user_id must match the owner."""
+
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    user_id: str | None = None
+
+
+class CreateSessionRequest(BaseModel):
+    """Shared body for ``POST /projects/{pid}/sessions`` (project-scoped — ``pid`` comes
+    from the URL, ``project_id`` here is ignored) and ``POST /sessions`` (standalone —
+    a non-null ``project_id`` here is rejected with 400; use the project-scoped route
+    instead)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | None = None
+    title: str | None = None
+    project_id: str | None = None
+
+
+class UpdateSessionRequest(BaseModel):
+    """PATCH /sessions/{sid} — rename and/or move a session into/out of a project.
+
+    Uses ``model_fields_set`` (not plain ``None``-checks) so the three states of
+    ``project_id`` are distinguishable: absent (don't move), explicit ``null`` (move to
+    standalone), a string (move into that project)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | None = None
+    title: str | None = None
+    project_id: str | None = None

@@ -56,6 +56,44 @@ class Settings(BaseSettings):
     # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
     exploit_relevance_gate_enabled: bool = False
     exploit_rerank_min_score: float = 0.5
+    # ── Input sanitization classifier (model-based, chat path) ─────────────────
+    # A tiny numpy linear head over the sec-embedding vector classifies each chat
+    # prompt into a combined taxonomy (intent: security|chitchat|offtopic + risk:
+    # injection|pii) BEFORE the agent runs, so off-topic/injection are refused
+    # deterministically instead of relying only on the LLM's <scope_policy>. Runtime
+    # is numpy-only (no torch/transformers); the head ships as sanitize/assets/head.npz,
+    # trained offline by scripts/train_sanitize_head.py against this same embedding
+    # model. FAIL-OPEN by construction: a missing/untrained head, an embed-model or
+    # dimension mismatch, or any embedding error passes the prompt through unchanged —
+    # the classifier can only ADD a block, never take chat down.
+    input_classifier_enabled: bool = True
+    # Directory holding head.npz/head.json/thresholds.json. Empty → packaged assets.
+    input_classifier_weights_path: str = ""
+    # Per-action switches (turn a behaviour into shadow/log-only by flipping to false).
+    input_classifier_block_injection: bool = True
+    input_classifier_block_offtopic: bool = True
+    input_classifier_shortcircuit_chitchat: bool = False  # OFF: LLM <interaction_policy> handles greetings
+    # Decision thresholds; 0 → use the value shipped in thresholds.json.
+    input_classifier_injection_threshold: float = 0.0
+    input_classifier_pii_threshold: float = 0.0
+    input_classifier_offtopic_threshold: float = 0.0
+    # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
+    input_classifier_embed_timeout_s: float = 5.0
+    # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
+    # the LLM judge instead of a binary threshold call. OFF by default — opt in once verified
+    # against a live serving endpoint (calibration was fit/verified offline; vast was down when
+    # this was built). No-op regardless of this flag when assets/calibration.json is absent
+    # (InputVerdict.injection_uncertain then never sets True), so enabling it is inert until a
+    # calibrated head is shipped.
+    injection_cascade_enabled: bool = False
+    injection_cascade_timeout_s: float = 8.0
+
+    # Language gate (security.is_unsupported_language): the classifier head was trained on
+    # Vietnamese + English only, so a message written predominantly in a non-Latin script
+    # (CJK/kana/Hangul/Cyrillic/Arabic/Thai/…) is refused on /ai/chat with a bilingual ask to
+    # use vi/en. Latin-script languages pass through. Dependency-free, no network.
+    language_gate_enabled: bool = True
+    language_gate_nonlatin_ratio: float = 0.5
 
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
@@ -89,7 +127,7 @@ class Settings(BaseSettings):
     qwen_context_window: int = 32768
 
     # ── LLM sampling (vLLM/Qwen path) ──────────────────────────────────────────
-    # Defaults = Cyber-F1 (Qwen3.5-MoE) model-card recommendation. Override per-deploy via
+    # Defaults = Cyber-F1 (Qwen3-30B-A3B-Instruct-2507 MoE) model-card recommendation. Override per-deploy via
     # env (LLM_TEMPERATURE, LLM_TOP_P, …). `temperature` is a first-class OpenAI field;
     # top_p/top_k/min_p/presence_penalty/repetition_penalty go through vLLM's extra_body.
     llm_temperature: float = 0.85
@@ -123,6 +161,15 @@ class Settings(BaseSettings):
     redis_url: str = ""
     admin_api_key: str = ""
     allowed_origins: str = ""
+
+    # ── Project/session durability (P0) ─────────────────────────────────────────
+    # Conversation memory used to live only in Redis with a 24h TTL — a restart or an
+    # idle user lost the thread. `sqlite` (default) switches the runner onto linch's
+    # shipped SqliteSessionStore, which persists sessions/messages/snapshots to disk
+    # with no expiry. `redis` keeps the legacy behavior (back-compat); `memory` is
+    # dev/test-only and never persists. See agent/runner.py's LinchRunner.__init__.
+    session_store_backend: str = "sqlite"
+    session_db_path: str = "./data/sessions.db"
 
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào
@@ -296,6 +343,57 @@ class Settings(BaseSettings):
     #   "auto"        — prune when the multi-file set has load-bearing companions, else consolidate.
     # Consolidation itself is unchanged and still gated by poc_consolidate_enabled.
     poc_strategy: str = "prune"
+
+    # ── Showcase / nghiệm-thu demo APIs (docs/nghiem-thu-showcase, Stage 1) ─────
+    # Read-only endpoints (nhóm F/D/K/L/E) that expose existing finetune + KPI evidence
+    # artifacts to a browser demo instead of screenshots/VSCode. All paths point at local
+    # directories on THIS dev machine (not portable) — override via env when moving host.
+    # nhóm KB (log sync) và nhóm S (source-dossier Loại 1) CHƯA làm ở Stage 1 — không cần
+    # settings cho chúng ở đây.
+    # Cả nhóm F lẫn nhóm K đều đọc HỒ SƠ GỐC (mirror Drive 17Qq9hXVl...), không đọc bản làm
+    # việc cục bộ (FINETUNE/, KPI-VA-GEN-TEST/) — 2 bên có số liệu lệch nhau (vd manifest cục bộ
+    # ghi dataset 1840MB/1260MB, hồ sơ gốc ghi 38.8MB/54.5MB đúng theo file thật).
+    showcase_finetune_dossier_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/01. Ho_so_huan_luyen/finetuning"
+    showcase_finetune_source_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/01. Ho_so_huan_luyen"
+    # nhóm K PHẢI đọc "hồ sơ gốc" (mirror cục bộ của Drive 17Qq9hXVl...), KHÔNG phải bản tự
+    # kiểm toán lại ở KPI-VA-GEN-TEST — 2 nguồn có số liệu khác nhau (vd Faithfulness hồ sơ
+    # gốc 98.48%/PASS, bản tự kiểm toán 96.71%/FAIL); khách chỉ nên thấy số khớp hồ sơ gốc.
+    showcase_kpi_results_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/03. Kpi_results"
+    showcase_evidence_dir: str = "./evidence"
+    # TensorBoard đang chạy thật, đọc trực tiếp các run trong
+    # TensorBoard đi ké qua gateway: link tương đối same-origin (/showcase-tb) → cùng tiền tố
+    # /showcase với trang + API, không cần mở cổng/CF. Gateway reverse-proxy /showcase-tb/* tới TB
+    # tại _upstream (TB chạy --path_prefix=/showcase-tb). Đặt URL tuyệt đối nếu muốn trỏ TB ra ngoài.
+    showcase_tensorboard_base_url: str = "/showcase-tb"
+    showcase_tensorboard_upstream: str = "http://127.0.0.1:6006"
+    # Thời gian FE phát lại log của mỗi KPI = thời gian đo THẬT × hệ số này (thu nhỏ lại cho
+    # vừa demo), kẹp trong [min, max]. Muốn chạy chậm/nhanh hơn thì chỉnh 3 số này, không phải
+    # sửa code FE. Vd hệ số 12: bước retrieval thật 1550s → phát 18.6s; faithfulness 762s → 9.1s.
+    # Thư mục hồ sơ gốc (mirror Drive) — nhóm S duyệt cây thư mục này để xem nguyên bản.
+    showcase_hosogoc_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI"
+    # Cùng thư mục hồ sơ gốc nhưng theo đường dẫn HOST — để hiển thị ĐƯỜNG DẪN TUYỆT ĐỐI cho người
+    # xem khi gateway chạy trong container (hồ sơ gốc bị mount/đổi tên thành /srv/showcase/hosogoc).
+    showcase_hosogoc_host_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI"
+    # Khi chạy KPI bench trên web, server phát log theo thời gian thật (SSE) VÀ ghi vào file này
+    # để ai `tail -f` trên server cũng thấy đúng từng dòng hiện ra — khớp với màn hình demo.
+    showcase_kpi_log: str = "./logs/kpi-bench-live.log"
+    # Bản chụp lệnh kiểm tra phần cứng (nvidia-smi/free/df/lsblk) chạy trên instance vast đang
+    # serving. Làm mới: ssh vào máy chạy 4 lệnh rồi ghi lại JSON này (xem summary+raw+captured_at).
+    showcase_hardware_check: str = "./data/hardware-check.json"
+    # Log cron cập nhật KB (CVE/0-day) hằng ngày — nhóm "Cập nhật KB".
+    showcase_kb_sync_log: str = "/home/ict/Downloads/CVE-DB/sync_cve.log"
+    showcase_kb_cron: str = "0 3 * * *"
+    # Triển khai: docker-compose + Helm chart để trưng trên UI (tiêu chí Docker image + Helm).
+    showcase_docker_compose: str = "/home/ict/AIEngines/secai/secai-docker/docker-compose.yml"
+    showcase_helm_dir: str = "./deploy/helm/secai-gateway"
+    # Bộ build fine-tuning chạy được (hồ sơ gốc) — nguồn cho tab "Huấn luyện lại" + nút tải gói.
+    showcase_ft_build_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/02. Bo_build_finetuning"
+    # Bộ dò/làm sạch PII-Secret mà KPI R-SEC-PII (F1 98.11%) đo — tab Sanitize chạy ĐÚNG file này
+    # (email/ip/phone/api_key/password), không phải gate gateway. Stdlib-only nên import trực tiếp.
+    showcase_sanitizer_detector: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/03. Kpi_results/Santization/Evaluation_code/detector.py"
+    showcase_time_gen_scale_ms_per_s: float = 200.0
+    showcase_time_gen_min_ms: int = 120000
+    showcase_time_gen_max_ms: int = 300000
 
     @model_validator(mode="after")
     def _enforce_airgap(self) -> "Settings":

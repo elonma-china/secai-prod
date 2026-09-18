@@ -1,0 +1,43 @@
+# Giá trị mặc định cho chart secai-gateway. Ánh xạ 1-1 từ secai-docker/docker-compose.yml.
+namespace: secai
+
+gateway:
+  image: secai-agent-gateway:0.3.0-merged
+  port: 8131
+  replicas: 1
+  env:
+    QDRANT_URL: http://qdrant:6333
+    NEO4J_URI: bolt://neo4j:7687
+    REDIS_URL: redis://redis:6379
+    ELASTICSEARCH_URL: http://elasticsearch:9200
+    GATEWAY_DB_PATH: /app/data/gateway.db
+    INPUT_CLASSIFIER_ENABLED: "true"
+    INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"
+  resources:
+    requests: { cpu: "1", memory: 2Gi }
+    limits: { cpu: "4", memory: 8Gi }
+
+qdrant:
+  image: qdrant/qdrant:v1.10.1
+  ports: [6333, 6334]
+  storage: 50Gi
+
+neo4j:
+  image: neo4j:5.20-community
+  ports: [7474, 7687]
+  password: secai2026
+  storage: 20Gi
+  heapMax: 2g
+
+redis:
+  image: redis:7-alpine
+  port: 6379
+
+elasticsearch:
+  image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+  port: 9200
+  javaOpts: "-Xms2g -Xmx2g"
+  storage: 30Gi
+
+# Lớp serving mô hình (LLM/embedding/reranker) chạy trên GPU riêng (vast.ai), KHÔNG nằm trong
+# chart này — gateway gọi qua các endpoint cấu hình trong .env / Secret.

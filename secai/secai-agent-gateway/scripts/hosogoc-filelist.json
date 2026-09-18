@@ -1,0 +1,2174 @@
+[
+  {
+    "url": "https://drive.google.com/uc?id=1nOZPk8zVJYrrlWLnVkp9WFb0T6c9bf4-",
+    "path": "01. Ho_so_huan_luyen/datasets/agentic/tool-use-manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Gw1UadVpHkr_NSAUVBPvILT5wdgR_rPh",
+    "path": "01. Ho_so_huan_luyen/datasets/agentic/tool_use_traces.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1XDvN3IH4wILdk26C8TG-1lUOuPUx_Oo4",
+    "path": "01. Ho_so_huan_luyen/datasets/external/back-translation-report.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ppvg99ZQ1keSvJy5lIJ6VF2yNBdrHphe",
+    "path": "01. Ho_so_huan_luyen/datasets/external/external-manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1T7ZUtcLi_SbPw0rVYXs1FIYLj5y_8a61",
+    "path": "01. Ho_so_huan_luyen/datasets/external/real_cybersec_instruction.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WbZjrbX69jCK4R3PQaR1mrWkEHnm3FuI",
+    "path": "01. Ho_so_huan_luyen/datasets/external/real_cybersec_vi.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1MNE7N3yX3iOOwUfBuCamub_lgkdf3VNy",
+    "path": "01. Ho_so_huan_luyen/datasets/generated/dataset_bge_m3_embedding.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1nnUqffFSLzl0XA96UMcZU8FErEJWn1xb",
+    "path": "01. Ho_so_huan_luyen/datasets/generated/dataset_qwen3_reranker.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Hz93TY_ivaD5r0_n3lGkl6zqh6bb1Leu",
+    "path": "01. Ho_so_huan_luyen/datasets/generated/dataset_qwen_llm_instruction.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1RPsWGWYs9gZENuDwL8eBlr-HbAptoO-Q",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_bge_m3_embedding/dataset-card.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JRHcBEqkhQVrDvlpu5nX4DXP4RXig9Cr",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_bge_m3_embedding/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1T6qh2jc1GE53GyFl_OKs5v6g6vvEd1FW",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_bge_m3_embedding/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GLJYl6q6cQ_NL017tw_xuhv6hSgiRV3d",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_bge_m3_embedding/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eE3V3HbN_NN218RpsFEoCJcCl2RD9VQg",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen3_reranker/dataset-card.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qzpnaQ2Rja6mgrjrEtDhX-lqDLpQRRgn",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen3_reranker/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wcBcZf6yfo3O4DFUadux99lX9UPgMoVR",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen3_reranker/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uouweLao1su8ePon6cs6V5la_pxQjALM",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen3_reranker/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1aEQMI_G5IBfi2qXil-75jhQc4AOaPJmk",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen_llm_instruction/dataset-card.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11_oVP2PNDyEZJcTzusiwElY0GGKpEtI3",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen_llm_instruction/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13bmnRGoe5QWd08O3wQzWZqE_imTLcSDC",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen_llm_instruction/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GZyh0uv9D_fd-_ZEwHNth21j_C1juR1b",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/dataset_qwen_llm_instruction/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FHsKxQfXFc06oTKmEa9I2Eq9-XP7ij5T",
+    "path": "01. Ho_so_huan_luyen/datasets/processed/manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_ll4nFPut3lbflcRiMyhZocNlO4qRJm0",
+    "path": "01. Ho_so_huan_luyen/datasets/samples/bge_embedding_samples.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Mv27d_0Nlo17VqXZsSMTdMZEyBb1L3II",
+    "path": "01. Ho_so_huan_luyen/datasets/samples/qwen_instruction_samples.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1htrJFw564rOoim_oJ7K7DK_NFxBx412w",
+    "path": "01. Ho_so_huan_luyen/datasets/samples/reranker_samples.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Q9J1KXMWv6aQUPERJm0zEHtZT1ATErZi",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/pentest_scaled_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=10LfthedgmiTavMt1fNeT2NbL73KtDe81",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/pentest_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1psPOdeUX7_YPo2-V4HjvT6DuQcWP6MlU",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/pentest_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EouEWNWHH5A_c_rLplFTydRt_dcUdx5n",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/poc_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lC1DV_DpfV6ccTjg9dt7_Acqfm1vOrb0",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/poc_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1RYHlrxz_uwodnLWlP18rnQAWadt9Tjte",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/remediation_scaled_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1A0N8eiR2_ot17BYcT2aYDh5P1XE7YIEm",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/remediation_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hkwpUFqMGNzy6Hc-6gQ2r3bKCGAyeT1B",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/remediation_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IKyswj77lidqSacMKjQlbvJCQZQiLwCB",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/report_scaled_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1o4icSL4qCeirjs8KKIK2NBFR8KlesPFi",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/report_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Q9kRzGA8X9T6NtKpNGhlmuMcx6DJY_VE",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/report_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FeorXjq92IH_Fb2uihl9u8MA1fT82eTZ",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/sast_scaled_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12-8qxlUg9nAOx-6SaD9wZ650rxD5_PXo",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/sast_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rBmFA2E0S4ng3OQLlPH45Q2r6opCMNEI",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/sast_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1elLmC8WSIKGwFDdczQWc8qnzAhTxJvK7",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/translation_scaled_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1iSSr3-aplWrgdAIBUI1-npkaQLEIamEX",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/translation_seed.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gbWketpmSJhFnWbB46YS-ATxkstyUFCP",
+    "path": "01. Ho_so_huan_luyen/datasets/seed/translation_seed_review.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Rlouevl3bo_WU2jXHQibbEdqjhJ2IcUR",
+    "path": "01. Ho_so_huan_luyen/datasets/manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1NF3T9u63DGjP2AMnmMlOZM2TR3_oP45b",
+    "path": "01. Ho_so_huan_luyen/datasets/phu-luc-ky-thuat-v1.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1h9mBZUXJyNV_9_cgesGcYVMXVnG7EiUA",
+    "path": "01. Ho_so_huan_luyen/datasets/query_templates_vi.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qffXbtYZ9M530Ql6Xelb92Z-6TEOGmBO",
+    "path": "01. Ho_so_huan_luyen/datasets/system_prompt_secai.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uXtVacYmCp6vQslkNtdpm5g6VftLNNXa",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/bge-m3-secai-embedding/adapter_config.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14PyX5z7Shft0Id-6HZpJKbqOP09nIRwW",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/bge-m3-secai-embedding/checkpoint-info.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JC3HmsVfYQbqoFNUhPyQsVRU1fItl5dO",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/bge-m3-secai-embedding/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Qfn6u9KrTkQOgolG_FTnRmTm4o1a7CTv",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/bge-m3-secai-embedding/sentence_transformers_config.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1javHAlTP3g_rHk2Md5Ywu0TIcGaawrT1",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/bge-m3-secai-embedding/training_args.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12xe2IW2dSyeyDVbCIdgMfSgZKlLBQHJ2",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-reranker-secai/checkpoint-info.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ba4j7tRLnhUJQqNADOuwhdcw5RITEk7C",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-reranker-secai/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11M3oLjmdoDmHch-EESfzbHhAhj49FMux",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-reranker-secai/training_args.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1usrMOlcm4rU5HgZmBpwd8qydb2i64R5a",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-secai-lora/adapter_config.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1l6XR1T0LUC6Ng4hv28v11B8zTKSDszMu",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-secai-lora/checkpoint-info.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1UdYADOVTf-MjCF-iYiP2aLGX6fBZYlDl",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-secai-lora/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1F1bzsqk0o5mvbZHb-BfgSMNx0mD1bciJ",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/qwen3-secai-lora/training_args.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eGqPTEU15Y4oMlXz8BMb-8iqM4KV30gK",
+    "path": "01. Ho_so_huan_luyen/finetuning/checkpoints/manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16zfobwGqppSc36AQfhQ_vm_qtvHC5d3l",
+    "path": "01. Ho_so_huan_luyen/finetuning/configs/training/bge-m3-embedding.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sdxqeSUmdyn8F84m0Dh6qbcKlVROemgC",
+    "path": "01. Ho_so_huan_luyen/finetuning/configs/training/qwen-lora.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Jbxlx7jvGzDMdy5chG2eh3sRrSeyvTBO",
+    "path": "01. Ho_so_huan_luyen/finetuning/configs/training/qwen3-reranker.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1srOLnP9STJ1UvulRfTnw43a_GBTmho-k",
+    "path": "01. Ho_so_huan_luyen/finetuning/configs/finetune-plan.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1pdC9Ar-AJnHY7Tg-RIyRUr-tLlJWvUge",
+    "path": "01. Ho_so_huan_luyen/finetuning/configs/finetune_thresholds.yml"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GbSrIcwNotuhV_w3YQiLK3kbIVhwBA0d",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/bge-m3-embedding-ft-20260501-eval-metrics.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=15D-wmAvV7e8n_34IeakyFnZMdCEkfGzn",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/bge-m3-embedding-ft-20260501-grad-norm.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sk1ykDzr2eykMkargJ-Jbticyan0x4UV",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/bge-m3-embedding-ft-20260501-learning-rate.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1oSsALTo-kfbGitlKgnuhNauBIuQsuAXg",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/bge-m3-embedding-ft-20260501-loss.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_mxEQ_JV21QcQVR6S4-8lh5ELGI9PoI-",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/eda_dashboard.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1dfDahOG6_MAJBt8bf2UgGux9X4Pg-Z2Q",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/lang_dist.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1I7lCmYDWx7rAkSE7lZIbxtaUi-cE5I6G",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/len_assistant.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1MzmnMOv8KU02NpcnfoMdQu-hdoH7gt5A",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/len_user.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1o9HPkn_d9MENZaPuHaKmBtgBI7cdQCSa",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/metrics_bge-m3-embedding-ft-20260501.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EblGjOumkQBXOkqpshlTp8je9H-D7Rd4",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/metrics_qwen-llm-instruction-ft-20260503.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PbDV8JKhXVIGCYG5s8gJ4ZgmtGYZNJ4E",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/metrics_qwen3-reranker-ft-20260502.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zCsKxNZf4G66J3KG2FE4_3Ku2gxfEf9K",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/origin_dist.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1z49WzFG1SEktDQ9cT5Fl8CwqjoaE1Zdm",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen-llm-instruction-ft-20260503-eval-metrics.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DiTHc0JQvBYVIyQa8dWO5FvKHTgo67YB",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen-llm-instruction-ft-20260503-grad-norm.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1juo-wgPC1oQ_re5FGQ_JJleia7_-7pzA",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen-llm-instruction-ft-20260503-learning-rate.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Rk5fmr8lpIy6MpEvla7wabXwL9_3kR1Z",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen-llm-instruction-ft-20260503-loss.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1SeEGsDvGgu-UalJwoijQxxO-4-bkksUH",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen3-reranker-ft-20260502-eval-metrics.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GdmiqPbsujaTBniWMJtLTNKQIHLSQEm7",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen3-reranker-ft-20260502-grad-norm.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tZK1wF8BX3F68EE9Nw9fvVE1IGCt9fh2",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen3-reranker-ft-20260502-learning-rate.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1aqY_YIU32BZkWQkIz3TL4cf5M2uPRst_",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/qwen3-reranker-ft-20260502-loss.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tn08AGTpOZOZ51lnnVpoiIa0dumu-ekn",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/split_dist.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1he869kog0bHar-McummCF_VrbKf21d5u",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/task_dist.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OS9DzHTz3_sIlnTVM5Rso9dYImiPJreY",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/tool_calls.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1R02poiIXnhCptgqtBnSeAsTUIu5RGlMi",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/top_cwe.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1kWQo-u7a0KIdrbRp8NuOyiKFmZUw-y_r",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/training_bge-m3-embedding-ft-20260501.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1VzgRUfKM7PtB1_zHIPpTwoH_I4Fba12p",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/training_qwen-llm-instruction-ft-20260503.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wnnMBH7b3Ua3iaapZj_9quLCDl9FTrXj",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/training_qwen3-reranker-ft-20260502.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sgimMIWrUK6457kiXk451WNVVWFT_EMo",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/figures/type_dist.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=176tRukoKc23gznWnY7uRu9-MGQsW1GEQ",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/screenshots/tensorboard-overview.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CelPFPg07sGC3TtBKorO93LJeBn3neqR",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard/bge-m3-embedding-ft-20260501/events.out.tfevents.1786672491.secai.3566212.0"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LwL1qEevaSQXo6yIrrleygj3TxczIE_q",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard/qwen-llm-instruction-ft-20260503/events.out.tfevents.1786672500.secai.3566212.1"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1U0r2COYuwtaO_BXZ7Ny-A7-wPAHLfYYo",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard/qwen3-reranker-ft-20260502/events.out.tfevents.1786672502.secai.3566212.2"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1bfl_dFhWTrvT3l1d9DFzBys7fRpx7tUT",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard_jsonl/events.secai.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EezBJ4tsDAqtoT7lLDjB0zoCSuucbLlV",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/dashboard.html"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1SqzUOigW3tcwZ_XmHad7dLTEtRqTf4cK",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard_event_manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1pFZZdmg6UUj7BSfhvaAA99gjvvhur6TL",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard_export.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ZXj18Vf-rIiZo0eXlCdtHO5JvjpnaZtv",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/tensorboard_scalars.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yr5j_I7hddNoxew7SNUwY28a8Ok-m5Du",
+    "path": "01. Ho_so_huan_luyen/finetuning/dashboards/wandb_run_summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ao9I7Z_E-SNQHKOsPxZqD5mcvrPxL2oP",
+    "path": "01. Ho_so_huan_luyen/finetuning/logs/training-log-index.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hlHrINuLhePcgLvYwJVI-lapBS9dYkSo",
+    "path": "01. Ho_so_huan_luyen/finetuning/logs/training-log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DY3Je9FdOpIEp1tlgjw0KvfTirdMi5wv",
+    "path": "01. Ho_so_huan_luyen/finetuning/notebooks/01_data_pipeline_eda.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Rjlv_eIzi2_ymxZQuqaoEjzA0XLzBz1O",
+    "path": "01. Ho_so_huan_luyen/finetuning/notebooks/BGE_M3_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yUlO3i-8R-J9scfgXtnx1VEY7afjtrwE",
+    "path": "01. Ho_so_huan_luyen/finetuning/notebooks/Qwen35_Cyber_F1_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ai8CAVnB0fRnbiN2hITuqgeMhTq5GJyC",
+    "path": "01. Ho_so_huan_luyen/finetuning/notebooks/Qwen3_Reranker_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JRyzp9NWWlH7_WP0npTeMRFd98IbAPFi",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/kpi-snapshot/embedding.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LZ9Sxe358wTHpVU8a70PtAXFUWoqt5U7",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/kpi-snapshot/llm-qa.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=17MaVdDEcoJXqShioGhM4BtZeI3wzi0qL",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/kpi-snapshot/reranker.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1dvSpyK3Jfs7xa3lUkmoSbO18XVMSqR6j",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/acceptance-checklist.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lSRLzt-RwGyrhaUgmUSZhSnXAMLUnThV",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/approved_metrics.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1asraNymuQamtq_sYVkustBNjXAuhlwAm",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/data-provenance.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1UCV89mKq3YwXiuKllA1Nb9VkXRv4dz3q",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/eda-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fNtstG6vsjLZNH7bUqHptAIyFCLD5d2x",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/eda-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tcASxlPg-dKhgFOaMBVWWeZZTZ2IeIpu",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/environment.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1xk1-yMY-9DiY9O5ovnOySuUy5QUuL0IH",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/epoch-summary.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-70AexVxj1-XwPiT95E9g96PnmPtRR_V",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/epoch-summary.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sokdMECjyKdPKGEpGWffyfJi2W62QT-H",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/finetune-decision.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1UESVVY65UxBSo6-4_uFGQytXPSbiahYF",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/finetuning-summary.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vLTTQYdtiYrGEfamZiplbMT9X72EM3zH",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/framework-evaluation-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ab_3hIQqyPaDovE3RcDpWZ8Ro5p0gecF",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/hyperparameters.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LXoc-BWs4oqKBr3qhZN4hYr39Misl50N",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/hyperparameters.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1M3V2bIiOC88FvXUMJAe7N1Q-i5oSCJel",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/preprocessing-report.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eWDGWzuEEDA7BAinU9Beu8cHnu0SaeUK",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/retraining-policy.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ksB06V7C5wM6-fcfNkVNwgkzSdDTfHRU",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/training-evidence-index.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1C-epBCSuZmmyT5Sx7G6BsqTv808GIJMH",
+    "path": "01. Ho_so_huan_luyen/finetuning/reports/training-time-summary.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PDoNxAaR4WMXV88aWKYZq-9l0j4CftyM",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/all_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=17d6EBHHwertCmZ0xeHIvsIuTQYVHehN9",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/eval-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16YcCVhQHktuQ-SE7gUmaM8yez0-C1PNQ",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/eval_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sUVD-b8ysen8kfpXpDYnwhKdM6OZ3J-c",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/eval_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1aNew1Nx9s1XkdDNBfaLB9SRbLd8NpzxW",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/grad_norm.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1MbY0YT_rrH3rDMWj-dt4kwRnJusgioqi",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/learning_rate.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1QkoxXesJmUPiIIHgSO0-3eDSsV9Tjn_e",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/loss_curve.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16Z6-7dGie4gxe6VWhu8CJM6idi1jhyDo",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/metrics.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Vy-hI9CO7ntmPXCjlBMP936qv8wBKjui",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/run-metadata.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14mkg5KLhOwheUqApdDxJsF-3KK_UtDO-",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/train_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zhOVrFzqRnpyb4HHWDNnnyrqIATj--1T",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/train_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wznhFaAEqVsuh2fK5I6WdZWy340gFORU",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/trainer_state.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tDXo8Xe8sIxsZ6gRgp72MY1puWX6I0d6",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/training-log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1pRTvHne2ziAUw2WYlVqf1J-lmuZOC3Td",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/bge-m3-embedding-ft-20260501/training_log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1n1iIHwNMT5PPE6dmFSEwBQuOgU_rdoWQ",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/all_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1C66tlQDPNlSu8TzseU1XYOvX1btDxMMm",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/eval-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16wxnhkTfRW0GR6IAw2wU-KDy9TpWczDb",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/eval_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11n1er8fzA5V3wikMDK7ZJSMP31Nq6nAo",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/eval_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1xFus4LtjqW0TftfYNDMaHunrS1GSjS44",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/grad_norm.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1aobmlxCcPkCapvWgbJeYO077jJkZOXtx",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/learning_rate.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14h401xu91SPQIxIvgs_YAhkk4dtyxOnF",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/loss_curve.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LW1blidOVcJqzp9zqfiO5fbwyPjVrzpP",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/metrics.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ECnNw0mVkd7PBJ3x6R51RY9dJ3vIvQJZ",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/run-metadata.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rfzQ-UYbdWm7IeIM9-yygT9qh0H1Iq9w",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/train_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1buFDk5it4lX_I2cD109DSREsarjAO2nP",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/train_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1R96XDso3x9tinsrP91y9Z6-JG0wlAMgL",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/trainer_state.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-MBjoCk0AhiiEcxBcfZM6EQUEfYiOzdB",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/training-log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IbOQrSpOSzL5nTxVenolMi2DBxTV_JNh",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen-llm-instruction-ft-20260503/training_log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1p7L4b8Y8XpT_iCVaUsjVTzZBfGUoOzg4",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/all_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1M7ExzvLNxPvPNm-Geg_8Hrb9ozT5uqQ3",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/eval-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14LXOMitFggympEpZAimHsoOIjsjmuczY",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/eval_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wQlXysE2gVqBrFP_6e9eFUQUJ9gOV--B",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/eval_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Fmd-NH4XK_kUhB-B7dGJGvxAckgo1HNz",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/grad_norm.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IXo4AljlGJZvg0JxNxlauTeteGYxwAQq",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/learning_rate.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CzxS_Tfyo9UucGtZzSrmlavA3YQ-z9Sk",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/loss_curve.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GE7x2s6dApi_imA_NISKMHhiYeeKEKdm",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/metrics.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WZfQBB1KinIfXDm0HRg4I8qtZ_l-jmOC",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/run-metadata.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_VeuD7xi-mN3xvr_Uc6AbI2U4bLK9jc5",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/train_loss.csv"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14y7hzocYAxjgxAZyP8A_nGGdz3I4RFxL",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/train_results.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1oDaPqMYdd9_jzjno3EYsBTG7tqOM5Rj7",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/trainer_state.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qYu0fixSELqtZHCnrpyZR-KTnAG4DfN9",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/training-log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Q96U5ymYvvqppf8-mal9ORNNNNtyFd4d",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/qwen3-reranker-ft-20260502/training_log.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tsZpqcCKU62k8ISP--FrZVsmX7-EYssC",
+    "path": "01. Ho_so_huan_luyen/finetuning/runs/PROVENANCE.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ji5urYPw5VfpEDorUCB3vhYJn9sTRwPk",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/approve_finetune_baseline.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19NCl5uxnqy1UyZc6og6zTEIT2uGNLx2b",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/back_translate.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FUeJG2Fvzvul4hajywaMkzBR-3XkY4m_",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/build_data_provenance.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FUlM6GykqVGamso_fbHjOOnxjjcHqwiX",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/build_poc_grounding.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1F7HSqjl_3vaDgieM79IjdL8U0UIE7SIU",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/build_real_retrieval_data.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Lmzj7kx74tu6isDqMNi9ALHXdsKgcep4",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/capture_environment.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WcNu8p4l-ucRjeL7CZCqT_NyUeSYHf__",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/capture_tool_use.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rGqUrDLaOvpZnOmANyHLECXUsNX1YV69",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/check_finetune_thresholds.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18brW4zU6jKQRp-hQp0qWqZM5i-yQ0PHM",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/eda.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Z9qELub82_OIqPhhyTPGU1CE4Ah_aJ7m",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/evaluate_runs.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ibcYlqFiekNT6TAgmYRWgWdhZOvwTdWQ",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/export_checkpoints.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YaG5lyEyKGEaVLmboLl2tj1iqfooUdnf",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/export_tensorboard_events.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GCUfrs15tsi_OWq3NJdmcbNdeC4rb23P",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/fetch_external_datasets.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gmpCrVojJj9UcdqEVhMeeppHBYpCRUlQ",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/gen_query_templates.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14HVMhJm9pTI1v72gy9-xAznVvCS7bTgt",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/generate_acceptance_artifacts.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1AS9qAq_2mmfq7o58ybl3nHZZw82MyO9G",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/generate_training_evidence.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18OFl86_y2GePXKNhBzatsJ9_uZLCvZLO",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/preprocess_datasets.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qTHd9m6l82OE3UG0m03XjYWMPmo3b2uV",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/preprocess_v2.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1q4--ICZqASX0HzqLgJ3yHJr9jc2ChIWk",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/run_all.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1anLfDdKVgeogB0XahZ6NilqXtcH6Iox4",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/scale_task_data.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CcY0wj3-8bmPo1Mf0RW_OzNUZPnV_klu",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/seed_pentest_sast.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yJemjDHBT2JHIcVz53KwuxJB0lWRo5Qv",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/seed_poc.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1AIZ_dyukIOgFEgqB3qf7HCfYQt6CtEFs",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/seed_remediation.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1B0EN1Bw3eNINZLoUz0YM5B8R9cvcydhg",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/seed_report.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1AbU5r6ANIyrWz5POKfZXVVQ0sPB6tdqN",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/seed_translation.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YathP4tQCS2194YIsatzB2vNeuMcSQXB",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/train.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13C0AjZdRDh5BWtf0dII2TZnckWmTd6yG",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/validate_finetuning_artifacts.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_0tzUX79dtEAX4PgxlXhd-lMh2uqYfaO",
+    "path": "01. Ho_so_huan_luyen/finetuning/scripts/validate_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IppgFZxabHtCzNDMB_iZGbRaiY5ZO_4e",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/trainers/__init__.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=10PKWEVXWldix0tZqoXQqJlZQKjthCoPA",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/trainers/real.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LvwoulpVuZKaN27fwy6smqtYUT8PvUUL",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/trainers/smoke.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jUdYbZB7RQIoXnbbyxg1EIjIbZKLB-Ky",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/__init__.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=15uOsk9Gt-xro48W7B1JsskmOtVvd4Cks",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/common.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DCpYq1o7GakMJy6oJZwF85QariMMA5nq",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/datasets.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1h0H6dOxO5vTwyer8fW-RzSa48B4opNL1",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/logging_utils.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eBDHH4JWBAuXcfzIO8FoDZDDeZ1030ay",
+    "path": "01. Ho_so_huan_luyen/finetuning/src/provenance.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1XcXxhurXzU96b315NKDDMaTwCPKoZDju",
+    "path": "01. Ho_so_huan_luyen/finetuning/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=148L4CQeuzOyFUlV_UToPKWvXY_UPLsY1",
+    "path": "01. Ho_so_huan_luyen/finetuning/requirements-gpu.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12XNfUZvuLQt1PR4NwM0R4hzfxQNonv8D",
+    "path": "01. Ho_so_huan_luyen/finetuning/requirements.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BwhuSmh_KWnoEP_UbBMP4kOq242b6OuT",
+    "path": "02. Bo_build_finetuning/benchmarks/baselines/approved_metrics.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1tXNVjx2GcU-tXpQdY8uA3QSDirY70kqr",
+    "path": "02. Bo_build_finetuning/benchmarks/data/llm_qa_harness_v1.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16_B7AnnyAo-0tlKKP4e8gBCjEkt5A4u2",
+    "path": "02. Bo_build_finetuning/benchmarks/manifests/llm_qa_harness_v1.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1v9FAhGTrz0k-TAtFTB7-7AXQH7Wbwp9B",
+    "path": "02. Bo_build_finetuning/benchmarks/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LNK6cwXkinqi5ekPScp0j1MweqqrLUrK",
+    "path": "02. Bo_build_finetuning/finetune/configs/finetune_thresholds.yml"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=183W-SOlU2UX4nESWhrvGxqWUr0OIsF1n",
+    "path": "02. Bo_build_finetuning/finetune/configs/qwen35_cyber_f1.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1QxdQFIdGjUQ8dlp3gAhS9uIq9J4lZ56_",
+    "path": "02. Bo_build_finetuning/finetune/data/embedding/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BW26-T4KrhAsS4MlqJ-VQC_oX_6lX5n8",
+    "path": "02. Bo_build_finetuning/finetune/data/embedding/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hKMdo0lOPOpkaT4ZTuOUYuxKhLxBFmQ9",
+    "path": "02. Bo_build_finetuning/finetune/data/embedding/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Zv4GnPWExVtjx4vxtSNoGyXiVEGpcpbV",
+    "path": "02. Bo_build_finetuning/finetune/data/llm/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IT1AAxQKpXy7PgdjtRqzLSdVlKDvBU-1",
+    "path": "02. Bo_build_finetuning/finetune/data/llm/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1QJGoeJ-44BXq4s3ofoMGl76nLT0sGOpb",
+    "path": "02. Bo_build_finetuning/finetune/data/llm/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gsyO05mCcu2UhExcYe0sB2lyoJa7qYBL",
+    "path": "02. Bo_build_finetuning/finetune/data/reranker/test.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GGsmSoRceZ1P6wyYjfG2E1rDjopUeDtu",
+    "path": "02. Bo_build_finetuning/finetune/data/reranker/train.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1o8HEKeldyE1JGOCnTbbjMfvUqj85qHnW",
+    "path": "02. Bo_build_finetuning/finetune/data/reranker/validation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19wGpMRCp1euYy41DKN6uLv0B6sWjIuID",
+    "path": "02. Bo_build_finetuning/finetune/notebooks/BGE_M3_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1kO0AjD2W94MxF_dMvNToCImVYZ15Inv5",
+    "path": "02. Bo_build_finetuning/finetune/notebooks/Qwen35_Cyber_F1_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LrJ0MxEkmxDXZ2F-sE2VnX1lUi42kaMi",
+    "path": "02. Bo_build_finetuning/finetune/notebooks/Qwen3_Reranker_Colab.ipynb"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EM3kFmKZbScYviL7qceWPH3IgMeuapT2",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/approve_finetune_baseline.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1mnqZomYhs5JQA99NNiU3O5dDzXSMGBXy",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/audit_llm_context.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yd3DK-NIGt46l5x0t2XQzz3RTw3zYX1N",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/check_finetune_thresholds.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1cBzg6d1B1w7k65r4Ka33LPhlOIZm2xrS",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/eval_embedding.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=17p0_PWUwvGHwUUv6N05o3e9ThlVdsT1A",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/eval_llm_qa.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BFrFb5GrqpG_HOqXAPFN5fhEiPJJT-Ig",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/eval_reranker.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BRZTdWF2IZLiVIyrrhkKMKsSGBT9T1Hs",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/export_llm_qa_prompts.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1MB7eR7qXBjKKdDKW1NPI4e4XtH8x1N5Q",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/prepare_llm_colab_bundle.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TyuZ4Tq106esArD02N6e-QrQX5VOU6MO",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/train_embedding.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GvLx6iHiUTLX2EB2fqKTNS_xvW1wwvcP",
+    "path": "02. Bo_build_finetuning/finetune/scripts/__pycache__/train_llm.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1h-9MSZwgSG03Z2jDZFxmfI9ZZP6ZSuut",
+    "path": "02. Bo_build_finetuning/finetune/scripts/approve_finetune_baseline.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YxYrXu-RK2MaCYph579VtLfSwxNeQMDa",
+    "path": "02. Bo_build_finetuning/finetune/scripts/audit_llm_context.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1dV70p-VXCK0X3XHn75_RvVpOYR4G_pjp",
+    "path": "02. Bo_build_finetuning/finetune/scripts/check_finetune_thresholds.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qFmH5ss0Pe14pfJBqr8x4oHypLX5vfNQ",
+    "path": "02. Bo_build_finetuning/finetune/scripts/eval_embedding.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vwaKv-vjahsYa-m-36aHkKGdRc1AX8Mk",
+    "path": "02. Bo_build_finetuning/finetune/scripts/eval_llm_qa.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hLkox5QlqAcFhp4WQJmXBODk0KLUfKmS",
+    "path": "02. Bo_build_finetuning/finetune/scripts/eval_reranker.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_MCRiYj4KzGB2v7LNIPab3e8OlQytQF4",
+    "path": "02. Bo_build_finetuning/finetune/scripts/export_llm_qa_prompts.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IzStk_mRDnzAbPjKqr2tLxSabVAIL8F3",
+    "path": "02. Bo_build_finetuning/finetune/scripts/prepare_llm_colab_bundle.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ve0FtLeHOLReKcyLYDGuqLWj0oJ2Bt6O",
+    "path": "02. Bo_build_finetuning/finetune/scripts/prepare_reranker_swift_data.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rOfdDD74dVwxWcxpoq2qWf05_Jyueofo",
+    "path": "02. Bo_build_finetuning/finetune/scripts/train_embedding.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hgFQxbKsirKE_tFXS5uw-oEnM00hza5i",
+    "path": "02. Bo_build_finetuning/finetune/scripts/train_llm.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1C9ASFP4PO1KcDf7K4Sbpfhe7_qPWKUi7",
+    "path": "02. Bo_build_finetuning/finetune/scripts/train_reranker.sh"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11CkiD-rPCpA1kwmBxlQqH68UZEMlp-CD",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/__pycache__/__init__.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ecvbURCR-WyiZIsSZxrmhD0_Pea9Gtnh",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/__pycache__/tools_schema.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FbudIIXiPluuliY52RTN5xkRxAyfsagL",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/trainers/__pycache__/unsloth_sft.cpython-314.pyc"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vtDcTR37UdNiNh8Gfgx1IKJjmvbUkKcg",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/trainers/__init__.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1N0PVeI1FE7BBtaz1D-RRtrkryej0AyLy",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/trainers/unsloth_sft.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1T3GyWwwLpvlsIDBXZ0gO4V4IpmMcc-2T",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/__init__.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14sjogL2tpru0oorFySMdYIonbfDURlF0",
+    "path": "02. Bo_build_finetuning/finetune/src/secai_ft/tools_schema.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Goy2JmgORwG-o3vRju1KlpAaL5HtoxQi",
+    "path": "02. Bo_build_finetuning/finetune/DATASET_CYBER_F1_V2.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11JDbJ06U-vakXEju388B-rAdyhRGpdJQ",
+    "path": "02. Bo_build_finetuning/finetune/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gmlNkSg974uFKW0xM1qYcjVMXzlMjJwt",
+    "path": "02. Bo_build_finetuning/quantization/calib_preprocess.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=160n-m0K1cTZMltaRfscLYP4ufwRRDjyD",
+    "path": "02. Bo_build_finetuning/quantization/calib_sample.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1NpQFptJ-zqAMIGZLWXbHTcdgYLvso3SZ",
+    "path": "02. Bo_build_finetuning/quantization/HUONG_DAN_CALIBRATION_VI.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1mpehxgNRP2pDmjDheykaFkYL2S9gKz3J",
+    "path": "02. Bo_build_finetuning/quantization/ignore_experts_only.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WLGlFp_0lKfYeF5m9X67COPIXmBtpEpM",
+    "path": "02. Bo_build_finetuning/quantization/quantize_cyberf1_awq.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12gyTH-3X0vSNRFXA0JRtKn00EtY6_-Vq",
+    "path": "02. Bo_build_finetuning/quantization/quantize_experts_only.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rIYzzmvFU8N7Ft4Z1GgbAbjRaq7COchw",
+    "path": "02. Bo_build_finetuning/quantization/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=165_2ikOOXZ0T0aJBNlLFzJxlPHHyXgov",
+    "path": "02. Bo_build_finetuning/quantization/requirements.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Cu0-gn5_UpdPKiIicIhEQRAlGepC1Hrk",
+    "path": "02. Bo_build_finetuning/quantization/run_all.sh"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PZncfsu1Hh4uDTazqSMsI86SnxpflndL",
+    "path": "02. Bo_build_finetuning/quantization/run_experts_only.sh"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PFT2Fk-H3Dan4ynQzeCBKQx-tguACCgc",
+    "path": "02. Bo_build_finetuning/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ugp_E--0hinzQQNU4x8D3W7mAXFWszCV",
+    "path": "03. Kpi_results/Model/Datasets/_pool/cve_pool.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zhegVKhRVyOL2jVmHWaLTVz4emUZXQKw",
+    "path": "03. Kpi_results/Model/Datasets/_pool/smoke_ids.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1q0sABkd00KB0YWOUQdjSJdm9q8RSGRKo",
+    "path": "03. Kpi_results/Model/Datasets/reserve/reserve_dinh_danh.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11z-3pPuWhib8UfZ_auTg8AbVJBjQ5GuP",
+    "path": "03. Kpi_results/Model/Datasets/reserve/reserve_khac_phuc.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1G9pbkImFuyKe12-63LFK9KPcJQEFab_h",
+    "path": "03. Kpi_results/Model/Datasets/reserve/reserve_tinh_huong.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19DOt3xI7YvKbAzClr1IxlKHJjRfywzxv",
+    "path": "03. Kpi_results/Model/Datasets/acceptance_dinh_danh.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fMp029ARkURDoqC94zo2QwqeKljH4V-F",
+    "path": "03. Kpi_results/Model/Datasets/acceptance_khac_phuc.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eOXXd8r-LTY7jcdM9rOibTqD6IxzLcj7",
+    "path": "03. Kpi_results/Model/Datasets/acceptance_tinh_huong.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-jf2grnUslGqt8ALv8Laqg0O5v_8uxB6",
+    "path": "03. Kpi_results/Model/Datasets/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lCjHyu2Ku7xr1X0wrDeDDARg1zP0n_ro",
+    "path": "03. Kpi_results/Model/models/host/throughput_embed_host.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1COprQFNm7imAbXcIg8zvri37urON_-7Z",
+    "path": "03. Kpi_results/Model/models/host/throughput_rerank_host.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Bs2UMzh5u6mExcgQk4pAf1rbB5GAeY0U",
+    "path": "03. Kpi_results/Model/models/host/tp_embed_host.log"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12t-6ENdYgJbzdmix62g-_-S22Gr_UtfH",
+    "path": "03. Kpi_results/Model/models/raw-logs/performance-per-request.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1O5l1R3cSk44GHC931suCx4b8hTXullsx",
+    "path": "03. Kpi_results/Model/models/raw-logs/performance-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TQ7AiwXQHinbHUKYIEXxIbG-ARGpGI9N",
+    "path": "03. Kpi_results/Model/models/reports/performance-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1n1tQdE8dAUJS_3pOugqJZvhJd67Psfn-",
+    "path": "03. Kpi_results/Model/models/tools/tp_bench.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ahp47ulwN9Px6dsABojHekAOdlP9YWVI",
+    "path": "03. Kpi_results/Model/models/CACH-DO-BENCH.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1l-qYuIC-T9rBnQ2uOZPQFOKJbSlZR5Qf",
+    "path": "03. Kpi_results/Model/models/KETQUA-MODELS.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fAn0FufLrgPWyVCbGktQwvyfq3IMb8GL",
+    "path": "03. Kpi_results/Model/models/quality-kpi-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vUG_B5qaUFEz428rQvZSRkDO8u7i9E3O",
+    "path": "03. Kpi_results/Model/models/summary.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DVep3nCtk_Uf2WmDJdLjRD5ajAKrJP3u",
+    "path": "03. Kpi_results/Model/models/throughput_embed.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Nk7i62Cocrv7JAoLC-5gptIIUHuJ6Q4h",
+    "path": "03. Kpi_results/Model/models/throughput_rerank.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1iQLES7BtPIweyBeq2J7J-gUaf11Ch13J",
+    "path": "03. Kpi_results/Model/quality/evaluation-code/acceptance_runner.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1P1s8SQqLkvDgO0yrE6UUVsFcg4urFg6g",
+    "path": "03. Kpi_results/Model/quality/evaluation-code/faith_judge.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18Z-kqO8OjnRR1TbBrxLrPEcG3nmQcKjK",
+    "path": "03. Kpi_results/Model/quality/evaluation-code/llm_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1iH89fI-gGWjfXAPvm7z6A8T5bU8IjE4_",
+    "path": "03. Kpi_results/Model/quality/evaluation-code/retrieval_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1n6ULuDTd8FYWQtUvvCgbq2nGFc6OhRPA",
+    "path": "03. Kpi_results/Model/quality/evaluation-code/task_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JxP7K0XxnKiQd8rEvvOCz8eJ-8QF465X",
+    "path": "03. Kpi_results/Model/quality/raw-logs/answers.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WkWxV-d7Cr6BLG2A_E0rQ-iYPw83Yj16",
+    "path": "03. Kpi_results/Model/quality/raw-logs/auto-remediation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wpir5-nj2xCQBnyVnQltNMmnizk_NSBu",
+    "path": "03. Kpi_results/Model/quality/raw-logs/contexts.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1kYX1bPOwnDlmlqpXL95DWJAaH6IGg44p",
+    "path": "03. Kpi_results/Model/quality/raw-logs/embedding-hit-rate-at-10.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ym5HihtLYEZk41HHFhjRX1k9867WMTxm",
+    "path": "03. Kpi_results/Model/quality/raw-logs/exploit-explanation.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IP-Z-gy6L_VkrsJt5xfs5Ljpxqmd-BUx",
+    "path": "03. Kpi_results/Model/quality/raw-logs/faithfulness-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=15p0g2eauNy7cURsTUaiYfOzqHjEhEwQz",
+    "path": "03. Kpi_results/Model/quality/raw-logs/kpi-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zNqZaU-wCKdIUNrQO-enq-JN8dC8U-J2",
+    "path": "03. Kpi_results/Model/quality/raw-logs/kpi-summary.xlsx"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1VtrMkllt_pgBrQGoeV8b1RXAXKUIeFuW",
+    "path": "03. Kpi_results/Model/quality/raw-logs/llm-answer-relevance.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WUckq7TmdFOX8uSsdKJqH07uFlsh7_8S",
+    "path": "03. Kpi_results/Model/quality/raw-logs/llm-entity-precision.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1c6ezTwAho0j1sunvenogzefhi4OtQFQl",
+    "path": "03. Kpi_results/Model/quality/raw-logs/llm-faithfulness.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1bJXlwfrk5AWVZLcmfFoicx3WzwvZdo0F",
+    "path": "03. Kpi_results/Model/quality/raw-logs/llm-hallucination.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1SqYpgCwv3ReLl1nHwf8_XXLvsCa0ZeTJ",
+    "path": "03. Kpi_results/Model/quality/raw-logs/llm-kpi-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jTUtJLNPxwGfg9ae2rZkYZsdSz4bmsX2",
+    "path": "03. Kpi_results/Model/quality/raw-logs/models-throughput_embed_client.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FL-PnK6OmX6H7OPH72MJ3uiXoS9CKoz_",
+    "path": "03. Kpi_results/Model/quality/raw-logs/models-throughput_embed_host.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-EqFU8jpqxnN3BEtiyY8tK6qzpeAIGj7",
+    "path": "03. Kpi_results/Model/quality/raw-logs/models-throughput_rerank_client.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Xu6LLCgq2fWsOcJIh9F1KfYOnQCiT5zn",
+    "path": "03. Kpi_results/Model/quality/raw-logs/models-throughput_rerank_host.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16PTUx-XzkH2z8OZGfGZyQfh6zsPf48TO",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf-ccu_rps.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1MlajA3_Ca0LWIURKaabQxr4PX82KgiI9",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf-llm35.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1q1pCRVfXHK16SO72ilHrdQ6nSDGEA2GC",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf-load_c10.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TF99t3PTIhxWTekCi3AdkndmP1b4yvKq",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf-loadB_c30.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wFSBMNGGMrcynneCi-JEC60nKiV4oPTq",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf-results.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1HbknEUgVQfDe1fRhEjf-BcUJArI8g1WO",
+    "path": "03. Kpi_results/Model/quality/raw-logs/perf_bench_100.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13fdfHsCXK4F_3rWCxboEyOrAgHaoA0mZ",
+    "path": "03. Kpi_results/Model/quality/raw-logs/performance-per-request.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_YSpqkoJyrM05KpJxFw3xqq86wmyWEvj",
+    "path": "03. Kpi_results/Model/quality/raw-logs/performance-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13U3N8bJ3Nx4hXMR0cTpm0f23mlS7QyYa",
+    "path": "03. Kpi_results/Model/quality/raw-logs/reranking-precision-at-1.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fu0zy1uAWNpfOTM9J1sG4yYku6N6mstT",
+    "path": "03. Kpi_results/Model/quality/raw-logs/results.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1flRsDWpxQAv3oLfraZMz3Rpqw_4voLJc",
+    "path": "03. Kpi_results/Model/quality/raw-logs/results_sast_2.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jvXtA_TvnZPgRy9-JGkF3VyRLb2b0k9v",
+    "path": "03. Kpi_results/Model/quality/raw-logs/results_sast_3.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BGq5PvkhA0YBZRRXVmPsqPHhOT1vkbik",
+    "path": "03. Kpi_results/Model/quality/raw-logs/retrieval-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-8xQSew3D0i7ZYXJjjU3mejqwkAf5x2J",
+    "path": "03. Kpi_results/Model/quality/raw-logs/run-manifest.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1aHBengxbxxWq5wT137aEZyHdi3wXdRpL",
+    "path": "03. Kpi_results/Model/quality/raw-logs/sanitization-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fOILwbi_GVqyktM9UaW-rOWDMDudZ5b0",
+    "path": "03. Kpi_results/Model/quality/raw-logs/sanitization.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vthpkOk7kfydqLuLxFxJQwDr8vmis1fb",
+    "path": "03. Kpi_results/Model/quality/raw-logs/sast.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YtYLqLbQLr-3s1yAvd2tCx2SRizut-nj",
+    "path": "03. Kpi_results/Model/quality/raw-logs/task-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TOX3uBKqoBiOPXouwg1xwKkaMoB_liDH",
+    "path": "03. Kpi_results/Model/quality/raw-logs/xlsx-error.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uojXRobo1uqG8KQNSmxwj6DmXL5YbrED",
+    "path": "03. Kpi_results/Model/quality/reports/ai-task-kpi-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DrN_Stb6dOFUP-xpcTIMBHXwX3js53I_",
+    "path": "03. Kpi_results/Model/quality/reports/baseline-comparison.xlsx"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uypZHv9Y-_rs9gYbQPj5Ul7VHX6zFyFf",
+    "path": "03. Kpi_results/Model/quality/reports/embedding-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wMVguAxtSjzsUShynVvcd7mk03fNSZdq",
+    "path": "03. Kpi_results/Model/quality/reports/error-analysis-and-improvement-plan.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yDXxNChivoT0Obf6PHoRA4h9_5w1rkOW",
+    "path": "03. Kpi_results/Model/quality/reports/failed-samples.xlsx"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gW1jU3ECy5-1fGGfK-BK6HNBrpgmmTqu",
+    "path": "03. Kpi_results/Model/quality/reports/false-negative-analysis.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12yCizPbc_Cyp5jzmwUH3BJ0Op2hFsWmd",
+    "path": "03. Kpi_results/Model/quality/reports/false-positive-analysis.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1NrkCPtmdlsL3JT1QYqTptURkvcU6OzS_",
+    "path": "03. Kpi_results/Model/quality/reports/improvement-plan.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=17W_iKBHNaT4hbGOUpn3-dpTrC9DUcyzo",
+    "path": "03. Kpi_results/Model/quality/reports/llm-kpi-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gBVi5ZV1QKU5a4Qtorypk2KhOVMYdq0A",
+    "path": "03. Kpi_results/Model/quality/reports/radar-data.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=10txaQzch-JzK-PB_Q7jwMGdmn7SnH34_",
+    "path": "03. Kpi_results/Model/quality/reports/radar-error.txt"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=15xwqQGg3Mh9CXyFd6Dxwzvul1Crba3lD",
+    "path": "03. Kpi_results/Model/quality/reports/radar.svg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rMHcZ_W5ViwsyVAxrUzZ2Rlmg_F4Ify8",
+    "path": "03. Kpi_results/Model/quality/reports/reranking-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Iupgj8R1rctJolpKGG0EWgSzOon2KsKR",
+    "path": "03. Kpi_results/Model/quality/reports/sanitization-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IFMYfot18qeFLneB7QNyYO8J_8mllTAC",
+    "path": "03. Kpi_results/Model/quality/run_eval_all.log"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_pMSB0MrzALJAVNy47Ett_or6kMaDR8Q",
+    "path": "03. Kpi_results/Model/quality/summary.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jdFUqZ6OEnwI-3Vd2F60Qf0YoExBgtS4",
+    "path": "03. Kpi_results/Perf/evaluation_code/scripts/perf_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12U5HrQEzNg1kuHkTvi8WvkQoZ69JxJFi",
+    "path": "03. Kpi_results/Perf/evaluation_code/.env.example"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1H0I7jGNAh2jy32LCfGOBE9ZirCkx4YMi",
+    "path": "03. Kpi_results/Perf/evaluation_code/_run.sh"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=145S-ny_PPjK8dx7wzIZyoihZEOqwYw9M",
+    "path": "03. Kpi_results/Perf/evaluation_code/build_combined.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13OeAl5tKjQrIDRcFUf-OW5LiHJh_MN1K",
+    "path": "03. Kpi_results/Perf/evaluation_code/build_perf_summary.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YZd7OttJLSi6A9TdaZpxDM8TYCYTFEdr",
+    "path": "03. Kpi_results/Perf/evaluation_code/config.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zVn8hYdmDxH-mJADL261sJ7vZtayHPol",
+    "path": "03. Kpi_results/Perf/evaluation_code/llm_load.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=132LhzDSe4ZWVO2lB7rgNrNpTWxoLAmsv",
+    "path": "03. Kpi_results/Perf/evaluation_code/make_perf_bench.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GbTVHIUUej0XLX2eXIcPcItJlnKv81vZ",
+    "path": "03. Kpi_results/Perf/evaluation_code/perf_bench_100.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18cv71EdEr_cU1SvVDN_47WB6t55UMDYd",
+    "path": "03. Kpi_results/Perf/evaluation_code/perf_load.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1iWd0sOHQ3IQbuoVm4z-9cxhbIZkg_WtS",
+    "path": "03. Kpi_results/Perf/evaluation_code/README-BENCH.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=145JGBpnXRnYY9MCfhKtTo1XbD-2rrZTQ",
+    "path": "03. Kpi_results/Perf/evaluation_code/run-perf-bench.sh"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1w-4H3r4lBEkj1FdkyUvzmNFzbPierCsH",
+    "path": "03. Kpi_results/Perf/evaluation_code/tp_bench.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1H9xf__4SU3bI_GH-ceDwgDt_Ov80xhZn",
+    "path": "03. Kpi_results/Perf/perf/raw-logs/load_c10.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uQbCAeK0cZNthHO17wUQLi2mrtJWqCYk",
+    "path": "03. Kpi_results/Perf/perf/raw-logs/loadB_c30.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1C9Im-IUojo--Oho2nal6wY9voefu1ik6",
+    "path": "03. Kpi_results/Perf/perf/raw-logs/performance-per-request.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ESM1q621ix2npxkToyQcHFHyGD6KHXZy",
+    "path": "03. Kpi_results/Perf/perf/raw-logs/performance-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yV7SiqySK7Mv2P4Q_2CTzyPiwbAYW5Mm",
+    "path": "03. Kpi_results/Perf/perf/reports/performance-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1qbs2cwW3rK5NYuUkzyRVk9wkiHF3KrkV",
+    "path": "03. Kpi_results/Perf/perf/tools/build_consolidated.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16F6rnz11JhcklZeVtyvIYOKCUde_USyf",
+    "path": "03. Kpi_results/Perf/perf/tools/build_full_run.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yJ5kG6EnHMIYLaUNCpPkFtJWej4XWV3l",
+    "path": "03. Kpi_results/Perf/perf/tools/build_perf_report.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1iFgrM3VXi9K62c4WnW2GUrxkyI1M1NFf",
+    "path": "03. Kpi_results/Perf/perf/tools/llm_load.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16TZa7tRpGMSb9dt7doEgqgOZ1g90iG_Z",
+    "path": "03. Kpi_results/Perf/perf/tools/make_perf_bench.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ovWfKtPoW1y27tBixPJyryRqAyNuZaMl",
+    "path": "03. Kpi_results/Perf/perf/tools/perf_load.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Bu0fV7NODx8fmJ3YYE_01SnH-ArLu_KP",
+    "path": "03. Kpi_results/Perf/perf/ccu_rps.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ronFhKKvePPunyeDhvQHqLYkfW4XlhxZ",
+    "path": "03. Kpi_results/Perf/perf/env.bench.before"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EvuOlTll9M0Nu80gkjVKzoDjHjwxbs3S",
+    "path": "03. Kpi_results/Perf/perf/KETQUA-NGHIEM-THU.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OAxb9D-TYUuXiwtPTg1F9E6TLGHiyPSh",
+    "path": "03. Kpi_results/Perf/perf/llm35.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1g6WjOcmJjptgFc1PmySVMgsd9IVXX61P",
+    "path": "03. Kpi_results/Perf/perf/perf_bench_100.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yqDbwJACxrmD1tIpfqEb0bepQ7FWQfr7",
+    "path": "03. Kpi_results/Perf/perf/results.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ubi7nOsHTHCisk9Zrup2rziMYcZuISvT",
+    "path": "03. Kpi_results/Perf/perf/summary.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lFNEpAnMy_tfPglKzAV4GmMgkkC5PQEy",
+    "path": "03. Kpi_results/Santization/Dataset/sanitization_pii.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eTkVuNoRCcVKFIN4IcYttM_Kx0rJvGs-",
+    "path": "03. Kpi_results/Santization/Evaluation_code/detector.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13JzzACqsUSlqxmgsT_0ZowkMGkEongzV",
+    "path": "03. Kpi_results/Santization/Evaluation_code/gen_pii_dataset.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1HAn68spCKsxom1zDG0ubGe4_D2LN-i42",
+    "path": "03. Kpi_results/Santization/Evaluation_code/sanitization_kpi.py"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1RV9ndVksrJTmfzDLYdcq8WBwPxicC15O",
+    "path": "03. Kpi_results/Santization/Logs/error-analysis-and-improvement-plan.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GVc9-doLUy5Vvv-I3AxAuaiPsFGkjIU7",
+    "path": "03. Kpi_results/Santization/Logs/false-negative-analysis.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ZxYYmnG9Ye0r6AA8XyxMRr-on8730pyw",
+    "path": "03. Kpi_results/Santization/Logs/false-positive-analysis.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13Z6WSiVev2CVUNU3Fmr3wHDN1LKPycrA",
+    "path": "03. Kpi_results/Santization/Logs/sanitization-report.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ALhx6eF5HpMIL6t18AAy3AYkP2NEJrgs",
+    "path": "03. Kpi_results/Santization/Logs/sanitization-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1k9QD2w6XDJApBSSciGtMskqMw1lFYOXJ",
+    "path": "03. Kpi_results/Santization/Logs/sanitization.jsonl"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1S1Dn9wJ0XBCb5hBeTvc7xNA2ZqFqa6GG",
+    "path": "03. Kpi_results/Santization/README.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fkDfs-uYLi8IOiX9IvgRHSkE9ciKC4FF",
+    "path": "03. Kpi_results/kpi-summary.json"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1HIyPAyAwsCm2jxdFWPGCSyf9sMU_oEep",
+    "path": "03. Kpi_results/SUMMARY.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jyty7CRcCeuYW9bE5kZbvyC81nmq33fY",
+    "path": "04. Huong_dan_cai_dat/HUONG-DAN-CAI-DAT.md"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1upK1BdS_bovk6uWXxy2XmQ5UQ2aL_oJ8",
+    "path": "Trí truệ nhân tạo 55 - finetuning-summary-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TOJAHCCXLZ04AcyEGuIZDZqRinLK7bkA",
+    "path": "Trí truệ nhân tạo 55 - finetuning-summary-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Bm83owmv8VaMJM7rC2VtdLLpeVeGm7wB",
+    "path": "Trí truệ nhân tạo 55 - finetuning-summary-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1WKZ8-KO8FXDEIVonf6GuZEbk3LfG-q1t",
+    "path": "Trí truệ nhân tạo 56 - finetuning-plan-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zmeirPJfGZEwbPWTYIreLsj4yh2So6xh",
+    "path": "Trí truệ nhân tạo 56 - finetuning-plan-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16-udXojP2H7PyGIji-mGr-s8oNWLP_UH",
+    "path": "Trí truệ nhân tạo 57 - training-time-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wtLhft_7mCQNwMHUIORtJGFLZ_Yme62F",
+    "path": "Trí truệ nhân tạo 58 - environment.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14f3fhK-vBqfdh8s2BCdWtmdzg4ZNJiv9",
+    "path": "Trí truệ nhân tạo 59 - checkpoint-manifest.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1F_xcy2AMHPj-oPi7oYzzvHFW0ZyK_a_e",
+    "path": "Trí truệ nhân tạo 60 - dataset-manifest-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1G0jv5G3oe6BrjndFXPC8GjaXcaz5qPZq",
+    "path": "Trí truệ nhân tạo 61 - data-provenance-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-CEPWSl0UMj_o4jHFQ5uyJVM3D8pwQuy",
+    "path": "Trí truệ nhân tạo 61 - data-provenance-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1KLMGsREMIUXVMYEowFu5NY1jnYQV1nyq",
+    "path": "Trí truệ nhân tạo 62 - mode-quality-task-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1E0jdW-So3D7NsiqmvtabdTG5Q7sSlk0t",
+    "path": "Trí truệ nhân tạo 63 - mode-quality-task-report.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1dGXcvSA9uuZ63IPG67jViN622wf5zFlr",
+    "path": "Trí truệ nhân tạo 64 - kpi-summary-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=156xUYnjIufn8gBCRm4Paxk75-g7jvhVy",
+    "path": "Trí truệ nhân tạo 64 - kpi-summary-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18NdxkXXLRz4kaWvHFP4N8zpkmae9LjBV",
+    "path": "Trí truệ nhân tạo 64 - kpi-summary-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11rY9VeBInzMFOZvTeCUVwFZ-yIxNezvl",
+    "path": "Trí truệ nhân tạo 65 - finetuning-config-bge.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CTLQMOhCOtDin1gt_TKf8qHRjgkxSJPo",
+    "path": "Trí truệ nhân tạo 66 - finetuning-config-qwen.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TzZS3PIMC6_8C89E88gULWq1YmrvPVw_",
+    "path": "Trí truệ nhân tạo 67 - finetuning-config-rerank.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gIDCGYpHyvtCuE2GVGwv6zC2kvhQ8rah",
+    "path": "Trí truệ nhân tạo 68 - finetuning-epoch-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jXO-0T5Ql6Y05AwOTOPCcAJ6X7WTPsKz",
+    "path": "Trí truệ nhân tạo 69 - finetuning-runs-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19r8F4ZlkdLR0usUOz37iuLwf8_ysLL_D",
+    "path": "Trí truệ nhân tạo 70 - finetuning-training-evidence.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1pAVp_Z_9-s2R2acd1F9O7KHo5D_Df7tV",
+    "path": "Trí tuệ nhân tạo 01 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ihFarb5YbnBzZ-xiPFr1yVqqX4NpG98a",
+    "path": "Trí tuệ nhân tạo 02 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1GUokrcrd_jaYz2IlaI34TlYTVkT10Eq8",
+    "path": "Trí tuệ nhân tạo 03 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DKvAdUSEaA5zbA3pplWIhGLXz6Wu3hjO",
+    "path": "Trí tuệ nhân tạo 04 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=153nKlmb3fZ61JvDhTS-b34_wVzQq7iWx",
+    "path": "Trí tuệ nhân tạo 05 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1grBwBEOU431PdFFY6nwMyKkXC7tFkxGa",
+    "path": "Trí tuệ nhân tạo 06 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19vxATUD3RgEWqhwI7_kI11-R8nsSZJrz",
+    "path": "Trí tuệ nhân tạo 07 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1QjVfbjKiX58-CQdykJHcvHVas7gn1HVK",
+    "path": "Trí tuệ nhân tạo 08 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19kRZUUIkBKWDug_Wt1x9zbJ-An7r2wtJ",
+    "path": "Trí tuệ nhân tạo 09 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=18XdYcaL3QqETA6dLcDh1qVYE8ZO6GG1s",
+    "path": "Trí tuệ nhân tạo 10 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1obxgQBcUsLdA_hT7CQle9zGUZRk5DT57",
+    "path": "Trí tuệ nhân tạo 100 - auto-ingest-bm25-sink.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CTtlZRcWR37MWV-rY_u7hKr2bf3VDk3M",
+    "path": "Trí tuệ nhân tạo 101 - auto-ingest-neo4j-sink.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fvCRl1iORl4Y0A-NTSicb7LyX3s8WglI",
+    "path": "Trí tuệ nhân tạo 102 - auto-ingest-qdrant-sink.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1I8J8222ps_lfElOek873Iz0TxN3g0zul",
+    "path": "Trí tuệ nhân tạo 103 - perf-report.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YsHOWo168qaSArIg0P6eCmvn5W9hNcLI",
+    "path": "Trí tuệ nhân tạo 104 - perf-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1r9Mb85b__25KCVsOC07tfTDHJLruGz84",
+    "path": "Trí tuệ nhân tạo 105 - trace-reasoning-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OV0a_122t38JbNJYQtIS1UvG3HY--rAA",
+    "path": "Trí tuệ nhân tạo 105 - trace-reasoning-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-_1RPXJmzm1FnxCIlKTeyKKT08qfXrWY",
+    "path": "Trí tuệ nhân tạo 105 - trace-reasoning-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1a5axflWL-gjb1fU1fmnGPeJWTVC70lAO",
+    "path": "Trí tuệ nhân tạo 105 - trace-reasoning-04.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1CTgQCgLbPP3D2ypRkTzvvxOPlzOqI1hk",
+    "path": "Trí tuệ nhân tạo 106 - trace-context-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13ER4euOzLyZNtbSjqwArKwrYl_CZ6xTV",
+    "path": "Trí tuệ nhân tạo 106 - trace-context-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BTRXspaYRWTTspyDqFCqU9qMLY5B3l4n",
+    "path": "Trí tuệ nhân tạo 106 - trace-context-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1DajRd3iprvvm3bq9M8JBlK2EeZ9IlFrl",
+    "path": "Trí tuệ nhân tạo 107 - phan-cung.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11d99n4E4sahgoJ0BTF4NxOF_v-7YomUI",
+    "path": "Trí tuệ nhân tạo 108 - perf-eval-code-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1i3gptRbWw8O0WKfJmfGR8ZdKHuhvYX_G",
+    "path": "Trí tuệ nhân tạo 109 - perf-ccu-rps.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=15frauK-zFJAxPgvL6JSmaGg5U3C2d1gb",
+    "path": "Trí tuệ nhân tạo 11 - Tổng quan mô-đun AI.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1xfX_7aF2m7Q88fkScOwgULMYMxtt_PBZ",
+    "path": "Trí tuệ nhân tạo 110 - santization-detector.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Trf2prRZuW_FKcGhwDFSYRpjhdXmSj-z",
+    "path": "Trí tuệ nhân tạo 111 - throughput-embedding.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1priGhwO-ctvZ51NH4B2_jhZmaP8NS7m-",
+    "path": "Trí tuệ nhân tạo 112 - model-perf-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1oTU1Rt5dMAO--oQcPh7cb9eNbdLA4l1S",
+    "path": "Trí tuệ nhân tạo 113 - llm-throughput.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lwsS23Gl9kGLANgqPe_fbgD6iGWe4u_P",
+    "path": "Trí tuệ nhân tạo 113 - throughput-rerank.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1VsjX9hHzToVP2CqFbeDa-X5dTa0mrzmu",
+    "path": "Trí tuệ nhân tạo 114 - santization-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1M6G5qx-vSbnLxM98EAECcQuiDTFQIAnX",
+    "path": "Trí tuệ nhân tạo 115 - ft-config-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OHaXhENQL1Km9FtcemGaqmhuHELePea6",
+    "path": "Trí tuệ nhân tạo 115 - ft-config-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Go188JKZOsnd0VKC86D0UMEiv72wG3Hd",
+    "path": "Trí tuệ nhân tạo 116 - docker.jpg"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FBMJWj5Ez5B8dYtk3hRo6bdldFqBiHH_",
+    "path": "Trí tuệ nhân tạo 12 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1FWWBFms6o40nW15XBOs5aKrK9EQeBKQs",
+    "path": "Trí tuệ nhân tạo 13 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1nhab_ghBbkmtSbAjXRuw5qVDfpWc1kW6",
+    "path": "Trí tuệ nhân tạo 14 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_vJwYm0CA3hd7U2nAuget9BsOfYGMmBZ",
+    "path": "Trí tuệ nhân tạo 15 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OOdkefn8p062smhWQ38aTb2Nb2UlgZbG",
+    "path": "Trí tuệ nhân tạo 16 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PN4x8nPoDZ7tbmz3DlrK9ukkQ4Pn8Zkc",
+    "path": "Trí tuệ nhân tạo 17 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1mFe_ZDpkOMjnxthSShPOqFuQp3jxyVcL",
+    "path": "Trí tuệ nhân tạo 18 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Ifj6y4KS-p2jQUtPx-3wIyigSgLrex80",
+    "path": "Trí tuệ nhân tạo 19 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1kIGIXXSKNDE0qxrHPX9Mskibl1sgF1Zk",
+    "path": "Trí tuệ nhân tạo 20 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1mhnVnm5QDfO0r-flL_Q79t7Ih-av-BOZ",
+    "path": "Trí tuệ nhân tạo 21 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rumvuu1MMgjmDBU7HnNRADM7ojJeRuM4",
+    "path": "Trí tuệ nhân tạo 22 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1u0Ze4EvDs1BbU76u1AwDclUHkpLjxUZU",
+    "path": "Trí tuệ nhân tạo 23 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1G2N4jmc10NgvJoQGFznfJAOzUrk9wbS6",
+    "path": "Trí tuệ nhân tạo 24 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1rito_qLbfYPBgPe4sNLq6Kmh1BqU0hnX",
+    "path": "Trí tuệ nhân tạo 25 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Olw1t9qw7O2VncRT7yReRpHoiAhMoImh",
+    "path": "Trí tuệ nhân tạo 26 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gqUuiPQ9xJmh2n2G_ZPkXx_IW4t-kT8z",
+    "path": "Trí tuệ nhân tạo 27 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=16qdyC8sDQJlEjguH5TSk49heLifjdnQl",
+    "path": "Trí tuệ nhân tạo 28 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vxbzCQvmqjB_3UdrZ0-euc3vvtWolvFM",
+    "path": "Trí tuệ nhân tạo 29 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1sNSUEVIb5lXg51NHfD3IZgxike3AYbSL",
+    "path": "Trí tuệ nhân tạo 30 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1IzIFuOyWcN2M0souhdZLFlHCf5RUgpG1",
+    "path": "Trí tuệ nhân tạo 31 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1wXxoIZfac-d5EgLcfJZJ9j8vM0BgFHyL",
+    "path": "Trí tuệ nhân tạo 32 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1lqhqF0Rwr6BRvws93WsDTJJdOowAuhzs",
+    "path": "Trí tuệ nhân tạo 33 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jmdapr38zSpIPqwsXr70cC0RN7zN1p5C",
+    "path": "Trí tuệ nhân tạo 34 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1jGmU6O7yzUfslCZhMXCm9aMSXjkWgKb4",
+    "path": "Trí tuệ nhân tạo 35 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1y1lC2895VkydmhTqWK4aqjyuFeglYk9k",
+    "path": "Trí tuệ nhân tạo 36 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1F1q6nU_xcajrwScAjjw9wsK9ZNz3JeJv",
+    "path": "Trí tuệ nhân tạo 37 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1bjvnMy41WiiruM8CLhCK8kaL-qrC6LEi",
+    "path": "Trí tuệ nhân tạo 38 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1vBlQpiVLH4TEQO6XR2kGFIH9LyoQpkHW",
+    "path": "Trí tuệ nhân tạo 39 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1XIfR2i7f3_G6l5Uvoz9kLEF2kKK2ChaU",
+    "path": "Trí tuệ nhân tạo 40 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Sp5rEjUIjcLus7hC0N6yK6mtPpftNP-T",
+    "path": "Trí tuệ nhân tạo 41 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gxBf_poVyjP8gzq2DL1mFBrzLebJYYcV",
+    "path": "Trí tuệ nhân tạo 42 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1XgVv9AOGPPnJzAUoB4e31ixtjpgqtvYs",
+    "path": "Trí tuệ nhân tạo 43 - Hồ sơ huấn luyện.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gKp56HTX48gHdp6IN1QK_8NpITBs8aRA",
+    "path": "Trí tuệ nhân tạo 44 - Bộ build fine-tuning.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1pA6BP0eeuIOE0UbUVLpBEBBMxR450lEG",
+    "path": "Trí tuệ nhân tạo 45 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1id8g0bLtyPvt23htm_AmbMW7Y3MjjyMg",
+    "path": "Trí tuệ nhân tạo 46 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1uoDwnBxc3MFAqvl9pVYpK6d6WE_QLlda",
+    "path": "Trí tuệ nhân tạo 47 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1yReEuXcVVwUEU-FfWS5SByrRTsdHx014",
+    "path": "Trí tuệ nhân tạo 48 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1mt8AM8tn-5vi2K5uJiGo5-NGKEnJtEXN",
+    "path": "Trí tuệ nhân tạo 49 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14h9UBWcIGvSxRKremCDJn-3VhlSr1sFN",
+    "path": "Trí tuệ nhân tạo 50 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1VzJulzHqesmoT03rRAUMmCIM2i0UWRZw",
+    "path": "Trí tuệ nhân tạo 51 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1G7gnyFcJTZ4-0QIKLiX6XoUK9OCjAU0o",
+    "path": "Trí tuệ nhân tạo 52 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1gquM8UHwN1QmUvvSX850x8pQ9FvLJIkB",
+    "path": "Trí tuệ nhân tạo 53 - Hướng dẫn cài đặt.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1QvNYch3iXrsoKHK4R2sgqhp5wOcewP-0",
+    "path": "Trí tuệ nhân tạo 54 - Model hệ thống.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1XDpVhsDTi_t8AeALiHjSHmRfd4H9Z615",
+    "path": "Trí tuệ nhân tạo 60 - dataset-manifest-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1YnWLzGS1o3daXHiMihck9BvWEZk0IYxp",
+    "path": "Trí tuệ nhân tạo 60 - dataset-manifest-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ZM8bE61FHJ76qsORYtWFwPw8An98tS11",
+    "path": "Trí tuệ nhân tạo 60 - dataset-manifest-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fmKkVuh2qyIQK8LPKJ1pza42y7wrzrrM",
+    "path": "Trí tuệ nhân tạo 61 - data-provenance-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zQgD6GXgMEXD4V2C-jlEOci42R1TB0zz",
+    "path": "Trí tuệ nhân tạo 61 - data-provenance-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1eOS4qImpRL7UfcErdhhofxIlZ4RHNoMB",
+    "path": "Trí tuệ nhân tạo 61 - data-provenance-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JZdtlWtkkAYzuTo4ZZznW5by1Wk4flJN",
+    "path": "Trí tuệ nhân tạo 71 - training-overview.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1AzjiMpVUz1azOg3jl2nQGZNadxU8rv1D",
+    "path": "Trí tuệ nhân tạo 72 - training-embedding.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1LCFoMw3HtgoUOPN0JhjLIkpEOd_a_sQs",
+    "path": "Trí tuệ nhân tạo 73 - training-rerank.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=13gx_4zudsW5QHUesQiRiWv4VLT02Im-y",
+    "path": "Trí tuệ nhân tạo 74 - training-llm.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12TGZwzf8kTaov4ZToj2XFoyw6zyHhTaQ",
+    "path": "Trí tuệ nhân tạo 75 - dataset-processed-manifest-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_944eDZrS0zSq31B1P0E44g61plZXeIV",
+    "path": "Trí tuệ nhân tạo 75 - dataset-processed-manifest.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1f8RfJTNqyYjJBdW2mlc5-Mgvm0l3YJm2",
+    "path": "Trí tuệ nhân tạo 76 - dataset-phu-luc-ky-thuat-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1P3h1dhsue-8yFTuf7LQED3fGfzEKEtgN",
+    "path": "Trí tuệ nhân tạo 76 - dataset-phu-luc-ky-thuat-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ORnlsGG3ogmW3Y2JiK_qdejhB3kAKebh",
+    "path": "Trí tuệ nhân tạo 76 - dataset-phu-luc-ky-thuat-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=14Ww7iWxRxKZlqmTUACZ6xFp2TmXY5Yf9",
+    "path": "Trí tuệ nhân tạo 76 - dataset-phu-luc-ky-thuat-04.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=19sP1B1xrBth2c_0P13hiNXdpGfuDIRbR",
+    "path": "Trí tuệ nhân tạo 77 - model-quality-retrieval-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zU5O74hpgBJB3GwY6fnwj0e6U2PCEbvX",
+    "path": "Trí tuệ nhân tạo 78 - model-quality-embedding-report.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1hE-4z1SVC4xlADiT0wxvh6o-iGtoqZRH",
+    "path": "Trí tuệ nhân tạo 79 - model-quality-rerank-report.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Fz8QQK7deUgkILExR5W1aDdwf_EO2yyU",
+    "path": "Trí tuệ nhân tạo 80 - model-quality-llm-kpi-report.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1f5zVTDggCbk_uVAdPviRocSAHwu0O8mL",
+    "path": "Trí tuệ nhân tạo 81 - model-quality-radar-json.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1oGo4nR2-Z5T-YP3Lq2HBMhqV3B4_rr3W",
+    "path": "Trí tuệ nhân tạo 82 - model-quality-radar-svg.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1PTUVjH2S258rkX0pC4qYwmzCVtzrlV09",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12D3IK2PhVpfT0p1FyKK3ZduXKLg4c-b2",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1BRzF9ge1hSpyRdtY5qZQxchVywerxQaa",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml-04.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1cv-47F-XWJ0cSfxDGWqS7laUc2BGkLM3",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml-05.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1j8CwE_z47bVPMEUfW4I3AhRIXr2pzeLV",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml-06.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Bo8hk-bNwdKdcUznXwEGb2JItpsrOhjP",
+    "path": "Trí tuệ nhân tạo 83 - docker-compose-yml.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1TFyW4hHufdT9BNOBhkq67wzQTiOah4JR",
+    "path": "Trí tuệ nhân tạo 84 - dataset-evel-readme.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1T0ZLr6Zh3shkIWMRmzoACwYkoJaU4-tO",
+    "path": "Trí tuệ nhân tạo 85 - model-kpi-raw-log.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1_idl-xNBfAnk8HgzULjTij2EpKhJ2lXr",
+    "path": "Trí tuệ nhân tạo 86 - model-quality-summary.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Z5H-tnO7ND4r-F7uBDjSThQr6nbKMNRK",
+    "path": "Trí tuệ nhân tạo 87 - model-quality-runevalall-log-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1EMeQ5ka3KHGqFcL1zh3BRaBHB-t3HtRa",
+    "path": "Trí tuệ nhân tạo 87 - model-quality-runevalall-log-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1E9CFPca5YGnvS1MGc522-GUwfp-hX71a",
+    "path": "Trí tuệ nhân tạo 87 - model-quality-runevalall-log-03.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1ouJa70A57OM2-qmD6Go79frBUb0YEySz",
+    "path": "Trí tuệ nhân tạo 87 - model-quality-runevalall-log-04.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1fzbO_DjrNADhCpZ2saaRkkqEPUlxxFI0",
+    "path": "Trí tuệ nhân tạo 88 - santization-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1AnvgotkNO4C7XKlT6Fv9Ys6j5QJqktES",
+    "path": "Trí tuệ nhân tạo 89 - santization-readme.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1JEf8pk7EO8nfx_1Wrmnh43ablCb6tsem",
+    "path": "Trí tuệ nhân tạo 90 - santization-kpi-code-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1on92XYmzg7OgEPyCO_Kn78RL46fLNZ6R",
+    "path": "Trí tuệ nhân tạo 90 - santization-kpi-code-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1RYbSCte1xKoW8eyyInp3IcJ1a0293Ug2",
+    "path": "Trí tuệ nhân tạo 91 - perf-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1-MB4cJjR_Y7_hCkuuGd3Q0VwHSCZYYBU",
+    "path": "Trí tuệ nhân tạo 92 - perf-eval-code-readme.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1Z9aqJ92CtSqDhocmn7HCDaQFT2gytS0Y",
+    "path": "Trí tuệ nhân tạo 93 - perf-run-bench-sh-01.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1oOa8xymYvWIg3JYwqV92CyAhWZg8DrTl",
+    "path": "Trí tuệ nhân tạo 93 - perf-run-bench-sh-02.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1nAcMGQriqWTYyV2USU8GPn4jDQtyt2ut",
+    "path": "Trí tuệ nhân tạo 94 - model-quality-eval-code.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=12UV6ImLHGdPyWEpDGrvi_zoWsROH0L83",
+    "path": "Trí tuệ nhân tạo 95 - model-quality-report-folder.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1zht5zUhRbvYi6nDb6tC_fdbx0i6XUBM3",
+    "path": "Trí tuệ nhân tạo 96 - nvd-feed.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=11SuNCpYOx-ecbUzPa3zGRvCuT185GrFw",
+    "path": "Trí tuệ nhân tạo 97 - exploitdb-feed.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1SSZsMXzZn8KCTeXSIoyxYn0fjWRyU-_S",
+    "path": "Trí tuệ nhân tạo 98 - auto-ingest-taxamony.png"
+  },
+  {
+    "url": "https://drive.google.com/uc?id=1OXzN5NX8ImV--SdmGeVuhWWcc7aAtv_K",
+    "path": "Trí tuệ nhân tạo 99 - auto-ingest-cve-to-chunk.png"
+  }
+]

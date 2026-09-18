@@ -37,6 +37,9 @@ export default defineConfig({
       },
       "/health": { target: gateway, changeOrigin: true },
       "/poc": { target: gateway, changeOrigin: true },
+      "/projects": { target: gateway, changeOrigin: true },
+      "/sessions": { target: gateway, changeOrigin: true },
+      "/admin": { target: gateway, changeOrigin: true },
     },
   },
 });

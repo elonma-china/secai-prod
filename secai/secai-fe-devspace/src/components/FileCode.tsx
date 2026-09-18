@@ -2,6 +2,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import DOMPurify from "dompurify";
 
 export type PocFile = {
   path: string;
@@ -200,10 +201,27 @@ export function PocFilePanel({
   );
 }
 
+/** Block javascript:/data:/vbscript: link targets — react-markdown never renders raw HTML
+ * from the source text (no rehype-raw here), so this + the DOMPurify pass below are
+ * defense-in-depth on top of the backend's own `neutralize_active_content` defanging, per
+ * REDESIGN-BRIEF §7: "FE vẫn phải DOMPurify + chặn link `javascript:` khi render Markdown." */
+function sanitizeUrl(url: string): string {
+  try {
+    if (/^\s*(javascript|data|vbscript):/i.test(url)) return "";
+    return url;
+  } catch {
+    return "";
+  }
+}
+
 function Prose({ text }: { text: string }) {
+  // Strip any literal HTML tags that survived into prose text before markdown-parsing it
+  // (code fences never reach this function — they're rendered as plain text via FileCard,
+  // which is inherently safe since it never uses dangerouslySetInnerHTML).
+  const clean = DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [], KEEP_CONTENT: true });
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-      {text}
+    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} urlTransform={sanitizeUrl}>
+      {clean}
     </ReactMarkdown>
   );
 }

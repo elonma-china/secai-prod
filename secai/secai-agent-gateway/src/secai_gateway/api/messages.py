@@ -34,11 +34,18 @@ def build_translate_prompt(text: str, src: Any, tgt: Any) -> tuple[str, list[str
     credential-bearing text is translatable and the secrets stay server-side.
     """
     masked, literals = mask_literals(text)
+    # Giữ nguyên thuật ngữ kỹ thuật (tên hàm/API, gói/thư viện/sản phẩm, giao thức, mã
+    # CVE/CWE, đoạn code, số phiên bản...) — chỉ dịch phần văn xuôi diễn giải xung quanh.
+    note = (
+        " Giữ nguyên (không dịch) các thuật ngữ kỹ thuật/chuyên ngành: tên hàm, API, "
+        "gói/thư viện/sản phẩm, giao thức, mã CVE/CWE, đoạn code, tên biến, số phiên bản "
+        "— chỉ dịch phần văn xuôi diễn giải."
+    )
     if src and tgt:
-        return f"Dịch văn bản sau từ {src} sang {tgt}:\n\n{masked}", literals
+        return f"Dịch văn bản sau từ {src} sang {tgt}.{note}\n\n{masked}", literals
     if tgt:
-        return f"Dịch văn bản sau sang {tgt}:\n\n{masked}", literals
-    return f"Dịch văn bản sau (tự nhận diện ngôn ngữ nguồn; Việt→Anh hoặc Anh→Việt):\n\n{masked}", literals
+        return f"Dịch văn bản sau sang {tgt}.{note}\n\n{masked}", literals
+    return f"Dịch văn bản sau (tự nhận diện ngôn ngữ nguồn; Việt→Anh hoặc Anh→Việt).{note}\n\n{masked}", literals
 
 
 def translate_prompt(body: LegacyRequest) -> tuple[str, list[str]]:

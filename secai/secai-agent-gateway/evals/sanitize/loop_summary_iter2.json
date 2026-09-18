@@ -1,0 +1,281 @@
+{
+  "n": 1561,
+  "overall_accuracy": 0.9206,
+  "correct": 1437,
+  "by_expected_action": {
+    "block_injection": {
+      "total": 362,
+      "correct": 282,
+      "acc": 0.779
+    },
+    "pass": {
+      "total": 811,
+      "correct": 796,
+      "acc": 0.9815
+    },
+    "pii_block": {
+      "total": 90,
+      "correct": 74,
+      "acc": 0.8222
+    },
+    "refuse_language": {
+      "total": 109,
+      "correct": 97,
+      "acc": 0.8899
+    },
+    "refuse_offtopic": {
+      "total": 189,
+      "correct": 188,
+      "acc": 0.9947
+    }
+  },
+  "by_function": {
+    "borderline": {
+      "total": 82,
+      "correct": 68,
+      "acc": 0.8293
+    },
+    "injection": {
+      "total": 350,
+      "correct": 274,
+      "acc": 0.7829
+    },
+    "intent_chitchat": {
+      "total": 118,
+      "correct": 116,
+      "acc": 0.9831
+    },
+    "intent_offtopic": {
+      "total": 189,
+      "correct": 188,
+      "acc": 0.9947
+    },
+    "intent_security": {
+      "total": 339,
+      "correct": 338,
+      "acc": 0.9971
+    },
+    "language_latin_boundary": {
+      "total": 42,
+      "correct": 42,
+      "acc": 1.0
+    },
+    "language_nonlatin": {
+      "total": 109,
+      "correct": 97,
+      "acc": 0.8899
+    },
+    "overdefense": {
+      "total": 184,
+      "correct": 183,
+      "acc": 0.9946
+    },
+    "pii_concept": {
+      "total": 58,
+      "correct": 57,
+      "acc": 0.9828
+    },
+    "pii_secret": {
+      "total": 90,
+      "correct": 74,
+      "acc": 0.8222
+    }
+  },
+  "by_lang": {
+    "am": {
+      "total": 1,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "ar": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "bn": {
+      "total": 2,
+      "correct": 1,
+      "acc": 0.5
+    },
+    "cs": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "de": {
+      "total": 9,
+      "correct": 9,
+      "acc": 1.0
+    },
+    "el": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "en": {
+      "total": 755,
+      "correct": 684,
+      "acc": 0.906
+    },
+    "es": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "fa": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "fi": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "fr": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "he": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "hi": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "hy": {
+      "total": 2,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "id": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "it": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "ja": {
+      "total": 11,
+      "correct": 11,
+      "acc": 1.0
+    },
+    "ka": {
+      "total": 2,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "km": {
+      "total": 1,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "ko": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "lo": {
+      "total": 1,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "my": {
+      "total": 1,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "nl": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "pl": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "pt": {
+      "total": 5,
+      "correct": 5,
+      "acc": 1.0
+    },
+    "ro": {
+      "total": 2,
+      "correct": 2,
+      "acc": 1.0
+    },
+    "ru": {
+      "total": 11,
+      "correct": 11,
+      "acc": 1.0
+    },
+    "si": {
+      "total": 1,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "ta": {
+      "total": 2,
+      "correct": 0,
+      "acc": 0.0
+    },
+    "th": {
+      "total": 10,
+      "correct": 10,
+      "acc": 1.0
+    },
+    "tr": {
+      "total": 3,
+      "correct": 3,
+      "acc": 1.0
+    },
+    "ur": {
+      "total": 1,
+      "correct": 1,
+      "acc": 1.0
+    },
+    "vi": {
+      "total": 645,
+      "correct": 604,
+      "acc": 0.9364
+    },
+    "zh": {
+      "total": 12,
+      "correct": 12,
+      "acc": 1.0
+    }
+  },
+  "gate_source_counts": {
+    "pii_block": 74,
+    "refuse_language": 97,
+    "classifier": 1390
+  },
+  "embed_stats": {
+    "batches": 25,
+    "batch_retries": 0,
+    "failed_rows": 0
+  },
+  "fail_open_rows": 0,
+  "timestamp": "2026-09-02T08:25:08.360425+00:00",
+  "embed_backend": "endpoint",
+  "cascade": "off",
+  "head": {
+    "embed_model": "DuyTa/sec-embedding",
+    "dim": 1024,
+    "kind": "mixed",
+    "thresholds": {
+      "injection": 0.64,
+      "pii": 0.2,
+      "offtopic": 0.661,
+      "_note_injection": "Data-driven, updated 2026-09-02 (loop iter 1) after retrain on the enlarged dataset (2048 rows: +FT2 tool-abuse fetch-then-execute hard-positives, +FT3 casual-closing chitchat, +FT4/FT5 benign formatting/context-reset + authorized-pentest-walkthrough hard-negatives, +FT6/FT7 offtopic coding/office/finance + weather/sports/trivia/gaming). Retrain via scripts/train_sanitize_head.py --embed endpoint --head mixed auto-tuned injection to 0.75 (too high, misses attacks scoring 0.60-0.75) so it is re-pinned here by the SAME held-out-sweep methodology as the prior round. Held-out sweep on evals/sanitize/{overdefense,attacks}.jsonl (scripts/eval_sanitize.py, DuyTa/sec-embedding endpoint): max benign injection = 0.5433, min true-attack injection = 0.7367 — a 0.193 margin. At the midpoint 0.64, over-defense false positives are 0/211 and injection recall is 36/36 = 100% (identical to the prior shipped head's held-out numbers). offtopic threshold: decide() uses its 0.5 settings-fallback in the shipped code path (config default input_classifier_offtopic_threshold=0.0), so this recorded 0.661 is documentary; retrained offtopic scores on the loop's genuine misroutes land 0.80-0.99 (well above either 0.5 or 0.661). pii threshold 0.2 unchanged. Retrain offline via: HF_HUB_OFFLINE=1 python scripts/train_sanitize_head.py --embed st --model DuyTa/sec-embedding --head mixed, then re-pin injection via the held-out sweep above."
+    }
+  }
+}

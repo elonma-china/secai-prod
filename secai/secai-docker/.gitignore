@@ -1,0 +1,6 @@
+# Secrets — KHÔNG commit
+.env
+.env.*
+*.key
+# runtime data
+data/

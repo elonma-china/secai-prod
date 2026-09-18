@@ -1,0 +1,9 @@
+SecAI gateway đã triển khai trên namespace {{ include "secai.namespace" . }}.
+- Gateway:      svc/gateway:{{ .Values.gateway.port }}
+- Qdrant:       svc/qdrant:6333
+- Neo4j:        svc/neo4j:7474 (HTTP) / 7687 (Bolt)
+- Redis:        svc/redis:6379
+- Elasticsearch svc/elasticsearch:9200
+
+Lớp serving mô hình (LLM/embedding/reranker) chạy trên GPU riêng (vast.ai), cấu hình endpoint
+qua Secret `secai-gateway-env`. Xem values.yaml để chỉnh image/tài nguyên/dung lượng.

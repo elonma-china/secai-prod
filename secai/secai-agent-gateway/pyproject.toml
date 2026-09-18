@@ -11,17 +11,26 @@ dependencies = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.27",
   "httpx>=0.27",
-  "linch>=1.1.0",
+  # Pin <2: linch 2.0.0 (2026-09) bắt custom hook khai `resume_policy_id` cho "durable runs"
+  # → gãy các hook của gateway (ToolCallBudgetHook…) làm chat/exploit 503. 1.2.x không có ràng
+  # buộc này. Dockerfile pip-install từ pyproject (không dùng uv.lock) nên PHẢI pin ở đây.
+  "linch>=1.2.1,<2",
   "pydantic>=2.6",
   "pydantic-settings>=2.2",
   "pyyaml>=6",
   "fastembed>=0.4",
+  # Runtime for the input-sanitization classifier head (matmul + softmax/sigmoid). Already
+  # present transitively via fastembed; declared explicitly since we import it directly.
+  "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
 redis = ["redis>=5"]
 postgres = ["asyncpg>=0.29"]
 dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27"]
+# Offline-only: training the sanitization head (scripts/train_sanitize_head.py). NOT
+# installed into the runtime/Docker image — the gateway stays numpy-only at serving time.
+train = ["scikit-learn>=1.3", "sentence-transformers>=2.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/secai_gateway"]

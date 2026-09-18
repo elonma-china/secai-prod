@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: qdrant, namespace: {{ include "secai.namespace" . }} }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: qdrant } }
+  template:
+    metadata: { labels: { app: qdrant } }
+    spec:
+      containers:
+        - name: qdrant
+          image: {{ .Values.qdrant.image }}
+          ports:
+          {{- range .Values.qdrant.ports }}
+            - containerPort: {{ . }}
+          {{- end }}
+          volumeMounts:
+            - { name: storage, mountPath: /qdrant/storage }
+      volumes:
+        - name: storage
+          persistentVolumeClaim: { claimName: qdrant-pvc }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: qdrant, namespace: {{ include "secai.namespace" . }} }
+spec:
+  selector: { app: qdrant }
+  ports:
+  {{- range .Values.qdrant.ports }}
+    - { name: "p{{ . }}", port: {{ . }}, targetPort: {{ . }} }
+  {{- end }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: qdrant-pvc, namespace: {{ include "secai.namespace" . }} }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: {{ .Values.qdrant.storage }} } }

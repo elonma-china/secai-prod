@@ -8,6 +8,8 @@ import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator
+from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import uuid4
@@ -15,6 +17,7 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from linch.events import ResultEvent, SystemEvent
 
@@ -43,9 +46,20 @@ from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
-from ..security import require_public_input, sanitize_output_language
+from ..sanitize import classify_input, decide, judge_injection
+from ..sanitize.classifier import note_verdict, verdict_stats
+from ..sanitize.gate import REFUSE_INJECTION_MSG
+from ..security import (
+    UNSUPPORTED_LANGUAGE_MSG, has_hidden_smuggling, is_unsupported_language,
+    neutralize_active_content, require_public_input, sanitize_output_language,
+    wrap_untrusted_content,
+)
 from .literal_mask import unmask_literals
-from .messages import build_translate_prompt, parse_statistical, report_prompt, statistical_prompt, translate_langs
+from .projects import _norm_owner
+from .messages import (
+    build_translate_prompt, parse_statistical, report_prompt, statistical_prompt,
+    translate_langs, translate_prompt,
+)
 from .text_chunk import split_for_translation
 from .schemas import (
     BughuntRequest,
@@ -232,6 +246,15 @@ _PREFETCH_APPENDIX_BUDGET = 3000
 _WEB_HINTS_APPENDIX_BUDGET = 12000
 
 
+def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
+    """Pure decision for /health's ``status`` field. Degraded when the LLM is unreachable OR
+    the input classifier has been failing open on more than half its calls over a real sample
+    (``total>=20`` — a small/cold-start sample shouldn't flip status on one or two unlucky
+    calls). Separate function so this can be unit-tested without a live LLM/httpx round trip."""
+    sanitize_degraded = sanitize_stats.get("total", 0) >= 20 and sanitize_stats.get("unknown_rate", 0.0) > 0.5
+    return "ok" if (qwen_ok and not sanitize_degraded) else "degraded"
+
+
 def _evidence_preview(evidence: list[dict[str, Any]], budget: int) -> str:
     """Truncated, path-labelled dump of the fetched PoC bytes (README/entry first) — enough
     for the model to write Mục 2/3, not the whole repo (that is Section 1's job)."""
@@ -280,7 +303,10 @@ def _prefetch_prompt_appendix(prefetch_result: dict[str, Any]) -> str:
     sources = [f"{ev.get('source') or '?'}: {ev.get('url') or ev.get('source_ref') or ''}"
                for ev in evidence]
     sources_line = "Nguồn: " + " ; ".join(sources) + "\n"
-    body = "Nội dung (đã cắt bớt theo giới hạn):\n" + preview + "\n]"
+    # Externally-sourced (fetched PoC/advisory) bytes — spotlight as untrusted data, never
+    # instructions (indirect prompt-injection defense; see <untrusted_content_policy>).
+    body = ("Nội dung (đã cắt bớt theo giới hạn):\n"
+            + wrap_untrusted_content(preview, source="poc_prefetch") + "\n]")
     if has_real_code_evidence(evidence):
         return (
             "\n\n[Hệ thống đã tìm thấy PoC khai thác công khai đã xác thực cho lỗ hổng này qua "
@@ -343,7 +369,8 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
         "được PoC thật. Một đoạn phân tích trung thực còn hữu ích hơn một đoạn code trông giống "
         "thật nhưng không dựa trên gì cả.\n"
         "Nguồn tham khảo:\n- " + "\n- ".join(sources) + "\n"
-        "Nội dung trang tham khảo (đã cắt bớt):\n" + preview + "\n]"
+        "Nội dung trang tham khảo (đã cắt bớt):\n"
+        + wrap_untrusted_content(preview, source="web_hints") + "\n]"
     )
 
 
@@ -530,7 +557,8 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         readme_ground = (
             "\nTÀI LIỆU HƯỚNG DẪN CHẠY THẬT của tác giả PoC (README/hướng dẫn gốc đã fetch)"
             f"{readme_cut} — DỊCH lại thành Mục 2 bằng tiếng Việt, bám ĐÚNG các lệnh/tham số/cổng/"
-            "tiền đề trong đó, không bịa thêm:\n---\n" + readme_preview + "\n---"
+            "tiền đề trong đó, không bịa thêm:\n---\n"
+            + wrap_untrusted_content(readme_preview, source="consolidated_poc_readme") + "\n---"
         )
     else:
         readme_ground = ""
@@ -544,7 +572,7 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
         f"phiên bản/cờ dòng lệnh không tồn tại.{readme_ground}{cli_ground} "
         "Giữ air-gap: không tải/clone/cài từ internet.\n"
         f"Mã tệp `{name}`{cut_note} (KHÔNG chép lại vào câu trả lời):\n"
-        + preview + "\n]"
+        + wrap_untrusted_content(preview, source="consolidated_poc") + "\n]"
     )
 
 
@@ -642,6 +670,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = prompt_override
         else:
             prompt = require_public_input(body.supplied_text())
+            if profile == "chat":
+                gated = await _chat_gate(prompt)
+                if gated is not None:  # model classifier short-circuited (injection/off-topic)
+                    return gated
         try:
             text, metadata = await state.runner.complete(profile, prompt, session_id)
         except HTTPException:
@@ -695,6 +727,124 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
+    async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
+        """Model-based input sanitization for the chat path (runs BEFORE the agent).
+
+        Embeds the prompt with the deployed sec-embedding model and applies the numpy head
+        (secai_gateway.sanitize) to classify intent + risk. Returns a short-circuit
+        ``(refusal_text, metadata)`` when the classifier blocks (injection / off-topic), or
+        ``None`` to let the agent answer. FAIL-OPEN: any classifier error/unavailability, or
+        the feature being disabled, returns ``None`` (pass through)."""
+        # Language gate (runs first, no embedding needed): the classifier head was trained on
+        # vi/en only, so a message predominantly in a non-Latin script (CJK/kana/Hangul/
+        # Cyrillic/…) is refused with a bilingual ask to use Vietnamese or English. Latin-script
+        # languages pass through to the classifier. Independent of input_classifier_enabled.
+        if getattr(state.settings, "language_gate_enabled", True) and is_unsupported_language(
+                prompt, ratio=getattr(state.settings, "language_gate_nonlatin_ratio", 0.5)):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=refuse_language", run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "unsupported_language", "action": "refuse_language", "pii": False})
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": {"label": "unsupported_language",
+                                         "action": "refuse_language", "blocked": True, "pii": False},
+                "short_circuit": True,
+            }
+            return UNSUPPORTED_LANGUAGE_MSG, metadata
+        # Unicode-smuggling injection gate (loop iter 4, FT-A): a prompt-injection payload hidden
+        # in non-rendering codepoints (TAG block / variation selectors / zero-width / interlinear)
+        # is invisible to the sec-embedding model, so the classifier head cannot see it. Catch it
+        # deterministically BEFORE embedding and refuse as an injection. High-precision — legit
+        # emoji / ZWJ / flag-tag sequences never trip it (see security.has_hidden_smuggling).
+        if getattr(state.settings, "input_classifier_enabled", True) and has_hidden_smuggling(prompt):
+            run_id = uuid4().hex
+            logger.info("input-sanitize run_id=%s action=block_injection reason=unicode_smuggling",
+                        run_id)
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": "injection", "action": "block_injection", "pii": False})
+            classification = {"label": "injection", "action": "block_injection",
+                              "blocked": True, "pii": False, "reason": "unicode_smuggling"}
+            metadata = {
+                "run_id": run_id, "profile": "chat",
+                "tool_registry": sorted(registry_for("chat")),
+                "input_classification": classification, "short_circuit": True,
+            }
+            return REFUSE_INJECTION_MSG, metadata
+        if not getattr(state.settings, "input_classifier_enabled", True):
+            return None
+        run_id = uuid4().hex
+        try:
+            verdict = await classify_input(prompt, settings=state.settings,
+                                           client=getattr(state, "http_client", None))
+            # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
+            # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
+            # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
+            # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
+            # straight back to the classifier's own threshold decision — never a new failure
+            # mode. See sanitize/cascade.py.
+            if (verdict.ok and verdict.injection_uncertain
+                    and getattr(state.settings, "injection_cascade_enabled", False)):
+                # Prefer the calibrated score (the one band-membership was actually decided on)
+                # if shipped; falls back to the raw score for display when it isn't.
+                cascade_score = verdict.scores.get("injection_calibrated",
+                                                   verdict.scores.get("injection", 0.0))
+                judge_verdict = await judge_injection(
+                    state.runner, prompt, cascade_score,
+                    timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                if judge_verdict is not None:
+                    logger.info(
+                        "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
+                        "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
+                    verdict = replace(verdict, injection=judge_verdict)
+            decision = decide(verdict, state.settings)
+        except Exception:  # a guard must never break chat
+            logger.exception("input classifier failed → fail-open")
+            return None
+
+        classification = {
+            "label": decision.label,
+            "action": decision.action.value,
+            "blocked": decision.short_circuit,
+            "pii": decision.pii,
+            "scores": {k: round(v, 4) for k, v in verdict.scores.items()},
+            "latency_ms": round(verdict.latency_ms, 1),
+        }
+        # Fail-open observability: a verdict that is not ``ok`` means the guard was bypassed
+        # (embed down / embed-model mismatch / timeout). That is safe but SILENT, so surface it
+        # at WARNING with the running unknown-rate rather than only INFO (see CLAUDE.md incident).
+        note_verdict(verdict.ok)
+        if not verdict.ok:
+            st = verdict_stats()
+            logger.warning("input-sanitize FAIL-OPEN run_id=%s reason=%s unknown_rate=%.3f (%d/%d)",
+                           run_id, verdict.reason, st["unknown_rate"], st["unknown"], st["total"])
+        logger.info("input-sanitize run_id=%s verdict=%s action=%s latency_ms=%.1f",
+                    run_id, verdict.summary(), decision.action.value, verdict.latency_ms)
+        # Persist an audit line (digest, not plaintext) for any block or PII hit.
+        if decision.short_circuit or decision.pii:
+            _audit(run_id, "input_sanitize", prompt,
+                   {"label": decision.label, "action": decision.action.value, "pii": decision.pii})
+
+        if not decision.short_circuit:
+            return None
+        metadata = {
+            "run_id": run_id, "profile": "chat",
+            "tool_registry": sorted(registry_for("chat")),
+            "input_classification": classification, "short_circuit": True,
+        }
+        return decision.message, metadata
+
+    def _short_circuit_stream(message: str, metadata: dict[str, Any]) -> StreamingResponse:
+        """SSE response for a classifier short-circuit: one token + one final, then DONE
+        (same frame shape as chat_stream's build_final, so token-only UIs still render it)."""
+        async def gen() -> AsyncIterator[bytes]:
+            yield sse_frame("token", {"delta": message})
+            yield sse_frame("final", {"content": message, "answer": message,
+                                      "message": message, "metadata": metadata})
+            yield b"data: [DONE]\n\n"
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
     @app.post("/chat_no_stream")
     @app.post("/ai/chat")
     async def chat(body: LegacyRequest) -> dict[str, Any]:
@@ -704,6 +854,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
     @app.post("/ai/chat/stream")
     async def chat_stream(body: LegacyRequest) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
+        gated = await _chat_gate(text)
+        if gated is not None:  # model classifier short-circuited before the agent runs
+            return _short_circuit_stream(gated[0], gated[1])
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -712,14 +865,186 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return stream("chat", text, session_id, build_final)
 
-    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
-        """Split the input and enforce the max-chunk cap (413) so one request can't fan out
-        into unbounded model calls. Returns (chunks, src, tgt)."""
-        src, tgt = translate_langs(body)
-        chunks = split_for_translation(body.supplied_text(), state.settings.translate_chunk_chars)
-        if len(chunks) > state.settings.translate_max_chunks:
+    async def _stamp_session_activity(sid: str, rec: Any, body: LegacyRequest) -> None:
+        """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
+        and backfill a ``title`` from the first ~60 chars of the user's message if the
+        session doesn't already have one. ``rec`` is the SessionRecord loaded BEFORE the
+        turn ran — used only as a fallback if the fresh re-load below fails for some
+        reason. We re-``load(sid)`` right before deciding the title (rather than trusting
+        ``rec.meta``) because a concurrent ``PATCH /sessions/{sid}`` rename can land while
+        the turn is in flight; deciding off the stale pre-turn snapshot would blow that
+        rename away by re-deriving a title from this message. Wrapped in try/except — a
+        session-store hiccup here must never turn a good reply into a failed request."""
+        try:
+            fresh = await state.runner.session_store.load(sid)
+            meta = (fresh.meta if fresh is not None else rec.meta) or {}
+            updates: dict[str, Any] = {"last_activity": datetime.now(timezone.utc).isoformat()}
+            if not meta.get("title"):
+                title = (body.supplied_text() or "").strip().replace("\n", " ")[:60]
+                if title:
+                    updates["title"] = title
+            await state.runner.session_store.update_meta(sid, updates)
+        except Exception:
+            logger.exception("session meta stamp failed for sid=%s", sid)
+
+    @app.post("/sessions/{sid}/chat")
+    async def session_chat(sid: str, body: LegacyRequest) -> dict[str, Any]:
+        """Session-scoped sibling of ``/ai/chat``: the caller picks the linch session id
+        explicitly via the URL (instead of it being derived from a hashed ``user_id``), so
+        multiple sessions per user/project are addressable. 404s on an unknown session
+        rather than silently creating one — sessions are provisioned via
+        ``POST /projects/{pid}/sessions`` (see api/projects.py). 403s on an owner
+        mismatch — mutation (a chat turn is appended to the session) — so a caller
+        holding someone else's ``sid`` can't inject turns / exfiltrate context."""
+        rec = await state.runner.session_store.load(sid)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        if (rec.meta or {}).get("owner") != _norm_owner(body.user_id):
+            raise HTTPException(status_code=403, detail="not the session owner")
+        text, metadata = await complete("chat", body, session_id=sid)
+        await _stamp_session_activity(sid, rec, body)
+        return {"response": text, "answer": text, "message": text, "metadata": metadata}
+
+    @app.post("/sessions/{sid}/chat/stream")
+    async def session_chat_stream(sid: str, body: LegacyRequest) -> StreamingResponse:
+        """Session-scoped sibling of ``/ai/chat/stream`` — same SSE framing, same input
+        gate, but ``sid`` (from the URL) is the runner session id. The existence check
+        happens before any streaming starts (mirrors how ``require_public_input`` already
+        raises before this handler's non-streaming counterpart above does), so an unknown
+        session gets a clean 404 instead of a 200 SSE stream carrying an error frame. The
+        owner check (403 on mismatch) happens right alongside it, before any streaming
+        starts, for the same reason."""
+        rec = await state.runner.session_store.load(sid)
+        if rec is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        if (rec.meta or {}).get("owner") != _norm_owner(body.user_id):
+            raise HTTPException(status_code=403, detail="not the session owner")
+        text = require_public_input(body.supplied_text())
+        # Stamp last_activity/auto-title HERE — once, before the input gate and before
+        # any streaming starts — rather than in build_final on completion. The FE aborts
+        # the stream (client disconnect) when the user switches chats mid-turn, which
+        # raises asyncio.CancelledError inside stream()'s generator; that is NOT an
+        # Exception subclass, so it skips the `except Exception` in stream() and
+        # build_final() never runs. A first turn cut off that way would otherwise never
+        # get a title/last_activity and would reload as "Cuộc trò chuyện mới" even
+        # though the FE had already shown the message as the title. Stamping here still
+        # preserves the two cases that matter: a 422 from require_public_input above
+        # never stamps (no turn happened), and a gate refusal below still counts as a
+        # turn and is still stamped (it already happened, by this same call).
+        await _stamp_session_activity(sid, rec, body)
+        gated = await _chat_gate(text)
+        if gated is not None:  # model classifier short-circuited before the agent runs
+            return _short_circuit_stream(gated[0], gated[1])
+
+        async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+            # linch persists the turn to its session store during the run; the meta
+            # bookkeeping (title/last_activity) already happened above, before streaming
+            # started — see the comment there for why.
+            return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
+
+        return stream("chat", text, sid, build_final)
+
+    # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
+    # occasionally echoes its own instruction preamble back verbatim instead of only
+    # translating past it. Reproduced 2026-09-12 on a >1MB CVE-detail-JSON translate
+    # input — each per-chunk echo landed mid-string after rejoin, splitting words in
+    # half (e.g. "...ji[Hôm nay là ...]\nDịch văn bản sau...:\n\nffies..."). Applied
+    # per-chunk (inside render(), below) so a leak never survives into the join.
+    # Two independent fragments can leak, together or alone (observed both: the date
+    # bracket alone with no instruction line, and the full "date + instruction" combo
+    # mid-chunk) — stripped as two separate passes rather than one combined pattern so
+    # either survives without the other.
+    _DATE_BRACKET_RE = re.compile(r"\[Hôm nay là [^\]]*\]\s*")
+    _INSTRUCTION_RE = re.compile(r"Dịch văn bản sau\b.{0,400}?\n\n?", re.DOTALL)
+
+    def _strip_prompt_echo(text: str) -> str:
+        return _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+
+    # A caller can post a whole JSON record as the text to translate — the ias.id.vn
+    # datalake page sends the entire "cves_detail" object. Round-tripping that through
+    # the model as ONE string is what produced garbled output: the same description is
+    # mirrored 6-9× across nvd_json/mitre_json/kb_json/history (measured: 17-50 total
+    # occurrences behind only 4-18 DISTINCT strings), so every copy was re-translated,
+    # and at that size the model also lost the instruction/content boundary. Instead,
+    # walk the object and translate every prose value wherever it sits in the tree,
+    # deduplicated — one model call per distinct string, reused at each occurrence —
+    # then splice the results back into the original structure. Identifiers, enums,
+    # URLs, versions, CVSS vectors, CPEs and timestamps stay byte-identical; translating
+    # those would corrupt the record.
+    _PROSE_KEYS = frozenset({"title", "description", "value", "summary", "new", "old", "data"})
+    _NON_PROSE_PREFIXES = ("http://", "https://", "cpe:", "CVSS:", "/")
+
+    def _is_prose(text: str) -> bool:
+        """Prose = long enough to be a sentence AND multi-word. Timestamps, ids, enums,
+        severities, versions, hashes and single-token paths all fail one of the two."""
+        stripped = text.strip()
+        return (len(stripped) >= 12 and " " in stripped
+                and not stripped.startswith(_NON_PROSE_PREFIXES))
+
+    def _collect_prose(node: Any, key: str | None, seen: set[str], out: list[str]) -> None:
+        if isinstance(node, dict):
+            for child_key, value in node.items():
+                _collect_prose(value, child_key, seen, out)
+        elif isinstance(node, list):
+            for item in node:  # a list inherits its parent's key ("descriptions": [...])
+                _collect_prose(item, key, seen, out)
+        elif isinstance(node, str) and key in _PROSE_KEYS and _is_prose(node) and node not in seen:
+            seen.add(node)
+            out.append(node)
+
+    def _replace_prose(node: Any, key: str | None, translated: dict[str, str]) -> Any:
+        if isinstance(node, dict):
+            return {k: _replace_prose(v, k, translated) for k, v in node.items()}
+        if isinstance(node, list):
+            return [_replace_prose(item, key, translated) for item in node]
+        if isinstance(node, str) and key in _PROSE_KEYS:
+            return translated.get(node, node)
+        return node
+
+    def _prose_values(text: str) -> tuple[dict[str, Any], list[str]] | None:
+        """(parsed object, distinct prose values) for JSON-object input, else None."""
+        try:
+            obj = json.loads(text)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return None
+        if not isinstance(obj, dict):
+            return None
+        seen: set[str] = set()
+        values: list[str] = []
+        _collect_prose(obj, None, seen, values)
+        return (obj, values) if values else None
+
+    def _guard_chunk_cap(count: int) -> None:
+        """One request must not fan out into unbounded model calls."""
+        if count > state.settings.translate_max_chunks:
             raise HTTPException(413, f"Văn bản quá dài để dịch (>{state.settings.translate_max_chunks} "
                                      "khối). Vui lòng chia nhỏ yêu cầu.")
+
+    # Chunks below this aren't worth the per-call overhead and start costing coherence
+    # (each chunk is translated without its neighbours' context).
+    _MIN_CHUNK_CHARS = 800
+
+    def _chunk_budget(text_len: int) -> int:
+        """Size chunks to fill the concurrency budget in ONE wave instead of always cutting
+        at the configured ceiling: a 4k-char value at ceiling 6000 is a single sequential
+        call (measured 13.9s), while the same value split into ~concurrency pieces
+        translates in parallel (4.0s). Short text still returns the ceiling, so it stays a
+        single call — and the ceiling still bounds very long input, so the max translatable
+        size (max_chunks × ceiling) is unchanged."""
+        ceiling = state.settings.translate_chunk_chars
+        if text_len <= _MIN_CHUNK_CHARS:
+            return ceiling
+        target = text_len // max(1, state.settings.translate_chunk_concurrency)
+        return max(_MIN_CHUNK_CHARS, min(ceiling, target))
+
+    def _split_adaptive(text: str) -> list[tuple[str, str]]:
+        return split_for_translation(text, _chunk_budget(len(text)))
+
+    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
+        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt)."""
+        src, tgt = translate_langs(body)
+        chunks = _split_adaptive(body.supplied_text())
+        _guard_chunk_cap(len(chunks))
         return chunks, src, tgt
 
     async def translate_assemble(body: LegacyRequest) -> tuple[str, dict[str, Any]]:
@@ -727,24 +1052,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
         a translation past its output-token cap (which would truncate). Each chunk runs the
         full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
         separators. complete() already sanitizes; we unmask each chunk's literals here."""
-        chunks, src, tgt = _translate_chunks(body)
+        src, tgt = translate_langs(body)
+        sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
 
         async def render(chunk_text: str) -> str:
             prompt, literals = build_translate_prompt(chunk_text, src, tgt)
             out, _meta = await complete("translate", body, prompt_override=prompt)
-            return unmask_literals(out, literals)
-
-        if len(chunks) == 1:
-            return await render(chunks[0][0]), base_meta("translate", None)
-
-        sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
+            return _strip_prompt_echo(unmask_literals(out, literals))
 
         async def render_bounded(chunk_text: str) -> str:
             async with sem:
                 return await render(chunk_text)
 
-        outs = await asyncio.gather(*(render_bounded(c) for c, _ in chunks))
-        final = "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
+        async def render_chunks(chunks: list[tuple[str, str]]) -> str:
+            """Translate one value's chunks concurrently and rejoin on the exact separators."""
+            outs = await asyncio.gather(*(render_bounded(c) for c, _sep in chunks))
+            return "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
+
+        record = _prose_values(body.supplied_text())
+        if record is not None:
+            obj, values = record
+            plans = [_split_adaptive(v) for v in values]
+            _guard_chunk_cap(sum(len(plan) for plan in plans))
+            outs = await asyncio.gather(*(render_chunks(plan) for plan in plans))
+            meta = base_meta("translate", None)
+            meta["prose_values_translated"] = len(values)
+            return json.dumps(_replace_prose(obj, None, dict(zip(values, outs))), ensure_ascii=False), meta
+
+        chunks, _src, _tgt = _translate_chunks(body)
+        if len(chunks) == 1:
+            return await render(chunks[0][0]), base_meta("translate", None)
+        final = await render_chunks(chunks)
         meta = base_meta("translate", None)
         meta["chunks"] = len(chunks)
         return final, meta
@@ -754,23 +1092,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         text, metadata = await translate_assemble(body)
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
-    @app.post("/ai/translate/stream")
-    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
-        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
-
-        if len(chunks) <= 1:
-            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
-
-            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-                # Restore literals in the authoritative `final` event (token deltas may still
-                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
-                final = unmask_literals(final, literals)
-                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
-
-            return stream("translate", prompt, None, build_final)
-
-        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
-        # True token streaming is traded for guaranteed completeness (no truncated tail).
+    def _sse_assemble_stream(body: LegacyRequest) -> AsyncIterator[bytes]:
+        """Assemble via translate_assemble() (chunked-translate or CVE-record path) and
+        emit as one token+final SSE frame. True token streaming is traded for guaranteed
+        completeness (no truncated tail, no per-chunk partial JSON)."""
         async def gen() -> AsyncIterator[bytes]:
             try:
                 final, meta = await translate_assemble(body)
@@ -782,8 +1107,34 @@ def register_routes(app: FastAPI, state: Any) -> None:
             yield sse_frame("final", {"content": final, "translation": final,
                                       "translated_text": final, "metadata": meta})
             yield b"data: [DONE]\n\n"
+        return gen()
 
-        return StreamingResponse(gen(), media_type="text/event-stream")
+    @app.post("/ai/translate/stream")
+    async def translate_stream(body: LegacyRequest) -> StreamingResponse:
+        record = _prose_values(body.supplied_text())
+        if record is not None:
+            # Same cap check as the plain-text path below, done BEFORE opening the stream —
+            # otherwise an oversized JSON record would 200+SSE-error mid-stream instead of a
+            # clean 413, breaking the "413 before streaming starts" contract for this path only.
+            _, values = record
+            _guard_chunk_cap(sum(len(_split_adaptive(v)) for v in values))
+            return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
+
+        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
+
+        if len(chunks) <= 1:
+            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
+
+            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
+                # Restore literals in the authoritative `final` event (token deltas may still
+                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
+                final = _strip_prompt_echo(unmask_literals(final, literals))
+                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
+
+            return stream("translate", prompt, None, build_final)
+
+        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
+        return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
 
     @app.post("/ai/generate-report")
     async def report(body: LegacyRequest) -> dict[str, Any]:
@@ -1154,7 +1505,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    {"user_id": body.user_id, "exploit_verdict": kt_result.get("exploit_verdict"),
                     "ok": kt_result.get("ok"), "error": kt_result.get("error")})
         await _pad_to_floor(_start, _floor)  # uniform total latency (see _pad_to_floor)
-        return {"description": text or no_poc, "exploit_guide": text or no_poc, "metadata": metadata}
+        safe = neutralize_active_content(text or no_poc)  # defang XSS in the injected PoC too
+        return {"description": safe, "exploit_guide": safe, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
     async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
@@ -1248,8 +1600,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(injected)
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
-            return {"content": final or no_poc, "exploit_guide": final or no_poc,
-                    "description": final or no_poc, "metadata": meta}
+            safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
+            return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
 
         async def gen() -> AsyncIterator[bytes]:
             final = ""
@@ -1370,7 +1722,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             preview_body = canonical_block(fullened, _pfres.get("cve_id"))
                             if preview_body:
                                 section1_sent = True
-                                yield sse_frame("section1", {"body": preview_body, "preview": True})
+                                yield sse_frame("section1",
+                                                {"body": neutralize_active_content(preview_body),
+                                                 "preview": True})
 
                     if model_next in done:
                         try:
@@ -1820,8 +2174,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if store is not None and hasattr(store, "ping"):
             redis_status = "connected" if await store.ping() else "unreachable"
         else:
-            redis_status = "memory-dev"
-        return {"status": "ok" if qwen_ok else "degraded", "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit}
+            redis_status = "ok"
+        session_backend = state.settings.session_store_backend
+        # Ư4: surface the input-classifier fail-open rate here too, not just as a WARNING log
+        # line — this is exactly the CLAUDE.md-documented failure mode (guard silently disabled,
+        # /health said ok) that fail-open observability was built to catch. A high unknown_rate
+        # over a real sample means the guard is bypassed on most requests right now.
+        sanitize_stats = verdict_stats()
+        status = _health_status(qwen_ok, sanitize_stats)
+        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:
@@ -1829,3 +2190,57 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not expected or x_api_key != expected:
             raise HTTPException(401, "Invalid admin API key")
         return {"status": "ok", "refreshed": True}
+
+    _register_showcase_routes(app, state)
+
+
+def _register_showcase_routes(app: FastAPI, state: Any) -> None:
+    """Nhóm F/D/K/L/E (docs/nghiem-thu-showcase/) — read-only evidence APIs for the
+    nghiệm-thu demo, Stage 1 (KB + S — hồ sơ gốc browser — deliberately not included yet).
+    None of these need ``state`` (no LLM/KB calls, no closures) — kept as a separate
+    function purely so this block stays easy to lift out later if the showcase moves repos.
+    """
+    from .showcase import finetune as showcase_finetune
+    from .showcase import kpi_bench as showcase_kpi_bench
+    from .showcase import model_info as showcase_model_info
+    from .showcase import sanitize_demo as showcase_sanitize_demo
+    from .showcase import source_dossier as showcase_source_dossier
+    from .showcase import kb as showcase_kb
+    from .showcase import deploy as showcase_deploy
+    from .showcase import tb_proxy as showcase_tb_proxy
+    from .showcase import testset as showcase_testset
+
+    app.include_router(showcase_finetune.router)
+    app.include_router(showcase_model_info.router)
+    app.include_router(showcase_kpi_bench.router)
+    app.include_router(showcase_sanitize_demo.router)
+    app.include_router(showcase_source_dossier.router)
+    app.include_router(showcase_kb.router)
+    app.include_router(showcase_deploy.router)
+    app.include_router(showcase_tb_proxy.router)  # /tb/* → TensorBoard (đi ké qua :8131)
+    app.include_router(showcase_testset.router)
+
+    try:
+        from .showcase import evidence as showcase_evidence
+    except ImportError:
+        logger.warning("showcase evidence router (nhóm E) chưa sẵn sàng — bỏ qua /ai/evidence/*")
+    else:
+        app.include_router(showcase_evidence.router)
+
+    # StaticFiles gửi Cache-Control: no-cache → trình duyệt LUÔN revalidate qua ETag (304 nếu
+    # không đổi, tải mới ngay khi file đổi). Tránh kẹt module JS/CSS cũ mỗi lần cập nhật showcase.
+    class _NoCacheStatic(StaticFiles):
+        def file_response(self, *args: Any, **kwargs: Any):
+            resp = super().file_response(*args, **kwargs)
+            resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+            return resp
+
+    finetune_figures_dir = Path(state.settings.showcase_finetune_dossier_dir) / "dashboards" / "figures"
+    if finetune_figures_dir.is_dir():
+        app.mount("/showcase-api/finetune/assets", _NoCacheStatic(directory=str(finetune_figures_dir)),
+                  name="showcase-finetune-assets")
+
+    # Serve the throwaway demo page same-origin (no CORS needed) — repo_root/demo/showcase/.
+    demo_dir = Path(__file__).resolve().parents[3] / "demo" / "showcase"
+    if demo_dir.is_dir():
+        app.mount("/showcase-demo", _NoCacheStatic(directory=str(demo_dir), html=True), name="showcase-demo")

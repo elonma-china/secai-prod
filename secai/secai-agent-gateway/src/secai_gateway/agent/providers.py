@@ -32,7 +32,7 @@ def build_llm_provider() -> tuple[Any, str]:
         base_url=s.qwen_base_url.rstrip("/"),
         context_window=s.qwen_context_window,
         parallel_tool_calls=True,
-        # Cyber-F1 (Qwen3.5-MoE) model-card recommended sampling, now env-tunable via
+        # Cyber-F1 (Qwen3-30B-A3B-Instruct-2507 MoE) model-card recommended sampling, now env-tunable via
         # Settings (LLM_TEMPERATURE, LLM_TOP_P, …). Only `temperature` is a first-class
         # OpenAI field (linch); top_p/top_k/min_p/presence_penalty/repetition_penalty are
         # vLLM sampling extensions, so all six go through extra_body — the OpenAI SDK

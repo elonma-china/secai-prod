@@ -15,7 +15,7 @@ from linch.events import (
     WorkflowEvent,
 )
 
-from ..security import remove_chinese_content
+from ..security import neutralize_active_content, remove_chinese_content
 
 # HookEventRecord.action values that discard the model's current in-flight answer and
 # start a fresh generation — e.g. RequireSearchBeforeAnswerHook/RequireRunInstructionsHook
@@ -51,7 +51,9 @@ def event_to_sse(event: Any) -> bytes | None:
         # Strip CJK before yield — model sometimes emits Chinese mid-stream.
         delta = event.delta if isinstance(event.delta, dict) else {}
         if delta.get("kind") == "text" and delta.get("text"):
-            cleaned = remove_chinese_content(delta["text"])
+            # Defang active HTML/JS per token (anti-XSS) in case the UI renders the live token
+            # stream; a tag split across two tokens still gets caught by the sanitized `final`.
+            cleaned = neutralize_active_content(remove_chinese_content(delta["text"]))
             if not cleaned:
                 return None
             return sse_frame("token", {"delta": cleaned})
