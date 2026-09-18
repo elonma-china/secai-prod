@@ -761,7 +761,13 @@ class RequireChatGroundingHook:
 
         attempts = RequireSearchBeforeAnswerHook._get(self._attempts, run_id, 0)
         if attempts >= self.max_retries:
-            return None
+            # Bug (found 2026-09-18): used to `return None` here, silently shipping the
+            # model's ungrounded guess once retries ran out — verified live: "CVE-2022-29353
+            # có trong KEV?" forced one regenerate (chat_kb_required) but the model never
+            # actually called qdrant_search/neo4j_search on retry either, and this branch let
+            # the same wrong "có" through as final. A confident ungrounded answer is worse
+            # than an honest "chưa tra được" — reuse the anti-empty floor instead of shipping it.
+            return HookResult.mutate(final_text=_CHAT_EMPTY_FALLBACK, reason="chat_kb_required_exhausted")
         self._attempts[run_id] = attempts + 1
         self._attempts.move_to_end(run_id)
         _trim(self._attempts)

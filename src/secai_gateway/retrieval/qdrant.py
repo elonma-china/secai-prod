@@ -68,8 +68,13 @@ def _format_hit(index: int, score: float, payload: dict[str, Any], rerank_score:
         lines.append(f"**Severity:** {payload['severity']}")
     if payload.get("cvss_score"):
         lines.append(f"**CVSS:** {payload['cvss_score']}")
-    if payload.get("is_in_kev"):
-        lines.append("**KEV:** yes")
+    if payload.get("is_in_kev") is not None:
+        # Bug (found 2026-09-18): `if payload.get("is_in_kev"):` silently dropped the
+        # line whenever the value was False, making "not in KEV" indistinguishable from
+        # "KEV status unknown" in the LLM's context — the model then guessed "yes" for
+        # KEV questions regardless of the real answer (verified: CVE-2022-29353,
+        # is_in_kev=False, model answered "yes"). Must render the negative explicitly.
+        lines.append(f"**KEV:** {'yes' if payload['is_in_kev'] else 'no'}")
     if payload.get("year"):
         lines.append(f"**Year:** {payload['year']}")
     if payload.get("products"):
