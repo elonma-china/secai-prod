@@ -271,7 +271,11 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     }
   }
 
-  async function rollbackJustCreated(sid: string, projectId: string | null) {
+  /** A just-created session's create-call succeeded but the stream that was supposed to use it
+   * failed before producing anything (422/429/5xx) — undo the creation server-side (best-effort)
+   * and drop everything from this attempt except the error/blocked banner (`aid`), restoring the
+   * typed text so the user can just hit send again. */
+  async function rollbackJustCreated(sid: string, projectId: string | null, aid: string, text: string) {
     try {
       await deleteSession(sid, userId);
     } catch {
@@ -279,11 +283,19 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     }
     setSessions((prev) => prev.filter((s) => s.session_id !== sid));
     setView({ kind: "draft", projectId });
+    setItems((prev) => prev.filter((it) => it.id === aid));
+    setInput(text);
   }
 
   /** LAZY CREATION — clicking "new" never POSTs anything; the session is only created here,
    * on the first message actually sent into a draft. Mirrors ChatGPT: an empty new-chat tab
-   * costs nothing server-side until you type. */
+   * costs nothing server-side until you type.
+   *
+   * The AbortController is created up front (before the `POST /sessions` create-call, which
+   * doesn't itself take a signal) so that switching to another chat while creation is still
+   * in flight — via selectSession's `abortRef.current?.abort()` — reliably cancels THIS attempt:
+   * we notice `ac.signal.aborted` as soon as the create-call resolves and unwind instead of
+   * hijacking the view/thread the user has since navigated to. */
   async function send(overrideText?: string) {
     const text = (overrideText ?? input).trim();
     if (!text || sendingRef.current) return;
@@ -291,13 +303,35 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     setBusy(true);
     setInput("");
 
-    let currentView = view;
-    let justCreated = false;
-    if (currentView.kind === "draft") {
-      try {
-        const created = currentView.projectId
-          ? await createSession(currentView.projectId, userId)
-          : await createStandaloneSession(userId);
+    const ac = new AbortController();
+    abortRef.current = ac;
+    let aborted = false;
+    let rolledBack = false;
+
+    try {
+      let currentView = view;
+      let justCreated = false;
+      if (currentView.kind === "draft") {
+        let created: SessionSummary;
+        try {
+          created = currentView.projectId
+            ? await createSession(currentView.projectId, userId)
+            : await createStandaloneSession(userId);
+        } catch (e) {
+          setInput(text);
+          const msg =
+            e instanceof ApiError ? `Không tạo được cuộc trò chuyện (${e.status}): ${e.message}` : `Không tạo được cuộc trò chuyện: ${String(e)}`;
+          window.alert(msg);
+          return;
+        }
+
+        if (ac.signal.aborted) {
+          // User switched to another chat while the create-call was in flight — the session
+          // exists server-side now but nothing here should touch state anymore; clean it up.
+          deleteSession(created.session_id, userId).catch(() => {});
+          return;
+        }
+
         justCreated = true;
         const optimisticTitle = text.replace(/\n/g, " ").slice(0, 60);
         const row: SessionSummary = { ...created, title: created.title || optimisticTitle };
@@ -305,91 +339,83 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
         currentView = { kind: "session", sid: row.session_id, projectId: row.project_id ?? null };
         setView(currentView);
         if (row.project_id) setExpanded((prev) => new Set(prev).add(row.project_id as string));
-      } catch (e) {
-        sendingRef.current = false;
-        setBusy(false);
-        setInput(text);
-        const msg =
-          e instanceof ApiError ? `Không tạo được cuộc trò chuyện (${e.status}): ${e.message}` : `Không tạo được cuộc trò chuyện: ${String(e)}`;
-        window.alert(msg);
-        return;
       }
-    }
 
-    const sid = currentView.sid;
-    const uid = `u-${Date.now()}`;
-    const aid = `a-${Date.now()}`;
-    setItems((prev) => [
-      ...prev,
-      { kind: "user", id: uid, text },
-      { kind: "assistant", id: aid, text: "", tools: [], phases: [], streaming: true },
-    ]);
-    scrollToBottom();
+      if (ac.signal.aborted) return;
 
-    const ac = new AbortController();
-    abortRef.current = ac;
-    let aborted = false;
-    let rolledBack = false;
-    try {
-      await chatStream(
-        sid,
-        text,
-        userId,
-        {
-          onToken: (delta) => {
-            patchAssistant(aid, (m) => ({ text: m.text + delta }));
-            scrollToBottom();
+      const sid = currentView.sid;
+      const uid = `u-${Date.now()}`;
+      const aid = `a-${Date.now()}`;
+      setItems((prev) => [
+        ...(justCreated ? [] : prev),
+        { kind: "user", id: uid, text },
+        { kind: "assistant", id: aid, text: "", tools: [], phases: [], streaming: true },
+      ]);
+      scrollToBottom();
+
+      try {
+        await chatStream(
+          sid,
+          text,
+          userId,
+          {
+            onToken: (delta) => {
+              patchAssistant(aid, (m) => ({ text: m.text + delta }));
+              scrollToBottom();
+            },
+            onRegenerate: () => patchAssistant(aid, () => ({ text: "" })),
+            onToolCall: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
+            onToolResult: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
+            onPhase: (p) => patchAssistant(aid, (m) => ({ phases: foldPhase(m.phases, p) })),
+            onError: (msg) => patchAssistant(aid, () => ({ error: msg })),
+            onFinal: (payload) =>
+              patchAssistant(aid, (m) => ({
+                text: String(payload.content ?? payload.answer ?? m.text),
+                streaming: false,
+                runId: (payload.metadata?.run_id as string | undefined) ?? undefined,
+              })),
           },
-          onRegenerate: () => patchAssistant(aid, () => ({ text: "" })),
-          onToolCall: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
-          onToolResult: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
-          onPhase: (p) => patchAssistant(aid, (m) => ({ phases: foldPhase(m.phases, p) })),
-          onError: (msg) => patchAssistant(aid, () => ({ error: msg })),
-          onFinal: (payload) =>
-            patchAssistant(aid, (m) => ({
-              text: String(payload.content ?? payload.answer ?? m.text),
-              streaming: false,
-              runId: (payload.metadata?.run_id as string | undefined) ?? undefined,
-            })),
-        },
-        ac.signal,
-      );
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") {
-        aborted = true;
-        patchAssistant(aid, () => ({ streaming: false }));
-      } else if (e instanceof ApiError && e.status === 422) {
-        setItems((prev) => prev.map((it) => (it.id === aid ? { kind: "blocked422", id: aid, detail: e.message } : it)));
-        if (justCreated) {
-          await rollbackJustCreated(sid, currentView.projectId);
-          rolledBack = true;
+          ac.signal,
+        );
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") {
+          aborted = true;
+          patchAssistant(aid, () => ({ streaming: false }));
+        } else if (e instanceof ApiError && e.status === 422) {
+          setItems((prev) => prev.map((it) => (it.id === aid ? { kind: "blocked422", id: aid, detail: e.message } : it)));
+          if (justCreated) {
+            await rollbackJustCreated(sid, currentView.projectId, aid, text);
+            rolledBack = true;
+          }
+        } else {
+          const msg = e instanceof ApiError ? `Lỗi ${e.status}: ${e.message}` : String(e);
+          patchAssistant(aid, () => ({ streaming: false, error: msg }));
+          if (e instanceof ApiError && justCreated) {
+            await rollbackJustCreated(sid, currentView.projectId, aid, text);
+            rolledBack = true;
+          }
         }
-      } else {
-        const msg = e instanceof ApiError ? `Lỗi ${e.status}: ${e.message}` : String(e);
-        patchAssistant(aid, () => ({ streaming: false, error: msg }));
-        if (e instanceof ApiError && justCreated) {
-          await rollbackJustCreated(sid, currentView.projectId);
-          rolledBack = true;
+      }
+
+      if (ac.signal.aborted) return;
+
+      if (!aborted && !rolledBack) {
+        if (justCreated) {
+          try {
+            setSessions(await listUserSessions(userId, "all"));
+          } catch {
+            /* keep the optimistic row — the server title just won't show up until next reload */
+          }
+        } else {
+          const now = new Date().toISOString();
+          setSessions((prev) => prev.map((s) => (s.session_id === sid ? { ...s, last_activity: now } : s)));
         }
       }
     } finally {
       sendingRef.current = false;
       setBusy(false);
-      abortRef.current = null;
+      if (abortRef.current === ac) abortRef.current = null;
       scrollToBottom();
-    }
-
-    if (!aborted && !rolledBack) {
-      if (justCreated) {
-        try {
-          setSessions(await listUserSessions(userId, "all"));
-        } catch {
-          /* keep the optimistic row — the server title just won't show up until next reload */
-        }
-      } else {
-        const now = new Date().toISOString();
-        setSessions((prev) => prev.map((s) => (s.session_id === sid ? { ...s, last_activity: now } : s)));
-      }
     }
   }
 

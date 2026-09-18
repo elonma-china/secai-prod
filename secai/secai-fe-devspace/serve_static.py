@@ -128,9 +128,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Connection", "close")
                 self.end_headers()
 
-                # Stream — never resp.read() whole body (breaks SSE)
+                # Stream — never resp.read() whole body (breaks SSE). read1() returns as soon as
+                # *some* bytes are available instead of blocking for a full 4KB, so tokens reach
+                # the browser as the gateway emits them and a client disconnect is noticed almost
+                # immediately (read() would otherwise sit blocked up to the next full chunk).
                 while True:
-                    chunk = resp.read(4096)
+                    chunk = resp.read1(4096)
                     if not chunk:
                         break
                     self.wfile.write(chunk)
