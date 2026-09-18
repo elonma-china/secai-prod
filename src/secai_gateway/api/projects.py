@@ -22,14 +22,19 @@ the linch async protocol — always ``await``.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from linch.types import message_to_dict
 
-from .schemas import CreateProjectRequest, CreateSessionRequest, RenameProjectRequest
+from .schemas import (
+    CreateProjectRequest,
+    CreateSessionRequest,
+    RenameProjectRequest,
+    UpdateSessionRequest,
+)
 
 router = APIRouter(tags=["projects"])
 
@@ -70,16 +75,33 @@ def _project_out(rec: dict[str, Any]) -> dict[str, Any]:
 
 
 def _session_out(rec: Any) -> dict[str, Any]:
+    """SessionOut: the shape returned by every session create/list/patch endpoint. Only
+    ADDS fields to the original 4-key shape ({session_id,title,created_at,updated_at}) —
+    ``project_id`` (null for a standalone session) and ``last_activity`` (falls back to
+    ``created_at`` for a session that has never been chatted in)."""
     meta = rec.meta or {}
     return {
         "session_id": rec.id, "title": meta.get("title", ""),
         "created_at": rec.created_at, "updated_at": rec.updated_at,
+        "project_id": meta.get("project_id"),
+        "last_activity": meta.get("last_activity") or rec.created_at,
     }
 
 
 def _is_project_session(rec: Any, pid: str) -> bool:
     meta = rec.meta or {}
     return meta.get("project_id") == pid and meta.get("kind") == "session"
+
+
+def _sort_by_last_activity(records: list[Any]) -> list[Any]:
+    """Sort session records newest-active-first. NOT ``updated_at`` — a rename bumps
+    ``updated_at`` (SessionStore.update_meta always does) but must not reorder the list,
+    only a chat turn (which stamps ``meta.last_activity``) should. Falls back to
+    ``created_at`` for a session that has never been chatted in."""
+    def key(rec: Any) -> str:
+        meta = rec.meta or {}
+        return meta.get("last_activity") or rec.created_at
+    return sorted(records, key=key, reverse=True)
 
 
 # ── projects ──────────────────────────────────────────────────────────────────────
@@ -161,9 +183,9 @@ async def create_session(pid: str, body: CreateSessionRequest, request: Request)
         raise _forbidden("not the project owner")
     store = state.runner.session_store
     sid = f"proj:{pid}:sess:{uuid4().hex}"
-    title = body.title or ""
-    await store.create(id=sid, meta={"project_id": pid, "owner": owner, "title": title, "kind": "session"})
-    return {"session_id": sid, "project_id": pid, "title": title}
+    title = (body.title or "").strip()
+    rec = await store.create(id=sid, meta={"project_id": pid, "owner": owner, "title": title, "kind": "session"})
+    return _session_out(rec)
 
 
 @router.get("/projects/{pid}/sessions")
@@ -177,7 +199,101 @@ async def list_project_sessions(pid: str, request: Request, user_id: str | None 
         # GET: 404 rather than 403, so a non-owner can't tell the project exists.
         raise _not_found(f"project not found: {pid}")
     store = state.runner.session_store
-    return [_session_out(s) for s in await store.list() if _is_project_session(s, pid)]
+    rows = [s for s in await store.list() if _is_project_session(s, pid)]
+    return [_session_out(s) for s in _sort_by_last_activity(rows)]
+
+
+# ── sessions (standalone — belong to NO project, like a ChatGPT top-level chat) ─────
+
+_MAX_TITLE_LEN = 200
+
+
+@router.post("/sessions")
+async def create_standalone_session(body: CreateSessionRequest, request: Request) -> dict[str, Any]:
+    """Create a session that belongs to no project. Provisioning a project-scoped
+    session is a different route (``POST /projects/{pid}/sessions``) — reject here
+    rather than silently ignoring a caller's intent to attach one."""
+    if body.project_id is not None:
+        raise _bad_request(
+            "project_id is not accepted here; use POST /projects/{pid}/sessions to "
+            "create a project-scoped session"
+        )
+    title = (body.title or "").strip()
+    if len(title) > _MAX_TITLE_LEN:
+        raise _bad_request(f"title must be at most {_MAX_TITLE_LEN} characters")
+    state = request.app.state.gateway
+    owner = _norm_owner(body.user_id)
+    store = state.runner.session_store
+    sid = f"sess:{uuid4().hex}"
+    rec = await store.create(id=sid, meta={"project_id": None, "owner": owner, "title": title, "kind": "session"})
+    return _session_out(rec)
+
+
+@router.get("/sessions")
+async def list_sessions(
+    request: Request,
+    user_id: str | None = Query(default=None),
+    scope: Literal["standalone", "all"] = Query(default="standalone"),
+) -> list[dict[str, Any]]:
+    """List the caller's own sessions (``kind == "session"`` only — legacy ``chat:*`` /
+    ``exploit:*`` rows, and any row missing ``kind``, never appear here). Default scope
+    is ``standalone`` (no ``project_id``) — the ChatGPT-style top-level chat list; pass
+    ``scope=all`` to also include project-scoped sessions. Sorted by ``last_activity``
+    desc, not ``updated_at`` (see ``_sort_by_last_activity``). No pagination."""
+    state = request.app.state.gateway
+    owner = _norm_owner(user_id)
+    store = state.runner.session_store
+    rows = [
+        s for s in await store.list()
+        if (s.meta or {}).get("kind") == "session"
+        and (s.meta or {}).get("owner") == owner
+        and (scope == "all" or (s.meta or {}).get("project_id") is None)
+    ]
+    return [_session_out(s) for s in _sort_by_last_activity(rows)]
+
+
+@router.patch("/sessions/{sid}")
+async def update_session(sid: str, body: UpdateSessionRequest, request: Request) -> dict[str, Any]:
+    """Rename a session and/or move it into/out of a project. Moving is metadata-only —
+    the session keeps its own id (``sess:...`` or ``proj:{pid}:sess:...``) regardless of
+    which project (if any) it currently belongs to; membership is decided purely by
+    ``meta.project_id`` (see ``_is_project_session``)."""
+    state = request.app.state.gateway
+    store = state.runner.session_store
+    rec = await store.load(sid)
+    if rec is None or (rec.meta or {}).get("kind") != "session":
+        # 404 also for a legacy row (chat:*/exploit:*, or anything missing kind) — this
+        # route only ever operates on rows this feature itself created.
+        raise _not_found(f"session not found: {sid}")
+    owner = _norm_owner(body.user_id)
+    if (rec.meta or {}).get("owner") != owner:
+        raise _forbidden("not the session owner")
+
+    fields_set = body.model_fields_set
+    updates: dict[str, Any] = {}
+
+    if "title" in fields_set:
+        title = (body.title or "").strip()
+        if not title:
+            raise _bad_request("title must not be blank")
+        if len(title) > _MAX_TITLE_LEN:
+            raise _bad_request(f"title must be at most {_MAX_TITLE_LEN} characters")
+        updates["title"] = title
+
+    if "project_id" in fields_set:
+        new_pid = body.project_id
+        current_pid = (rec.meta or {}).get("project_id")
+        if new_pid is not None and new_pid != current_pid:
+            proj = state.runner.project_store.get(new_pid)
+            if proj is None or proj["owner"] != owner:
+                raise _not_found(f"project not found: {new_pid}")
+        updates["project_id"] = new_pid
+
+    if not updates:
+        raise _bad_request("nothing to update")
+
+    updated = await store.update_meta(sid, updates)
+    return _session_out(updated)
 
 
 @router.get("/sessions/{sid}")

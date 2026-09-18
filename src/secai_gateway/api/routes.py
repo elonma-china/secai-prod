@@ -869,11 +869,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
         """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
         and backfill a ``title`` from the first ~60 chars of the user's message if the
         session doesn't already have one. ``rec`` is the SessionRecord loaded BEFORE the
-        turn ran (so ``rec.meta`` reflects the pre-turn title). Wrapped in try/except —
-        a session-store hiccup here must never turn a good reply into a failed request."""
+        turn ran — used only as a fallback if the fresh re-load below fails for some
+        reason. We re-``load(sid)`` right before deciding the title (rather than trusting
+        ``rec.meta``) because a concurrent ``PATCH /sessions/{sid}`` rename can land while
+        the turn is in flight; deciding off the stale pre-turn snapshot would blow that
+        rename away by re-deriving a title from this message. Wrapped in try/except — a
+        session-store hiccup here must never turn a good reply into a failed request."""
         try:
+            fresh = await state.runner.session_store.load(sid)
+            meta = (fresh.meta if fresh is not None else rec.meta) or {}
             updates: dict[str, Any] = {"last_activity": datetime.now(timezone.utc).isoformat()}
-            if not (rec.meta or {}).get("title"):
+            if not meta.get("title"):
                 title = (body.supplied_text() or "").strip().replace("\n", " ")[:60]
                 if title:
                     updates["title"] = title
@@ -916,6 +922,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
         text = require_public_input(body.supplied_text())
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
+            # Still counts as "a turn happened" for bookkeeping purposes (last_activity +
+            # auto-title) — the non-stream sibling gets this for free because it runs
+            # _stamp_session_activity() unconditionally after complete() (which itself
+            # returns early on a gate refusal); this path calls _chat_gate() directly and
+            # must stamp explicitly before returning the short-circuit response.
+            await _stamp_session_activity(sid, rec, body)
             return _short_circuit_stream(gated[0], gated[1])
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
