@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
 from linch.hooks.types import ToolResult
 
-from secai_gateway.agent.hooks import RequireChatGroundingHook, classify_chat_grounding
+from secai_gateway.agent.hooks import _CHAT_EMPTY_FALLBACK, RequireChatGroundingHook, classify_chat_grounding
 
 
 @dataclass
@@ -155,6 +155,10 @@ def test_pre_blocks_non_allowlisted_web_fetch(monkeypatch) -> None:
 def test_gives_up_after_retries() -> None:
     hook = RequireChatGroundingHook(max_retries=2)
     ctx = _final("r1", "chat", "OWASP Top 10")
-    assert asyncio.run(hook.on_before_final_answer(ctx)) is not None
-    assert asyncio.run(hook.on_before_final_answer(ctx)) is not None
-    assert asyncio.run(hook.on_before_final_answer(ctx)) is None
+    assert asyncio.run(hook.on_before_final_answer(ctx)).action == "force_continue"
+    assert asyncio.run(hook.on_before_final_answer(ctx)).action == "force_continue"
+    # Retries exhausted and still ungrounded → honest fallback, never the model's unverified guess.
+    exhausted = asyncio.run(hook.on_before_final_answer(ctx))
+    assert exhausted is not None and exhausted.action == "mutate"
+    assert exhausted.reason == "chat_kb_required_exhausted"
+    assert exhausted.final_text == _CHAT_EMPTY_FALLBACK
