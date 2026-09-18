@@ -111,16 +111,68 @@ export async function deleteProject(pid: string, userId: string): Promise<{ dele
 
 // ── sessions (scoped under a project, plus flat /sessions/{sid} lookups) ──────────────
 
-export async function createSession(
-  pid: string,
-  userId: string,
-  title?: string,
-): Promise<{ session_id: string; project_id: string; title: string }> {
-  return postJson(`/projects/${encodeURIComponent(pid)}/sessions`, { user_id: userId, title });
+/** Fills in whatever an older/partial BE response leaves out — kept for the transition where
+ * `POST /projects/{pid}/sessions` had only returned `{session_id, project_id, title}`. */
+function normalizeSession(raw: Partial<SessionSummary> & { session_id: string }): SessionSummary {
+  const now = new Date().toISOString();
+  const created = raw.created_at ?? now;
+  const updated = raw.updated_at ?? created;
+  return {
+    session_id: raw.session_id,
+    title: raw.title ?? "",
+    created_at: created,
+    updated_at: updated,
+    project_id: raw.project_id ?? null,
+    last_activity: raw.last_activity ?? updated,
+  };
+}
+
+export async function createSession(pid: string, userId: string, title?: string): Promise<SessionSummary> {
+  const res = await postJson<Partial<SessionSummary> & { session_id: string }>(
+    `/projects/${encodeURIComponent(pid)}/sessions`,
+    { user_id: userId, title },
+  );
+  return normalizeSession({ ...res, project_id: res.project_id ?? pid });
+}
+
+/** `POST /sessions` — standalone session, belongs to no project. */
+export async function createStandaloneSession(userId: string, title?: string): Promise<SessionSummary> {
+  const res = await postJson<Partial<SessionSummary> & { session_id: string }>("/sessions", { user_id: userId, title });
+  return normalizeSession({ ...res, project_id: res.project_id ?? null });
+}
+
+/** `GET /sessions?user_id&scope=` — `scope="all"` includes project-owned sessions too (their
+ * `project_id` is set); `"standalone"` is only the ones with no project. Sorted by the BE
+ * `last_activity desc`, but callers should still re-sort after any local mutation. */
+export async function listUserSessions(userId: string, scope: "standalone" | "all" = "all"): Promise<SessionSummary[]> {
+  const rows = await getJson<Array<Partial<SessionSummary> & { session_id: string }>>(
+    `/sessions${qs({ user_id: userId, scope })}`,
+  );
+  return rows.map((r) => normalizeSession(r));
 }
 
 export async function listSessions(pid: string, userId: string): Promise<SessionSummary[]> {
-  return getJson<SessionSummary[]>(`/projects/${encodeURIComponent(pid)}/sessions${qs({ user_id: userId })}`);
+  const rows = await getJson<Array<Partial<SessionSummary> & { session_id: string }>>(
+    `/projects/${encodeURIComponent(pid)}/sessions${qs({ user_id: userId })}`,
+  );
+  return rows.map((r) => normalizeSession({ ...r, project_id: r.project_id ?? pid }));
+}
+
+/** `PATCH /sessions/{sid}` — `project_id` ABSENT from `patch` means "don't move it"; pass
+ * `project_id: null` explicitly to move it out of its project, or a project id to move it in. */
+export async function updateSession(
+  sid: string,
+  patch: { title?: string; project_id?: string | null },
+  userId: string,
+): Promise<SessionSummary> {
+  const body: Record<string, unknown> = { user_id: userId };
+  if (patch.title !== undefined) body.title = patch.title;
+  if ("project_id" in patch) body.project_id = patch.project_id;
+  const res = await patchJson<Partial<SessionSummary> & { session_id: string }>(
+    `/sessions/${encodeURIComponent(sid)}`,
+    body,
+  );
+  return normalizeSession(res);
 }
 
 export async function getSession(sid: string, userId: string): Promise<SessionDetail> {

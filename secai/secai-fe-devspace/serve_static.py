@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent / "dist"
 GATEWAY = os.environ.get("VITE_GATEWAY_PROXY", "http://127.0.0.1:8131")
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
-PROXY_PREFIXES = ("/ai", "/health", "/poc")
+PROXY_PREFIXES = ("/ai", "/health", "/poc", "/projects", "/sessions", "/admin")
 HOP_BY_HOP = {
     "connection",
     "keep-alive",
@@ -48,6 +48,12 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch()
 
     def do_POST(self) -> None:  # noqa: N802
+        self._dispatch()
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        self._dispatch()
+
+    def do_DELETE(self) -> None:  # noqa: N802
         self._dispatch()
 
     def do_OPTIONS(self) -> None:  # noqa: N802
@@ -111,24 +117,38 @@ class Handler(BaseHTTPRequestHandler):
         is_sse = "text/event-stream" in ct or "/stream" in urlsplit(self.path).path
 
         try:
-            self.send_response(resp.status)
-            for k, v in resp.getheaders():
-                if k.lower() in HOP_BY_HOP:
-                    continue
-                self.send_header(k, v)
             if is_sse:
+                self.send_response(resp.status)
+                for k, v in resp.getheaders():
+                    if k.lower() in HOP_BY_HOP:
+                        continue
+                    self.send_header(k, v)
                 self.send_header("Cache-Control", "no-cache, no-transform")
                 self.send_header("X-Accel-Buffering", "no")
                 self.send_header("Connection", "close")
-            self.end_headers()
+                self.end_headers()
 
-            # Stream — never resp.read() whole body (breaks SSE)
-            while True:
-                chunk = resp.read(4096)
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                self.wfile.flush()
+                # Stream — never resp.read() whole body (breaks SSE)
+                while True:
+                    chunk = resp.read(4096)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+            else:
+                # Plain JSON CRUD response — buffer it fully so we can send a real
+                # Content-Length. Without it (HOP_BY_HOP strips the upstream one) the
+                # keep-alive connection has no framing and the client can hang waiting
+                # for more bytes that never come.
+                body = resp.read()
+                self.send_response(resp.status)
+                for k, v in resp.getheaders():
+                    if k.lower() in HOP_BY_HOP:
+                        continue
+                    self.send_header(k, v)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
         except (BrokenPipeError, ConnectionResetError, socket.timeout):
             pass
         finally:

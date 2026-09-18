@@ -13,13 +13,24 @@ export interface Project {
   updated_at: string; // ISO-8601
 }
 
-/** Row shape from `GET /projects/{pid}/sessions`. */
+/** `SessionOut` — row shape from `POST /sessions`, `GET /sessions`, `POST/GET
+ * /projects/{pid}/sessions` and `PATCH /sessions/{sid}`. `project_id` is the ONLY source of
+ * truth for project membership — `session_id` is opaque and must never be parsed for it. */
 export interface SessionSummary {
   session_id: string;
   title: string;
   created_at: string;
   updated_at: string;
+  project_id?: string | null;
+  last_activity?: string;
 }
+
+/** What the chat pane is currently showing. A "draft" has no `session_id` yet — lazy
+ * creation (see ChatbotScreen.send) only POSTs a session on the first message sent into it.
+ * Both variants carry `projectId` so callers can read it without a `kind` narrowing. */
+export type ChatView =
+  | { kind: "draft"; projectId: string | null }
+  | { kind: "session"; sid: string; projectId: string | null };
 
 /** Row shape from `GET /sessions/{sid}` (full meta, not just the summary fields above). */
 export interface SessionDetail {
