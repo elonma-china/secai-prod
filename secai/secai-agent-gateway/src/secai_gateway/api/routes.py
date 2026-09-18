@@ -920,20 +920,26 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if (rec.meta or {}).get("owner") != _norm_owner(body.user_id):
             raise HTTPException(status_code=403, detail="not the session owner")
         text = require_public_input(body.supplied_text())
+        # Stamp last_activity/auto-title HERE — once, before the input gate and before
+        # any streaming starts — rather than in build_final on completion. The FE aborts
+        # the stream (client disconnect) when the user switches chats mid-turn, which
+        # raises asyncio.CancelledError inside stream()'s generator; that is NOT an
+        # Exception subclass, so it skips the `except Exception` in stream() and
+        # build_final() never runs. A first turn cut off that way would otherwise never
+        # get a title/last_activity and would reload as "Cuộc trò chuyện mới" even
+        # though the FE had already shown the message as the title. Stamping here still
+        # preserves the two cases that matter: a 422 from require_public_input above
+        # never stamps (no turn happened), and a gate refusal below still counts as a
+        # turn and is still stamped (it already happened, by this same call).
+        await _stamp_session_activity(sid, rec, body)
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
-            # Still counts as "a turn happened" for bookkeeping purposes (last_activity +
-            # auto-title) — the non-stream sibling gets this for free because it runs
-            # _stamp_session_activity() unconditionally after complete() (which itself
-            # returns early on a gate refusal); this path calls _chat_gate() directly and
-            # must stamp explicitly before returning the short-circuit response.
-            await _stamp_session_activity(sid, rec, body)
             return _short_circuit_stream(gated[0], gated[1])
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-            # linch persists the turn to its session store during the run — only the
-            # meta bookkeeping (title/last_activity) is left to do here, best-effort.
-            await _stamp_session_activity(sid, rec, body)
+            # linch persists the turn to its session store during the run; the meta
+            # bookkeeping (title/last_activity) already happened above, before streaming
+            # started — see the comment there for why.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, sid, build_final)

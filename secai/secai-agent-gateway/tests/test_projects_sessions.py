@@ -40,6 +40,10 @@ class ProjectFakeRunner:
         self.session_store = InMemorySessionStore()
         self.poc = None  # /health uses getattr(..., "poc", None)
         self.calls: list[tuple[str, str, str | None]] = []
+        # UC-30: the title the session had (per session_store) at the moment stream()
+        # was invoked — lets a test tell "stamped before streaming started" apart from
+        # "stamped only on completion" without needing a real client disconnect.
+        self.stream_start_titles: list[str | None] = []
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
@@ -47,6 +51,11 @@ class ProjectFakeRunner:
 
     async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
+        title = None
+        if session_id is not None:
+            rec = await self.session_store.load(session_id)
+            title = (rec.meta or {}).get("title") if rec is not None else None
+        self.stream_start_titles.append(title)
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
 
 
@@ -840,3 +849,40 @@ async def test_uc29_session_out_is_superset_of_legacy_shape(tmp_path) -> None:
         assert listing.status_code == 200
         for row in listing.json():
             assert {"session_id", "title", "created_at", "updated_at", "project_id", "last_activity"} <= row.keys()
+
+
+# ── UC-30 — a first stream turn is stamped BEFORE streaming starts, not only on ────
+# completion (round 2 fix): the FE aborts the stream (client disconnect) when the
+# user switches chats mid-turn, which raises asyncio.CancelledError inside the SSE
+# generator — that bypasses build_final entirely (CancelledError isn't an Exception
+# subclass), so a stamp that only happened in build_final would leave a cut-off first
+# turn with no title/last_activity forever. Assert the stamp lands before the runner
+# is even invoked, using the fake runner's stream_start_titles snapshot (no need to
+# simulate a real disconnect).
+
+async def test_uc30_stream_stamps_before_first_token_not_only_on_completion(tmp_path) -> None:
+    runner = ProjectFakeRunner(tmp_path)
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "alice"})).json()["session_id"]
+
+        resp = await client.post(f"/sessions/{sid}/chat/stream",
+                                 json={"user_id": "alice", "message": "hello there, first turn"})
+        assert resp.status_code == 200
+        # The session's title, as seen by the runner's stream() at the moment it was
+        # called, must already be the auto-title — proving the stamp happened before
+        # streaming started, not after it finished.
+        assert runner.stream_start_titles == ["hello there, first turn"]
+
+        got = (await client.get(f"/sessions/{sid}", params={"user_id": "alice"})).json()
+        assert got["meta"]["title"] == "hello there, first turn"
+        assert got["meta"]["last_activity"]
+
+        # A 422 from require_public_input (secret-bearing text, same fixture as UC-12)
+        # must still never stamp anything — it raises before the stamp call is reached.
+        sid2 = (await client.post("/sessions", json={"user_id": "alice"})).json()["session_id"]
+        secret = await client.post(f"/sessions/{sid2}/chat/stream",
+                                   json={"user_id": "alice", "message": "password=super-secret-token-value"})
+        assert secret.status_code == 422
+        got2 = (await client.get(f"/sessions/{sid2}", params={"user_id": "alice"})).json()
+        assert not got2["meta"].get("title")
+        assert not got2["meta"].get("last_activity")
