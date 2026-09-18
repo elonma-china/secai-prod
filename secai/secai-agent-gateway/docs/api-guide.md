@@ -12,7 +12,8 @@ Toàn bộ API AI **đang chạy thật trên production** (`main`, deploy 2026-
 0. [SSE — quy ước dùng chung cho mọi endpoint `/stream`](#0-sse--quy-ước-dùng-chung)
 1. [Chat](#1-chat)
    - [1.1 Chat theo session cụ thể — `/sessions/{sid}/chat`](#11-chat-theo-session-cụ-thể--sessionssidchat)
-2. [Hội thoại có lịch sử — `/ai/conversations/*`](#2-hội-thoại-có-lịch-sử--aiconversations)
+   - [1.2 Quản lý cuộc trò chuyện — `/sessions`, `/projects/{pid}/sessions`](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)
+2. [Hội thoại có lịch sử — `/ai/conversations/*`](#2-hội-thoại-có-lịch-sử--aiconversations) ⚠️ *chưa có trong bản build này*
 3. [Dịch](#3-dịch--aitranslate)
 4. [Báo cáo](#4-báo-cáo--aigenerate-report)
 5. [Báo cáo thống kê](#5-báo-cáo-thống-kê--aigenerate-statistical-report)
@@ -107,7 +108,7 @@ POST /sessions/{sid}/chat
 POST /sessions/{sid}/chat/stream
 ```
 
-Biến thể của mục 1 khi caller **tự chỉ định session id** trên URL thay vì để gateway tự suy ra một luồng riêng từ `user_id` băm. Dùng khi cần nhiều cuộc hội thoại độc lập, có thể gắn với 1 project — tạo session trước bằng `POST /projects/{pid}/sessions`, nhận về `session_id` dạng `proj:{pid}:sess:{uuid}`, rồi chat vào đúng `sid` đó.
+Biến thể của mục 1 khi caller **tự chỉ định session id** trên URL thay vì để gateway tự suy ra một luồng riêng từ `user_id` băm. Dùng khi cần nhiều cuộc hội thoại độc lập. Tạo session trước — hoặc **không thuộc project nào** (`POST /sessions`, kiểu "cuộc trò chuyện" độc lập như ChatGPT) hoặc **gắn với 1 project** (`POST /projects/{pid}/sessions`) — nhận về `session_id` rồi chat vào đúng `sid` đó. Xem chi tiết cách tạo/liệt kê/đổi tên/di chuyển session ở [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions).
 
 **Request:** giống hệt khung ở mục 1 (`message`/`question`/`prompt`/`content`/`text`, `user_id` tuỳ chọn) — `sid` nằm trên URL, không lặp lại trong body:
 ```json
@@ -116,7 +117,7 @@ Biến thể của mục 1 khi caller **tự chỉ định session id** trên UR
 
 **Response 200 (non-stream) / `final` frame (stream):** cùng khung `{"response"/"content","answer","message","metadata"}` như mục 1 — dùng chung cổng lọc đầu vào (ngôn ngữ không hỗ trợ, prompt-injection, PII) và bước làm sạch đầu ra với `/ai/chat`, chỉ khác bộ nhớ hội thoại đi vào đúng `sid` thay vì luồng theo `user_id`.
 
-**404 `{"detail": "session not found"}`** nếu `sid` chưa tồn tại — endpoint này **không tự tạo session mồ côi**; phải tạo qua `POST /projects/{pid}/sessions` trước. Với bản `/stream`, lỗi 404 trả về trước khi stream bắt đầu (không phải một SSE `error` frame).
+**404 `{"detail": "session not found"}`** nếu `sid` chưa tồn tại — endpoint này **không tự tạo session mồ côi**; phải tạo trước qua `POST /sessions` (standalone) hoặc `POST /projects/{pid}/sessions` (trong project). Với bản `/stream`, lỗi 404 trả về trước khi stream bắt đầu (không phải một SSE `error` frame).
 
 **Tiêu đề & hoạt động:** mỗi lượt chat thành công (kể cả khi bị chặn bởi cổng lọc và trả lời từ chối) cập nhật `last_activity` trên session; nếu session chưa có `title`, tự đặt bằng ~60 ký tự đầu của tin nhắn — chỉ lần đầu, không ghi đè tiêu đề đã có (kể cả tiêu đề đặt thủ công). Việc cập nhật này là best-effort: một lỗi lưu meta không làm hỏng câu trả lời.
 
@@ -127,9 +128,63 @@ curl -X POST http://<gateway>:8131/sessions/proj:p1:sess:abc123/chat \
   -d '{"user_id": "user-42", "message": "SQL injection là gì?"}'
 ```
 
+### 1.2 Quản lý cuộc trò chuyện — `/sessions`, `/projects/{pid}/sessions`
+
+CRUD cho **cuộc trò chuyện** (session) — như ChatGPT: một cuộc trò chuyện có thể **đứng độc lập** ("standalone", không thuộc project nào) hoặc **thuộc về 1 project**. `session_id` là chuỗi **mờ (opaque)** — FE không nên tự parse hay giả định định dạng (nội bộ hiện dùng `sess:{uuid}` cho standalone và `proj:{pid}:sess:{uuid}` cho session tạo trong project, nhưng việc chuyển session giữa project **không đổi `session_id`** — xem PATCH bên dưới).
+
+| Method | Path | Việc gì |
+|---|---|---|
+| POST | `/sessions` | Tạo cuộc trò chuyện standalone (không thuộc project nào) |
+| GET | `/sessions?user_id=&scope=standalone\|all` | Liệt kê cuộc trò chuyện của `user_id` (mặc định `scope=standalone`) |
+| PATCH | `/sessions/{sid}` | Đổi tên và/hoặc chuyển cuộc trò chuyện vào/ra khỏi 1 project |
+| GET | `/sessions/{sid}` | Xem chi tiết 1 cuộc trò chuyện (kèm `meta` đầy đủ) |
+| DELETE | `/sessions/{sid}` | Xoá 1 cuộc trò chuyện |
+| GET | `/sessions/{sid}/messages` | Lấy lịch sử tin nhắn |
+| POST | `/projects/{pid}/sessions` | Tạo cuộc trò chuyện **thuộc project `pid`** |
+| GET | `/projects/{pid}/sessions` | Liệt kê cuộc trò chuyện thuộc project `pid` |
+
+**`SessionOut`** — hình dạng response chung cho mọi endpoint tạo/liệt kê/đổi (`POST /sessions`, `GET /sessions`, `PATCH /sessions/{sid}`, `POST`/`GET /projects/{pid}/sessions`):
+```json
+{
+  "session_id": "sess:6f1a...",
+  "title": "SQL injection là gì?",
+  "created_at": "2026-09-18T09:00:00+00:00",
+  "updated_at": "2026-09-18T09:05:00+00:00",
+  "project_id": null,
+  "last_activity": "2026-09-18T09:05:00+00:00"
+}
+```
+`project_id` là `null` cho session standalone, hoặc id project khi thuộc 1 project. `last_activity` là mốc thời gian của lượt chat gần nhất (rơi về `created_at` nếu chưa chat lượt nào) — **danh sách sắp theo `last_activity` giảm dần, KHÔNG phải `updated_at`** (đổi tên cũng cập nhật `updated_at` nhưng không đẩy session lên đầu danh sách). Không phân trang.
+
+**Tạo standalone:**
+```bash
+curl -X POST http://<gateway>:8131/sessions \
+  -d '{"user_id": "user-42", "title": "Câu hỏi nhanh"}'
+```
+`400` nếu body có `project_id` khác `null` (dùng `POST /projects/{pid}/sessions` để tạo session thuộc project), hoặc `title` dài quá 200 ký tự.
+
+**Liệt kê:** `GET /sessions?user_id=user-42` → chỉ session standalone của `user-42`. Thêm `scope=all` để gồm cả session thuộc project. `scope` khác `standalone`/`all` → `422`.
+
+**Đổi tên / di chuyển:**
+```bash
+curl -X PATCH http://<gateway>:8131/sessions/sess:abc123 \
+  -d '{"user_id": "user-42", "title": "Tên mới", "project_id": "proj-xyz"}'
+```
+- Bỏ trống `project_id` trong body → không di chuyển (giữ nguyên project hiện tại, hoặc vẫn standalone).
+- `project_id: null` tường minh → chuyển ra standalone.
+- `project_id: "<pid>"` → chuyển vào project đó (phải tồn tại và thuộc đúng chủ, nếu không → `404`).
+- `400` nếu không có gì để cập nhật (body rỗng), `title` rỗng/toàn khoảng trắng, hoặc `title` > 200 ký tự.
+- `404` nếu `sid` không tồn tại **hoặc** không phải một session hợp lệ (chặn thao tác lên các row hội thoại "cũ" như `chat:<hash>`/`exploit:...`); `403` nếu `user_id` không phải chủ session.
+
+**Quyền sở hữu:** một `user_id` chỉ thấy/sửa được session của chính mình. Đọc (GET) sai chủ → `404` (không tiết lộ sự tồn tại); sửa (PATCH/DELETE/tạo trong project sai chủ) → `403`.
+
+**Rate limit:** `/sessions`, `/projects`, và mọi path bắt đầu bằng `/projects/` hoặc `/sessions/` (trừ `/sessions/{sid}/chat[/stream]`, vẫn 90/60s như mục 1.1) = **120 req/60s** — CRUD nhẹ hơn nhiều so với 1 lượt LLM, nhưng nhiều user FE chia sẻ chung 1 IP proxy nên mức mặc định 15/60s sẽ chặn nhầm traffic hợp lệ.
+
 ---
 
 ## 2. Hội thoại có lịch sử — `/ai/conversations/*`
+
+> ⚠️ **Nhóm endpoint `/ai/conversations/*` mô tả trong mục này KHÔNG có trong bản build hiện tại của gateway** (gọi vào sẽ trả `404`). Muốn nhiều cuộc hội thoại song song + lưu bền, dùng [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions) (`/sessions`, `/projects/{pid}/sessions`) thay thế. Giữ lại nội dung mục này để tham khảo hình dạng response tương lai/lịch sử — đừng tích hợp FE vào các path bên dưới.
 
 Bản mở rộng của mục 1: **nhiều cuộc hội thoại/`user_id`**, lưu bền không hết hạn, đổi tên tự động + thủ công.
 
@@ -279,7 +334,7 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 ## 9. Ghi chú vận hành & giới hạn đã biết
 
-- **Rate limit** (mỗi IP): `/ai/chat`, `/ai/conversations/chat` = **90 req/60s**; `/ai/exploit` = 20/60s; `/ai/translate`, `/ai/generate-report`, `/ai/generate-statistical-report` = 10/60s; còn lại (kể cả GET/PATCH/DELETE conversations) = 15/60s mặc định. `/stream` tính chung hạn ngạch với bản không-stream.
+- **Rate limit** (mỗi IP): `/ai/chat`, `/sessions/{sid}/chat[/stream]` = **90 req/60s**; `/sessions`, `/projects`, và mọi path bắt đầu bằng `/projects/`/`/sessions/` (ngoại trừ chat ở trên) = **120 req/60s** (xem [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)); `/ai/exploit` = 20/60s; `/ai/translate`, `/ai/generate-report`, `/ai/generate-statistical-report` = 10/60s; còn lại = 15/60s mặc định. `/stream` tính chung hạn ngạch với bản không-stream.
 - **Air-gap:** hệ thống **không gọi internet** khi trả lời (không `web_fetch`, không tra OWASP/CWE Top-N từ web) — toàn bộ dựa trên KB nội bộ (Qdrant/Neo4j) + kiến thức model.
 - **⚠️ SSE chưa có frame `regenerate`:** khi hook nội bộ buộc model viết lại câu trả lời (force-continue), phần `token` của bản nháp bị huỷ **có thể** nối liền với bản viết lại trên luồng `token`, không có ranh giới đánh dấu. Xảy ra không thường xuyên (chỉ khi hook grounding/search kích hoạt lại). **Khuyến nghị FE:** không dùng chuỗi `token` ghép lại làm nội dung cuối cùng để lưu/hiển thị persistent — luôn ghi đè bằng `final.content` khi nhận được. *(Đã có bản vá cho vấn đề này ở nhánh dev nội bộ, chưa port sang production — xem phần theo dõi riêng.)*
 - **Bộ nhớ chat thường (mục 1):** Redis, 24h, 1 luồng/`user_id`. Hội thoại có lịch sử (mục 2): Redis 24h (bộ nhớ sống, tự nén khi dài) + SQLite bền vô thời hạn (đọc lại luôn từ đây).
