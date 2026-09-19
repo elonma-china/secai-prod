@@ -2248,3 +2248,9 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     demo_dir = Path(__file__).resolve().parents[3] / "demo" / "showcase"
     if demo_dir.is_dir():
         app.mount("/showcase-demo", _NoCacheStatic(directory=str(demo_dir), html=True), name="showcase-demo")
+
+    # KPI Studio — standalone app (not a showcase-demo tab), same-origin, own sidebar shell.
+    # Calls the same real /showcase-api/kpi-studio/* + /showcase-api/kpi-bench/* endpoints above.
+    kpi_studio_dir = Path(__file__).resolve().parents[3] / "demo" / "kpi-studio"
+    if kpi_studio_dir.is_dir():
+        app.mount("/kpi-studio", _NoCacheStatic(directory=str(kpi_studio_dir), html=True), name="kpi-studio-demo")
