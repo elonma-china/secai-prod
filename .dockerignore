@@ -5,6 +5,9 @@
 .env
 .env.*
 !.env.example
+# kpi_bench's template (no real secrets, same idea as !.env.example above) — the
+# `.env.*` pattern above would otherwise also swallow this at any depth.
+!kpi_bench/.env.bench.example
 
 # Host virtualenv (huge, machine-specific) and Python caches.
 .venv/
@@ -27,3 +30,11 @@ secai-serving-vast/
 .git/
 .git.bak-nested/
 .gitignore
+
+# kpi_bench IS copied into the image (see Dockerfile `COPY kpi_bench`), but its
+# run-churn/output dirs are not — they don't exist in a fresh checkout, but keep
+# this belt-and-suspenders so a local test run never bloats a rebuild.
+kpi_bench/runs/
+kpi_bench/raw-logs/
+kpi_bench/reports/
+kpi_bench/**/__pycache__/

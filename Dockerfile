@@ -63,6 +63,11 @@ COPY --from=builder /opt/venv /opt/venv
 COPY src ./src
 COPY bin ./bin
 
+# Vendored KPI bench code (KPI Studio "Live" run, groups B/C — see kpi_run.py) — was
+# previously bind-mounted from a sibling KPI-VA-GEN-TEST/ dir; now baked in so the image
+# is self-contained/portable. bash + python3 (already installed above) run it as-is.
+COPY kpi_bench ./kpi_bench
+
 # Writable state dir + mountpoints for the secai-data bundle, owned by the non-root user.
 # /srv/poc is bind-mounted read-write at runtime: PocCatalog opens sqlite with
 # `PRAGMA journal_mode=WAL`, which needs to create catalog.db-wal/-shm next to catalog.db.
