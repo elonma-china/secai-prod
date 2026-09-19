@@ -23,3 +23,17 @@ POC_API_Guide.docx
 *.log
 CVE_exploit_info.md
 secai/claude-bug-bounty/
+
+# ── Dọn repo 2026-09-19: cây phụ trợ lớn/runtime/churn — KHÔNG commit vào repo chính ──
+secai/HO-SO-GOC-NGHIEM-THU-AI/
+secai/FINETUNE/
+secai/DATA/
+secai/studio-llamafactory/
+secai/clearml-server/
+secai/KPI-VA-GEN-TEST/runs/
+secai/KPI-VA-GEN-TEST/gui/
+secai/KPI-VA-GEN-TEST/raw-logs/
+secai/KPI-VA-GEN-TEST/reports/
+secai/KPI-VA-GEN-TEST/loadtest/results/
+secai/KPI-VA-GEN-TEST/embedding-rerank-bench/
+secai/ui-*.png
