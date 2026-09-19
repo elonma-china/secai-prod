@@ -804,12 +804,17 @@ def _human(n: float) -> str:
 
 def _bundle_members(root: Path):
     """(abs, rel) các file đưa vào gói .zip: TOÀN BỘ bộ build TRỪ split dữ liệu đóng băng
-    (finetune/data ~711 MB — công khai trên Hugging Face) và cache bytecode Python."""
+    (finetune/data ~711 MB — công khai trên Hugging Face), cache bytecode Python, và `mlops/`
+    (lớp orchestration MLOps riêng — thêm 2026-09-18: chứa venv cục bộ + `runs/` + `setup/mlops.env`
+    với HF_TOKEN/JUDGE_API_KEY THẬT dạng plaintext; endpoint này không auth và gateway bind
+    0.0.0.0 — từng bị rglob cuốn vào gói .zip công khai trước khi vá dòng loại trừ này)."""
     for p in sorted(root.rglob("*")):
         if not p.is_file():
             continue
         rel = p.relative_to(root)
         if rel.parts[:2] == ("finetune", "data"):
+            continue
+        if rel.parts[:1] == ("mlops",):
             continue
         if "__pycache__" in rel.parts or p.suffix == ".pyc":
             continue
@@ -907,7 +912,7 @@ def retrain_guide() -> dict:
             "size": _human(total),
             "file_count": len(tree),
             "includes": ["finetune/{scripts, src, configs, notebooks}", "benchmarks/{data, manifests, baselines}", "quantization/", "README.md"],
-            "excludes": "finetune/data/ (split train/validation/test ~711 MB) — tải riêng từ Hugging Face",
+            "excludes": "finetune/data/ (split train/validation/test ~711 MB, tải riêng từ Hugging Face); mlops/ (lớp orchestration MLOps riêng, không thuộc bộ build)",
             "data_hf": "https://huggingface.co/datasets/DuyTa/Cyber_F1_v2",
             "tree": tree,
         },
