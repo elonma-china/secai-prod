@@ -2203,6 +2203,7 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     from .showcase import finetune as showcase_finetune
     from .showcase import kpi_bench as showcase_kpi_bench
     from .showcase import kpi_studio as showcase_kpi_studio
+    from .showcase import kpi_run as showcase_kpi_run
     from .showcase import model_info as showcase_model_info
     from .showcase import sanitize_demo as showcase_sanitize_demo
     from .showcase import source_dossier as showcase_source_dossier
@@ -2216,6 +2217,7 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     app.include_router(showcase_model_info.router)
     app.include_router(showcase_kpi_bench.router)
     app.include_router(showcase_kpi_studio.router)
+    app.include_router(showcase_kpi_run.router)
     app.include_router(showcase_sanitize_demo.router)
     app.include_router(showcase_source_dossier.router)
     app.include_router(showcase_kb.router)
