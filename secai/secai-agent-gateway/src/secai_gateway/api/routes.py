@@ -46,6 +46,8 @@ from ..poc.kt_exploit import parse_exploit_intent, run_kt_exploit
 from ..poc.runners.toolbox import run_raw_command, run_tool
 from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
+from ..retrieval.filters import ENTITY_ID_RES
+from ..retrieval.qdrant import _qdrant_search
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
 from ..sanitize.gate import REFUSE_INJECTION_MSG
@@ -674,6 +676,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 gated = await _chat_gate(prompt)
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
+                prompt = await _ground_chat_prompt(prompt)
         try:
             text, metadata = await state.runner.complete(profile, prompt, session_id)
         except HTTPException:
@@ -726,6 +729,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
             yield b"data: [DONE]\n\n"
 
         return StreamingResponse(gen(), media_type="text/event-stream")
+
+    async def _ground_chat_prompt(prompt: str) -> str:
+        """Chủ động tra KB (qdrant_search) TRƯỚC khi đưa prompt vào agent, nếu câu hỏi
+        nêu CVE/CWE/CAPEC/ATT&CK-id tường minh — KHÔNG phụ thuộc việc model tự quyết định
+        gọi tool hay không.
+
+        Lý do: cơ chế ép grounding có sẵn (``RequireChatGroundingHook.on_before_final_answer``,
+        agent/hooks.py) đang INERT trong production vì linch không dispatch hook đó (xem
+        agent/hooks.py:616-624). Đo thật 2026-09-19 (KPI-VA-GEN-TEST, 1000 câu độc lập):
+        46.9% câu trả lời có ``tools: []`` — model không tra KB — và với câu có CVE-id cụ
+        thể, model thường bịa nhầm sang 1 CVE nổi tiếng khác có id gần giống (vd
+        CVE-2021-37630 bị trả lời như thể là CVE-2021-44228/Log4Shell). Faithfulness đo
+        được chỉ 58-63% (ngưỡng hợp đồng >98%).
+
+        Tra cứu xảy ra ở tầng code, không qua model, nên đảm bảo có context bất kể model
+        có gọi tool hay không. Fail-open: KB lỗi/timeout → trả nguyên prompt gốc, không
+        chặn chat."""
+        if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
+            return prompt
+        try:
+            result = await _qdrant_search(query=prompt, ctx=None, top_k=5)
+        except Exception:
+            logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
+            return prompt
+        if not result.content:
+            return prompt
+        return (
+            "[Ngữ cảnh tra cứu từ KB nội bộ — PHẢI dùng để trả lời chính xác, "
+            "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + result.content +
+            "\n\n[Câu hỏi của người dùng]\n" + prompt
+        )
 
     async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
         """Model-based input sanitization for the chat path (runs BEFORE the agent).
@@ -857,6 +891,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
+        text = await _ground_chat_prompt(text)
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -935,6 +970,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
+        text = await _ground_chat_prompt(text)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run; the meta
