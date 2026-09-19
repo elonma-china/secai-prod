@@ -45,3 +45,24 @@ secai/KPI-VA-GEN-TEST/embedding-rerank-bench/
 secai/ui-*.png
 # vendored third-party repo (its own git history/remote) — not part of this project
 secai-serving-vast/
+
+# ── Repo gateway-centric cleanup 2026-09-19: untrack old root gateway duplicate ──
+# (leading slash = repo-root ONLY, so the LIVE gateway's own src/docs/tests/scripts stay tracked)
+/bin/
+/deploy/
+/docs/
+/evals/
+/pocs-lab/
+/scripts/
+/src/
+/tests/
+/docker-compose.yml
+/Dockerfile
+/.dockerignore
+/.env.example
+/pyproject.toml
+/show-reasoning.sh
+# sibling trees superseded by / outside the gateway core (kept on disk, not tracked)
+secai/KPI-VA-GEN-TEST/
+secai/secai-onebox/
+secai/TAI-LIEU-DU-LIEU-PHAN-HE-AI.md

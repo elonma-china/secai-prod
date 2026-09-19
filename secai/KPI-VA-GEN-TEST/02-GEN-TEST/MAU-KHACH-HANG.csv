@@ -1,9 +1,0 @@
-cve_id,cau_hoi,nang_luc,do_kho,tu_bat_buoc,ghi_chu
-CVE-2021-44228,,cve_qa,de,,"Log4Shell — RCE qua JNDI lookup; CVSS 10.0 CRITICAL; CWE-502"
-CVE-2024-3272,,cve_qa,trung_binh,,"D-Link NAS hard-coded credentials; CWE-798; CVSS 9.8"
-CVE-2023-4863,,remediation,kho,,"libwebp heap overflow; cần nâng cấp thư viện; CWE-787"
-CVE-2014-0160,Heartbleed ảnh hưởng tới hệ thống của chúng tôi thế nào?,cve_qa,trung_binh,OpenSSL;Heartbleed,"Khách tự viết câu hỏi — giữ nguyên"
-,Cách phát hiện SQL injection trong mã nguồn PHP?,sast,kho,SQL injection;CWE-89,"Câu hỏi không gắn CVE cụ thể"
-CVE-2017-0144,,exploit,kho,,"EternalBlue — SMBv1 RCE; CWE-20"
-CVE-2022-22965,,pentest,tu_duy,,"Spring4Shell — RCE qua data binding; CWE-94"
-CVE-2020-1472,,report,kho,,"Zerologon — Netlogon privilege escalation; CWE-330"
