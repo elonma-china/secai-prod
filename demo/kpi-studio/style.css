@@ -83,6 +83,22 @@ button.run:hover { background: var(--accent-2-dark); }
 button.run:disabled { opacity: .45; cursor: default; }
 button.run.active { outline: 2px solid var(--accent); }
 
+/* Segmented toggle (vd. Demo/Live) — cùng bảng màu với button.run/.pill nhưng gọn hơn,
+   dùng cho lựa chọn loại trừ lẫn nhau (chỉ 1 lựa chọn "active" tại 1 thời điểm). */
+.seg {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 9px;
+  overflow: hidden; background: var(--panel-2);
+}
+.seg-btn {
+  background: transparent; color: var(--muted); border: none; padding: 8px 16px;
+  cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 700;
+  transition: background .15s, color .15s;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn:hover { color: var(--text); }
+.seg-btn.active { background: var(--accent-2); color: #fff; }
+.seg-btn:disabled { opacity: .45; cursor: default; }
+
 input, select {
   padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--border);
   border-radius: 8px; color: var(--text); font-family: inherit; font-size: 13px;

@@ -395,6 +395,19 @@ class Settings(BaseSettings):
     showcase_time_gen_min_ms: int = 120000
     showcase_time_gen_max_ms: int = 300000
 
+    # ── KPI Studio "Live" run (showcase/kpi_run.py) — chạy THẬT các script CLI bench
+    # (KPI-VA-GEN-TEST/02-GEN-TEST/bench_kpi.py cho nhóm B/C, scripts/bench.sh cho nhóm A),
+    # khác hẳn kpi_bench.py (chỉ replay lại 1 bản ghi hồ sơ gốc đã đóng băng, xem module đó).
+    kpi_bench_scripts_dir: str = "/home/ict/AIEngines/secai/KPI-VA-GEN-TEST"
+    # File .env.bench merge vào env của subprocess — rỗng thì dùng
+    # <kpi_bench_scripts_dir>/.env.bench (mặc định của bench.sh).
+    kpi_bench_env_file: str = ""
+    kpi_bench_python: str = "python3"
+    kpi_bench_smoke_limit: int = 5
+    # Lịch sử các lần chạy LIVE (khác hẳn localStorage phía FE) — /showcase-api/kpi-run/runs
+    # và /runs/{run_id} đọc lại từ đây.
+    kpi_run_history_file: str = "./logs/kpi-run-history.json"
+
     @model_validator(mode="after")
     def _enforce_airgap(self) -> "Settings":
         """When air-gap is on, force every internet-touching feature flag off — regardless
