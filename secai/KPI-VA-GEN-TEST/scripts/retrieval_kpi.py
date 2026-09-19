@@ -34,6 +34,13 @@ import bm25_py  # noqa: E402
 
 KPI_DIR = Path(__file__).resolve().parents[1]
 RRF_K = 60
+# ── BM25 nửa lexical: dùng Qdrant SPARSE vector (KHỚP production gateway retrieval/bm25.py)
+# thay cho bm25_py local. Encode query bằng FastEmbed Qdrant/bm25 rồi search sparse trên Qdrant.
+# Cần fastembed trong env; thiếu -> tự fallback bm25_py local (kém khớp) rồi dense-only.
+BM25_VECTOR = os.environ.get("QDRANT_BM25_VECTOR", "bm25")
+BM25_MODEL = os.environ.get("BM25_MODEL", "Qdrant/bm25")
+BM25_LOCAL_MODEL_DIR = os.environ.get(
+    "BM25_LOCAL_MODEL_DIR", "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model")
 # datasets-acceptance nằm ở eval/ (cha của kpi/). Trên VPS rsync giữ cấu trúc → ../datasets-acceptance.
 DS_CANDIDATES = [
     KPI_DIR.parent / "datasets-acceptance",
@@ -113,6 +120,43 @@ def rrf_merge(dense_ids, bm25_ids, limit):
     for rank, pid in enumerate(bm25_ids):
         scores[pid] = scores.get(pid, 0.0) + 1.0 / (RRF_K + rank + 1)
     return [pid for pid, _ in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]]
+
+
+class QdrantSparseBM25:
+    """Nửa lexical BM25 qua Qdrant SPARSE vector — KHỚP production (gateway retrieval/bm25.py):
+    FastEmbed(Qdrant/bm25) encode query -> Qdrant /points/search trên sparse vector 'bm25'.
+    Thay bm25_py local (index + tokenizer/scoring riêng, lệch production). Encode fastembed
+    serialize bằng 1 khoá (model không đảm bảo thread-safe); phần HTTP dense vẫn song song."""
+
+    def __init__(self):
+        import threading
+        self._lock = threading.Lock()
+        self._model = None
+
+    def _encode(self, query):
+        text = (query or "").strip()
+        if not text:
+            return None
+        with self._lock:
+            if self._model is None:
+                from fastembed import SparseTextEmbedding
+                kwargs = {}
+                if os.path.isdir(BM25_LOCAL_MODEL_DIR):
+                    kwargs["specific_model_path"] = BM25_LOCAL_MODEL_DIR
+                self._model = SparseTextEmbedding(model_name=BM25_MODEL, **kwargs)
+            emb = next(iter(self._model.embed([text])))
+        indices = [int(i) for i in emb.indices]
+        values = [float(v) for v in emb.values]
+        return {"indices": indices, "values": values} if indices else None
+
+    def search(self, query, top_k):
+        sp = self._encode(query)
+        if not sp:
+            return []
+        body = {"vector": {"name": BM25_VECTOR, "vector": sp}, "limit": top_k, "with_payload": False}
+        r = _post(f"{config.QDRANT_URL}/collections/{config.QDRANT_COLLECTION}/points/search", body, timeout=30)
+        return [(str(x["id"]), float(x.get("score", 0.0)))
+                for x in r.get("result", []) if x.get("score", 0) > 0]
 
 
 def load_pairs(limit=None, ds_override=None):
@@ -224,9 +268,24 @@ def main():
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    bm25_dir = bm25_py.find_bm25_dir()
-    bm25 = bm25_py.Bm25Index(bm25_dir) if bm25_dir else None
-    mode = "hybrid (dense+BM25+RRF)" if bm25 else "dense-only (BM25 KHÔNG có)"
+    # Ưu tiên Qdrant SPARSE (khớp production) → fallback bm25_py local → dense-only.
+    bm25 = None
+    bm25_source = "none (dense-only)"
+    try:
+        _sp = QdrantSparseBM25()
+        _sp.search("healthcheck log4shell", 1)  # ép nạp model + xác nhận Qdrant sparse chạy
+        bm25 = _sp
+        bm25_source = f"qdrant_sparse (vector=\'{BM25_VECTOR}\', model={BM25_MODEL}) — khớp production"
+    except Exception as e:  # noqa: BLE001
+        print(f"[BM25] Qdrant sparse không dùng được ({repr(e)[:90]}) → thử bm25_py local...", flush=True)
+        try:
+            _d = bm25_py.find_bm25_dir()
+            if _d:
+                bm25 = bm25_py.Bm25Index(_d)
+                bm25_source = f"local_bm25 ({_d}) — FALLBACK, KHÔNG khớp production"
+        except Exception:  # noqa: BLE001
+            bm25 = None
+    mode = f"hybrid (dense + {bm25_source} + RRF)" if bm25 else "dense-only (không có BM25)"
     print(f"retrieval KPI · {len(pairs)} query · ds={ds_dir} · mode={mode}\n", flush=True)
 
     hit_log = (out_dir / "embedding-hit-rate-at-10.jsonl").open("w", encoding="utf-8")
@@ -285,6 +344,7 @@ def main():
     summary = {
         "kpi": "retrieval",
         "mode": (mode + " + id-aware exact cve_id filter (khớp product qdrant_search)"),
+        "bm25_source": bm25_source,
         "model_embed": config.EMBED_MODEL, "model_rerank": config.RERANK_MODEL,
         "n": n, "errors": errs,
         # headline = id-aware: dùng exact cve_id filter khi câu hỏi có CVE-id explicit (đúng cách product chạy)
