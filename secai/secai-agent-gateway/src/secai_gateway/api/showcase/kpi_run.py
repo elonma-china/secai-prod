@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import os
+import re
 import shlex
 import signal
 import tempfile
@@ -307,14 +308,16 @@ async def _gen(run_id: str, scope: str, group: str | None, profile: str, limit: 
         if need_a:
             if profile == "full":
                 log(f"[CẢNH BÁO] run_id={run_id}: nhóm A profile=full có thể mất 1–4 giờ.")
-            env_tmp_path = _write_tmp_env(env, run_id)
-            tmp_paths.append(env_tmp_path)
-            a_cmd = ["bash", "scripts/bench.sh"]
+            # Nhóm A = pipeline chất lượng self-contained chay_eval_gateway_moi.sh (KHÔNG phải
+            # bench.sh — bench.sh với t)i vào cây eval/ sibling không tồn tại trên host này). Nó tự
+            # `cd $KPI_DIR` + `. .env.bench` (đã trỏ đúng endpoint sống + DATA_ROOT), nên chỉ cần
+            # truyền --dataset (tuyệt đối) + --limit khi smoke. Faith cần OPENAI_API_KEY nên smoke bỏ.
+            testset = settings.kpi_bench_testset_dir or str(scripts_dir / "02-GEN-TEST" / "testset-v2")
+            a_cmd = ["bash", "02-GEN-TEST/chay_eval_gateway_moi.sh", "--dataset", testset]
             if profile == "smoke":
-                a_cmd += ["--limit", str(limit)]
-            a_cmd += ["--env", str(env_tmp_path)]
-            plan.append({"label": f"bench.sh (nhóm A, profile={profile})", "cmd": a_cmd,
-                        "cwd": scripts_dir})
+                a_cmd += ["--limit", str(limit), "--no-faith"]
+            plan.append({"label": f"chay_eval_gateway_moi.sh (nhóm A, profile={profile})",
+                        "cmd": a_cmd, "cwd": scripts_dir})
 
         cmd_summary = " && ".join(" ".join(p["cmd"]) for p in plan) if plan else "(không có lệnh)"
 
@@ -324,6 +327,7 @@ async def _gen(run_id: str, scope: str, group: str | None, profile: str, limit: 
                              "targets": targets, "cmd_summary": cmd_summary,
                              "started_at": _STATE.started_at_iso})
 
+        captured_a_run: str | None = None  # runs/<ts>-evalindep do chay_eval in ra stdout
         total_phases = max(1, len(plan))
         for i, step in enumerate(plan):
             log(f"----- phase {i + 1}/{len(plan)}: {step['label']} (cwd={step['cwd']}) -----")
@@ -345,6 +349,10 @@ async def _gen(run_id: str, scope: str, group: str | None, profile: str, limit: 
             if proc.stdout is not None:
                 async for raw in proc.stdout:
                     text = raw.decode(errors="replace").rstrip("\n")
+                    if captured_a_run is None:
+                        m = re.search(r"run=(runs/[^\s]+-evalindep)", text)
+                        if m:
+                            captured_a_run = m.group(1)
                     log(text)
                     yield _sse("line", {"text": text})
             rc = await proc.wait()
@@ -372,18 +380,18 @@ async def _gen(run_id: str, scope: str, group: str | None, profile: str, limit: 
             results += build_bc_results(bc_ids, flat)
 
         if need_a:
-            latest = scripts_dir / "runs" / "latest"
-            summary_paths = list(latest.rglob("kpi-summary.json")) if latest.exists() else []
+            run_dir_a = (scripts_dir / captured_a_run) if captured_a_run else (scripts_dir / "runs" / "latest")
+            summary_paths = list(run_dir_a.rglob("kpi-summary.json")) if run_dir_a.exists() else []
             if not summary_paths:
-                msg = (f"Không tìm thấy kpi-summary.json dưới {latest} sau khi bench.sh chạy "
-                       f"xong (rc=0).")
+                msg = (f"Không tìm thấy kpi-summary.json dưới {run_dir_a} sau khi "
+                       f"chay_eval_gateway_moi.sh chạy xong (rc=0).")
                 log(f"[LỖI] {msg}")
                 yield _sse("error", {"message": msg, "run_id": run_id})
                 return
             kpi_summary = _read_json_or_none(summary_paths[0]) or {}
             a_ids = [t for t in targets if group_of(t) == "A"]
             results += build_a_results(a_ids, kpi_summary)
-            run_dir = str(latest.resolve())
+            run_dir = str(run_dir_a.resolve())
 
         ok_count = sum(1 for r in results if r.get("pass"))
         total = len(results)

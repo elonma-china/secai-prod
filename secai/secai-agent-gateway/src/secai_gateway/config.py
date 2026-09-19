@@ -404,6 +404,8 @@ class Settings(BaseSettings):
     kpi_bench_env_file: str = ""
     kpi_bench_python: str = "python3"
     kpi_bench_smoke_limit: int = 5
+    # Bộ đề nhóm A cho chay_eval_gateway_moi.sh --dataset (rỗng -> <scripts_dir>/02-GEN-TEST/testset-v2).
+    kpi_bench_testset_dir: str = ""
     # Lịch sử các lần chạy LIVE (khác hẳn localStorage phía FE) — /showcase-api/kpi-run/runs
     # và /runs/{run_id} đọc lại từ đây.
     kpi_run_history_file: str = "./logs/kpi-run-history.json"
