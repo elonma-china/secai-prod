@@ -1,91 +1,100 @@
-// Tab "KPI Studio" — mở rộng tab "KPI Bench" (vốn chỉ phát lại log 1 bản ghi hồ sơ gốc đóng
-// băng) thành 1 studio đủ 5 mảng người vận hành cần: (1) catalog 19 KPI kèm công thức/ngưỡng,
-// (2) duyệt phân trang bộ dữ liệu bench thật, (3) trạng thái sẵn sàng của 4 dịch vụ backend,
-// (4) chạy bench từng KPI/cả nhóm/tất cả với log realtime, (5) lịch sử các lần chạy + biểu đồ.
+// KPI Studio — app độc lập (không còn là 1 tab trong demo/showcase/), same-origin qua gateway
+// (mount /kpi-studio/, xem routes.py). Gọi cùng backend thật đã có sẵn:
+//   /showcase-api/kpi-studio/*  (catalog, datasets, service-status — viết riêng cho Studio)
+//   /showcase-api/kpi-bench/*   (run-stream SSE — tái dùng nguyên, không viết lại)
 //
-// THẬT vs MÔ PHỎNG (ghi rõ để không ai hiểu nhầm):
-//   - Catalog, danh sách/nội dung dataset, trạng thái dịch vụ, chạy bench (SSE log + kết quả):
-//     TẤT CẢ đọc/gọi thật qua /showcase-api/kpi-studio/* và /showcase-api/kpi-bench/* (đã có
-//     sẵn, đọc thẳng hồ sơ gốc — xem kpi_studio.py / kpi_bench.py).
-//   - "Tải lên": THẬT — parse file .jsonl người dùng chọn ngay trên trình duyệt, không giả.
-//   - "Nhập từ Hugging Face": MÔ PHỎNG — chưa có endpoint backend tải file từ HF Hub, form này
-//     chỉ diễn hoạt luồng UI (progress giả) để chốt thiết kế trước khi làm phần nối API thật.
-//   - "Lịch sử & biểu đồ": lưu trong localStorage của TRÌNH DUYỆT NÀY (chưa có DB phía server) —
-//     mỗi lần bench thật qua mục (4) sẽ tự thêm 1 dòng lịch sử.
+// THẬT vs MÔ PHỎNG:
+//   - Catalog, dataset (list+phân trang), trạng thái dịch vụ, chạy bench (log SSE + kết quả):
+//     THẬT — đọc/gọi thẳng backend, backend đọc thẳng hồ sơ gốc.
+//   - "Tải lên" dataset: THẬT — parse .jsonl ngay trên trình duyệt.
+//   - "Nhập từ Hugging Face": MÔ PHỎNG có chủ đích — chưa có endpoint tải từ HF Hub thật.
+//   - "Lịch sử & biểu đồ": lưu trong localStorage của trình duyệt này (chưa có DB server).
 
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
 const fmtNum = (n) => (typeof n === "number" ? (Number.isInteger(n) ? String(n) : n.toFixed(2)) : String(n ?? "—"));
 const LS_HISTORY = "secai_kpi_studio_history";
 const LS_CUSTOM_DATASETS = "secai_kpi_studio_custom_datasets";
 
+async function apiGet(path) {
+  const res = await fetch(path, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((body && body.message) || `HTTP ${res.status}`);
+  return body;
+}
+const api = { get: apiGet };
+
 function enforcedPill(enforced) {
   if (enforced === true) return `<span class="pill ok">Gate thật</span>`;
   if (enforced === "partial") return `<span class="pill warn">Gate một phần</span>`;
   return `<span class="pill fail">Không gate</span>`;
 }
-function passPill(pass) {
-  return pass ? `<span class="pill ok">Đạt</span>` : `<span class="pill fail">Chưa đạt</span>`;
-}
+function passPill(pass) { return pass ? `<span class="pill ok">Đạt</span>` : `<span class="pill fail">Chưa đạt</span>`; }
 
-// ── Shell: sub-nav 5 mục, mỗi mục lazy-render 1 lần ─────────────────────────
+// ── Shell: sidebar = nav chính (không còn lồng trong tab nào khác) ──────────
 const SECTIONS = [
-  { id: "overview", label: "Tổng quan (19 KPI)", fn: renderOverview },
-  { id: "datasets", label: "Bộ dữ liệu", fn: renderDatasets },
-  { id: "status", label: "Trạng thái dịch vụ", fn: renderServiceStatus },
-  { id: "run", label: "Chạy bench", fn: renderRunBench },
-  { id: "history", label: "Lịch sử & biểu đồ", fn: renderHistory },
+  { id: "overview", label: "Tổng quan (19 KPI)", title: "Tổng quan — 19 KPI nghiệm thu", fn: renderOverview },
+  { id: "datasets", label: "Bộ dữ liệu", title: "Bộ dữ liệu bench", fn: renderDatasets },
+  { id: "status", label: "Trạng thái dịch vụ", title: "Trạng thái dịch vụ", fn: renderServiceStatus },
+  { id: "run", label: "Chạy bench", title: "Chạy bench", fn: renderRunBench },
+  { id: "history", label: "Lịch sử & biểu đồ", title: "Lịch sử & biểu đồ", fn: renderHistory },
 ];
 
-export async function render(container, api) {
-  container.innerHTML = `
-    <nav class="row" id="ks-nav"></nav>
-    <div id="ks-body"><p class="hint">Đang tải…</p></div>
-  `;
-  const nav = container.querySelector("#ks-nav");
-  const body = container.querySelector("#ks-body");
-  const rendered = new Set();
+const nav = document.getElementById("nav");
+const main = document.getElementById("main");
+const state = { catalog: null };
+const rendered = new Map(); // id -> panel element (render 1 lần, giữ lại khi chuyển mục)
 
-  // Cache catalog 1 lần — nhiều mục dùng chung (overview, run, history đối chiếu ngưỡng).
-  const state = { catalog: null, api };
+async function boot() {
   state.catalog = await api.get("/showcase-api/kpi-studio/catalog");
-
-  function open(id) {
-    [...nav.children].forEach((b) => b.classList.toggle("active", b.dataset.id === id));
-    [...body.children].forEach((el) => (el.hidden = el.dataset.id !== id));
-    if (!rendered.has(id)) {
-      rendered.add(id);
-      const sec = SECTIONS.find((s) => s.id === id);
-      const panel = body.querySelector(`[data-id="${id}"]`);
-      sec.fn(panel, state).catch((err) => {
-        panel.innerHTML = `<p class="error">Lỗi tải mục "${sec.label}": ${err.message}</p>`;
-      });
-    }
-  }
-
-  SECTIONS.forEach((s, i) => {
+  SECTIONS.forEach((s) => {
     const btn = document.createElement("button");
-    btn.className = "run";
     btn.textContent = s.label;
     btn.dataset.id = s.id;
-    btn.addEventListener("click", () => open(s.id));
+    btn.addEventListener("click", () => { location.hash = s.id; });
     nav.appendChild(btn);
-
-    const panel = document.createElement("section");
-    panel.dataset.id = s.id;
-    panel.hidden = i !== 0;
-    body.appendChild(panel);
   });
-  body.querySelector("p.hint")?.remove();
-  open(SECTIONS[0].id);
+  loadSidebarStatus();
+  window.addEventListener("hashchange", openFromHash);
+  openFromHash();
 }
+
+function openFromHash() {
+  const id = location.hash.replace(/^#/, "") || SECTIONS[0].id;
+  const sec = SECTIONS.find((s) => s.id === id) || SECTIONS[0];
+  [...nav.children].forEach((b) => b.classList.toggle("active", b.dataset.id === sec.id));
+
+  if (!rendered.has(sec.id)) {
+    const panel = document.createElement("div");
+    panel.innerHTML = `<h2 class="page-title">${esc(sec.title)}</h2><div class="sec-body"><p class="hint">Đang tải…</p></div>`;
+    rendered.set(sec.id, panel);
+    sec.fn(panel.querySelector(".sec-body"), state).catch((err) => {
+      panel.querySelector(".sec-body").innerHTML = `<p class="error">Lỗi tải "${esc(sec.label)}": ${esc(err.message)}</p>`;
+    });
+  }
+  main.innerHTML = "";
+  main.appendChild(rendered.get(sec.id));
+}
+
+async function loadSidebarStatus() {
+  const box = document.getElementById("sidebar-status");
+  try {
+    const data = await api.get("/showcase-api/kpi-studio/service-status");
+    const okCount = data.checks.filter((c) => c.ok).length;
+    box.innerHTML = data.ready_to_bench
+      ? `<span class="pill ok">SẴN SÀNG</span><p class="hint">4/4 dịch vụ OK</p>`
+      : `<span class="pill fail">CHƯA SẴN SÀNG</span><p class="hint">${okCount}/4 dịch vụ OK — xem mục Trạng thái dịch vụ</p>`;
+  } catch (err) {
+    box.innerHTML = `<span class="pill warn">Không kiểm tra được</span><p class="hint">${esc(err.message)}</p>`;
+  }
+}
+
+boot().catch((err) => { main.innerHTML = `<p class="error">Không khởi động được KPI Studio: ${esc(err.message)}</p>`; });
 
 // ── 1) Tổng quan — catalog 19 KPI ───────────────────────────────────────────
 async function renderOverview(panel, state) {
   const { meta, groups, kpis } = state.catalog;
-
   panel.innerHTML = `
     <div class="card">
-      <h3>19 KPI nghiệm thu secAI</h3>
       <p class="hint">Nguồn nội dung (công thức/ngưỡng/dataset): <code>${esc(meta.source)}</code></p>
       <div class="row">
         ${groups.map((g) => `<span class="pill warn">Nhóm ${g.id} — ${esc(g.name)}: ${g.count} KPI</span>`).join("")}
@@ -100,22 +109,18 @@ async function renderOverview(panel, state) {
       </p>
     </div>
     <div class="row" id="ks-ov-filters" style="margin-bottom:4px"></div>
-    <div id="ks-ov-list"></div>
+    <div class="grid-cards" id="ks-ov-list"></div>
   `;
-
   const filters = panel.querySelector("#ks-ov-filters");
   const list = panel.querySelector("#ks-ov-list");
   const groupBtns = [{ id: "*", name: "Tất cả" }, ...groups].map((g) => {
     const btn = document.createElement("button");
-    btn.className = "run";
-    btn.textContent = g.id === "*" ? "Tất cả" : `Nhóm ${g.id}`;
-    btn.dataset.g = g.id;
+    btn.className = "run"; btn.textContent = g.id === "*" ? "Tất cả" : `Nhóm ${g.id}`; btn.dataset.g = g.id;
     return btn;
   });
   const search = document.createElement("input");
   search.placeholder = "Tìm theo mã hoặc tên KPI…";
-  search.style.cssText = "flex:1;min-width:180px;padding:8px 10px;background:var(--panel-2);" +
-    "border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px";
+  search.style.flex = "1"; search.style.minWidth = "200px";
 
   let activeGroup = "*";
   function draw() {
@@ -123,11 +128,8 @@ async function renderOverview(panel, state) {
     const q = search.value.trim().toLowerCase();
     const rows = kpis.filter((k) =>
       (activeGroup === "*" || k.group === activeGroup) &&
-      (!q || k.code.toLowerCase().includes(q) || k.name.toLowerCase().includes(q))
-    );
-    list.innerHTML = rows.length
-      ? rows.map(kpiCard).join("")
-      : `<p class="hint">Không có KPI khớp bộ lọc.</p>`;
+      (!q || k.code.toLowerCase().includes(q) || k.name.toLowerCase().includes(q)));
+    list.innerHTML = rows.length ? rows.map(kpiCard).join("") : `<p class="hint">Không có KPI khớp bộ lọc.</p>`;
   }
   groupBtns.forEach((b) => { b.addEventListener("click", () => { activeGroup = b.dataset.g; draw(); }); filters.appendChild(b); });
   filters.appendChild(search);
@@ -144,16 +146,16 @@ function kpiCard(k) {
       <div class="row">${enforcedPill(k.enforced)}<strong>${esc(k.threshold_display)}</strong></div>
       <p><strong>Đạt/không đạt:</strong> ${esc(k.pass_rule)}</p>
       <p><strong>Tính toán:</strong> ${esc(k.formula)}</p>
-      <p><strong>Dữ liệu:</strong> ${esc(k.dataset)} ${dsKeys ? `(xem tab Bộ dữ liệu: ${dsKeys})` : ""}</p>
+      <p><strong>Dữ liệu:</strong> ${esc(k.dataset)} ${dsKeys ? `(xem mục Bộ dữ liệu: ${dsKeys})` : ""}</p>
       <p class="hint"><strong>Phụ thuộc:</strong> ${deps} · <strong>Script:</strong> <code>${esc(k.script)}</code></p>
       ${k.note ? `<p class="hint">⚠ ${esc(k.note)}</p>` : ""}
     </div>`;
 }
 
-// ── 2) Bộ dữ liệu — danh sách + phân trang + tải lên (thật) + HF import (mô phỏng) ─────────
+// ── 2) Bộ dữ liệu ────────────────────────────────────────────────────────────
 async function renderDatasets(panel, state) {
   panel.innerHTML = `
-    <div class="card" id="ks-ds-import">
+    <div class="card">
       <h3>Nhập thêm bộ dữ liệu</h3>
       <div class="row">
         <div style="flex:1;min-width:260px">
@@ -164,7 +166,7 @@ async function renderDatasets(panel, state) {
         <div style="flex:1;min-width:260px;border-left:1px solid var(--border);padding-left:16px">
           <p class="hint">Nhập từ Hugging Face — <strong>demo mô phỏng</strong>, chưa nối API HF Hub thật.</p>
           <div class="row">
-            <input id="ks-hf-repo" placeholder="vd. DuyTa/Cyber_F1_v2" style="flex:1;min-width:160px;padding:8px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px" />
+            <input id="ks-hf-repo" placeholder="vd. DuyTa/Cyber_F1_v2" style="flex:1;min-width:160px" />
             <button class="run" id="ks-hf-go">Nhập (mô phỏng)</button>
           </div>
           <div class="progress" id="ks-hf-progress" hidden><div></div></div>
@@ -175,12 +177,11 @@ async function renderDatasets(panel, state) {
     <div id="ks-ds-list"></div>
     <div id="ks-ds-viewer"></div>
   `;
-
   const listEl = panel.querySelector("#ks-ds-list");
   const viewerEl = panel.querySelector("#ks-ds-viewer");
 
   async function loadList() {
-    const { datasets } = await state.api.get("/showcase-api/kpi-studio/datasets");
+    const { datasets } = await api.get("/showcase-api/kpi-studio/datasets");
     const custom = readCustomDatasets();
     listEl.innerHTML = `
       <div class="card">
@@ -198,7 +199,7 @@ async function renderDatasets(panel, state) {
               </tr>`).join("")}
             ${custom.map((d) => `
               <tr>
-                <td><code>${esc(d.key)}</code><br/><span class="hint pill warn">tải lên / mô phỏng</span></td>
+                <td><code>${esc(d.key)}</code><br/><span class="pill warn">tải lên / mô phỏng</span></td>
                 <td>${esc(d.description)}</td>
                 <td>${fmtNum(d.rows.length)}</td>
                 <td><span class="hint">chưa gắn KPI nào</span></td>
@@ -207,16 +208,12 @@ async function renderDatasets(panel, state) {
           </tbody>
         </table>
       </div>`;
-    listEl.querySelectorAll("[data-view]").forEach((b) =>
-      b.addEventListener("click", () => viewRemoteDataset(viewerEl, state, b.dataset.view)));
-    listEl.querySelectorAll("[data-view-custom]").forEach((b) =>
-      b.addEventListener("click", () => viewLocalDataset(viewerEl, b.dataset.viewCustom)));
-    listEl.querySelectorAll("[data-del-custom]").forEach((b) =>
-      b.addEventListener("click", () => { removeCustomDataset(b.dataset.delCustom); loadList(); }));
+    listEl.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => viewRemoteDataset(viewerEl, b.dataset.view)));
+    listEl.querySelectorAll("[data-view-custom]").forEach((b) => b.addEventListener("click", () => viewLocalDataset(viewerEl, b.dataset.viewCustom)));
+    listEl.querySelectorAll("[data-del-custom]").forEach((b) => b.addEventListener("click", () => { removeCustomDataset(b.dataset.delCustom); loadList(); }));
   }
   await loadList();
 
-  // Tải lên thật: FileReader đọc .jsonl trên trình duyệt, không gửi server.
   panel.querySelector("#ks-upload-input").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     const msg = panel.querySelector("#ks-upload-msg");
@@ -232,12 +229,9 @@ async function renderDatasets(panel, state) {
       saveCustomDataset({ key, description: `Tải lên từ "${file.name}" (${rows.length} dòng)`, rows });
       msg.textContent = `Đã nạp ${rows.length} dòng từ ${file.name}.`;
       await loadList();
-    } catch (err) {
-      msg.textContent = `Lỗi: ${err.message}`;
-    }
+    } catch (err) { msg.textContent = `Lỗi: ${err.message}`; }
   });
 
-  // HF import — MÔ PHỎNG có chủ đích (xem ghi chú đầu file).
   panel.querySelector("#ks-hf-go").addEventListener("click", async () => {
     const repo = panel.querySelector("#ks-hf-repo").value.trim();
     const bar = panel.querySelector("#ks-hf-progress");
@@ -246,35 +240,21 @@ async function renderDatasets(panel, state) {
     if (!repo) { msg.textContent = "Nhập dataset id trên Hugging Face trước (vd DuyTa/Cyber_F1_v2)."; return; }
     bar.hidden = false; inner.style.width = "0%";
     msg.textContent = "Đang mô phỏng tải… (chưa nối API Hugging Face thật)";
-    for (const pct of [20, 45, 70, 90, 100]) {
-      await new Promise((r) => setTimeout(r, 220));
-      inner.style.width = pct + "%";
-    }
+    for (const pct of [20, 45, 70, 90, 100]) { await new Promise((r) => setTimeout(r, 220)); inner.style.width = pct + "%"; }
     const key = `hf_${Date.now()}`;
-    saveCustomDataset({
-      key, description: `Mô phỏng nhập từ Hugging Face: ${repo}`,
-      rows: [{ _note: `Đây là dữ liệu MÔ PHỎNG — cần backend gọi HF Hub API thật để tải "${repo}".` }],
-    });
+    saveCustomDataset({ key, description: `Mô phỏng nhập từ Hugging Face: ${repo}`,
+      rows: [{ _note: `Đây là dữ liệu MÔ PHỎNG — cần backend gọi HF Hub API thật để tải "${repo}".` }] });
     msg.textContent = `Xong (mô phỏng) — đã thêm mục "${key}" vào danh sách bên dưới.`;
     await loadList();
   });
 }
 
-function readCustomDatasets() {
-  try { return JSON.parse(localStorage.getItem(LS_CUSTOM_DATASETS) || "[]"); } catch { return []; }
-}
+function readCustomDatasets() { try { return JSON.parse(localStorage.getItem(LS_CUSTOM_DATASETS) || "[]"); } catch { return []; } }
 function saveCustomDataset(d) {
-  try {
-    const all = readCustomDatasets();
-    all.push(d);
-    localStorage.setItem(LS_CUSTOM_DATASETS, JSON.stringify(all));
-  } catch { /* localStorage không khả dụng (private mode…) — bỏ qua êm */ }
+  try { const all = readCustomDatasets(); all.push(d); localStorage.setItem(LS_CUSTOM_DATASETS, JSON.stringify(all)); } catch { /* noop */ }
 }
 function removeCustomDataset(key) {
-  try {
-    const all = readCustomDatasets().filter((d) => d.key !== key);
-    localStorage.setItem(LS_CUSTOM_DATASETS, JSON.stringify(all));
-  } catch { /* noop */ }
+  try { localStorage.setItem(LS_CUSTOM_DATASETS, JSON.stringify(readCustomDatasets().filter((d) => d.key !== key))); } catch { /* noop */ }
 }
 
 function rowsToTable(rows) {
@@ -283,17 +263,16 @@ function rowsToTable(rows) {
   const cell = (v) => {
     if (v == null) return "";
     if (typeof v === "object") { const s = JSON.stringify(v); return esc(s.length > 140 ? s.slice(0, 140) + "…" : s); }
-    const s = String(v);
-    return esc(s.length > 200 ? s.slice(0, 200) + "…" : s);
+    const s = String(v); return esc(s.length > 200 ? s.slice(0, 200) + "…" : s);
   };
   return `<table><thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>
     ${rows.map((r) => `<tr>${cols.map((c) => `<td>${cell(r[c])}</td>`).join("")}</tr>`).join("")}
   </tbody></table>`;
 }
 
-async function viewRemoteDataset(viewerEl, state, key, page = 1, pageSize = 20) {
+async function viewRemoteDataset(viewerEl, key, page = 1, pageSize = 20) {
   viewerEl.innerHTML = `<p class="hint">Đang tải…</p>`;
-  const data = await state.api.get(`/showcase-api/kpi-studio/datasets/${encodeURIComponent(key)}?page=${page}&page_size=${pageSize}`);
+  const data = await api.get(`/showcase-api/kpi-studio/datasets/${encodeURIComponent(key)}?page=${page}&page_size=${pageSize}`);
   viewerEl.innerHTML = `
     <div class="card">
       <h3>${esc(data.label)} <span class="hint">(${esc(data.source)})</span></h3>
@@ -307,7 +286,7 @@ async function viewRemoteDataset(viewerEl, state, key, page = 1, pageSize = 20) 
     <button class="run" data-p="next" ${data.page >= data.total_pages ? "disabled" : ""}>Sau ›</button>`;
   ["#ks-pg-ctrl", "#ks-pg-ctrl-bottom"].forEach((sel) => { viewerEl.querySelector(sel).innerHTML = ctrl(); });
   viewerEl.querySelectorAll("[data-p]").forEach((b) =>
-    b.addEventListener("click", () => viewRemoteDataset(viewerEl, state, key, data.page + (b.dataset.p === "next" ? 1 : -1), pageSize)));
+    b.addEventListener("click", () => viewRemoteDataset(viewerEl, key, data.page + (b.dataset.p === "next" ? 1 : -1), pageSize)));
   viewerEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -323,8 +302,8 @@ function viewLocalDataset(viewerEl, key) {
   viewerEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-// ── 3) Trạng thái dịch vụ — kiểm tra thật LLM/embedding/reranker/Qdrant ─────
-async function renderServiceStatus(panel, state) {
+// ── 3) Trạng thái dịch vụ ────────────────────────────────────────────────────
+async function renderServiceStatus(panel) {
   panel.innerHTML = `
     <div class="card">
       <div class="row">
@@ -332,20 +311,19 @@ async function renderServiceStatus(panel, state) {
         <button class="run" id="ks-status-refresh">Kiểm tra lại</button>
       </div>
       <p class="hint">Gọi thật: LLM <code>GET /models</code>; embedding <code>POST /v1/embeddings</code>;
-        reranker <code>POST /v1/rerank</code> (đúng tên model cấu hình — bắt được lỗi "serving load
-        nhầm model mặc định" theo đúng cảnh báo trong CLAUDE.md); Qdrant <code>GET /collections/&lt;tên&gt;</code>.</p>
+        reranker <code>POST /v1/rerank</code> (đúng tên model cấu hình); Qdrant <code>GET /collections/&lt;tên&gt;</code>.</p>
       <div id="ks-status-body"><p class="hint">Đang kiểm tra…</p></div>
     </div>`;
   const body = panel.querySelector("#ks-status-body");
-  panel.querySelector("#ks-status-refresh").addEventListener("click", () => load());
+  panel.querySelector("#ks-status-refresh").addEventListener("click", () => { load(); loadSidebarStatus(); });
 
   async function load() {
     body.innerHTML = `<p class="hint">Đang kiểm tra…</p>`;
-    const data = await state.api.get("/showcase-api/kpi-studio/service-status");
+    const data = await api.get("/showcase-api/kpi-studio/service-status");
     const banner = data.ready_to_bench
       ? `<p><span class="pill ok">SẴN SÀNG</span> cả 4 dịch vụ phản hồi OK lúc ${esc(data.checked_at)}.</p>`
-      : `<p><span class="pill fail">CHƯA SẴN SÀNG</span> ít nhất 1 dịch vụ lỗi lúc ${esc(data.checked_at)} — xem chi tiết bên dưới trước khi bấm chạy bench.</p>`;
-    body.innerHTML = banner + `<div class="row">${data.checks.map(statusCard).join("")}</div>`;
+      : `<p><span class="pill fail">CHƯA SẴN SÀNG</span> ít nhất 1 dịch vụ lỗi lúc ${esc(data.checked_at)} — xem chi tiết bên dưới trước khi chạy bench.</p>`;
+    body.innerHTML = banner + `<div class="grid-cards">${data.checks.map(statusCard).join("")}</div>`;
   }
   await load();
 }
@@ -359,13 +337,13 @@ function statusCard(c) {
   if (c.http_status != null) rows.push(`HTTP: ${c.http_status}`);
   if (c.detail) rows.push(`<span class="hint">${esc(c.detail)}</span>`);
   return `
-    <div class="card" style="flex:1;min-width:220px">
+    <div class="card">
       <h3>${esc(c.role.toUpperCase())} ${c.ok ? `<span class="pill ok">OK</span>` : `<span class="pill fail">LỖI</span>`}</h3>
       ${rows.map((r) => `<p class="hint">${r}</p>`).join("")}
     </div>`;
 }
 
-// ── 4) Chạy bench — từng KPI / cả nhóm / tất cả 19, log realtime ────────────
+// ── 4) Chạy bench ────────────────────────────────────────────────────────────
 async function renderRunBench(panel, state) {
   const { groups, kpis } = state.catalog;
   panel.innerHTML = `
@@ -376,10 +354,7 @@ async function renderRunBench(panel, state) {
       <div class="row"><button class="run" id="ks-run-go">Chạy</button><span class="hint run-elapsed" id="ks-run-elapsed"></span></div>
       <div class="progress" id="ks-run-progress" hidden><div></div></div>
     </div>
-    <div class="card">
-      <h3>Log realtime</h3>
-      <pre class="run-log" id="ks-run-log"></pre>
-    </div>
+    <div class="card"><h3>Log realtime</h3><pre class="run-log" id="ks-run-log"></pre></div>
     <div id="ks-run-results"></div>
   `;
   const scopeBtns = panel.querySelector("#ks-scope-btns");
@@ -391,12 +366,8 @@ async function renderRunBench(panel, state) {
   const elapsedEl = panel.querySelector("#ks-run-elapsed");
   const resultsEl = panel.querySelector("#ks-run-results");
 
-  let scope = "single"; // single | group | all
-  const SCOPES = [
-    { id: "single", label: "Từng KPI" },
-    { id: "group", label: "Cả 1 nhóm" },
-    { id: "all", label: "Tất cả 19" },
-  ];
+  let scope = "single";
+  const SCOPES = [{ id: "single", label: "Từng KPI" }, { id: "group", label: "Cả 1 nhóm" }, { id: "all", label: "Tất cả 19" }];
   SCOPES.forEach((s) => {
     const b = document.createElement("button");
     b.className = "run"; b.textContent = s.label; b.dataset.s = s.id;
@@ -406,9 +377,7 @@ async function renderRunBench(panel, state) {
   function drawScope() {
     [...scopeBtns.children].forEach((b) => b.classList.toggle("active", b.dataset.s === scope));
     if (scope === "single") {
-      scopeDetail.innerHTML = `<select id="ks-pick-kpi" style="padding:8px 10px;background:var(--panel-2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:inherit">
-        ${kpis.map((k) => `<option value="${esc(k.code)}">${esc(k.code)} — ${esc(k.name)}</option>`).join("")}
-      </select>`;
+      scopeDetail.innerHTML = `<select id="ks-pick-kpi">${kpis.map((k) => `<option value="${esc(k.code)}">${esc(k.code)} — ${esc(k.name)}</option>`).join("")}</select>`;
     } else if (scope === "group") {
       scopeDetail.innerHTML = groups.map((g) => `<label class="hint"><input type="radio" name="ks-pick-group" value="${g.id}" ${g.id === "A" ? "checked" : ""}/> Nhóm ${g.id} — ${esc(g.name)} (${g.count})</label>`).join(" ");
     } else {
@@ -430,10 +399,8 @@ async function renderRunBench(panel, state) {
     const tests = testsForScope();
     if (!tests.length) return;
     goBtn.disabled = true;
-    logEl.textContent = "";
-    resultsEl.innerHTML = "";
-    progress.hidden = false;
-    progressInner.style.width = "0%";
+    logEl.textContent = ""; resultsEl.innerHTML = "";
+    progress.hidden = false; progressInner.style.width = "0%";
     const started = performance.now();
     const ticker = setInterval(() => {
       const s = Math.floor((performance.now() - started) / 1000);
@@ -457,15 +424,13 @@ async function renderRunBench(panel, state) {
       resultsEl.innerHTML = renderRunSummary(results);
     }
     progressInner.style.width = "100%";
-    clearInterval(ticker);
-    elapsedEl.textContent = "";
-    goBtn.disabled = false;
+    clearInterval(ticker); elapsedEl.textContent = ""; goBtn.disabled = false;
     saveHistoryRun({ scope, results, at: new Date().toISOString() });
     resultsEl.innerHTML = renderRunSummary(results) + `<p class="hint">Đã lưu vào mục "Lịch sử & biểu đồ".</p>`;
+    loadSidebarStatus();
   });
 }
 
-// 1 test = 1 kết nối SSE tới endpoint run-stream THẬT đã có sẵn (kpi_bench.py) — không mô phỏng gì thêm ở đây.
 function runOneTestStream(testId, logEl, onProgress) {
   return new Promise((resolve, reject) => {
     const es = new EventSource(`/showcase-api/kpi-bench/tests/${encodeURIComponent(testId)}/run-stream`);
@@ -495,31 +460,25 @@ function renderRunSummary(results) {
     </div>`;
 }
 
-// ── 5) Lịch sử & biểu đồ — localStorage của trình duyệt này ─────────────────
-function readHistory() {
-  try { return JSON.parse(localStorage.getItem(LS_HISTORY) || "[]"); } catch { return []; }
-}
+// ── 5) Lịch sử & biểu đồ ─────────────────────────────────────────────────────
+function readHistory() { try { return JSON.parse(localStorage.getItem(LS_HISTORY) || "[]"); } catch { return []; } }
 function saveHistoryRun(run) {
   try {
     const all = readHistory();
-    all.unshift(run); // mới nhất lên đầu
-    localStorage.setItem(LS_HISTORY, JSON.stringify(all.slice(0, 50))); // giữ tối đa 50 lần chạy gần nhất
-  } catch { /* localStorage không khả dụng — bỏ qua êm, chỉ mất tính năng lịch sử */ }
+    all.unshift(run);
+    localStorage.setItem(LS_HISTORY, JSON.stringify(all.slice(0, 50)));
+  } catch { /* localStorage không khả dụng — chỉ mất tính năng lịch sử */ }
 }
 
 async function renderHistory(panel, state) {
   const runs = readHistory();
   if (!runs.length) {
-    panel.innerHTML = `<div class="card"><p class="hint">Chưa có lần chạy nào được lưu. Sang tab "Chạy bench" để chạy — mỗi lần chạy xong sẽ tự thêm 1 dòng ở đây (lưu trong trình duyệt này, chưa có DB phía server).</p></div>`;
+    panel.innerHTML = `<div class="card"><p class="hint">Chưa có lần chạy nào được lưu. Sang mục "Chạy bench" để chạy — mỗi lần chạy xong sẽ tự thêm 1 dòng ở đây (lưu trong trình duyệt này, chưa có DB phía server).</p></div>`;
     return;
   }
-  // Ngưỡng số THẬT (để vẽ % cột) lấy từ catalog — result.threshold trả về từ kpi-bench là chuỗi
-  // hiển thị đã format sẵn (vd "20–35", "> 96"), không parse ngược ra số được.
   const thrByCode = new Map(state.catalog.kpis.map((k) => [k.code, k]));
-
   panel.innerHTML = `<div class="card"><h3>${runs.length} lần chạy gần nhất</h3><div id="ks-hist-list"></div></div>`;
-  const list = panel.querySelector("#ks-hist-list");
-  list.innerHTML = runs.map((run, i) => {
+  panel.querySelector("#ks-hist-list").innerHTML = runs.map((run, i) => {
     const ok = run.results.filter((r) => r.pass).length;
     const total = run.results.filter((r) => !r.error).length;
     const when = new Date(run.at).toLocaleString("vi-VN");
@@ -533,16 +492,11 @@ async function renderHistory(panel, state) {
   }).join("");
 }
 
-// Tái dùng .hist-bars/.hist-bar sẵn có trong style.css (đã dùng cho tab "Huấn luyện lại")
-// thay vì tự bịa 1 hệ class biểu đồ mới. Chiều cao cột = % so ngưỡng (100% = vừa chạm ngưỡng),
-// kẹp trong [4%, 100%] để cột luôn thấy được kể cả khi vượt xa hoặc gần 0.
 function historyBarsChart(results, thrByCode) {
   const bars = results.filter((r) => !r.error && typeof r.value === "number").map((r) => {
     const cat = thrByCode.get(r.test_id);
     const thrNum = cat ? (Array.isArray(cat.threshold) ? cat.threshold[1] : Number(cat.threshold)) : NaN;
-    const pct = Number.isFinite(thrNum) && thrNum
-      ? Math.max(4, Math.min(100, (Number(r.value) / thrNum) * 100))
-      : 50; // không tra được ngưỡng số (không nên xảy ra vì catalog phủ đủ 19 mã) — vẽ cột giữa thay vì NaN
+    const pct = Number.isFinite(thrNum) && thrNum ? Math.max(4, Math.min(100, (Number(r.value) / thrNum) * 100)) : 50;
     return `<div class="hist-bar"><i class="${r.pass ? "" : "fail"}" style="height:${pct.toFixed(0)}%"></i><span>${esc(r.test_id.replace("R-", ""))}</span></div>`;
   }).join("");
   return bars ? `<div class="hist-bars">${bars}</div><p class="hint">Chiều cao cột = % so với ngưỡng (100% = vừa chạm ngưỡng).</p>` : "";

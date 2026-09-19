@@ -10,7 +10,6 @@ const TABS = [
   { id: "retraining-auto", label: "Retraining tự động", module: "./tabs/retraining-auto.js" },
   { id: "model-info", label: "Model & phần cứng", module: "./tabs/model-info.js" },
   { id: "kpi-bench", label: "KPI Bench", module: "./tabs/kpi-bench.js" },
-  { id: "kpi-studio", label: "KPI Studio", module: "./tabs/kpi-studio.js" },
   { id: "sanitize-demo", label: "Sanitize demo", module: "./tabs/sanitize-demo.js" },
   { id: "evidence", label: "Evidence", module: "./tabs/evidence.js" },
   { id: "kb-sync", label: "Cập nhật KB", module: "./tabs/kb-sync.js" },
