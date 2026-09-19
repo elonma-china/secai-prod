@@ -13,6 +13,7 @@ Toàn bộ API AI **đang chạy thật trên production**. Base URL: `http://<g
 1. [Chat](#1-chat)
    - [1.1 Chat theo session cụ thể — `/sessions/{sid}/chat`](#11-chat-theo-session-cụ-thể--sessionssidchat)
    - [1.2 Quản lý cuộc trò chuyện — `/sessions`, `/projects/{pid}/sessions`](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)
+   - [1.3 Quản lý project (thư mục chứa hội thoại) — `/projects`](#13-quản-lý-project-thư-mục-chứa-hội-thoại--projects)
 2. [Hội thoại có lịch sử — `/ai/conversations/*`](#2-hội-thoại-có-lịch-sử--aiconversations) ⚠️ *chưa có trong bản build này*
 3. [Dịch](#3-dịch--aitranslate)
 4. [Báo cáo](#4-báo-cáo--aigenerate-report)
@@ -184,6 +185,55 @@ curl -X PATCH http://<gateway>:8131/sessions/sess:abc123 \
 
 ---
 
+### 1.3 Quản lý project (thư mục chứa hội thoại) — `/projects`
+
+CRUD cho **project** — cái "thư mục" gom nhiều cuộc trò chuyện (như ChatGPT Projects). Session có thể đứng độc lập hoặc thuộc 1 project; tạo/liệt kê session **bên trong** 1 project dùng `/projects/{pid}/sessions` ở [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions). Mục này là CRUD cho **bản thân project**.
+
+| Method | Path | Việc gì |
+|---|---|---|
+| POST | `/projects` | Tạo project mới |
+| GET | `/projects?user_id=` | Liệt kê project của `user_id` |
+| GET | `/projects/{pid}?user_id=` | Xem chi tiết 1 project |
+| PATCH | `/projects/{pid}` | Đổi tên project |
+| DELETE | `/projects/{pid}?user_id=` | Xoá project **và toàn bộ session thuộc nó** (cascade) |
+
+**`ProjectOut`** — hình dạng response chung cho tạo/liệt kê/xem/đổi tên (`created_at`/`updated_at` chuẩn hoá về ISO-8601 như `SessionOut`):
+```json
+{
+  "project_id": "proj:8c2e...",
+  "name": "Đợt pentest Q3",
+  "owner": "user-42",
+  "created_at": "2026-09-18T09:00:00+00:00",
+  "updated_at": "2026-09-18T09:00:00+00:00"
+}
+```
+
+**Tạo / Đổi tên:**
+```bash
+curl -X POST http://<gateway>:8131/projects \
+  -d '{"user_id": "user-42", "name": "Đợt pentest Q3"}'
+curl -X PATCH http://<gateway>:8131/projects/proj:8c2e \
+  -d '{"user_id": "user-42", "name": "Tên mới"}'
+```
+- `name` **bắt buộc**; rỗng/toàn khoảng trắng → `400 {"error":"bad_request","message":"name is required"}`.
+- `user_id` bỏ trống/rỗng → chủ sở hữu mặc định `"anonymous"` (nhất quán với caller ẩn danh ở các endpoint khác).
+
+**Liệt kê:** `GET /projects?user_id=user-42` → mảng `ProjectOut` của đúng `user_id` đó (không phân trang).
+
+**Xoá (cascade):**
+```bash
+curl -X DELETE "http://<gateway>:8131/projects/proj:8c2e?user_id=user-42"
+```
+→ xoá project **cùng mọi session con** của nó, trả `{"deleted": <số session đã xoá kèm theo>}`. Session standalone (không thuộc project) không bị ảnh hưởng.
+
+**Quyền sở hữu:** một `user_id` chỉ thấy/sửa project của chính mình.
+- `GET` sai chủ hoặc `pid` không tồn tại → `404 {"error":"not_found","message":"project not found: <pid>"}` (không tiết lộ sự tồn tại).
+- `PATCH`/`DELETE` sai chủ → `403 {"error":"forbidden","message":"not the project owner"}`.
+
+**Rate limit:** chung nhóm `/projects*` = **120 req/60s** (xem [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)).
+
+---
+
 ## 2. Hội thoại có lịch sử — `/ai/conversations/*`
 
 > ⚠️ **Nhóm endpoint `/ai/conversations/*` mô tả trong mục này KHÔNG có trong bản build hiện tại của gateway** (gọi vào sẽ trả `404`). Muốn nhiều cuộc hội thoại song song + lưu bền, dùng [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions) (`/sessions`, `/projects/{pid}/sessions`) thay thế. Giữ lại nội dung mục này để tham khảo hình dạng response tương lai/lịch sử — đừng tích hợp FE vào các path bên dưới.
@@ -319,8 +369,8 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 | Mã | Khi nào | Body |
 |---|---|---|
-| `400` | Quản lý session (§1.2): thiếu `name`/`title`, `title` > 200 ký tự, `POST /sessions` có `project_id` khác null, hoặc PATCH không có gì để cập nhật | `{"error","message"}` |
-| `403` | Sửa/xoá session/project không phải của mình (mutate sai chủ — §1.2) | `{"error","message"}` |
+| `400` | Quản lý session (§1.2): thiếu `name`/`title`, `title` > 200 ký tự, `POST /sessions` có `project_id` khác null, hoặc PATCH không có gì để cập nhật. Quản lý project (§1.3): thiếu `name` khi tạo/đổi tên project | `{"error","message"}` |
+| `403` | Sửa/xoá session/project không phải của mình (mutate sai chủ — §1.2/§1.3) | `{"error","message"}` |
 | `404` | Session/project không tồn tại hoặc đọc sai chủ (không tiết lộ tồn tại); PATCH lên row hội thoại cũ (`chat:`/`exploit:`); **hoặc endpoint đã bị gỡ** (`/ai/conversations/*`, §2) | `{"detail"}` hoặc `{"error","message"}` |
 | `422` | Request rỗng — thiếu mọi field text hợp lệ; hoặc `scope` không hợp lệ ở `GET /sessions` | `{"detail": "..."}` |
 | `429` | Vượt rate limit | `{"detail": "rate limit exceeded"}` |

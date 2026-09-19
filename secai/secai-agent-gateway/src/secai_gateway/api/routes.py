@@ -2202,6 +2202,8 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     """
     from .showcase import finetune as showcase_finetune
     from .showcase import kpi_bench as showcase_kpi_bench
+    from .showcase import kpi_studio as showcase_kpi_studio
+    from .showcase import kpi_run as showcase_kpi_run
     from .showcase import model_info as showcase_model_info
     from .showcase import sanitize_demo as showcase_sanitize_demo
     from .showcase import source_dossier as showcase_source_dossier
@@ -2209,16 +2211,20 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     from .showcase import deploy as showcase_deploy
     from .showcase import tb_proxy as showcase_tb_proxy
     from .showcase import testset as showcase_testset
+    from .showcase import retraining_proxy as showcase_retraining_proxy
 
     app.include_router(showcase_finetune.router)
     app.include_router(showcase_model_info.router)
     app.include_router(showcase_kpi_bench.router)
+    app.include_router(showcase_kpi_studio.router)
+    app.include_router(showcase_kpi_run.router)
     app.include_router(showcase_sanitize_demo.router)
     app.include_router(showcase_source_dossier.router)
     app.include_router(showcase_kb.router)
     app.include_router(showcase_deploy.router)
     app.include_router(showcase_tb_proxy.router)  # /tb/* → TensorBoard (đi ké qua :8131)
     app.include_router(showcase_testset.router)
+    app.include_router(showcase_retraining_proxy.router)  # /showcase-api/retraining/* → trigger_api host :8877
 
     try:
         from .showcase import evidence as showcase_evidence
@@ -2244,3 +2250,9 @@ def _register_showcase_routes(app: FastAPI, state: Any) -> None:
     demo_dir = Path(__file__).resolve().parents[3] / "demo" / "showcase"
     if demo_dir.is_dir():
         app.mount("/showcase-demo", _NoCacheStatic(directory=str(demo_dir), html=True), name="showcase-demo")
+
+    # KPI Studio — standalone app (not a showcase-demo tab), same-origin, own sidebar shell.
+    # Calls the same real /showcase-api/kpi-studio/* + /showcase-api/kpi-bench/* endpoints above.
+    kpi_studio_dir = Path(__file__).resolve().parents[3] / "demo" / "kpi-studio"
+    if kpi_studio_dir.is_dir():
+        app.mount("/kpi-studio", _NoCacheStatic(directory=str(kpi_studio_dir), html=True), name="kpi-studio-demo")
