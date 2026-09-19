@@ -1,0 +1,10 @@
+# Vendored KPI bench code — this .gitignore keeps run-churn and secrets out of git.
+# (The runnable scripts themselves ARE tracked; only their outputs/secrets are excluded.)
+
+runs/
+raw-logs/
+reports/
+__pycache__/
+*.pyc
+.env.bench
+*.bak.*

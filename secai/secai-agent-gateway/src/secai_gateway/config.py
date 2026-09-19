@@ -366,6 +366,14 @@ class Settings(BaseSettings):
     # tại _upstream (TB chạy --path_prefix=/showcase-tb). Đặt URL tuyệt đối nếu muốn trỏ TB ra ngoài.
     showcase_tensorboard_base_url: str = "/showcase-tb"
     showcase_tensorboard_upstream: str = "http://127.0.0.1:6006"
+    # Service kích hoạt MLOps (trigger_api) chạy trên HOST — gateway reverse-proxy
+    # /showcase-api/retraining/* tới đây để trang nghiệm thu gọi same-origin. Container thấy host
+    # qua host.docker.internal (extra_hosts trong secai-docker/docker-compose.yml, giống /tb).
+    showcase_retraining_upstream: str = "http://host.docker.internal:8877"
+    # Nếu trigger_api bật HTTP Basic Auth (MLOPS_BASIC_AUTH_USER/PASS — bắt buộc khi expose ra
+    # internet), khai cùng cặp "user:pass" ở đây để proxy tự thêm header Authorization: Basic khi
+    # forward, giữ đường same-origin của trang nghiệm thu chạy được. Để trống nếu Basic Auth tắt.
+    showcase_retraining_basic_auth: str = ""
     # Thời gian FE phát lại log của mỗi KPI = thời gian đo THẬT × hệ số này (thu nhỏ lại cho
     # vừa demo), kẹp trong [min, max]. Muốn chạy chậm/nhanh hơn thì chỉnh 3 số này, không phải
     # sửa code FE. Vd hệ số 12: bước retrieval thật 1550s → phát 18.6s; faithfulness 762s → 9.1s.
@@ -396,14 +404,19 @@ class Settings(BaseSettings):
     showcase_time_gen_max_ms: int = 300000
 
     # ── KPI Studio "Live" run (showcase/kpi_run.py) — chạy THẬT các script CLI bench
-    # (KPI-VA-GEN-TEST/02-GEN-TEST/bench_kpi.py cho nhóm B/C, scripts/bench.sh cho nhóm A),
-    # khác hẳn kpi_bench.py (chỉ replay lại 1 bản ghi hồ sơ gốc đã đóng băng, xem module đó).
-    kpi_bench_scripts_dir: str = "/home/ict/AIEngines/secai/KPI-VA-GEN-TEST"
+    # (02-GEN-TEST/bench_kpi.py cho nhóm B/C, scripts/bench.sh cho nhóm A), khác hẳn
+    # kpi_bench.py (chỉ replay lại 1 bản ghi hồ sơ gốc đã đóng băng, xem module đó).
+    # 2026-09-19 consolidation: KPI-VA-GEN-TEST/ is no longer bind-mounted from the host —
+    # the runnable subset is vendored + baked into the image at build time (Dockerfile
+    # `COPY kpi_bench ./kpi_bench`), so these now point at the in-container copy path.
+    kpi_bench_scripts_dir: str = "/app/kpi_bench"
     # File .env.bench merge vào env của subprocess — rỗng thì dùng
     # <kpi_bench_scripts_dir>/.env.bench (mặc định của bench.sh).
     kpi_bench_env_file: str = ""
     kpi_bench_python: str = "python3"
     kpi_bench_smoke_limit: int = 5
+    # Bộ đề nhóm A cho chay_eval_gateway_moi.sh --dataset (rỗng -> <scripts_dir>/02-GEN-TEST/testset-v2).
+    kpi_bench_testset_dir: str = "/app/kpi_bench/02-GEN-TEST/testset-v2"
     # Lịch sử các lần chạy LIVE (khác hẳn localStorage phía FE) — /showcase-api/kpi-run/runs
     # và /runs/{run_id} đọc lại từ đây.
     kpi_run_history_file: str = "./logs/kpi-run-history.json"

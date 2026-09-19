@@ -21,6 +21,7 @@ import re
 import sys
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Trích CVE-id explicit trong câu hỏi (để dùng exact cve_id filter — khớp product qdrant_search).
@@ -33,6 +34,13 @@ import bm25_py  # noqa: E402
 
 KPI_DIR = Path(__file__).resolve().parents[1]
 RRF_K = 60
+# ── BM25 nửa lexical: dùng Qdrant SPARSE vector (KHỚP production gateway retrieval/bm25.py)
+# thay cho bm25_py local. Encode query bằng FastEmbed Qdrant/bm25 rồi search sparse trên Qdrant.
+# Cần fastembed trong env; thiếu -> tự fallback bm25_py local (kém khớp) rồi dense-only.
+BM25_VECTOR = os.environ.get("QDRANT_BM25_VECTOR", "bm25")
+BM25_MODEL = os.environ.get("BM25_MODEL", "Qdrant/bm25")
+BM25_LOCAL_MODEL_DIR = os.environ.get(
+    "BM25_LOCAL_MODEL_DIR", "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model")
 # datasets-acceptance nằm ở eval/ (cha của kpi/). Trên VPS rsync giữ cấu trúc → ../datasets-acceptance.
 DS_CANDIDATES = [
     KPI_DIR.parent / "datasets-acceptance",
@@ -114,6 +122,43 @@ def rrf_merge(dense_ids, bm25_ids, limit):
     return [pid for pid, _ in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:limit]]
 
 
+class QdrantSparseBM25:
+    """Nửa lexical BM25 qua Qdrant SPARSE vector — KHỚP production (gateway retrieval/bm25.py):
+    FastEmbed(Qdrant/bm25) encode query -> Qdrant /points/search trên sparse vector 'bm25'.
+    Thay bm25_py local (index + tokenizer/scoring riêng, lệch production). Encode fastembed
+    serialize bằng 1 khoá (model không đảm bảo thread-safe); phần HTTP dense vẫn song song."""
+
+    def __init__(self):
+        import threading
+        self._lock = threading.Lock()
+        self._model = None
+
+    def _encode(self, query):
+        text = (query or "").strip()
+        if not text:
+            return None
+        with self._lock:
+            if self._model is None:
+                from fastembed import SparseTextEmbedding
+                kwargs = {}
+                if os.path.isdir(BM25_LOCAL_MODEL_DIR):
+                    kwargs["specific_model_path"] = BM25_LOCAL_MODEL_DIR
+                self._model = SparseTextEmbedding(model_name=BM25_MODEL, **kwargs)
+            emb = next(iter(self._model.embed([text])))
+        indices = [int(i) for i in emb.indices]
+        values = [float(v) for v in emb.values]
+        return {"indices": indices, "values": values} if indices else None
+
+    def search(self, query, top_k):
+        sp = self._encode(query)
+        if not sp:
+            return []
+        body = {"vector": {"name": BM25_VECTOR, "vector": sp}, "limit": top_k, "with_payload": False}
+        r = _post(f"{config.QDRANT_URL}/collections/{config.QDRANT_COLLECTION}/points/search", body, timeout=30)
+        return [(str(x["id"]), float(x.get("score", 0.0)))
+                for x in r.get("result", []) if x.get("score", 0) > 0]
+
+
 def load_pairs(limit=None, ds_override=None):
     cands = [Path(ds_override)] if ds_override else DS_CANDIDATES
     ds_dir = next((d for d in cands if d.exists()), None)
@@ -140,6 +185,75 @@ def load_pairs(limit=None, ds_override=None):
     return pairs, str(ds_dir)
 
 
+def process_one(pr, bm25):
+    """Toàn bộ gọi mạng (embed/Qdrant/BM25-local/rerank) cho 1 câu — chạy trong worker thread.
+    Không đụng file/counter chung (những cái đó ở lại main thread, xem main())."""
+    gold = pr["gold_cve"].upper()
+    try:
+        vec = embed(pr["query"])
+        dense = dense_search(vec, TOP_DENSE)
+    except Exception as e:
+        return {"pr": pr, "gold": gold, "ok": False, "err": repr(e)[:60]}
+
+    dense_ids = [str(d["id"]) for d in dense]
+    cve_by_id = {str(d["id"]): (d.get("cve_id") or "").upper() for d in dense}
+    text_by_id = {str(d["id"]): (d.get("text") or "") for d in dense}
+
+    # BM25 + RRF (hybrid) — BM25 tra cứu local (thread-safe, chỉ đọc), chỉ fetch_payloads gọi mạng.
+    bm25_ids = []
+    if bm25:
+        bm25_hits = bm25.search(pr["query"], TOP_DENSE)
+        bm25_ids = [h[0] for h in bm25_hits]
+        need = [pid for pid in bm25_ids if pid not in cve_by_id]
+        for pid, pl in fetch_payloads(need).items():
+            cve_by_id[pid] = (pl.get("cve_id") or "").upper()
+            text_by_id[pid] = pl.get("text") or ""
+    hybrid_ids = rrf_merge(dense_ids, bm25_ids, TOP_DENSE) if bm25 else dense_ids
+
+    # ── id-aware: câu hỏi có CVE-id explicit → exact cve_id filter (khớp product qdrant_search) ──
+    qids = [c.upper() for c in CVE_IN_QUERY_RE.findall(pr["query"])]
+    idaware_ids = list(hybrid_ids)
+    if qids:
+        id_chunk_ids = []
+        for qcve in qids:
+            for ch in scroll_by_cve(qcve, TOP_DENSE):
+                pid = str(ch["id"])
+                cve_by_id[pid] = (ch.get("cve_id") or "").upper()
+                text_by_id[pid] = ch.get("text") or ""
+                id_chunk_ids.append(pid)
+        seen = set()
+        idaware_ids = [p for p in id_chunk_ids + hybrid_ids if not (p in seen or seen.add(p))]
+
+    dense_top10_cve = [cve_by_id.get(pid, "") for pid in dense_ids[:10]]
+    hybrid_top10_cve = [cve_by_id.get(pid, "") for pid in hybrid_ids[:10]]
+    idaware_top10_cve = [cve_by_id.get(pid, "") for pid in idaware_ids[:10]]
+    is_hit_dense = gold in dense_top10_cve
+    is_hit_hybrid = gold in hybrid_top10_cve
+    is_hit = gold in idaware_top10_cve
+    rank = (idaware_top10_cve.index(gold) + 1) if is_hit else None
+
+    # P@1: rerank top-20 id-aware candidate → top-1
+    cand_ids = idaware_ids[:TOP_DENSE]
+    is_p1 = False
+    top1_cve = None
+    if cand_ids:
+        try:
+            docs = [text_by_id.get(pid, "")[:1200] for pid in cand_ids]
+            rr = rerank(pr["query"], docs)
+            best = cand_ids[rr[0]["index"]]
+            top1_cve = cve_by_id.get(best, "")
+            is_p1 = top1_cve == gold
+        except Exception as e:
+            top1_cve = f"RERANK_ERR:{repr(e)[:40]}"
+
+    return {
+        "pr": pr, "gold": gold, "ok": True,
+        "idaware_top10_cve": idaware_top10_cve, "is_hit": is_hit, "is_hit_hybrid": is_hit_hybrid,
+        "is_hit_dense": is_hit_dense, "rank": rank, "is_p1": is_p1, "top1_cve": top1_cve,
+        "text_by_id": text_by_id, "idaware_ids": idaware_ids,
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(KPI_DIR / "raw-logs"))
@@ -147,15 +261,31 @@ def main():
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--delay", type=float, default=0.0)
     ap.add_argument("--dataset", default=None, help="thư mục dataset (override; vd /tmp/trial_ds cho eval thử)")
+    ap.add_argument("--workers", type=int, default=16, help="số luồng song song embed/Qdrant/rerank (mặc định 16, giống mức đã dùng ổn ở faith_judge.py/llm_kpi.py)")
     args = ap.parse_args()
 
     pairs, ds_dir = load_pairs(args.limit, args.dataset)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    bm25_dir = bm25_py.find_bm25_dir()
-    bm25 = bm25_py.Bm25Index(bm25_dir) if bm25_dir else None
-    mode = "hybrid (dense+BM25+RRF)" if bm25 else "dense-only (BM25 KHÔNG có)"
+    # Ưu tiên Qdrant SPARSE (khớp production) → fallback bm25_py local → dense-only.
+    bm25 = None
+    bm25_source = "none (dense-only)"
+    try:
+        _sp = QdrantSparseBM25()
+        _sp.search("healthcheck log4shell", 1)  # ép nạp model + xác nhận Qdrant sparse chạy
+        bm25 = _sp
+        bm25_source = f"qdrant_sparse (vector=\'{BM25_VECTOR}\', model={BM25_MODEL}) — khớp production"
+    except Exception as e:  # noqa: BLE001
+        print(f"[BM25] Qdrant sparse không dùng được ({repr(e)[:90]}) → thử bm25_py local...", flush=True)
+        try:
+            _d = bm25_py.find_bm25_dir()
+            if _d:
+                bm25 = bm25_py.Bm25Index(_d)
+                bm25_source = f"local_bm25 ({_d}) — FALLBACK, KHÔNG khớp production"
+        except Exception:  # noqa: BLE001
+            bm25 = None
+    mode = f"hybrid (dense + {bm25_source} + RRF)" if bm25 else "dense-only (không có BM25)"
     print(f"retrieval KPI · {len(pairs)} query · ds={ds_dir} · mode={mode}\n", flush=True)
 
     hit_log = (out_dir / "embedding-hit-rate-at-10.jsonl").open("w", encoding="utf-8")
@@ -163,100 +293,58 @@ def main():
     ctx_out = Path(args.contexts).open("w", encoding="utf-8")
 
     n = hit_dense = hit_hybrid = hit_idaware = p1 = errs = 0
-    for i, pr in enumerate(pairs, 1):
-        gold = pr["gold_cve"].upper()
-        try:
-            vec = embed(pr["query"])
-            dense = dense_search(vec, TOP_DENSE)
-        except Exception as e:
-            errs += 1
-            print(f"[{i}/{len(pairs)}] {pr['id']} EMBED/SEARCH ERR {repr(e)[:60]}", flush=True)
-            continue
-        n += 1
-        dense_ids = [str(d["id"]) for d in dense]
-        cve_by_id = {str(d["id"]): (d.get("cve_id") or "").upper() for d in dense}
-        text_by_id = {str(d["id"]): (d.get("text") or "") for d in dense}
+    # Gọi mạng (embed/Qdrant/rerank) song song trên args.workers luồng — ex.map() trả kết quả
+    # đúng thứ tự pairs dù việc xử lý chạy đồng thời, nên phần đếm/ghi log dưới đây vẫn ở main
+    # thread, KHÔNG cần lock (giống pattern llm_kpi.py judge_relevance / faith_judge.py).
+    with ThreadPoolExecutor(max_workers=args.workers) as ex:
+        results_iter = ex.map(lambda pr: process_one(pr, bm25), pairs)
+        for i, (pr, res) in enumerate(zip(pairs, results_iter), 1):
+            if not res["ok"]:
+                errs += 1
+                print(f"[{i}/{len(pairs)}] {pr['id']} EMBED/SEARCH ERR {res['err']}", flush=True)
+                if args.delay:
+                    time.sleep(args.delay)
+                continue
+            n += 1
+            gold = res["gold"]
+            idaware_top10_cve = res["idaware_top10_cve"]
+            is_hit, is_hit_hybrid, is_hit_dense = res["is_hit"], res["is_hit_hybrid"], res["is_hit_dense"]
+            hit_dense += 1 if is_hit_dense else 0
+            hit_hybrid += 1 if is_hit_hybrid else 0
+            hit_idaware += 1 if is_hit else 0
+            hit_log.write(json.dumps({
+                "id": pr["id"], "true_label": pr["gold_cve"], "predicted_label": idaware_top10_cve,
+                "score": 1 if is_hit else 0, "score_hybrid": 1 if is_hit_hybrid else 0,
+                "score_dense": 1 if is_hit_dense else 0, "rank": res["rank"],
+                "has_id_in_query": pr["has_id_in_query"], "capability": pr["capability"], "difficulty": pr["difficulty"],
+            }, ensure_ascii=False) + "\n")
 
-        # BM25 + RRF (hybrid)
-        bm25_ids = []
-        if bm25:
-            bm25_hits = bm25.search(pr["query"], TOP_DENSE)
-            bm25_ids = [h[0] for h in bm25_hits]
-            need = [pid for pid in bm25_ids if pid not in cve_by_id]
-            for pid, pl in fetch_payloads(need).items():
-                cve_by_id[pid] = (pl.get("cve_id") or "").upper()
-                text_by_id[pid] = pl.get("text") or ""
-        hybrid_ids = rrf_merge(dense_ids, bm25_ids, TOP_DENSE) if bm25 else dense_ids
+            p1 += 1 if res["is_p1"] else 0
+            p1_log.write(json.dumps({
+                "id": pr["id"], "true_label": pr["gold_cve"], "predicted_label": res["top1_cve"],
+                "score": 1 if res["is_p1"] else 0, "capability": pr["capability"], "difficulty": pr["difficulty"],
+            }, ensure_ascii=False) + "\n")
 
-        # ── id-aware: câu hỏi có CVE-id explicit → exact cve_id filter (khớp product qdrant_search) ──
-        # Trích id TỪ QUERY (không dùng gold → tránh circular). Chunk của CVE đó lên đầu ứng viên.
-        qids = [c.upper() for c in CVE_IN_QUERY_RE.findall(pr["query"])]
-        idaware_ids = list(hybrid_ids)
-        if qids:
-            id_chunk_ids = []
-            for qcve in qids:
-                for ch in scroll_by_cve(qcve, TOP_DENSE):
-                    pid = str(ch["id"])
-                    cve_by_id[pid] = (ch.get("cve_id") or "").upper()
-                    text_by_id[pid] = ch.get("text") or ""
-                    id_chunk_ids.append(pid)
-            seen = set()
-            idaware_ids = [p for p in id_chunk_ids + hybrid_ids if not (p in seen or seen.add(p))]
+            # contexts cho RAGAS: top-CTX_K chunk text (id-aware → chunk đúng CVE lên đầu)
+            text_by_id = res["text_by_id"]; idaware_ids = res["idaware_ids"]
+            ctx_out.write(json.dumps({
+                "id": pr["id"], "query": pr["query"],
+                "contexts": [text_by_id.get(pid, "")[:1500] for pid in idaware_ids[:CTX_K]],
+                "retrieved_cves": idaware_top10_cve[:CTX_K],
+            }, ensure_ascii=False) + "\n")
 
-        dense_top10_cve = [cve_by_id.get(pid, "") for pid in dense_ids[:10]]
-        hybrid_top10_cve = [cve_by_id.get(pid, "") for pid in hybrid_ids[:10]]
-        idaware_top10_cve = [cve_by_id.get(pid, "") for pid in idaware_ids[:10]]
-        is_hit_dense = gold in dense_top10_cve
-        is_hit_hybrid = gold in hybrid_top10_cve
-        is_hit = gold in idaware_top10_cve  # headline = id-aware (production retrieval path)
-        hit_dense += 1 if is_hit_dense else 0
-        hit_hybrid += 1 if is_hit_hybrid else 0
-        hit_idaware += 1 if is_hit else 0
-        rank = (idaware_top10_cve.index(gold) + 1) if is_hit else None
-        hit_log.write(json.dumps({
-            "id": pr["id"], "true_label": pr["gold_cve"], "predicted_label": idaware_top10_cve,
-            "score": 1 if is_hit else 0, "score_hybrid": 1 if is_hit_hybrid else 0,
-            "score_dense": 1 if is_hit_dense else 0, "rank": rank,
-            "has_id_in_query": pr["has_id_in_query"], "capability": pr["capability"], "difficulty": pr["difficulty"],
-        }, ensure_ascii=False) + "\n")
-
-        # P@1: rerank top-20 id-aware candidate → top-1
-        cand_ids = idaware_ids[:TOP_DENSE]
-        is_p1 = False
-        top1_cve = None
-        if cand_ids:
-            try:
-                docs = [text_by_id.get(pid, "")[:1200] for pid in cand_ids]
-                rr = rerank(pr["query"], docs)
-                best = cand_ids[rr[0]["index"]]
-                top1_cve = cve_by_id.get(best, "")
-                is_p1 = top1_cve == gold
-            except Exception as e:
-                top1_cve = f"RERANK_ERR:{repr(e)[:40]}"
-        p1 += 1 if is_p1 else 0
-        p1_log.write(json.dumps({
-            "id": pr["id"], "true_label": pr["gold_cve"], "predicted_label": top1_cve,
-            "score": 1 if is_p1 else 0, "capability": pr["capability"], "difficulty": pr["difficulty"],
-        }, ensure_ascii=False) + "\n")
-
-        # contexts cho RAGAS: top-CTX_K chunk text (id-aware → chunk đúng CVE lên đầu)
-        ctx_out.write(json.dumps({
-            "id": pr["id"], "query": pr["query"],
-            "contexts": [text_by_id.get(pid, "")[:1500] for pid in idaware_ids[:CTX_K]],
-            "retrieved_cves": idaware_top10_cve[:CTX_K],
-        }, ensure_ascii=False) + "\n")
-
-        if i % 50 == 0 or i == len(pairs):
-            print(f"[{i}/{len(pairs)}] Hit@10 id-aware={100*hit_idaware/n:.1f}% "
-                  f"(hybrid={100*hit_hybrid/n:.1f}% dense={100*hit_dense/n:.1f}%) "
-                  f"P@1={100*p1/n:.1f}%", flush=True)
-        if args.delay:
-            time.sleep(args.delay)
+            if i % 50 == 0 or i == len(pairs):
+                print(f"[{i}/{len(pairs)}] Hit@10 id-aware={100*hit_idaware/n:.1f}% "
+                      f"(hybrid={100*hit_hybrid/n:.1f}% dense={100*hit_dense/n:.1f}%) "
+                      f"P@1={100*p1/n:.1f}%", flush=True)
+            if args.delay:
+                time.sleep(args.delay)
 
     hit_log.close(); p1_log.close(); ctx_out.close()
     summary = {
         "kpi": "retrieval",
         "mode": (mode + " + id-aware exact cve_id filter (khớp product qdrant_search)"),
+        "bm25_source": bm25_source,
         "model_embed": config.EMBED_MODEL, "model_rerank": config.RERANK_MODEL,
         "n": n, "errors": errs,
         # headline = id-aware: dùng exact cve_id filter khi câu hỏi có CVE-id explicit (đúng cách product chạy)
