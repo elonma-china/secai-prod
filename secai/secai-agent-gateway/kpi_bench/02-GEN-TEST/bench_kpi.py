@@ -29,6 +29,30 @@ LƯU Ý R-MODEL-EMB1200: script này đo từ máy chạy nó (WAN tới endpoin
 minh 2026-08-27 bằng cách SSH thẳng vào instance đo on-host: WAN ~117-500 emb/s vs
 on-host ~2600 emb/s (ngưỡng đo trên A100 tại chỗ, không tính RTT mạng). TRƯỢT ở đây
 không tự động nghĩa là hệ thống yếu — cần đo on-host mới kết luận được.
+# TODO: đo embed/rerank throughput NGAY TRÊN máy serving (SSH vào instance, trỏ
+# EMBED_URL/RERANK_URL=http://127.0.0.1:<port>, chạy --onhost) để loại RTT mạng —
+# chưa tự động hoá việc SSH, đây là khung sườn (--onhost chỉ đổi NHÃN measure_location,
+# người chạy vẫn phải tự trỏ EMBED_URL/RERANK_URL về localhost khi ở trên máy serving).
+
+CẬP NHẬT 2026-09-20 (audit /tmp/kpi-method-audit.md, quyết định: ĐO THẬT dù số tụt +
+GIỮ NGUYÊN số liệu/field CŨ, chỉ BỔ SUNG field mới cạnh field cũ — không đổi ý nghĩa
+field cũ, không đổi hành vi mặc định trừ khi có cờ mới tường minh):
+  - Token thật: mọi request đếm token theo cách CŨ (chars/4 hoặc đếm chunk SSE) vẫn giữ
+    nguyên ở field cũ (R-PERF-TPS, R-LLM-TPS28); nếu server trả `usage.completion_tokens`
+    (yêu cầu qua `stream_options: {"include_usage": true}` — chỉ áp dụng được cho
+    R-LLM-TPS28 vì đó là endpoint OpenAI-compatible /v1/chat/completions gọi thẳng; gateway
+    /ai/chat/stream ở R-PERF-TPS KHÔNG có field usage nên vẫn phải fallback chars/4) thì
+    số liệu token thật được ghi vào field MỚI (`R-LLM-TPS28_real_token`,
+    `R-PERF-TPS_real_token`) + nhãn `token_source` trong `_meta_*`.
+  - TTFT: giữ nguyên client wall-clock ở R-PERF-TTFT; thêm nhãn `ttft_basis` trong
+    `_meta_group_b` để không ai hiểu nhầm là server timestamp (catalog cũ tham chiếu
+    schema opencode đã không còn tồn tại).
+  - CCU: R-PERF-CCU giữ nguyên hành vi echo-input cũ; ramp-discovery THẬT chỉ chạy khi
+    truyền `--ccu-ramp`, kết quả ghi field RIÊNG `R-PERF-CCU_ramp` (không đổi mặc định).
+  - RPS: R-PERF-RPS giữ nguyên số tự-giới-tốc cũ; đo capacity thật (tắt rate limiter)
+    chỉ chạy khi truyền `--rps-capacity`, ghi field RIÊNG `R-PERF-RPS_capacity`.
+  - Embed/Rerank throughput: số liệu WAN cũ giữ nguyên; `--onhost` chỉ đổi nhãn
+    `measure_location` (xem TODO ở trên — không tự SSH).
 """
 from __future__ import annotations
 
@@ -156,7 +180,10 @@ def _post_json(url: str, body: dict, headers: dict, timeout: float = 120) -> dic
         return json.loads(r.read())
 
 
-def bench_embed_throughput(conc_levels=(8, 16, 32), batch=64, reqs_per_level=64) -> dict:
+def bench_embed_throughput(conc_levels=(8, 16, 32), batch=64, reqs_per_level=64, onhost: bool = False) -> dict:
+    # TODO: đo embed throughput network-free (chạy script này trực tiếp trên máy serving,
+    # trỏ EMBED_URL=http://127.0.0.1:<port> qua env) — WAN đọc thấp ~5x (xem docstring đầu
+    # file). `onhost=True` chỉ đổi NHÃN measure_location, không tự SSH/đổi EMBED_URL.
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}
     texts = [f"vulnerability test query about CVE-2021-{1000+i} and CWE-{79+i} injection overflow"
              for i in range(batch)]
@@ -185,10 +212,13 @@ def bench_embed_throughput(conc_levels=(8, 16, 32), batch=64, reqs_per_level=64)
         elapsed = time.time() - t0
         rate = (n_ok[0] * batch) / elapsed if elapsed > 0 else 0.0
         best = max(best, rate)
-    return {"R-MODEL-EMB1200": best}
+    return {"R-MODEL-EMB1200": best,
+            "_meta_embed_throughput": {"measure_location": "on-host" if onhost else "WAN (client)",
+                                        "endpoint": EMBED_URL}}
 
 
-def bench_rerank_throughput(conc_levels=(8, 16, 32), batch=50, reqs_per_level=64) -> dict:
+def bench_rerank_throughput(conc_levels=(8, 16, 32), batch=50, reqs_per_level=64, onhost: bool = False) -> dict:
+    # TODO: như trên (embed) — chạy on-host để loại RTT mạng trước khi so với ngưỡng A100.
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}
     docs = [f"doc {j}: SQL injection buffer overflow XSS RCE privilege escalation in product version {j}"
             for j in range(batch)]
@@ -219,7 +249,9 @@ def bench_rerank_throughput(conc_levels=(8, 16, 32), batch=50, reqs_per_level=64
         elapsed = time.time() - t0
         rate = (n_ok[0] * batch) / elapsed if elapsed > 0 else 0.0
         best = max(best, rate)
-    return {"R-MODEL-RERANK180": best}
+    return {"R-MODEL-RERANK180": best,
+            "_meta_rerank_throughput": {"measure_location": "on-host" if onhost else "WAN (client)",
+                                         "endpoint": RERANK_URL}}
 
 
 LLM_PROMPT = ("Bạn là trợ lý an toàn thông tin. Trình bày CHI TIẾT về CVE-2021-44228 (Log4Shell): "
@@ -228,17 +260,25 @@ LLM_PROMPT = ("Bạn là trợ lý an toàn thông tin. Trình bày CHI TIẾT v
 
 
 def bench_llm_tps(ccu: int = 30, total_reqs: int = 60, max_tokens: int = 512) -> dict:
+    """R-LLM-TPS28. Giữ NGUYÊN cách đếm CŨ (toks += 1 mỗi chunk SSE có content, tức đếm
+    SỐ CHUNK chứ không phải token thật — bug đã biết, xem audit) ở field R-LLM-TPS28 để
+    KHÔNG đổi số cũ. BỔ SUNG: yêu cầu `stream_options.include_usage` (chuẩn OpenAI-compatible,
+    endpoint này gọi thẳng /v1/chat/completions nên áp dụng được) — nếu server trả về
+    usage.completion_tokens ở chunk cuối, tính THÊM tps theo token thật, ghi field RIÊNG
+    R-LLM-TPS28_real_token + nhãn token_source (không thay/xoá field cũ)."""
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {LLM_API_KEY}"}
     url = f"{LLM_BASE_URL}/chat/completions"
-    tps_list, done = [], [0]
+    tps_list, tps_list_real, done = [], [], [0]
+    n_with_usage = [0]
     lock = Lock()
 
     def one(_):
         body = {"model": LLM_MODEL, "messages": [{"role": "user", "content": LLM_PROMPT}],
-                "max_tokens": max_tokens, "temperature": 0.0, "stream": True}
+                "max_tokens": max_tokens, "temperature": 0.0, "stream": True,
+                "stream_options": {"include_usage": True}}
         req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers)
         t0 = time.time()
-        ttft, toks = None, 0
+        ttft, toks, real_toks = None, 0, None
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 for raw in r:
@@ -249,14 +289,24 @@ def bench_llm_tps(ccu: int = 30, total_reqs: int = 60, max_tokens: int = 512) ->
                     if data == "[DONE]":
                         break
                     try:
-                        d = json.loads(data)["choices"][0].get("delta", {})
-                        delta = d.get("content") or d.get("reasoning")
+                        obj = json.loads(data)
                     except Exception:
-                        delta = None
-                    if delta:
-                        if ttft is None:
-                            ttft = time.time() - t0
-                        toks += 1
+                        obj = None
+                    if not obj:
+                        continue
+                    choices = obj.get("choices") or []
+                    if choices:
+                        d = choices[0].get("delta", {})
+                        delta = d.get("content") or d.get("reasoning")
+                        if delta:
+                            if ttft is None:
+                                ttft = time.time() - t0
+                            toks += 1  # CŨ: đếm chunk SSE, KHÔNG đổi (xem docstring hàm)
+                    # BỔ SUNG: usage chỉ xuất hiện ở chunk cuối (OpenAI stream_options
+                    # include_usage) — thường đi kèm choices rỗng.
+                    usage = obj.get("usage")
+                    if usage and usage.get("completion_tokens"):
+                        real_toks = usage.get("completion_tokens")
         except Exception:
             pass
         e2e = time.time() - t0
@@ -264,12 +314,23 @@ def bench_llm_tps(ccu: int = 30, total_reqs: int = 60, max_tokens: int = 512) ->
             done[0] += 1
             bar(done[0], total_reqs, "Nhóm C · LLM throughput (tok/s)", extra=f"ccu={ccu}")
         if ttft and toks > 20 and (e2e - ttft) > 0:
-            tps_list.append(toks / (e2e - ttft))
+            tps_list.append(toks / (e2e - ttft))  # CŨ — giữ nguyên
+        if ttft and real_toks and real_toks > 20 and (e2e - ttft) > 0:
+            with lock:
+                n_with_usage[0] += 1
+            tps_list_real.append(real_toks / (e2e - ttft))  # MỚI — token thật
 
     with ThreadPoolExecutor(max_workers=ccu) as ex:
         list(ex.map(one, range(total_reqs)))
     p50 = pct(tps_list, 50) or 0.0
-    return {"R-LLM-TPS28": p50}
+    p50_real = pct(tps_list_real, 50)
+    token_source = (f"usage.completion_tokens (n={n_with_usage[0]}/{done[0]})" if tps_list_real
+                     else "server không trả usage — chỉ có chunks (approx, TODO tokenizer count)")
+    return {
+        "R-LLM-TPS28": p50,  # CŨ — đếm chunk SSE, giữ nguyên ý nghĩa/giá trị
+        "R-LLM-TPS28_real_token": p50_real,  # MỚI — None nếu server không trả usage
+        "_meta_llm_tps": {"token_source": token_source, "n_with_usage": n_with_usage[0], "n_total": done[0]},
+    }
 
 
 # ── Nhóm B — hiệu năng chatflow qua gateway (SSE /ai/chat/stream) ─────────────────
@@ -307,16 +368,34 @@ class _RateLimiter:
 _rate_limiter = _RateLimiter()
 
 
-def _stream_chat(question: str, max_429_retries: int = 3) -> dict:
+class _UnlimitedLimiter:
+    """Limiter no-op — dùng cho phép đo capacity thật (R-PERF-RPS_capacity, --rps-capacity).
+    KHÔNG dùng làm mặc định: gọi gateway không giới tốc dễ ăn 429 (đúng ý đồ của phép đo
+    này — đo trần backend thật, không phải mức tuân thủ quota)."""
+
+    def acquire(self) -> None:
+        return None
+
+
+_unlimited_limiter = _UnlimitedLimiter()
+
+
+def _stream_chat(question: str, max_429_retries: int = 3, limiter=None) -> dict:
+    limiter = limiter or _rate_limiter
     url = f"{GATEWAY_BASE}/ai/chat/stream"
     body = json.dumps({"message": question}).encode()
     for attempt in range(max_429_retries + 1):
-        _rate_limiter.acquire()
+        limiter.acquire()
         req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"}, method="POST")
         t0 = time.time()
         ttft = None
         final_text = ""
         err = None
+        real_tokens_out = None  # BỔ SUNG: token thật nếu gateway từng trả (hiện CHƯA có trường
+        # usage trong event "final" của /ai/chat/stream — xem routes.py — nên vẫn thử đọc phòng
+        # khi gateway được nâng cấp; nếu không có thì fallback về tokens_out (chars/4) như CŨ.
+        # TODO: nếu cần token thật cho R-PERF-TPS, phải sửa gateway (secai_gateway/api/routes.py)
+        # để event "final" mang usage.completion_tokens — nằm ngoài phạm vi các file được sửa ở đây.
         try:
             with urllib.request.urlopen(req, timeout=180) as r:
                 buf = b""
@@ -339,6 +418,9 @@ def _stream_chat(question: str, max_429_retries: int = 3) -> dict:
                                 ttft = time.time() - t0
                         elif ev == "final":
                             final_text = data.get("content") or data.get("answer") or ""
+                            usage = data.get("usage") or {}
+                            real_tokens_out = (usage.get("completion_tokens") or data.get("completion_tokens")
+                                               or data.get("tokens_out"))
         except urllib.error.HTTPError as e:
             if e.code == 429 and attempt < max_429_retries:
                 time.sleep(3)
@@ -347,10 +429,13 @@ def _stream_chat(question: str, max_429_retries: int = 3) -> dict:
         except Exception as e:
             err = f"{type(e).__name__}: {e}"
         total = time.time() - t0
-        tokens_out = max(len(final_text) // 4, 1) if final_text else 0
+        tokens_out = max(len(final_text) // 4, 1) if final_text else 0  # CŨ — giữ nguyên
         return {"ttftMs": (ttft * 1000) if ttft else None, "totalMs": total * 1000,
-                "tokens_out": tokens_out, "error": err}
-    return {"ttftMs": None, "totalMs": None, "tokens_out": 0, "error": "HTTP429:retries_exhausted"}
+                "tokens_out": tokens_out,  # CŨ (chars/4)
+                "tokens_out_real": real_tokens_out,  # MỚI — None nếu gateway không trả usage
+                "error": err}
+    return {"ttftMs": None, "totalMs": None, "tokens_out": 0, "tokens_out_real": None,
+            "error": "HTTP429:retries_exhausted"}
 
 
 def bench_group_b(concurrency: int = 30, n: int = 100) -> dict:
@@ -376,21 +461,118 @@ def bench_group_b(concurrency: int = 30, n: int = 100) -> dict:
     errs = [r for r in results if r["error"]]
     ttfts = [r["ttftMs"] for r in ok if r["ttftMs"]]
     totals = [r["totalMs"] for r in ok if r["totalMs"]]
-    tps_list = []
+    tps_list = []  # CŨ — chars/4
+    tps_list_real = []  # MỚI — token thật (chỉ có nếu gateway trả usage, hiện thường rỗng)
+    n_with_real = 0
     for r in ok:
         if r["tokens_out"] and r["ttftMs"] and r["totalMs"]:
             gen_s = (r["totalMs"] - r["ttftMs"]) / 1000.0
             if gen_s > 0.3:
                 tps_list.append(r["tokens_out"] / gen_s)
+                if r.get("tokens_out_real"):
+                    n_with_real += 1
+                    tps_list_real.append(r["tokens_out_real"] / gen_s)
+
+    tps_token_source = (f"usage.completion_tokens (n={n_with_real}/{len(ok)})" if tps_list_real
+                         else "chars/4 (approx — TODO real tokens; gateway SSE 'final' event "
+                              "chưa có field usage, xem routes.py)")
 
     return {
-        "R-PERF-TPS": pct(tps_list, 50) or 0.0,
-        "R-PERF-TTFT": pct(ttfts, 50) or 0.0,
-        "R-PERF-RPS": round(len(ok) / wall, 3) if wall else 0.0,
+        "R-PERF-TPS": pct(tps_list, 50) or 0.0,  # CŨ — giữ nguyên (chars/4)
+        "R-PERF-TPS_real_token": pct(tps_list_real, 50),  # MỚI — None nếu không có usage
+        "R-PERF-TTFT": pct(ttfts, 50) or 0.0,  # CŨ — client wall-clock, giữ nguyên số
+        "R-PERF-RPS": round(len(ok) / wall, 3) if wall else 0.0,  # CŨ — self-throttled, giữ nguyên
         # "chịu được" mức concurrency này = tỉ lệ lỗi THẬT (sau khi đã tự retry 429) < 5%.
-        "R-PERF-CCU": concurrency if len(errs) / max(len(results), 1) < 0.05 else 0,
+        "R-PERF-CCU": concurrency if len(errs) / max(len(results), 1) < 0.05 else 0,  # CŨ — echo input, giữ nguyên
         "R-CTRL-RESP15": pct(totals, 50) or 0.0,
-        "_meta_group_b": {"n": n, "ok": len(ok), "errors": len(errs), "wall_s": round(wall, 1)},
+        "_meta_group_b": {
+            "n": n, "ok": len(ok), "errors": len(errs), "wall_s": round(wall, 1),
+            # Nhãn phương pháp — KHÔNG đổi số, chỉ để đọc report không hiểu nhầm ý nghĩa:
+            "ttft_basis": "client wall-clock to first token (incl network RTT)",
+            # TODO: reconcile catalog formula (server-timestamp min(part.start)-info.time.created,
+            # schema opencode cũ) với thực tế SSE hiện tại (/ai/chat/stream không có field đó).
+            "tps_token_source": tps_token_source,
+            "rps_basis": "self-throttled to gateway quota (client _RateLimiter ~1.29 req/s) — "
+                         "dùng --rps-capacity để đo thêm biến thể capacity (limiter off)",
+            "ccu_basis": "input echo (TODO: ramp-discovery) — dùng --ccu-ramp để đo thêm "
+                         "R-PERF-CCU_ramp (trần thật qua ramp concurrency)",
+        },
+    }
+
+
+def bench_ccu_ramp(levels=(10, 20, 30, 45, 60), reqs_per_level: int = 20,
+                    error_bound: float = 0.05, p95_bound_ms: float = 20000.0) -> dict:
+    """Framework ceiling-discovery THẬT cho R-PERF-CCU_ramp: tăng dần concurrency, dừng ở
+    mức đầu tiên vượt ngưỡng lỗi (>{error_bound}) hoặc p95 latency (>{p95_bound_ms}ms); trả
+    về mức CAO NHẤT còn "chịu được" — khác hẳn hành vi echo-input cũ của R-PERF-CCU.
+    Đây là field/mode RIÊNG (chỉ chạy khi có --ccu-ramp), KHÔNG thay R-PERF-CCU mặc định."""
+    items = _load_perf_dataset(max(reqs_per_level, max(levels)))
+    max_sustained = 0
+    detail = []
+    done_total = 0
+    total_work = len(levels) * reqs_per_level
+    for lvl in levels:
+        batch_items = [items[i % len(items)] for i in range(reqs_per_level)] if items else []
+
+        def one(item):
+            nonlocal done_total
+            r = _stream_chat(item["input"])
+            done_total += 1
+            bar(done_total, total_work, "Nhóm B · CCU ramp-discovery", extra=f"conc={lvl}")
+            return r
+
+        with ThreadPoolExecutor(max_workers=lvl) as ex:
+            results = list(ex.map(one, batch_items))
+        errs = [r for r in results if r["error"]]
+        totals = [r["totalMs"] for r in results if not r["error"] and r["totalMs"]]
+        err_rate = len(errs) / max(len(results), 1)
+        p95 = pct(totals, 95) if totals else None
+        ok_level = (err_rate < error_bound) and (p95 is None or p95 <= p95_bound_ms)
+        detail.append({"concurrency": lvl, "error_rate": round(err_rate, 3), "p95_ms": p95, "ok": ok_level})
+        if ok_level:
+            max_sustained = lvl
+        else:
+            break  # tìm được trần — mức đầu tiên vượt ngưỡng, dừng ramp
+    return {
+        "R-PERF-CCU_ramp": max_sustained,
+        "_meta_ccu_ramp": {
+            "ccu_basis": f"ramp-discovery (error_rate<{error_bound:.0%} & p95<={p95_bound_ms:.0f}ms)",
+            "levels": detail,
+        },
+    }
+
+
+def bench_rps_capacity(concurrency: int = 30, n: int = 60) -> dict:
+    """Framework đo R-PERF-RPS_capacity: TẮT _RateLimiter phía client để đo trần backend
+    thật thay vì mức tự-giới-tốc theo quota gateway. CẢNH BÁO: sẽ dễ ăn 429 từ rate-limit
+    chống-lạm-dụng của gateway — đây là chủ đích (đo capacity, không phải compliance).
+    Field/mode RIÊNG (chỉ chạy khi có --rps-capacity), KHÔNG thay R-PERF-RPS mặc định."""
+    print("  ⚠ RPS capacity mode: đã tắt rate limiter phía client — có thể thấy nhiều 429 "
+          "từ gateway (đúng chủ đích: đo trần backend, không phải mức tuân thủ quota).")
+    items = _load_perf_dataset(n)
+    n = len(items)
+    done = [0]
+    lock = Lock()
+
+    def one(item):
+        r = _stream_chat(item["input"], limiter=_unlimited_limiter)
+        with lock:
+            done[0] += 1
+            bar(done[0], n, "Nhóm B · RPS capacity (limiter off)", extra=f"conc={concurrency}")
+        return r
+
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        results = list(ex.map(one, items))
+    wall = time.time() - t0
+    ok = [r for r in results if not r["error"]]
+    errs = [r for r in results if r["error"]]
+    return {
+        "R-PERF-RPS_capacity": round(len(ok) / wall, 3) if wall else 0.0,
+        "_meta_rps_capacity": {
+            "rps_basis": "capacity (limiter off)", "n": n, "ok": len(ok), "errors": len(errs),
+            "error_rate": round(len(errs) / max(len(results), 1), 3), "wall_s": round(wall, 1),
+        },
     }
 
 
@@ -501,6 +683,19 @@ def print_summary(results: dict, strict_tps_band: bool = False) -> None:
     print(f"TỔNG: {n_pass}/{n_total} KPI đạt ngưỡng hợp đồng.")
     print("=" * 92)
 
+    # Các field BỔ SUNG (không phải KPI hợp đồng — không tính vào TỔNG ở trên) — số liệu
+    # "chuẩn hơn"/framework mới đặt CẠNH số cũ, xem docstring đầu file.
+    extra = {k: v for k, v in results.items() if k not in KPI_SPEC and not k.startswith("_meta")}
+    if extra:
+        print("\n[Bổ sung — đo thêm/chuẩn hơn, KHÔNG thay số KPI hợp đồng ở trên]")
+        for k, v in extra.items():
+            print(f"  {k:<28} = {v}")
+    metas = {k: v for k, v in results.items() if k.startswith("_meta")}
+    if metas:
+        print("\n[Nhãn phương pháp đo (_meta) — đọc để biết số nào là proxy/approx]")
+        for k, v in metas.items():
+            print(f"  {k}: {json.dumps(v, ensure_ascii=False)}")
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -513,6 +708,21 @@ def main() -> int:
     ap.add_argument("--tps-band-strict", action="store_true",
                     help="Chấm R-PERF-TPS nghiêm ngặt cả 2 đầu dải 20-35 (mặc định: vượt trần vẫn ĐẠT)")
     ap.add_argument("--out", default=None, help="Ghi kết quả JSON ra file này")
+    # --- Bổ sung (additive, không đổi mặc định) — xem docstring đầu file / audit 2026-09-20 ---
+    ap.add_argument("--onhost", action="store_true",
+                    help="Chỉ đổi NHÃN measure_location=on-host cho R-MODEL-EMB1200/RERANK180 "
+                         "(không tự SSH/đổi EMBED_URL/RERANK_URL — người chạy phải tự trỏ về "
+                         "localhost khi ở trên máy serving)")
+    ap.add_argument("--ccu-ramp", action="store_true",
+                    help="Đo THÊM R-PERF-CCU_ramp (ramp-discovery: tăng dần concurrency tới khi "
+                         "vượt ngưỡng lỗi/độ trễ) — field RIÊNG, không thay R-PERF-CCU (echo input) mặc định")
+    ap.add_argument("--ccu-ramp-levels", default="10,20,30,45,60",
+                    help="Danh sách mức concurrency cho --ccu-ramp, phân tách bởi dấu phẩy")
+    ap.add_argument("--ccu-ramp-reqs", type=int, default=20, help="Số request mỗi mức trong --ccu-ramp")
+    ap.add_argument("--rps-capacity", action="store_true",
+                    help="Đo THÊM R-PERF-RPS_capacity (tắt rate limiter phía client, đo trần backend "
+                         "thật — sẽ dễ ăn 429) — field RIÊNG, không thay R-PERF-RPS (self-throttled) mặc định")
+    ap.add_argument("--rps-capacity-n", type=int, default=60, help="Số request cho --rps-capacity")
     args = ap.parse_args()
 
     groups = {"b": ["B"], "c": ["C"], "bc": ["B", "C"], "a": ["A"], "all": ["A", "B", "C"]}[args.group]
@@ -533,11 +743,16 @@ def main() -> int:
     t_start = time.time()
 
     if "C" in groups:
-        results.update(bench_embed_throughput())
-        results.update(bench_rerank_throughput())
+        results.update(bench_embed_throughput(onhost=args.onhost))
+        results.update(bench_rerank_throughput(onhost=args.onhost))
         results.update(bench_llm_tps())
     if "B" in groups:
         results.update(bench_group_b(concurrency=args.concurrency, n=args.n))
+        if args.ccu_ramp:
+            levels = tuple(int(x) for x in args.ccu_ramp_levels.split(",") if x.strip())
+            results.update(bench_ccu_ramp(levels=levels, reqs_per_level=args.ccu_ramp_reqs))
+        if args.rps_capacity:
+            results.update(bench_rps_capacity(concurrency=args.concurrency, n=args.rps_capacity_n))
     if "A" in groups:
         results.update(bench_group_a(args.dataset, workers=args.workers))
 
