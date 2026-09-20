@@ -185,6 +185,21 @@ def load_pairs(limit=None, ds_override=None):
     return pairs, str(ds_dir)
 
 
+def _rerank_p1(query, cand_ids, text_by_id, cve_by_id, gold):
+    """Rerank 1 pool cand_ids (đã cắt top-20) → (is_p1, top1_cve). Dùng chung cho id-aware/
+    hybrid/dense-only P@1 (chỉ khác pool truyền vào)."""
+    if not cand_ids:
+        return False, None
+    try:
+        docs = [text_by_id.get(pid, "")[:1200] for pid in cand_ids]
+        rr = rerank(query, docs)
+        best = cand_ids[rr[0]["index"]]
+        top1_cve = cve_by_id.get(best, "")
+        return (top1_cve == gold), top1_cve
+    except Exception as e:
+        return False, f"RERANK_ERR:{repr(e)[:40]}"
+
+
 def process_one(pr, bm25):
     """Toàn bộ gọi mạng (embed/Qdrant/BM25-local/rerank) cho 1 câu — chạy trong worker thread.
     Không đụng file/counter chung (những cái đó ở lại main thread, xem main())."""
@@ -232,24 +247,33 @@ def process_one(pr, bm25):
     is_hit = gold in idaware_top10_cve
     rank = (idaware_top10_cve.index(gold) + 1) if is_hit else None
 
-    # P@1: rerank top-20 id-aware candidate → top-1
-    cand_ids = idaware_ids[:TOP_DENSE]
-    is_p1 = False
-    top1_cve = None
-    if cand_ids:
-        try:
-            docs = [text_by_id.get(pid, "")[:1200] for pid in cand_ids]
-            rr = rerank(pr["query"], docs)
-            best = cand_ids[rr[0]["index"]]
-            top1_cve = cve_by_id.get(best, "")
-            is_p1 = top1_cve == gold
-        except Exception as e:
-            top1_cve = f"RERANK_ERR:{repr(e)[:40]}"
+    # P@1 — SỐ CŨ (headline precision_at_1_pct, GIỮ NGUYÊN): rerank top-20 id-aware candidate.
+    # SỐ MỚI (cách đo chuẩn, additive, không đổi số cũ): rerank thêm trên pool hybrid/dense-only
+    # (không có oracle id-filter) → precision_at_1_hybrid_pct / precision_at_1_dense_pct.
+    # Cache theo tuple(cand_ids): khi 2 pool trùng nhau (câu không có CVE-id explicit →
+    # idaware_ids==hybrid_ids; hoặc không có BM25 → hybrid_ids==dense_ids) thì KHÔNG rerank
+    # 2 lần cho cùng 1 pool (tránh nhân 3 số lượt gọi rerank network).
+    idaware_cand = idaware_ids[:TOP_DENSE]
+    hybrid_cand = hybrid_ids[:TOP_DENSE]
+    dense_cand = dense_ids[:TOP_DENSE]
+    _p1_cache = {}
+
+    def _p1(cand_ids):
+        key = tuple(cand_ids)
+        if key not in _p1_cache:
+            _p1_cache[key] = _rerank_p1(pr["query"], cand_ids, text_by_id, cve_by_id, gold)
+        return _p1_cache[key]
+
+    is_p1, top1_cve = _p1(idaware_cand)                    # SỐ CŨ — headline precision_at_1_pct
+    is_p1_hybrid, top1_cve_hybrid = _p1(hybrid_cand)       # MỚI — cách đo chuẩn (hybrid, không oracle)
+    is_p1_dense, top1_cve_dense = _p1(dense_cand)          # MỚI — cách đo chuẩn (dense-only)
 
     return {
         "pr": pr, "gold": gold, "ok": True,
         "idaware_top10_cve": idaware_top10_cve, "is_hit": is_hit, "is_hit_hybrid": is_hit_hybrid,
         "is_hit_dense": is_hit_dense, "rank": rank, "is_p1": is_p1, "top1_cve": top1_cve,
+        "is_p1_hybrid": is_p1_hybrid, "top1_cve_hybrid": top1_cve_hybrid,
+        "is_p1_dense": is_p1_dense, "top1_cve_dense": top1_cve_dense,
         "text_by_id": text_by_id, "idaware_ids": idaware_ids,
     }
 
@@ -292,7 +316,7 @@ def main():
     p1_log = (out_dir / "reranking-precision-at-1.jsonl").open("w", encoding="utf-8")
     ctx_out = Path(args.contexts).open("w", encoding="utf-8")
 
-    n = hit_dense = hit_hybrid = hit_idaware = p1 = errs = 0
+    n = hit_dense = hit_hybrid = hit_idaware = p1 = p1_hybrid = p1_dense = errs = 0
     # Gọi mạng (embed/Qdrant/rerank) song song trên args.workers luồng — ex.map() trả kết quả
     # đúng thứ tự pairs dù việc xử lý chạy đồng thời, nên phần đếm/ghi log dưới đây vẫn ở main
     # thread, KHÔNG cần lock (giống pattern llm_kpi.py judge_relevance / faith_judge.py).
@@ -320,9 +344,18 @@ def main():
             }, ensure_ascii=False) + "\n")
 
             p1 += 1 if res["is_p1"] else 0
+            p1_hybrid += 1 if res["is_p1_hybrid"] else 0
+            p1_dense += 1 if res["is_p1_dense"] else 0
             p1_log.write(json.dumps({
                 "id": pr["id"], "true_label": pr["gold_cve"], "predicted_label": res["top1_cve"],
-                "score": 1 if res["is_p1"] else 0, "capability": pr["capability"], "difficulty": pr["difficulty"],
+                # SỐ CŨ (headline precision_at_1_pct, GIỮ NGUYÊN):
+                "score": 1 if res["is_p1"] else 0,
+                # MỚI, additive — cách đo chuẩn (không oracle id-filter):
+                "score_hybrid": 1 if res["is_p1_hybrid"] else 0,
+                "predicted_label_hybrid": res["top1_cve_hybrid"],
+                "score_dense": 1 if res["is_p1_dense"] else 0,
+                "predicted_label_dense": res["top1_cve_dense"],
+                "capability": pr["capability"], "difficulty": pr["difficulty"],
             }, ensure_ascii=False) + "\n")
 
             # contexts cho RAGAS: top-CTX_K chunk text (id-aware → chunk đúng CVE lên đầu)
@@ -336,7 +369,7 @@ def main():
             if i % 50 == 0 or i == len(pairs):
                 print(f"[{i}/{len(pairs)}] Hit@10 id-aware={100*hit_idaware/n:.1f}% "
                       f"(hybrid={100*hit_hybrid/n:.1f}% dense={100*hit_dense/n:.1f}%) "
-                      f"P@1={100*p1/n:.1f}%", flush=True)
+                      f"P@1 id-aware={100*p1/n:.1f}% (hybrid={100*p1_hybrid/n:.1f}% dense={100*p1_dense/n:.1f}%)", flush=True)
             if args.delay:
                 time.sleep(args.delay)
 
@@ -347,17 +380,30 @@ def main():
         "bm25_source": bm25_source,
         "model_embed": config.EMBED_MODEL, "model_rerank": config.RERANK_MODEL,
         "n": n, "errors": errs,
+        # ── SỐ CŨ, GIỮ NGUYÊN Ý NGHĨA/GIÁ TRỊ (theo yêu cầu additive — không đổi số cũ) ──
         # headline = id-aware: dùng exact cve_id filter khi câu hỏi có CVE-id explicit (đúng cách product chạy)
         "hit_rate_at_10_pct": round(100 * hit_idaware / max(n, 1), 2),
-        # minh bạch: số hybrid thuần (không filter) + dense-only — lộ giới hạn embedding thật
+        "precision_at_1_pct": round(100 * p1 / max(n, 1), 2),
+        # ── MỚI, ADDITIVE — cách đo CHUẨN NGÀNH (TREC/MTEB Hit@k, RRF hybrid): KHÔNG có oracle
+        # exact-cve id-filter injection vào candidate pool; phản ánh năng lực retrieval thật ──
         "hit_rate_at_10_hybrid_pct": round(100 * hit_hybrid / max(n, 1), 2),
         "hit_rate_at_10_dense_only_pct": round(100 * hit_dense / max(n, 1), 2),
-        "precision_at_1_pct": round(100 * p1 / max(n, 1), 2),
+        "precision_at_1_hybrid_pct": round(100 * p1_hybrid / max(n, 1), 2),
+        "precision_at_1_dense_pct": round(100 * p1_dense / max(n, 1), 2),
+        "headline_basis": (
+            "hit_rate_at_10_pct/precision_at_1_pct = id-aware (oracle exact-cve_id filter chèn "
+            "trước khi rank — SỐ CŨ, giữ nguyên theo yêu cầu, KHÔNG phải năng lực retrieval thuần). "
+            "Cách đo CHUẨN (TREC/MTEB Hit@k, không oracle id-filter) = "
+            "hit_rate_at_10_hybrid_pct/hit_rate_at_10_dense_only_pct + "
+            "precision_at_1_hybrid_pct/precision_at_1_dense_pct (MỚI, additive)."
+        ),
     }
     (out_dir / "retrieval-summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
     print(f"\n=== Hit@10 id-aware={summary['hit_rate_at_10_pct']}% "
           f"[hybrid={summary['hit_rate_at_10_hybrid_pct']}% dense-only={summary['hit_rate_at_10_dense_only_pct']}%] "
-          f"(ngưỡng >96) · P@1={summary['precision_at_1_pct']}% (ngưỡng >90) · n={n} ===")
+          f"(ngưỡng >96) · P@1 id-aware={summary['precision_at_1_pct']}% "
+          f"[hybrid={summary['precision_at_1_hybrid_pct']}% dense={summary['precision_at_1_dense_pct']}%] "
+          f"(ngưỡng >90) · n={n} ===")
 
 
 if __name__ == "__main__":

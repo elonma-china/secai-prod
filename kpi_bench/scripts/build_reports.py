@@ -12,6 +12,7 @@ Usage: python3 build_reports.py [--logs ../raw-logs] [--reports ../reports] [--m
 import argparse
 import json
 import math
+import statistics
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,83 @@ from pathlib import Path
 KPI_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(KPI_DIR))
 import config  # noqa: E402
+
+
+# ── CẬP NHẬT 2026-09-20 (audit /tmp/kpi-method-audit.md, mục (h) + fix #6) ─────────────
+# Trước đây kpi-summary.json chỉ có 11 KPI nhóm A (K dict dưới không có R-PERF-*/R-CTRL-
+# RESP15/R-MODEL-*/R-LLM-TPS28) dù registry gọi R-CTRL-RESP15 là "GATE THẬT". BỔ SUNG
+# (KHÔNG đổi 11 field A cũ): merge thêm 8 KPI nhóm B/C vào K, đọc từ performance-summary.json
+# (perf_kpi.py) + throughput-summary.json (bench_kpi.py --out, quy ước tên file) — file nào
+# thiếu thì value=None ("chưa đo"), không giả định số.
+#
+# Ngưỡng nhóm B/C mirror kpi_bench/02-GEN-TEST/bench_kpi.py:KPI_SPEC (không import trực
+# tiếp — khác thư mục/entrypoint, tránh phụ thuộc chéo giữa 2 script CLI độc lập) +
+# kpi-registry.json. config.THRESHOLDS (dead code cũ, config.py không thuộc phạm vi sửa ở
+# đây) chỉ có sẵn R-CTRL-RESP15/R-PERF-TTFT/R-PERF-TPS — R-PERF-TPS ở đó là "range" 2 đầu,
+# KHÁC quyết định kinh doanh 2026-08-28 (range_floor, vượt trần vẫn ĐẠT) đã áp dụng trong
+# bench_kpi.py, nên dùng config.check_threshold CHỈ cho R-CTRL-RESP15 (kích hoạt lại dead
+# code, không có divergence) và tính pass INLINE cho 7 KPI còn lại để khớp bench_kpi.py.
+# TODO: thêm 5 KPI thiếu (R-PERF-RPS/CCU, R-MODEL-EMB1200/RERANK180, R-LLM-TPS28) vào
+# config.THRESHOLDS khi có dịp sửa config.py (không nằm trong phạm vi file được sửa ở đây).
+BC_SPEC = {
+    "R-CTRL-RESP15":     {"name": "Response p50",             "unit": "ms",     "op": "<=",          "target": 15000, "group": "B"},
+    "R-PERF-TPS":        {"name": "TPS chatflow (mỗi luồng)",  "unit": "tok/s",  "op": "range_floor", "lo": 20, "hi": 35, "group": "B"},
+    "R-PERF-TTFT":       {"name": "TTFT p50",                  "unit": "ms",     "op": "range",       "lo": 900, "hi": 1500, "group": "B"},
+    "R-PERF-RPS":        {"name": "RPS ổn định",                "unit": "RPS",    "op": ">=",          "target": 0.6, "group": "B"},
+    "R-PERF-CCU":        {"name": "CCU đồng thời",              "unit": "luồng",  "op": "ccu",         "target": 30, "group": "B"},
+    "R-MODEL-EMB1200":   {"name": "Embedding throughput",       "unit": "emb/s",  "op": ">=",          "target": 1200, "group": "C"},
+    "R-MODEL-RERANK180": {"name": "Reranker throughput",        "unit": "docs/s", "op": ">=",          "target": 180, "group": "C"},
+    "R-LLM-TPS28":       {"name": "LLM throughput",             "unit": "tok/s",  "op": ">=",          "target": 28, "group": "C"},
+}
+
+
+def bc_pass(code, value):
+    """Pass/fail inline cho nhóm B/C — mirror bench_kpi.py:evaluate() (op range_floor:
+    vượt trần 35 tok/s vẫn ĐẠT, quyết định 2026-08-28; op ccu: chỉ ép >= tham số, đúng
+    bản chất 'echo input' đã biết của R-PERF-CCU, xem kpi-method-audit.md)."""
+    if value is None:
+        return None
+    s = BC_SPEC[code]
+    op = s["op"]
+    if op == ">=":
+        return value >= s["target"]
+    if op == "<=":
+        return value <= s["target"]
+    if op == "range":
+        return s["lo"] <= value <= s["hi"]
+    if op == "range_floor":
+        return value >= s["lo"]
+    if op == "ccu":
+        return value >= s["target"]
+    return None
+
+
+def bc_thr_str(code):
+    s = BC_SPEC[code]
+    if s["op"] in ("range", "range_floor"):
+        return f"{s['lo']}–{s['hi']}"
+    if s["op"] == "ccu":
+        return f"~{s['target']}"
+    return f"{s['op']} {s['target']}"
+
+
+def load_throughput_bench(logs):
+    """Đọc số đo trực tiếp nhóm B/C từ bench_kpi.py — quy ước:
+    `python3 02-GEN-TEST/bench_kpi.py --group bc --out raw-logs/throughput-summary.json`.
+    Trả {} nếu chưa chạy (value sẽ None ở K, không giả định số). Cũng thử vài tên file cũ
+    theo kpi-registry.json (throughput_embed.json/throughput_rerank.json/llm-layer.json)
+    để tương thích nếu ai tách riêng từng KPI ra file khác."""
+    d = load(logs, "throughput-summary.json") or {}
+    for legacy, keys in (
+        ("throughput_embed.json", ("R-MODEL-EMB1200",)),
+        ("throughput_rerank.json", ("R-MODEL-RERANK180",)),
+        ("llm-layer.json", ("R-LLM-TPS28",)),
+    ):
+        extra = load(logs, legacy)
+        if extra:
+            for k in keys:
+                d.setdefault(k, extra.get(k))
+    return d
 
 
 def load(logs, name):
@@ -286,9 +364,75 @@ def main():
     cov = 100 * poly_area(actual) / poly_area(committed) if poly_area(committed) else None
     K["R-KPI-RADAR90"] = {"name": "Radar coverage area", "unit": "%", "thr": "> 90",
                           "value": round(cov, 1) if cov else None, "pass": (cov is not None and cov > 90)}
+
+    # BỔ SUNG (audit fix #5, KHÔNG đổi "value"/"pass" ở trên — diện tích đa giác cũ, có thể
+    # >100% khi 1-2 trục vượt xa cam kết, xem kpi-method-audit.md mục (g)): trung bình có
+    # trọng số (mean) của tỉ lệ 5 trục thực đo/cam kết, mỗi trục clamp về [0,100] TRƯỚC khi
+    # lấy mean nên kết quả LUÔN <=100% — đây là chỉ số HIỂN THỊ/DẪN XUẤT (derived/display),
+    # không phải KPI đo độc lập (2/5 trục — Safety=100-Hallucination, Reasoning không ngưỡng
+    # riêng — vốn đã là dẫn xuất/không gate, xem axes ở trên).
+    def _clamped_axis_ratio(val, target):
+        v = val if val is not None else 0.0
+        r = (100.0 * v / target) if target else 0.0
+        return max(0.0, min(r, 100.0))
+    radar_coverage_clamped_pct = round(statistics.mean(
+        _clamped_axis_ratio(a[1], a[2]) for a in axes), 1)
+    K["R-KPI-RADAR90"]["radar_coverage_clamped_pct"] = radar_coverage_clamped_pct
+    K["R-KPI-RADAR90"]["radar_note"] = ("value/pass = diện tích đa giác CŨ (poly_area, có thể "
+        ">100%); radar_coverage_clamped_pct = trung bình có trọng số 5 trục thực đo/cam kết, "
+        "clamp mỗi trục <=100% trước khi mean nên KHÔNG BAO GIỜ >100% — chỉ số HIỂN THỊ/DẪN "
+        "XUẤT (derived), không phải KPI đo độc lập (2/5 trục là dẫn xuất/không có ngưỡng riêng).")
+
     radar_data = {"axes": [a[0] for a in axes], "actual": actual, "committed": committed,
-                  "coverage_area_pct": round(cov, 1) if cov else None}
+                  "coverage_area_pct": round(cov, 1) if cov else None,
+                  "coverage_clamped_pct": radar_coverage_clamped_pct}
     (reports / "radar-data.json").write_text(json.dumps(radar_data, ensure_ascii=False, indent=2))
+
+    # ---- BỔ SUNG (audit fix #6): merge 8 KPI nhóm B/C vào K — KHÔNG đổi 11 field A ở trên.
+    # Nguồn: performance-summary.json (perf_kpi.py, đã có sẵn) + throughput-summary.json
+    # (bench_kpi.py --out, đo trực tiếp/nhanh hơn — ưu tiên nếu có cả hai). Thiếu file nào
+    # thì value=None ("chưa đo"), KHÔNG suy diễn/giả định số.
+    thr_bench = load_throughput_bench(logs)
+    d_perf = perf.get("derived", {}) if perf else {}
+
+    def pick(*vals):
+        for v in vals:
+            if v is not None:
+                return v
+        return None
+
+    bc_values = {
+        "R-CTRL-RESP15":     pick(thr_bench.get("R-CTRL-RESP15"), g(d_perf, "response_ms", "p50")),
+        "R-PERF-TPS":        pick(thr_bench.get("R-PERF-TPS"), g(d_perf, "tps_est", "mean")),
+        "R-PERF-TTFT":       pick(thr_bench.get("R-PERF-TTFT"), g(d_perf, "ttft_ms", "p50")),
+        "R-PERF-RPS":        pick(thr_bench.get("R-PERF-RPS"), g(perf, "concurrency", "rps")),
+        "R-PERF-CCU":        thr_bench.get("R-PERF-CCU"),  # chỉ bench_kpi.py đo (perf_kpi.py không có KPI này)
+        "R-MODEL-EMB1200":   pick(thr_bench.get("R-MODEL-EMB1200"), g(perf, "throughput_embedding", "embeddings_per_s")),
+        "R-MODEL-RERANK180": pick(thr_bench.get("R-MODEL-RERANK180"), g(perf, "throughput_reranker", "docs_per_s")),
+        "R-LLM-TPS28":       thr_bench.get("R-LLM-TPS28"),  # chỉ bench_kpi.py đo
+    }
+    # Nhãn phương pháp (không đổi số) — đọc kèm value để biết proxy/approx hay chưa:
+    BC_BASIS_NOTE = {
+        "R-CTRL-RESP15": "client wall-clock (xem performance-summary.json/derived.response_ms.basis)",
+        "R-PERF-TPS": "chars/4 approx trừ khi throughput-summary.json có *_real_token (xem field đó)",
+        "R-PERF-TTFT": "client wall-clock, KHÔNG phải server timestamp (xem derived.ttft_ms.basis)",
+        "R-PERF-RPS": "self-throttled to gateway quota trừ khi đọc từ R-PERF-RPS_capacity (bench_kpi.py --rps-capacity)",
+        "R-PERF-CCU": "input echo trừ khi đọc từ R-PERF-CCU_ramp (bench_kpi.py --ccu-ramp)",
+        "R-MODEL-EMB1200": "WAN (client) trừ khi đo on-host (xem measure_location trong performance-summary.json)",
+        "R-MODEL-RERANK180": "WAN (client) trừ khi đo on-host",
+        "R-LLM-TPS28": "đếm chunk SSE trừ khi throughput-summary.json có R-LLM-TPS28_real_token",
+    }
+    for code, spec in BC_SPEC.items():
+        v = bc_values.get(code)
+        if code == "R-CTRL-RESP15":
+            # Kích hoạt lại config.THRESHOLDS/check_threshold (dead code trước đây) — ngưỡng
+            # ở đó khớp bench_kpi.py (<=15000ms), không có divergence cho KPI này.
+            p = config.check_threshold(code, v) if v is not None else None
+        else:
+            p = bc_pass(code, v)
+        K[code] = {"name": spec["name"], "unit": spec["unit"], "thr": bc_thr_str(code),
+                   "value": (round(v, 1) if isinstance(v, (int, float)) else v), "pass": p,
+                   "group": spec["group"], "basis": BC_BASIS_NOTE[code]}
 
     # radar.png
     try:
@@ -369,7 +513,8 @@ def main():
     # embedding-report.md
     (reports / "embedding-report.md").write_text("\n".join([
         "# Embedding Model — Hit Rate@10 (R-KPI-EMB96)\n", hdr,
-        f"\n- **Hit Rate@10 (hybrid dense+BM25): {fmt(retr.get('hit_rate_at_10_pct'))}** · ngưỡng > 96% · {badge(K['R-KPI-EMB96']['pass'])}",
+        f"\n- **Hit Rate@10 (id-aware, CÓ oracle exact-CVE filter): {fmt(retr.get('hit_rate_at_10_pct'))}** · ngưỡng > 96% · {badge(K['R-KPI-EMB96']['pass'])}",
+        f"- Hit Rate@10 (hybrid dense+BM25+RRF — năng lực retrieval THẬT, KHÔNG oracle): {fmt(retr.get('hit_rate_at_10_hybrid_pct'))}",
         f"- Dense-only (embedding thuần): {fmt(retr.get('hit_rate_at_10_dense_only_pct'))}",
         f"- Mode: {retr.get('mode','—')} · N = {retr.get('n','—')} · model {retr.get('model_embed','—')}",
         "\nRaw log: `raw-logs/embedding-hit-rate-at-10.jsonl` (True=gold CVE, Predicted=top-10 CVE, Score=1/0).",
@@ -381,7 +526,8 @@ def main():
     # reranking-report.md
     (reports / "reranking-report.md").write_text("\n".join([
         "# Reranking Model — Precision@1 (R-KPI-RERANK90)\n", hdr,
-        f"\n- **Precision@1: {fmt(retr.get('precision_at_1_pct'))}** · ngưỡng > 90% · {badge(K['R-KPI-RERANK90']['pass'])}",
+        f"\n- **Precision@1 (id-aware, CÓ oracle exact-CVE filter): {fmt(retr.get('precision_at_1_pct'))}** · ngưỡng > 90% · {badge(K['R-KPI-RERANK90']['pass'])}",
+        f"- Precision@1 (hybrid, KHÔNG oracle): {fmt(retr.get('precision_at_1_hybrid_pct'))} · dense-only: {fmt(retr.get('precision_at_1_dense_pct'))}",
         f"- N = {retr.get('n','—')} · model {retr.get('model_rerank','—')}",
         "\nRaw log: `raw-logs/reranking-precision-at-1.jsonl` (True=gold CVE, Predicted=top-1 sau rerank, Score=1/0).",
         "\n## Phân tích",
@@ -421,7 +567,17 @@ def main():
         "| Độ khó | p50 (ms) | p95 (ms) | %≤15s |", "|--------|----------|----------|-------|",
     ] + [f"| {k} | {v.get('p50_ms')} | {v.get('p95_ms')} | {v.get('pct_le_15s')}% |" for k, v in (g(d, "by_difficulty") or {}).items()]
       + ["\n## Lưu ý", "- Đo trên deepseek-v4-flash (cloud) + bge endpoint VPS — KHÔNG phải 3×A100/Qwen on-prem như cam kết phần cứng.",
-         "- Response >15s ở câu khó/tư duy do LLM sinh câu trả lời dài; cân nhắc giới hạn độ dài / model nhanh hơn / on-prem A100 để đạt ngưỡng."]),
+         "- Response >15s ở câu khó/tư duy do LLM sinh câu trả lời dài; cân nhắc giới hạn độ dài / model nhanh hơn / on-prem A100 để đạt ngưỡng.",
+         "\n## BỔ SUNG 2026-09-20 (audit /tmp/kpi-method-audit.md)",
+         "- 8 KPI nhóm B/C (R-CTRL-RESP15, R-PERF-TPS/TTFT/RPS/CCU, R-MODEL-EMB1200/RERANK180, "
+         "R-LLM-TPS28) giờ có trong `kpi-summary.json` cùng bảng với 11 KPI nhóm A (xem `basis` "
+         "mỗi KPI trong `kpi-summary.json` để biết số đang là proxy/approx hay đã đo thật).",
+         "- Token/CCU/RPS/TTFT: số CŨ (chars/4, đếm chunk, echo-input, self-throttled, client "
+         "wall-clock) GIỮ NGUYÊN; số THẬT hơn (usage.completion_tokens, ramp-discovery, "
+         "capacity-mode) nằm ở field RIÊNG (`*_real_token`, `R-PERF-CCU_ramp`, "
+         "`R-PERF-RPS_capacity`) trong `throughput-summary.json` (bench_kpi.py --out) — chưa "
+         "tự động merge số RIÊNG này vào `kpi-summary.json` (chỉ merge field CŨ để không đổi "
+         "ý nghĩa cột 'Thực đo' hiện có); xem `throughput-summary.json` trực tiếp để lấy số THẬT."]),
         encoding="utf-8")
 
     # sanitization-report.md
