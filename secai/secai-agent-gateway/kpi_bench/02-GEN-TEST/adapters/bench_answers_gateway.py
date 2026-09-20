@@ -26,7 +26,16 @@ SSE frames: "event: NAME\ndata: JSON\n\n", kết thúc bằng dòng "data: [DONE
   - tool_call   {"id","name","input","summary"} → gom event["name"] vào "tools".
     Đây là CÁCH DUY NHẤT biết tool nào thực sự được gọi (khác /chat_no_stream, chỉ liệt
     kê tool CÓ SẴN cho profile chứ không phải tool ĐÃ GỌI — do đó KHÔNG dùng /chat_no_stream).
-  - tool_result {"id","name","is_error","duration_ms","result"} — chỉ để debug.
+  - tool_result {"id","name","is_error","duration_ms","result"} — "result" là nội dung
+    tool trả về, ĐÃ ĐƯỢC gateway đưa vào SSE để UI hiển thị citation (xem
+    src/secai_gateway/api/sse.py:66-78: "Include the retrieved content so the UI can
+    render citations (sources)", cắt 4000 ký tự). Với tool truy hồi KB (qdrant_search/
+    neo4j_search — xem agent/factory.py RequireKbSearchBeforeSynthesisHook), "result" CHÍNH
+    LÀ context RAG thật đã được feed cho LLM sinh câu trả lời → 2026-09-20: gom các
+    tool_result này (lọc theo _CONTEXT_TOOL_NAMES) vào rec["retrieved_contexts"] và xuất
+    riêng ra <out-dir>/real-contexts.jsonl (id → contexts) để faith_judge.py chấm
+    faithfulness đúng chuẩn RAGAS (context = cái gateway ĐÃ retrieve, không phải gold
+    re-fetch). Trước 2026-09-20 field "result" bị bỏ qua hoàn toàn (chỉ gom tên tool).
   - token       {"delta"} — 1 chunk text stream. Ghi lại wall-clock của token ĐẦU TIÊN
     trừ thời điểm bắt đầu request = ttftMs. Nối các delta thành draft best-effort.
   - regenerate  {"hook","reason"} — hook bác bản draft đang stream, bắt model làm lại
@@ -118,6 +127,14 @@ _RATE_LIMIT_MAX = int(os.environ.get("GATEWAY_RATE_LIMIT_MAX", "80"))
 _RATE_LIMIT_PERIOD = float(os.environ.get("GATEWAY_RATE_LIMIT_PERIOD", "62"))
 _rate_limiter = _RateLimiter(_RATE_LIMIT_MAX, _RATE_LIMIT_PERIOD)
 _MAX_429_RETRIES = int(os.environ.get("GATEWAY_MAX_429_RETRIES", "3"))
+
+# Tool nào trả về context RAG THẬT (KB retrieval) — dùng để lọc tool_result events khi gom
+# rec["retrieved_contexts"]. Khớp agent/factory.py: RequireKbSearchBeforeSynthesisHook(tools=
+# ("qdrant_search", "neo4j_search")). Override bằng env nếu tên tool đổi (comma-separated).
+_CONTEXT_TOOL_NAMES = {
+    t.strip() for t in os.environ.get(
+        "FAITH_CONTEXT_TOOL_NAMES", "qdrant_search,neo4j_search").split(",") if t.strip()
+}
 
 _LANG_BY_EXT = {
     ".py": "python", ".js": "javascript", ".ts": "typescript", ".jsx": "jsx",
@@ -216,7 +233,8 @@ def answer_one(s, dataset_dir):
     rec = {"id": qid, "capability": s.get("capability"), "bucket": s.get("bucket"),
            "difficulty": s.get("difficulty"), "input": s.get("input"),
            "text": "", "tools": [], "ttftMs": None, "totalMs": None, "error": None,
-           "input_classification": None}
+           "input_classification": None,
+           "retrieved_contexts": []}  # tool_result["result"] thật từ qdrant_search/neo4j_search
     message = _build_message(s, dataset_dir)
     body = json.dumps({"message": message}).encode("utf-8")
     t0 = time.time()
@@ -241,6 +259,13 @@ def answer_one(s, dataset_dir):
                         name = payload.get("name")
                         if name:
                             rec["tools"].append(name)
+                    elif event_name == "tool_result":
+                        # "result" là context RAG THẬT gateway đã feed cho LLM (sse.py:66-78)
+                        # — chỉ giữ tool truy hồi KB, bỏ qua tool khác (poc_search, web_fetch...).
+                        name = payload.get("name")
+                        result = payload.get("result")
+                        if name in _CONTEXT_TOOL_NAMES and result:
+                            rec["retrieved_contexts"].append(result)
                     elif event_name == "token":
                         if not ttft_recorded:
                             rec["ttftMs"] = int((time.time() - t0) * 1000)
@@ -285,6 +310,7 @@ def answer_one(s, dataset_dir):
                 retries_429 += 1
                 time.sleep(3.0 * attempt)
                 rec["tools"] = []  # reset — attempt trước có thể đã gom dở dang
+                rec["retrieved_contexts"] = []  # reset cùng lý do
                 continue
             if e.code == 429:
                 # Hết số lần retry cho phép, vẫn 429 — gắn nhãn riêng để phân biệt với
@@ -313,7 +339,13 @@ def main():
     ap.add_argument("--out", default="/opt/secai/kpi/raw-logs/results.jsonl")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--real-contexts-out", default=None,
+                     help="đường dẫn real-contexts.jsonl (id -> contexts THẬT gom từ tool_result "
+                          "qdrant_search/neo4j_search). Mặc định: cùng thư mục --out, tên "
+                          "'real-contexts.jsonl' — faith_judge.py tự tìm file này theo quy ước đó.")
     args = ap.parse_args()
+    real_ctx_path = args.real_contexts_out or str(
+        Path(args.out).resolve().with_name("real-contexts.jsonl"))
 
     qs = []
     for f in sorted(glob.glob(os.path.join(args.dataset, "*.jsonl"))):
@@ -338,12 +370,15 @@ def main():
     lock = Lock()
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     out = open(args.out, "a", encoding="utf-8")
+    os.makedirs(os.path.dirname(os.path.abspath(real_ctx_path)) or ".", exist_ok=True)
+    real_ctx_out = open(real_ctx_path, "a", encoding="utf-8")
     n = [0]
     nerr = [0]
     n422 = [0]
     nblocked = [0]
     n429ok = [0]     # câu bị 429 nhưng retry thành công (không phải lỗi cuối cùng)
     n429fail = [0]   # câu vẫn 429 sau khi hết số lần retry — error="HTTP429:rate_limited_after_retries"
+    nctx = [0]       # câu có >=1 context THẬT gom được từ tool_result (qdrant_search/neo4j_search)
     t0 = time.time()
 
     def work(s):
@@ -351,6 +386,11 @@ def main():
         with lock:
             out.write(json.dumps(r, ensure_ascii=False) + "\n")
             out.flush()
+            # real-contexts.jsonl: id -> contexts THẬT (RAGAS-compliant) — faith_judge.py
+            # tự tìm file này trong cùng thư mục answers.jsonl/results.jsonl.
+            real_ctx_out.write(json.dumps(
+                {"id": r["id"], "contexts": r.get("retrieved_contexts") or []}, ensure_ascii=False) + "\n")
+            real_ctx_out.flush()
             n[0] += 1
             if r["error"]:
                 nerr[0] += 1
@@ -360,19 +400,22 @@ def main():
                     n429fail[0] += 1
             elif r.get("retries_429", 0) > 0:
                 n429ok[0] += 1
+            if r.get("retrieved_contexts"):
+                nctx[0] += 1
             ic = r.get("input_classification")
             if isinstance(ic, dict) and ic.get("blocked"):
                 nblocked[0] += 1
             if n[0] % 25 == 0 or n[0] == len(todo):
                 rate = n[0] / max(1e-9, time.time() - t0)
                 eta = (len(todo) - n[0]) / max(1e-9, rate)
-                print(f"  {n[0]}/{len(todo)} · {rate:.2f} q/s · err={nerr[0]} (422={n422[0]}) · 429_retried_ok={n429ok[0]} 429_final_fail={n429fail[0]} · classifier_blocked={nblocked[0]} · ETA {eta/60:.1f}m", flush=True)
+                print(f"  {n[0]}/{len(todo)} · {rate:.2f} q/s · err={nerr[0]} (422={n422[0]}) · 429_retried_ok={n429ok[0]} 429_final_fail={n429fail[0]} · classifier_blocked={nblocked[0]} · real_ctx_captured={nctx[0]} · ETA {eta/60:.1f}m", flush=True)
         return r
 
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         list(ex.map(work, todo))
     out.close()
-    print(f"== XONG: {n[0]} câu · {nerr[0]} lỗi (422={n422[0]}) · 429_retried_ok={n429ok[0]} 429_final_fail={n429fail[0]} · classifier_blocked={nblocked[0]} · {(time.time()-t0)/60:.1f} phút ==", flush=True)
+    real_ctx_out.close()
+    print(f"== XONG: {n[0]} câu · {nerr[0]} lỗi (422={n422[0]}) · 429_retried_ok={n429ok[0]} 429_final_fail={n429fail[0]} · classifier_blocked={nblocked[0]} · real_ctx_captured={nctx[0]}/{n[0]} → {real_ctx_path} · {(time.time()-t0)/60:.1f} phút ==", flush=True)
 
 
 if __name__ == "__main__":
