@@ -106,7 +106,18 @@ services:
     # giả lập từ kết quả pre-fetch (api/routes.py _grounding_sse_frames, stream()
     # pre_frames param) — /ai/chat[/stream] + /sessions/{sid}/chat[/stream] đều có.
     # Ảnh 0.5.3-faith-tune giữ nguyên để rollback.
-    image: secai-agent-gateway:0.5.4-source-sse
+    # 0.5.5-regen-fix (2026-09-21): bug thật do 0.5.2 gây ra — RequireChatGroundingHook.
+    # on_before_final_answer chỉ coi "đã tra KB" qua tool_result thật (on_post_tool_use);
+    # pre-fetch của _ground_chat_prompt() gọi _qdrant_search() thẳng, không qua tool-call
+    # nên hook không biết, ép force_continue (regenerate) 2 LẦN/câu dù context đã đúng —
+    # user báo "gen gần xong thì giật, sinh lại" (đúng UI hành vi clear buffer khi nhận
+    # regenerate). Xác nhận live: CVE-2021-44228/CVE-2026-53963 đều 2 regenerate trước
+    # fix, 0 sau fix — 2-3x lãng phí compute mỗi câu, và có rủi ro hết max_retries thì
+    # SHIP _CHAT_EMPTY_FALLBACK đè lên câu trả lời pre-fetch vốn đã đúng. Fix: marker
+    # CHAT_PRE_FETCH_MARKER (agent/hooks.py) chèn đầu prompt khi pre-fetch, hook check
+    # prompt.startswith(marker) → coi need_kb=False, bỏ qua force_continue cho nhánh đó.
+    # Ảnh 0.5.4-source-sse giữ nguyên để rollback.
+    image: secai-agent-gateway:0.5.5-regen-fix
     container_name: secai-docker-gateway
     restart: unless-stopped
     # Cho container phân giải host.docker.internal → IP host (để reverse-proxy /tb tới TensorBoard :6006 trên host).
