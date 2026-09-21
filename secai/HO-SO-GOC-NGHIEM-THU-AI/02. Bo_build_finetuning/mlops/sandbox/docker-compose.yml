@@ -1,0 +1,28 @@
+# Gateway SANDBOX (:8132) cho smoke full-pipeline — TÁCH HẲN production gateway :8131.
+# Dùng ở: stage 9 requalify (CANDIDATE_GATEWAY_BASE=http://localhost:8132) + stage 10 redeploy
+# (10_promote_or_hold.sh: cd <compose_dir> && docker compose up -d gateway).
+# gateway.env repoint QWEN/EMBED/RERANK sang CANDIDATE lúc stage 9. Join network production để
+# dùng chung Qdrant/Neo4j/Redis (kiến thức nằm ở KB, không ở model).
+services:
+  gateway:
+    image: secai-agent-gateway:0.5.3-faith-tune
+    container_name: secai-smoke-gateway
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - gateway.env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      SESSION_STORE_BACKEND: sqlite
+      SESSION_DB_PATH: /app/data/sessions.db
+      GATEWAY_DB_PATH: /app/data/gateway.db
+    ports:
+      - "8132:8131"
+    networks: [secai-net]
+networks:
+  secai-net:
+    external: true
+    name: secai-docker_secai-net

@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "policy_id": "secai-finetune-drift-detect-v1",
+  "baseline_file": "../../benchmarks/baselines/approved_metrics.json",
+  "trigger": "DETECTION policy — dùng RIÊNG cho stage 3 (đo model đang serving trên bộ SYNTHETIC CVE mới, nhỏ + gold distant-supervision yếu). KHÁC finetune_thresholds.yml (dùng cho REQUALIFY stage 6c trên BENCHMARK hand-gold đầy đủ). Vì sao tách: áp min_examples cỡ-benchmark (100/1000) + ngưỡng KPI tuyệt đối (correctness>=0.85, halluc<=0.02) lên bộ synthetic nhỏ gold-yếu khiến stage 3 gần như LUÔN 'thiếu mẫu/điểm thấp' -> FINETUNE_REQUIRED thừa mỗi chu kỳ (sự cố 2026-09-19). Ở đây: (a) min_examples nhỏ hợp bộ CVE mới hàng tháng; (b) embedding/reranker GIỮ KPI hợp đồng (positive=mô tả CVE là gold VỮNG cho retrieval, không yếu như LLM); (c) LLM NỚI ngưỡng để chỉ bắt suy giảm CỰC ĐOAN (vd model từ chối CVE mới: thực đo correctness~0.07, halluc~0.93) mà KHÔNG kích hoạt bởi nhiễu gold-yếu (model tốt trên gold-yếu vẫn ~0.4-0.6). Các ngưỡng LLM dưới là HEURISTIC phát hiện — nên calibrate lại khi có 1 lần đo model TỐT trên chính bộ synthetic.",
+  "checks": [
+    {
+      "id": "embedding-hit-at-10",
+      "report": "embedding",
+      "finetune_target": "embedding",
+      "suite_id": "secai-embedding-pairwise-v1",
+      "metric": "recall@10",
+      "min": 0.96,
+      "max_relative_drop": 0.05,
+      "min_examples": 10,
+      "required": true,
+      "platform_kpi": "R-KPI-EMB96",
+      "note": "Retrieval gold (positive = mô tả CVE) VỮNG trên synthetic -> giữ KPI hợp đồng, chỉ hạ min_examples."
+    },
+    {
+      "id": "reranker-precision-at-1",
+      "report": "reranker",
+      "finetune_target": "reranker",
+      "suite_id": "secai-reranker-candidate-set-v1",
+      "metric": "precision@1",
+      "min": 0.90,
+      "max_relative_drop": 0.05,
+      "min_examples": 10,
+      "required": true,
+      "platform_kpi": "R-KPI-RERANK90",
+      "note": "Như embedding — gold retrieval vững, giữ KPI."
+    },
+    {
+      "id": "llm-answer-correctness",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-qa-harness-v1",
+      "metric": "answer_correctness",
+      "min": 0.30,
+      "min_examples": 10,
+      "required": true,
+      "platform_kpi": "R-LLM-SAST85",
+      "note": "NỚI từ 0.85 (KPI benchmark) xuống 0.30: gold synthetic yếu -> model tốt vẫn ~0.4-0.6; <0.30 = suy giảm cực đoan (thực đo lúc drift ~0.07). Requalify (6c) vẫn ép 0.85 trên benchmark hand-gold."
+    },
+    {
+      "id": "llm-answer-relevance",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-qa-harness-v1",
+      "metric": "answer_relevance",
+      "min": 0.40,
+      "min_examples": 10,
+      "required": true,
+      "platform_kpi": "R-KPI-RELEV90",
+      "note": "NỚI từ 0.90 -> 0.40 (heuristic phát hiện)."
+    },
+    {
+      "id": "llm-hallucination-rate",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-qa-harness-v1",
+      "metric": "hallucination_rate",
+      "max": 0.50,
+      "min_examples": 10,
+      "required": true,
+      "platform_kpi": "R-KPI-HALLU2",
+      "note": "NỚI từ 0.02 -> 0.50: gold yếu dễ bị chấm hallucination oan cho paraphrase; >0.50 = suy giảm cực đoan (thực đo lúc drift ~0.93). Requalify (6c) vẫn ép 0.02 trên benchmark."
+    }
+  ]
+}

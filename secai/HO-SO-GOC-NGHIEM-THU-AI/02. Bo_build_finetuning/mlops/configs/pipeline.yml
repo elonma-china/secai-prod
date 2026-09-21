@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "comment": "JSON-compatible YAML, giống finetune/configs/finetune_thresholds.yml — không cần thư viện yaml, chỉ json.loads.",
+
+  "qdrant": {
+    "url_env": "QDRANT_URL", "default_url": "http://localhost:6333",
+    "collection_env": "QDRANT_COLLECTION", "default_collection": "cve_kb_hybrid",
+    "comment": "cve_kb_hybrid là collection THẬT gateway đọc (dense+sparse); cve_kb cũ rỗng — xem KB manual CVE ingest 2026."
+  },
+
+  "gateway": {
+    "env_file": "../../../../secai-agent-gateway/.env",
+    "docker_env_file": "../../../../secai-docker/.env",
+    "health_url_env": "GATEWAY_HEALTH_URL", "default_health_url": "http://localhost:8131/health",
+    "compose_dir": "../../../../secai-docker",
+    "comment_paths": "Đường dẫn tương đối tính từ mlops/configs/ — 4 cấp lên tới secai/ (secai/HO-SO-GOC-NGHIEM-THU-AI/02. Bo_build_finetuning/mlops/configs/)."
+  },
+
+  "judge": {
+    "url_env": "JUDGE_BASE_URL", "model_env": "JUDGE_MODEL", "api_key_env": "JUDGE_API_KEY",
+    "comment": "Judge PHẢI độc lập với model đang đo (yêu cầu eval_llm_qa.py) — không trỏ về chính serving đang test. 2026-09-18: dùng OpenRouter (https://openrouter.ai/api/v1, model deepseek/deepseek-chat-v3.1) làm judge."
+  },
+
+  "hf": {
+    "token_env": "HF_TOKEN",
+    "production_repos": {
+      "llm": "DuyTa/Cyber-F1-AWQ",
+      "embedding": "DuyTa/sec-embedding",
+      "reranker": "DuyTa/sec-rerank"
+    },
+    "candidate_repos": {
+      "llm": "autumn10/Cyber-F1-smoke",
+      "embedding": "autumn10/sec-embedding-smoke",
+      "reranker": "autumn10/sec-rerank-smoke"
+    },
+    "comment_candidate": "Trỏ tạm sang tài khoản HF của người vận hành (autumn10) cho đợt smoke test — production_repos (DuyTa/*) không đổi, không bị đụng tới bởi smoke test."
+  },
+
+  "vast_serving": {
+    "up_script": "../../../../secai-agent-gateway/secai-serving-vast/serving-up-cyber-f1.sh",
+    "down_script": "../../../../secai-agent-gateway/secai-serving-vast/serving-down.sh",
+    "candidate_label": "secai-serving-candidate",
+    "production_label": "secai-serving-cyberf1",
+    "embed_model_flag_default": "DuyTa/sec-embedding",
+    "rerank_model_flag_default": "DuyTa/sec-rerank",
+    "comment": "PHẢI truyền --embed-model/--rerank-model biến thể fine-tune (không dùng default script) — xem CLAUDE.md deploy-use-finetuned-variants."
+  },
+
+  "min_new_cves_to_run": 20,
+  "comment_min_new_cves": "Dưới ngưỡng này, run_pipeline.sh dừng sớm sau bước 01 — tránh chạy cả vòng gate/GPU vì lệch vài CVE.",
+
+  "benchmark": {
+    "embedding_test": "../../finetune/data/embedding/test.jsonl",
+    "reranker_test": "../../finetune/data/reranker/test.jsonl",
+    "llm_test": "../../benchmarks/data/llm_qa_harness_v1.jsonl",
+    "comment": "Bộ benchmark CỐ ĐỊNH (hand-curated, held-out) để REQUALIFY/gate promote (stage 6c) — candidate KHÔNG train trên đó (tập train chỉ ghép vào train.jsonl, không đụng test). Tránh rò rỉ train/test + bắt regression. Bộ synthetic CVE mới CHỈ dùng để phát hiện suy giảm (stage 3) + train (stage 4)."
+  },
+
+  "schedule": {
+    "cadence": "monthly",
+    "day": 15,
+    "contract_refs": ["R-RETRAIN-AUTO", "R-RETRAIN-DRIFT5", "R-RETRAIN-DETECT"],
+    "source": "01. Ho_so_huan_luyen/finetuning/reports/retraining-policy.md + configs/finetune_thresholds.yml:principles (đã duyệt 2026-05-06)",
+    "comment": "Giá trị mặc định LẤY NGUYÊN từ chính sách retrain đã duyệt trong hồ sơ nghiệm thu, không tự đặt nhịp khác. Đổi ở đây nếu chính sách được duyệt lại."
+  },
+
+  "trigger_api": {
+    "host": "127.0.0.1", "port": 8877,
+    "api_key_env": "MLOPS_TRIGGER_API_KEY",
+    "comment": "Cố ý KHÔNG dùng chung ADMIN_API_KEY của gateway public — endpoint này có thể châm ngòi thuê GPU + tốn tiền, tách tiến trình + khoá riêng."
+  }
+}
