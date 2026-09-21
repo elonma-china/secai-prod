@@ -781,7 +781,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # có >5 chunk (core/context/…) có thể rơi mất chunk "context" (chứa KEV/severity)
             # một cách ngẫu nhiên — đo thật 2026-09-20: câu hỏi KEV-status trả lời sai vì thiếu
             # đúng chunk. top_k=10 đủ dư cho số chunk/CVE thực tế mà vẫn không làm loãng context.
+            _t0 = time.monotonic()
             result = await _qdrant_search(query=prompt, ctx=None, top_k=10)
+            grounding_ms = int(round((time.monotonic() - _t0) * 1000))
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
             return prompt, None
@@ -792,7 +794,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + result.content +
             "\n\n[Câu hỏi của người dùng]\n" + prompt
         )
-        return grounded, {"query": prompt, "result": result.content, "summary": result.summary}
+        # duration_ms: đo thời gian tra qdrant THẬT ở bước pre-fetch để event tool_result
+        # giả lập (xem _grounding_sse_frames) hiển thị đúng độ trễ thay vì hard-code 0ms.
+        return grounded, {"query": prompt, "result": result.content,
+                          "summary": result.summary, "duration_ms": grounding_ms}
 
     def _grounding_sse_frames(grounding: dict[str, Any] | None) -> list[bytes]:
         """Dựng cặp SSE tool_call/tool_result giả lập từ kết quả pre-fetch của
@@ -807,7 +812,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "input": {"query": grounding["query"]}, "summary": grounding.get("summary"),
             }),
             sse_frame("tool_result", {
-                "id": tool_id, "name": "qdrant_search", "is_error": False, "duration_ms": 0,
+                "id": tool_id, "name": "qdrant_search", "is_error": False,
+                "duration_ms": int(grounding.get("duration_ms", 0) or 0),
                 "result": grounding["result"][:4000],
             }),
         ]
