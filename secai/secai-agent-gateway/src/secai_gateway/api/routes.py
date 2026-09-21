@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from linch.events import ResultEvent, SystemEvent
 
 from ..agent import registry_for
+from ..agent.hooks import CHAT_PRE_FETCH_MARKER
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -787,7 +788,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not result.content:
             return prompt, None
         grounded = (
-            "[Ngữ cảnh tra cứu từ KB nội bộ — PHẢI dùng để trả lời chính xác, "
+            CHAT_PRE_FETCH_MARKER + " — PHẢI dùng để trả lời chính xác, "
             "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + result.content +
             "\n\n[Câu hỏi của người dùng]\n" + prompt
         )

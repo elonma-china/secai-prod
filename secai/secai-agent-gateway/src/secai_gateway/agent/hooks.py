@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import re
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
@@ -568,6 +568,17 @@ _CHAT_VAGUE_CLARIFY = (
     "phẩm cụ thể. Bạn nêu rõ hơn giúp tôi nhé.\n\n" + _CHAT_CLOSER
 )
 
+# api/routes.py::_ground_chat_prompt() chèn marker này vào ĐẦU prompt khi pre-fetch KB
+# trực tiếp (gọi _qdrant_search thẳng, không qua tool-call của model). session.meta
+# ["last_user_prompt"] lưu đúng prompt ĐÃ chèn (agent/runner.py:173), nên
+# RequireChatGroundingHook thấy được marker này qua _prompt_of(). Dùng để coi KB đã thỏa
+# mãn — nếu không, has_kb chỉ bật qua on_post_tool_use (tool_result thật), pre-fetch không
+# đi qua đường đó nên hook cứ tưởng "chưa tra" và ép force_continue 2-3 lần một cách lãng
+# phí (phát hiện live 2026-09-21: UI "giật" giữa chừng generation vì client phải xóa buffer
+# theo regenerate event) — tệ hơn nữa, hết max_retries thì hook SHIP _CHAT_EMPTY_FALLBACK
+# đè lên câu trả lời pre-fetch vốn đã đúng.
+CHAT_PRE_FETCH_MARKER = "[Ngữ cảnh tra cứu từ KB nội bộ"
+
 
 def _chat_body_is_empty(text: str) -> bool:
     """True when the final has no substantive body — empty, whitespace, or ONLY the closer
@@ -750,6 +761,13 @@ class RequireChatGroundingHook:
         plan = classify_chat_grounding(prompt)
         if plan.route == "concept":
             return None
+        # KB đã được routes.py::_ground_chat_prompt() pre-fetch trực tiếp (không qua tool-call
+        # của model) — xem CHAT_PRE_FETCH_MARKER ở trên. force_continue ở đây sẽ lãng phí (ép
+        # model làm lại dù đã có context đúng) hoặc tệ hơn là ship _CHAT_EMPTY_FALLBACK đè lên
+        # câu trả lời pre-fetch đã đúng khi hết max_retries. web_fetch KHÔNG được pre-fetch nên
+        # missing_web vẫn phải kiểm tra bình thường.
+        if plan.need_kb and prompt.startswith(CHAT_PRE_FETCH_MARKER):
+            plan = replace(plan, need_kb=False)
 
         run_id = ctx.run_id
         has_web = RequireSearchBeforeAnswerHook._get(self._web, run_id, False)
