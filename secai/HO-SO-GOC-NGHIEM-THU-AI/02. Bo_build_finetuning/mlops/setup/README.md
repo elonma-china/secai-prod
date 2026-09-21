@@ -6,6 +6,21 @@ production (stage 10). Máy serving GPU tự nó **không cần cài gì tay** �
 ephemeral dựng từ image `vastai/vllm_*` qua `serving-up-cyber-f1.sh` (xem
 `04. Huong_dan_cai_dat/HUONG-DAN-CAI-DAT.md`).
 
+> **Lưu ý quan trọng trước khi chạy (đọc trước bước 1):**
+> - **`.venv-eval`**: máy điều phối chạy stage 1-3/9 + `trigger_api` trong venv `mlops/.venv-eval`.
+>   Venv này **bị gitignore + không relocatable** → máy mới KHÔNG có sẵn; `install.sh` mục 1b sẽ
+>   tự tạo (venv + `requirements-eval.txt` + fastapi/uvicorn/httpx/pyyaml). Đừng copy `.venv-eval`
+>   từ máy khác sang (đường dẫn tuyệt đối trong `pyvenv.cfg` sẽ sai).
+> - **Product gate là MẶC ĐỊNH (`PRODUCT_GATE=1`)**: stage 3/9 đo qua **full pipeline thật**
+>   (gateway `/ai/chat` + embed/rerank + Qdrant). Vì vậy **cả `run_pipeline.sh` dry-run cũng cần
+>   stack phục vụ (`secai-docker`: gateway :8131 + serving vast + qdrant) ĐANG CHẠY** — không phải
+>   "chỉ đọc, không đụng gì". Đặt `PRODUCT_GATE=0` nếu muốn gate benchmark cũ (không gọi stack sống).
+> - **`CANDIDATE_GATEWAY_BASE`** (bắt buộc khi requalify bằng product gate): gateway trỏ LLM
+>   *candidate* cho stage 6c. Thiếu → `run_pipeline.sh` dừng cứng. Khai trong `mlops.env` (vd sandbox
+>   `:8132`), hoặc dùng `PRODUCT_GATE=0`.
+> - **Judge**: chọn model **non-reasoning** (vd `deepseek/deepseek-chat-v3.1`) cho gate ~1000 mẫu —
+>   model reasoning (deepseek-flash…) chậm nhiều giờ. Xem `mlops.env.example`.
+
 ## 1. Chạy preflight
 
 ```bash
@@ -19,14 +34,16 @@ Kiểm tra & cài (nếu thiếu):
   `console.vast.ai` 403 — xem ghi chú trong `install.sh`)
 - GPU (`nvidia-smi`) — chỉ cần trên máy sẽ chạy `--execute` (train/DPO); máy chỉ chạy drift-check
   (stage 01-03, không `--execute`) không cần GPU
-- `finetune/requirements-eval.txt` (sentence-transformers/transformers/torch CPU) — **cần cả ở
-  dry-run mặc định** (stage 3 tải model embed/rerank về đo cục bộ) — phát hiện thật 2026-09-18:
-  máy điều phối sạch chạy `run_pipeline.sh` không cờ vẫn chết ở `eval_embedding.py` vì thiếu gói
-  này, dễ nhầm "stage 1-3 không cần cài gì" (đúng cho GPU, sai cho python deps)
-- `finetune/requirements-train.txt` (unsloth/trl/…) — chỉ cần trên máy chạy `--execute` (train/DPO)
+- `.venv-eval` (mục 1b) — cài `requirements-eval.txt` (sentence-transformers/transformers/torch
+  CPU) + fastapi/uvicorn/httpx/pyyaml; **cần cả ở dry-run mặc định** (stage 3 đo embed/rerank).
+  Máy điều phối sạch chạy `run_pipeline.sh` không cờ vẫn chết nếu thiếu — dễ nhầm "stage 1-3 không
+  cần cài gì" (đúng cho GPU, sai cho python deps)
+- `finetune/requirements-train.txt` (unsloth/trl/…) — chỉ cần trên máy chạy `--execute` (train/DPO).
+  Reranker (ms-swift) phải ở **venv RIÊNG** (`datasets==4.8.4`, xung đột với unsloth `datasets<4.4`)
 - `quantization/requirements.txt` (llmcompressor/…) — chỉ cần trên máy chạy `06_quantize_candidate.sh`
-- Gateway `.env` đọc được `QWEN_BASE_URL`/`QWEN_API_KEY` (đường dẫn khai ở
-  `configs/pipeline.yml:gateway.env_file`)
+- `secai-docker/.env` đọc được `EMBEDDING_API_URL`/`RERANKER_API_URL`/`QDRANT_URL` + gateway `:8131`
+  `/health` sống + judge (`JUDGE_*`) reachable — các tiền đề của product gate (mục 7-8 của
+  `install.sh`). (Nhánh cũ đọc `secai-agent-gateway/.env`+`QWEN_*` đã stale, không còn dùng mặc định.)
 
 ## 2. Biến môi trường cần export trước khi chạy `--execute`/`--allow-deploy` bằng tay
 

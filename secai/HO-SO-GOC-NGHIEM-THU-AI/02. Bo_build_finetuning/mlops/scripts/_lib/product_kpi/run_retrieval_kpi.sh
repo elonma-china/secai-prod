@@ -8,11 +8,13 @@
 set -euo pipefail
 DATASET="${1:?cần dataset_dir}"; OUT="${2:?cần out_dir}"; LIMIT="${3:-}"
 
-PKG="/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/02. Bo_build_finetuning"
-GW="/home/ict/AIEngines/secai/secai-agent-gateway"
+# Đường dẫn DERIVE tương đối vị trí script (portable) — override qua env nếu cần.
+PKG="${MLOPS_PKG_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
+SECAI_ROOT="$(cd "$PKG/../.." && pwd)"
+GW="${SECAI_GW_DIR:-$SECAI_ROOT/secai-agent-gateway}"
 LIBDIR="$PKG/mlops/scripts/_lib/product_kpi"
-PY="$PKG/mlops/.venv-eval/bin/python"
-DOCKER_ENV="/home/ict/AIEngines/secai/secai-docker/.env"
+PY="${MLOPS_PY:-$PKG/mlops/.venv-eval/bin/python}"
+DOCKER_ENV="${DOCKER_ENV:-$SECAI_ROOT/secai-docker/.env}"
 
 # ── endpoint (mặc định = PRODUCTION đọc từ secai-docker/.env; có thể override qua env sẵn có) ──
 getenv() { grep -E "^$1=" "$DOCKER_ENV" | head -1 | cut -d= -f2-; }
@@ -24,7 +26,7 @@ export RERANK_KEY="${RERANK_KEY:-$(getenv RERANKER_API_KEY)}"
 export RERANK_MODEL="${RERANK_MODEL:-$(getenv RERANKER_MODEL)}"
 export QDRANT_URL="${QDRANT_URL:-http://localhost:6333}"
 export QDRANT_COLLECTION="${QDRANT_COLLECTION:-$(getenv QDRANT_COLLECTION)}"
-export BM25_LOCAL_MODEL_DIR="${BM25_LOCAL_MODEL_DIR:-/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model}"
+export BM25_LOCAL_MODEL_DIR="${BM25_LOCAL_MODEL_DIR:-$SECAI_ROOT/secai-data/_state/bm25_local_model}"
 export PYTHONPATH="$LIBDIR${PYTHONPATH:+:$PYTHONPATH}"   # để retrieval_kpi.py `import config` thấy shim
 
 mkdir -p "$OUT/raw"

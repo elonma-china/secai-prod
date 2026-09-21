@@ -7,11 +7,13 @@
 set -euo pipefail
 DATASET="${1:?cần dataset_dir}"; OUT="${2:?cần out_dir}"; GW_BASE="${3:-http://localhost:8131}"; LIMIT="${4:-}"
 
-PKG="/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/02. Bo_build_finetuning"
-GW="/home/ict/AIEngines/secai/secai-agent-gateway"
+# Đường dẫn DERIVE tương đối vị trí script (portable) — override qua env nếu cần.
+PKG="${MLOPS_PKG_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
+SECAI_ROOT="$(cd "$PKG/../.." && pwd)"
+GW="${SECAI_GW_DIR:-$SECAI_ROOT/secai-agent-gateway}"
 LIBDIR="$PKG/mlops/scripts/_lib/product_kpi"
-PY="$PKG/mlops/.venv-eval/bin/python"
-DOCKER_ENV="/home/ict/AIEngines/secai/secai-docker/.env"
+PY="${MLOPS_PY:-$PKG/mlops/.venv-eval/bin/python}"
+DOCKER_ENV="${DOCKER_ENV:-$SECAI_ROOT/secai-docker/.env}"
 MLOPS_ENV="$HOME/.config/secai-mlops/mlops.env"
 
 getenv() { grep -E "^$1=" "$DOCKER_ENV" | head -1 | cut -d= -f2-; }

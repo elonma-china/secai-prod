@@ -11,11 +11,13 @@
 set -euo pipefail
 DATASET="${1:?cần dataset_dir}"; OUT="${2:?cần out_dir}"; GW_BASE="${3:-http://localhost:8131}"; LIMIT="${4:-}"
 
-PKG="/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/02. Bo_build_finetuning"
-GW="/home/ict/AIEngines/secai/secai-agent-gateway"
+# Đường dẫn DERIVE tương đối vị trí script (portable, không hardcode máy) — override qua env nếu cần.
+PKG="${MLOPS_PKG_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)}"
+SECAI_ROOT="$(cd "$PKG/../.." && pwd)"   # .../secai (chứa 02. Bo_build_finetuning + secai-agent-gateway + secai-docker)
+GW="${SECAI_GW_DIR:-$SECAI_ROOT/secai-agent-gateway}"
 LIB="$PKG/mlops/scripts/_lib/product_kpi"
-PY="$PKG/mlops/.venv-eval/bin/python"
-DOCKER_ENV="/home/ict/AIEngines/secai/secai-docker/.env"
+PY="${MLOPS_PY:-$PKG/mlops/.venv-eval/bin/python}"
+DOCKER_ENV="${DOCKER_ENV:-$SECAI_ROOT/secai-docker/.env}"
 MLOPS_ENV="$HOME/.config/secai-mlops/mlops.env"
 getenv() { grep -E "^$1=" "$DOCKER_ENV" | head -1 | cut -d= -f2-; }
 
@@ -30,7 +32,7 @@ export RAGAS_JUDGE_API_KEY="$JUDGE_API_KEY" OPENAI_API_KEY="$JUDGE_API_KEY"
 export EMBED_URL="${EMBED_URL:-$(getenv EMBEDDING_API_URL)}" EMBED_MODEL="${EMBED_MODEL:-$(getenv EMBEDDING_MODEL)}" EMBED_KEY="${EMBED_KEY:-$(getenv EMBEDDING_API_KEY)}"
 export RERANK_URL="${RERANK_URL:-$(getenv RERANKER_API_URL)}" RERANK_MODEL="${RERANK_MODEL:-$(getenv RERANKER_MODEL)}" RERANK_KEY="${RERANK_KEY:-$(getenv RERANKER_API_KEY)}"
 export QDRANT_URL="${QDRANT_URL:-http://localhost:6333}" QDRANT_COLLECTION="${QDRANT_COLLECTION:-$(getenv QDRANT_COLLECTION)}"
-export BM25_LOCAL_MODEL_DIR="${BM25_LOCAL_MODEL_DIR:-/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model}"
+export BM25_LOCAL_MODEL_DIR="${BM25_LOCAL_MODEL_DIR:-$SECAI_ROOT/secai-data/_state/bm25_local_model}"
 export FAITH_GOLD_CONTEXTS=1 RAGAS_SAMPLE="${RAGAS_SAMPLE:-2000}"
 export PYTHONPATH="$LIB${PYTHONPATH:+:$PYTHONPATH}"
 
