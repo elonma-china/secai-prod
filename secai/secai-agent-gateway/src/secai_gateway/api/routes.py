@@ -59,7 +59,7 @@ from ..security import (
 from .literal_mask import unmask_literals
 from .projects import _norm_owner
 from .messages import (
-    build_translate_prompt, parse_statistical, report_prompt, statistical_prompt,
+    build_translate_prompt, parse_statistical, report_prompt, statistical_detail_table, statistical_prompt,
     translate_langs, translate_prompt,
 )
 from .text_chunk import split_for_translation
@@ -672,11 +672,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = prompt_override
         else:
             prompt = require_public_input(body.supplied_text())
+            grounding: dict[str, Any] | None = None
             if profile == "chat":
                 gated = await _chat_gate(prompt)
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
-                prompt = await _ground_chat_prompt(prompt)
+                prompt, grounding = await _ground_chat_prompt(prompt)
         try:
             text, metadata = await state.runner.complete(profile, prompt, session_id)
         except HTTPException:
@@ -685,15 +686,29 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # Mirrors the streaming path (see stream()), which already surfaces failures
             # as an SSE error event instead of tearing down the response.
             raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
+        # pre-fetch grounding (xem _ground_chat_prompt) không qua tool-call của model nên
+        # không có mặt trong tool_registry/tool-log thông thường — lộ ra đây để client JSON
+        # thường (không SSE) cũng biết nguồn đã dùng, tương ứng tool_call/tool_result giả
+        # lập bên stream().
+        if prompt_override is None and grounding:
+            metadata = {**metadata, "sources": [{"name": "qdrant_search", **grounding}]}
         return sanitize_output_language(text), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
         return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
 
-    def stream(profile: str, prompt: str, session_id: str | None, build_final) -> StreamingResponse:
+    def stream(profile: str, prompt: str, session_id: str | None, build_final,
+              pre_frames: list[bytes] | None = None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
         endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
+
+        ``pre_frames`` — frame(s) to yield BEFORE the agent runs at all (currently: the
+        synthetic tool_call/tool_result pair from ``_grounding_sse_frames()`` when
+        ``_ground_chat_prompt()`` pre-fetched KB context — that fetch bypasses the model's
+        own tool-use decision, so it never appears in ``state.runner.stream()``'s real
+        event stream; without this the client's ToolTimeline has nothing to render even
+        though the answer IS grounded).
 
         A ``regenerate`` event (see api/sse.py) can arrive mid-stream when a hook forces
         the model to redo its answer (e.g. it answered before calling required tools) —
@@ -703,6 +718,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         authoritative text regardless — only the raw `token` stream is affected."""
 
         async def gen() -> AsyncIterator[bytes]:
+            for frame in pre_frames or []:
+                yield frame
             final = ""
             run_id = None
             failed = False
@@ -730,7 +747,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    async def _ground_chat_prompt(prompt: str) -> str:
+    async def _ground_chat_prompt(prompt: str) -> tuple[str, dict[str, Any] | None]:
         """Chủ động tra KB (qdrant_search) TRƯỚC khi đưa prompt vào agent, nếu câu hỏi
         nêu CVE/CWE/CAPEC/ATT&CK-id tường minh — KHÔNG phụ thuộc việc model tự quyết định
         gọi tool hay không.
@@ -745,21 +762,54 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         Tra cứu xảy ra ở tầng code, không qua model, nên đảm bảo có context bất kể model
         có gọi tool hay không. Fail-open: KB lỗi/timeout → trả nguyên prompt gốc, không
-        chặn chat."""
+        chặn chat.
+
+        Trả về ``(prompt_đã_chèn_context, grounding)`` — ``grounding`` là dict {query, result,
+        summary} khi thật sự tra được, hoặc ``None`` khi không match entity-id / KB lỗi / rỗng.
+        2026-09-21: trước đây chỉ trả về prompt, khiến FE mất tín hiệu "nguồn" — vì pre-fetch
+        này thay hẳn việc model tự gọi tool, nên KHÔNG còn tool_call/tool_result SSE event nào
+        phát ra cho UI (ToolTimeline.tsx) render trích dẫn, dù model vẫn dùng đúng context. Gọi
+        nơi này (chat_stream/session_chat_stream) tự dựng cặp tool_call/tool_result giả lập từ
+        ``grounding`` để khôi phục tín hiệu nguồn cho FE."""
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
-            return prompt
+            return prompt, None
         try:
-            result = await _qdrant_search(query=prompt, ctx=None, top_k=5)
+            # top_k=10 (không phải 5): khi có cve_id pin, _qdrant_search dùng "EXACT-CVE FAST
+            # PATH" (retrieval/qdrant.py) — scroll max(top_k,8) dòng theo THỨ TỰ LƯU TRỮ
+            # QDRANT (không xếp hạng độ liên quan) rồi cắt cứng về top_k. Với top_k=5, 1 CVE
+            # có >5 chunk (core/context/…) có thể rơi mất chunk "context" (chứa KEV/severity)
+            # một cách ngẫu nhiên — đo thật 2026-09-20: câu hỏi KEV-status trả lời sai vì thiếu
+            # đúng chunk. top_k=10 đủ dư cho số chunk/CVE thực tế mà vẫn không làm loãng context.
+            result = await _qdrant_search(query=prompt, ctx=None, top_k=10)
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
-            return prompt
+            return prompt, None
         if not result.content:
-            return prompt
-        return (
+            return prompt, None
+        grounded = (
             "[Ngữ cảnh tra cứu từ KB nội bộ — PHẢI dùng để trả lời chính xác, "
             "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + result.content +
             "\n\n[Câu hỏi của người dùng]\n" + prompt
         )
+        return grounded, {"query": prompt, "result": result.content, "summary": result.summary}
+
+    def _grounding_sse_frames(grounding: dict[str, Any] | None) -> list[bytes]:
+        """Dựng cặp SSE tool_call/tool_result giả lập từ kết quả pre-fetch của
+        ``_ground_chat_prompt`` — cùng shape với ``event_to_sse`` (api/sse.py) thật, để FE
+        (``ToolTimeline.tsx``) render đúng như khi model tự gọi ``qdrant_search``."""
+        if not grounding:
+            return []
+        tool_id = f"pre-fetch-{uuid4()}"
+        return [
+            sse_frame("tool_call", {
+                "id": tool_id, "name": "qdrant_search",
+                "input": {"query": grounding["query"]}, "summary": grounding.get("summary"),
+            }),
+            sse_frame("tool_result", {
+                "id": tool_id, "name": "qdrant_search", "is_error": False, "duration_ms": 0,
+                "result": grounding["result"][:4000],
+            }),
+        ]
 
     async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
         """Model-based input sanitization for the chat path (runs BEFORE the agent).
@@ -891,14 +941,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text = await _ground_chat_prompt(text)
+        text, grounding = await _ground_chat_prompt(text)
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run — nothing to do here.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
-        return stream("chat", text, session_id, build_final)
+        return stream("chat", text, session_id, build_final, pre_frames=_grounding_sse_frames(grounding))
 
     async def _stamp_session_activity(sid: str, rec: Any, body: LegacyRequest) -> None:
         """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
@@ -970,7 +1020,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text = await _ground_chat_prompt(text)
+        text, grounding = await _ground_chat_prompt(text)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run; the meta
@@ -978,7 +1028,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # started — see the comment there for why.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
-        return stream("chat", text, sid, build_final)
+        return stream("chat", text, sid, build_final, pre_frames=_grounding_sse_frames(grounding))
 
     # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
     # occasionally echoes its own instruction preamble back verbatim instead of only
@@ -1187,12 +1237,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
     async def statistical_report(body: LegacyRequest) -> dict[str, Any]:
         text, metadata = await complete("statistical_report", body, prompt_override=statistical_prompt(body))
         # Legacy gemini shape: report_title / report_summary / report_detail (parsed from JSON).
-        return {**parse_statistical(text), "report": text, "statistical_report": text, "metadata": metadata}
+        result = parse_statistical(text)
+        table = statistical_detail_table(body)
+        if table is not None:  # structured `detail[]` given — code-rendered table wins over the model's own report_detail.
+            result["report_detail"] = table
+        return {**result, "report": text, "statistical_report": text, "metadata": metadata}
 
     @app.post("/ai/generate-statistical-report/stream")
     async def statistical_stream(body: LegacyRequest) -> StreamingResponse:
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-            return {**parse_statistical(final), "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
+            result = parse_statistical(final)
+            table = statistical_detail_table(body)
+            if table is not None:
+                result["report_detail"] = table
+            return {**result, "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
         return stream("statistical_report", statistical_prompt(body), None, build_final)
 
     async def exploit_prefetch(prompt: str, session_id: str | None = None) -> dict[str, Any]:
