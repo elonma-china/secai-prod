@@ -303,7 +303,7 @@ class _FakeRunner:
         # a judge-call failure).
         self.judge_response: str | BaseException | None = None
 
-    async def complete(self, profile, prompt, session_id=None):
+    async def complete(self, profile, prompt, session_id=None, *, grounding_context=None):
         self.calls.append((profile, prompt))
         if profile == "injection_judge" and self.judge_response is not None:
             if isinstance(self.judge_response, BaseException):
@@ -311,7 +311,7 @@ class _FakeRunner:
             return self.judge_response, {"run_id": "r", "profile": profile}
         return f"{profile}: {prompt}", {"run_id": "r", "profile": profile}
 
-    async def stream(self, profile, prompt, session_id=None):
+    async def stream(self, profile, prompt, session_id=None, *, grounding_context=None):
         self.calls.append((profile, prompt))
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile}: {prompt}"})
 

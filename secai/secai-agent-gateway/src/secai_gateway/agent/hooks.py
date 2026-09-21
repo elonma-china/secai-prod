@@ -48,6 +48,64 @@ def _session_id_of(ctx: Any) -> str | None:
     return getattr(session, "id", None)
 
 
+class EphemeralTurnContextHook:
+    """Delivers per-turn ephemeral context (today's date, optional pre-fetched KB
+    grounding) to the model WITHOUT it ever landing in the persisted session history.
+
+    Bug this fixes (2026-09-21): the chat leak where switching away from and back to
+    the chatbot re-displayed the raw internal prompt (``<env>...``, ``[Ngữ cảnh tra
+    cứu...]``, KB dump, ``[Câu hỏi của người dùng]``). Root cause: linch persists
+    EXACTLY the string passed to ``session.run(prompt)`` as the user turn (see
+    ``linch/loop/runner.py``: ``user_message = build_user_message(prompt, images)``
+    then ``await session.append([user_message])``) — so any grounding/date text baked
+    into that string is what ``GET /sessions/{sid}/messages`` returns verbatim later.
+
+    linch's per-turn context-build channel is the supported way out: any hook exposing
+    an async ``build_context(session, turn_index)`` is invoked once per model turn by
+    ``loop/request.py::_build_context_result`` / ``ContextInjectionHook`` (same
+    mechanism). Its returned ``ContextBuildResult`` is folded into the OUTGOING provider
+    request ONLY (``_build_turn_request``) — never appended to ``session.provider_view``/
+    ``full_history``/the store.
+
+    Delivered as an extra ``messages`` entry (``ContextBuildResult.messages``), appended
+    AFTER ``session.provider_view`` (``_build_turn_request``: ``messages = list(session.
+    provider_view); messages.extend(context.messages)``) — i.e. as one more user-role
+    turn placed right after the REAL, already-persisted, now-clean user question, seen
+    by the model for this generation only. Deliberately NOT ``ContextBuildResult.
+    system_blocks``: those get joined into the SAME single system-role message as
+    ``session.system_blocks_override`` (see ``linch/providers/openai_chat.py::
+    _build_chat_payload``: ``"\\n\\n".join(block.text for block in req.system)``), which
+    sits immediately before the tool schemas in the rendered vLLM/Qwen chat-template
+    prompt. Putting per-turn volatile text there would reintroduce almost exactly the
+    cache-prefix problem ``agent/runner.py``'s old ``_dated_prompt`` docstring called out
+    ("landing the date in the system block would invalidate that whole cached prefix
+    (system + tools) once a day") — except now on EVERY turn of EVERY profile (date +,
+    for chat, a multi-KB grounding dump), not once a day. Routing it through ``messages``
+    instead keeps ``session.system_blocks_override`` + tool schemas byte-identical and
+    fully vLLM-prefix-cacheable across requests, exactly as before this fix, while still
+    keeping the ephemeral content out of the persisted store.
+
+    ``LinchRunner`` (agent/runner.py) stashes the plain text to inject on
+    ``session.meta["ephemeral_context"]`` right before every ``session.run()`` call
+    (``session.meta`` is the live in-memory Session object's own field — set via plain
+    attribute assignment, NOT ``session.update_meta()``, so it is never written to the
+    durable ``SessionRecord`` the ``GET /sessions/{sid}`` endpoints return either).
+    This hook just re-emits that string as a message on every turn of the run.
+    """
+
+    name = "ephemeral_turn_context"
+
+    async def build_context(self, session: Any, turn_index: int) -> Any:
+        meta = getattr(session, "meta", None)
+        text = meta.get("ephemeral_context") if isinstance(meta, dict) else None
+        if not text:
+            return None
+        from linch.context import ContextBuildResult
+        from linch.types import Message, TextBlock
+
+        return ContextBuildResult(messages=[Message(role="user", content=[TextBlock(text=text)])])
+
+
 class ToolCallBudgetHook:
     """Block a tool after its configured per-run invocation budget is exhausted."""
 
@@ -568,15 +626,24 @@ _CHAT_VAGUE_CLARIFY = (
     "phẩm cụ thể. Bạn nêu rõ hơn giúp tôi nhé.\n\n" + _CHAT_CLOSER
 )
 
-# api/routes.py::_ground_chat_prompt() chèn marker này vào ĐẦU prompt khi pre-fetch KB
-# trực tiếp (gọi _qdrant_search thẳng, không qua tool-call của model). session.meta
-# ["last_user_prompt"] lưu đúng prompt ĐÃ chèn (agent/runner.py:173), nên
-# RequireChatGroundingHook thấy được marker này qua _prompt_of(). Dùng để coi KB đã thỏa
-# mãn — nếu không, has_kb chỉ bật qua on_post_tool_use (tool_result thật), pre-fetch không
-# đi qua đường đó nên hook cứ tưởng "chưa tra" và ép force_continue 2-3 lần một cách lãng
-# phí (phát hiện live 2026-09-21: UI "giật" giữa chừng generation vì client phải xóa buffer
-# theo regenerate event) — tệ hơn nữa, hết max_retries thì hook SHIP _CHAT_EMPTY_FALLBACK
-# đè lên câu trả lời pre-fetch vốn đã đúng.
+# api/routes.py::_ground_chat_prompt() bắt đầu khối grounding này bằng marker khi pre-fetch
+# KB trực tiếp (gọi _qdrant_search thẳng, không qua tool-call của model). Dùng để coi KB đã
+# thỏa mãn — nếu không, has_kb chỉ bật qua on_post_tool_use (tool_result thật), pre-fetch
+# không đi qua đường đó nên hook cứ tưởng "chưa tra" và ép force_continue 2-3 lần một cách
+# lãng phí (phát hiện live 2026-09-21: UI "giật" giữa chừng generation vì client phải xóa
+# buffer theo regenerate event) — tệ hơn nữa, hết max_retries thì hook SHIP
+# _CHAT_EMPTY_FALLBACK đè lên câu trả lời pre-fetch vốn đã đúng.
+#
+# 2026-09-21 (chat-history-leak fix): TRƯỚC ĐÂY, cả khối này (marker+KB dump) bị chèn thẳng
+# vào chuỗi truyền cho session.run() rồi lưu NGUYÊN VĂN vào session store — đây chính là bug
+# rò rỉ prompt nội bộ khi user quay lại chatbot (linch persist đúng những gì session.run()
+# nhận). Đã chuyển sang kênh ephemeral (EphemeralTurnContextHook, session.meta
+# ["ephemeral_context"]) — KHÔNG còn nằm trong chuỗi persist nữa, nên ``session.meta
+# ["last_user_prompt"]`` giờ LUÔN là prompt gốc sạch của user, không còn bắt đầu bằng marker
+# này. RequireChatGroundingHook.on_before_final_answer vì vậy không còn sniff marker qua
+# ``prompt.startswith(...)`` — dùng cờ tường minh ``session.meta["chat_prefetch_grounded"]``
+# (đặt bởi agent/runner.py::_apply_profile) thay thế, cùng ý nghĩa "KB đã thỏa mãn qua
+# pre-fetch" nhưng không phụ thuộc nội dung prompt nữa.
 CHAT_PRE_FETCH_MARKER = "[Ngữ cảnh tra cứu từ KB nội bộ"
 
 
@@ -766,7 +833,12 @@ class RequireChatGroundingHook:
         # model làm lại dù đã có context đúng) hoặc tệ hơn là ship _CHAT_EMPTY_FALLBACK đè lên
         # câu trả lời pre-fetch đã đúng khi hết max_retries. web_fetch KHÔNG được pre-fetch nên
         # missing_web vẫn phải kiểm tra bình thường.
-        if plan.need_kb and prompt.startswith(CHAT_PRE_FETCH_MARKER):
+        # 2026-09-21: cờ tường minh thay cho sniff marker trong prompt (prompt giờ luôn là
+        # bản gốc sạch — xem comment dài ở CHAT_PRE_FETCH_MARKER phía trên).
+        session = getattr(ctx, "session", None)
+        session_meta = getattr(session, "meta", None)
+        prefetch_grounded = bool(isinstance(session_meta, dict) and session_meta.get("chat_prefetch_grounded"))
+        if plan.need_kb and prefetch_grounded:
             plan = replace(plan, need_kb=False)
 
         run_id = ctx.run_id
