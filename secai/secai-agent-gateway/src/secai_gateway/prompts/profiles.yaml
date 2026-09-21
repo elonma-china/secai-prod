@@ -5,7 +5,11 @@
 #   max_turns  : agent loop cap for this profile
 chat:
   prompt: chat.md
-  tools: [qdrant_search, neo4j_search, poc_search, web_fetch, fetch_reference]
+  # poc_fetch thêm 2026-09-21: chat drill-down 1 PoC cụ thể đã liệt kê qua poc_search cần
+  # xem evidence thật (mã/README) thay vì bịa — cùng gate license với exploit_research
+  # (poc/backend.py::_allow_code), KHÔNG mở quyền exec/verify nào thêm. Xem chat.md's
+  # poc_drilldown_policy.
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, web_fetch, fetch_reference]
   base: true
   max_turns: 10
 
