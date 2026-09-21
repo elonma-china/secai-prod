@@ -77,6 +77,15 @@ class Settings(BaseSettings):
     input_classifier_injection_threshold: float = 0.0
     input_classifier_pii_threshold: float = 0.0
     input_classifier_offtopic_threshold: float = 0.0
+    # Margin guard (gate.py::decide, near-tie fix 2026-09-21): the offtopic vs. security
+    # softmax scores are two classes racing each other, not independent signals — a message
+    # scoring offtopic=0.51/security=0.49 is a coin-flip, not confident off-topic, yet a bare
+    # `>= threshold` check refuses it anyway (real incident: PoC drill-down follow-up refused
+    # at 0.5096/0.4901). Require offtopic to beat security by this margin too before refusing;
+    # a near-tie now PASSes through to the agent, which still has the LLM <scope_policy> as a
+    # second line of defense for genuine off-topic (weather/cooking/etc. score nowhere near a
+    # tie). 0.0 disables the margin check (legacy threshold-only behavior).
+    input_classifier_offtopic_margin: float = 0.15
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
     # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
