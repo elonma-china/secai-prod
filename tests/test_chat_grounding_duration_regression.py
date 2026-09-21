@@ -56,10 +56,10 @@ class _FakeRunner:
     """Minimal stand-in for the real linch runner — the model is never exercised here,
     only the pre-fetch grounding path that runs before the agent."""
 
-    async def complete(self, profile_name, prompt, session_id=None):
+    async def complete(self, profile_name, prompt, session_id=None, *, grounding_context=None):
         return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
 
-    async def stream(self, profile_name, prompt, session_id=None):
+    async def stream(self, profile_name, prompt, session_id=None, *, grounding_context=None):
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
 
 

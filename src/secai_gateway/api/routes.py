@@ -668,6 +668,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
                        session_id: str | None = None) -> tuple[str, dict[str, Any]]:
+        grounding_context: str | None = None
         if prompt_override is not None:
             # Endpoint already built the task-specific user message (translate/report/…).
             prompt = prompt_override
@@ -679,8 +680,23 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
                 prompt, grounding = await _ground_chat_prompt(prompt)
+                grounding_context = _grounding_context_text(grounding)
         try:
-            text, metadata = await state.runner.complete(profile, prompt, session_id)
+            # grounding_context is delivered to the model via LinchRunner's ephemeral
+            # per-turn context channel (agent/hooks.py::EphemeralTurnContextHook), never
+            # baked into `prompt` — passed only when truthy so a runner double whose
+            # complete()/stream() doesn't accept this kwarg still works for scenarios that
+            # never trigger chat grounding. NOTE (2026-09-21, Opus review round 2): a
+            # runner double that DOES get exercised with a real CVE/CWE/CAPEC-id message
+            # (grounding truthy) MUST still accept this kwarg — the kwarg then always gets
+            # passed, and a double missing it raises TypeError inside this try, which the
+            # broad `except Exception` below silently downgrades to a 503 (a real failure
+            # got misread as a passing "handles-503-cleanly" test in the past — see
+            # tests/test_chat_grounding_duration_regression.py's ``_FakeRunner``).
+            text, metadata = await state.runner.complete(
+                profile, prompt, session_id,
+                **({"grounding_context": grounding_context} if grounding_context else {}),
+            )
         except HTTPException:
             raise
         except Exception as exc:  # provider/runtime failure → clean 503, not an opaque 500
@@ -699,7 +715,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
 
     def stream(profile: str, prompt: str, session_id: str | None, build_final,
-              pre_frames: list[bytes] | None = None) -> StreamingResponse:
+              pre_frames: list[bytes] | None = None,
+              grounding_context: str | None = None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
         endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
@@ -725,7 +742,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             run_id = None
             failed = False
             try:
-                async for event in state.runner.stream(profile, prompt, session_id):
+                # See complete()'s comment: grounding_context only passed when truthy — but
+                # any runner double exercised with a grounding-triggering message (real
+                # CVE/CWE/CAPEC-id) must accept this kwarg, or the call raises inside this
+                # try and gets silently folded into the generic "stream failed" error path.
+                async for event in state.runner.stream(
+                    profile, prompt, session_id,
+                    **({"grounding_context": grounding_context} if grounding_context else {}),
+                ):
                     if isinstance(event, SystemEvent):
                         run_id = getattr(event, "run_id", None) or run_id
                     if isinstance(event, ResultEvent):
@@ -765,13 +789,24 @@ def register_routes(app: FastAPI, state: Any) -> None:
         có gọi tool hay không. Fail-open: KB lỗi/timeout → trả nguyên prompt gốc, không
         chặn chat.
 
-        Trả về ``(prompt_đã_chèn_context, grounding)`` — ``grounding`` là dict {query, result,
-        summary} khi thật sự tra được, hoặc ``None`` khi không match entity-id / KB lỗi / rỗng.
-        2026-09-21: trước đây chỉ trả về prompt, khiến FE mất tín hiệu "nguồn" — vì pre-fetch
-        này thay hẳn việc model tự gọi tool, nên KHÔNG còn tool_call/tool_result SSE event nào
-        phát ra cho UI (ToolTimeline.tsx) render trích dẫn, dù model vẫn dùng đúng context. Gọi
-        nơi này (chat_stream/session_chat_stream) tự dựng cặp tool_call/tool_result giả lập từ
-        ``grounding`` để khôi phục tín hiệu nguồn cho FE."""
+        Trả về ``(prompt, grounding)`` — ``grounding`` là dict {query, result, summary,
+        duration_ms} khi thật sự tra được, hoặc ``None`` khi không match entity-id / KB
+        lỗi / rỗng. ``prompt`` LUÔN là bản gốc KHÔNG đổi (kể cả khi tra được) — 2026-09-21
+        (chat-history-leak fix): trước đây hàm này trả về ``prompt`` đã bị CHÈN THẲNG
+        marker+KB dump ở đầu, và runner lại persist NGUYÊN chuỗi đó vào session store làm
+        user turn (linch: ``session.run(prompt)`` → ``build_user_message(prompt)`` →
+        ``session.append(...)``) — khiến việc quay lại chatbot hiển thị lộ toàn bộ context
+        nội bộ. Grounding giờ được deliver cho model qua kênh ephemeral riêng (xem
+        ``_grounding_context_text`` + ``agent/runner.py``/``agent/hooks.py::
+        EphemeralTurnContextHook``), KHÔNG còn qua chuỗi ``prompt`` — nên user turn được
+        lưu/hiển thị luôn là bản gốc sạch.
+
+        2026-09-21 (trước đó, cùng ngày): trước NỮA chỉ trả về prompt, khiến FE mất tín
+        hiệu "nguồn" — vì pre-fetch này thay hẳn việc model tự gọi tool, nên KHÔNG còn
+        tool_call/tool_result SSE event nào phát ra cho UI (ToolTimeline.tsx) render trích
+        dẫn, dù model vẫn dùng đúng context. Gọi nơi này (chat_stream/session_chat_stream)
+        tự dựng cặp tool_call/tool_result giả lập từ ``grounding`` để khôi phục tín hiệu
+        nguồn cho FE."""
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
             return prompt, None
         try:
@@ -789,15 +824,28 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return prompt, None
         if not result.content:
             return prompt, None
-        grounded = (
-            CHAT_PRE_FETCH_MARKER + " — PHẢI dùng để trả lời chính xác, "
-            "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + result.content +
-            "\n\n[Câu hỏi của người dùng]\n" + prompt
-        )
         # duration_ms: đo thời gian tra qdrant THẬT ở bước pre-fetch để event tool_result
         # giả lập (xem _grounding_sse_frames) hiển thị đúng độ trễ thay vì hard-code 0ms.
-        return grounded, {"query": prompt, "result": result.content,
-                          "summary": result.summary, "duration_ms": grounding_ms}
+        return prompt, {"query": prompt, "result": result.content,
+                        "summary": result.summary, "duration_ms": grounding_ms}
+
+    def _grounding_context_text(grounding: dict[str, Any] | None) -> str | None:
+        """Builds the KB-grounding block delivered to the model via LinchRunner's
+        per-turn ephemeral context channel (agent/hooks.py::EphemeralTurnContextHook) —
+        NOT appended to the persisted user turn (see ``_ground_chat_prompt``'s docstring
+        for why). Same marker/content shape the old inline prompt used, minus the
+        trailing "[Câu hỏi của người dùng]\\n"+prompt echo — that's redundant now since
+        the real question already IS the (clean, separately-persisted) user turn earlier
+        in the same request; this block is appended as one more message right AFTER it
+        (see EphemeralTurnContextHook's docstring for why it's a message, not a system
+        block), so the model still sees question-then-context, immediately before
+        generating its answer."""
+        if not grounding:
+            return None
+        return (
+            CHAT_PRE_FETCH_MARKER + " — PHẢI dùng để trả lời chính xác, "
+            "KHÔNG bịa/suy đoán khi thiếu thông tin]\n" + grounding["result"]
+        )
 
     def _grounding_sse_frames(grounding: dict[str, Any] | None) -> list[bytes]:
         """Dựng cặp SSE tool_call/tool_result giả lập từ kết quả pre-fetch của
@@ -952,10 +1000,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
         session_id = _chat_session_id(body)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-            # linch persists the turn to its session store during the run — nothing to do here.
+            # linch persists the turn to its session store during the run — nothing to do
+            # here. `text` passed to stream() below is the ORIGINAL clean prompt (grounding
+            # goes through the ephemeral context channel instead), so the persisted turn is
+            # clean too — see _ground_chat_prompt()'s docstring.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
-        return stream("chat", text, session_id, build_final, pre_frames=_grounding_sse_frames(grounding))
+        return stream("chat", text, session_id, build_final, pre_frames=_grounding_sse_frames(grounding),
+                      grounding_context=_grounding_context_text(grounding))
 
     async def _stamp_session_activity(sid: str, rec: Any, body: LegacyRequest) -> None:
         """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
@@ -1032,10 +1084,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run; the meta
             # bookkeeping (title/last_activity) already happened above, before streaming
-            # started — see the comment there for why.
+            # started — see the comment there for why. `text` is the ORIGINAL clean prompt
+            # (see _ground_chat_prompt()'s docstring), so the persisted turn is clean too.
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
-        return stream("chat", text, sid, build_final, pre_frames=_grounding_sse_frames(grounding))
+        return stream("chat", text, sid, build_final, pre_frames=_grounding_sse_frames(grounding),
+                      grounding_context=_grounding_context_text(grounding))
 
     # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
     # occasionally echoes its own instruction preamble back verbatim instead of only
