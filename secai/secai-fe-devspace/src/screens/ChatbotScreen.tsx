@@ -27,6 +27,43 @@ function byActivityDesc(a: SessionSummary, b: SessionSummary): number {
   return av < bv ? 1 : av > bv ? -1 : 0;
 }
 
+// ── "which chat was open" persistence (survives screen switches + reloads) ──────────
+//
+// App.tsx conditionally renders this screen (`{screen === "chat" && <ChatbotScreen/>}`), so
+// navigating away and back fully unmounts/remounts it and wipes all local state. Without this,
+// every trip back to the chatbot lands on a blank draft even though the session is untouched
+// server-side. Keyed BY userId so switching the active user_id never leaks one user's open
+// session to another — the mount effect below only ever reads the record for the CURRENT
+// userId, and a stale/foreign/deleted sid falls back to a clean draft instead of erroring.
+const OPEN_VIEW_KEY_PREFIX = "chat_open_view:";
+
+function readSavedView(userId: string): ChatView | null {
+  try {
+    const raw = localStorage.getItem(OPEN_VIEW_KEY_PREFIX + userId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ChatView> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    const projectId = typeof parsed.projectId === "string" ? parsed.projectId : null;
+    if (parsed.kind === "session" && typeof parsed.sid === "string" && parsed.sid) {
+      return { kind: "session", sid: parsed.sid, projectId };
+    }
+    if (parsed.kind === "draft") {
+      return { kind: "draft", projectId };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedView(userId: string, view: ChatView) {
+  try {
+    localStorage.setItem(OPEN_VIEW_KEY_PREFIX + userId, JSON.stringify(view));
+  } catch {
+    /* best-effort — private mode / quota errors are harmless to ignore here */
+  }
+}
+
 export default function ChatbotScreen({ userId, health }: { userId: string; health: HealthStatus | null }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -49,15 +86,16 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Reload everything whenever the active user_id changes (owner-scoped listing) — always land
-  // on a no-project draft, never re-open whatever the previous user had open.
+  // Reload everything whenever the active user_id changes (owner-scoped listing) — this also
+  // fires on every mount (e.g. switching back to the chatbot screen, which fully remounts this
+  // component). Restore whatever session was last open FOR THIS userId, if any; a different user
+  // (or no saved record, or a since-deleted session) always lands on a clean draft — see
+  // restoreSession's own fallback and readSavedView's userId-scoped key.
   useEffect(() => {
     let alive = true;
     setProjects([]);
     setSessions([]);
     setExpanded(new Set());
-    setView({ kind: "draft", projectId: null });
-    setItems([]);
     setLoadError(null);
     setSearch("");
     setEditing(null);
@@ -67,6 +105,14 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     abortRef.current?.abort();
     sendingRef.current = false;
     setBusy(false);
+
+    const saved = readSavedView(userId);
+    if (saved && saved.kind === "session") {
+      void restoreSession(saved.sid, saved.projectId);
+    } else {
+      setView(saved ?? { kind: "draft", projectId: null });
+      setItems([]);
+    }
 
     Promise.all([
       listProjects(userId).catch(() => [] as Project[]),
@@ -83,6 +129,19 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       alive = false;
     };
   }, [userId]);
+
+  /** Set the view AND persist it as "what's open" for this userId, synchronously, at the same
+   * call site that decided the navigation. Deliberately NOT a `useEffect([view])` catch-all: under
+   * React.StrictMode's dev double-invoke (mount → cleanup → mount), an effect keyed on `view`
+   * fires during the FIRST mount pass with the still-default `draft` state — before
+   * `restoreSession`'s async `setView({session})` has committed — and would write that stale
+   * draft over the just-restored session, which the second StrictMode mount would then read back
+   * and get stuck on. Writing at the point of intent instead ties the localStorage write to the
+   * same synchronous call as the state update, so no render/effect ordering can race it. */
+  function openView(v: ChatView) {
+    setView(v);
+    writeSavedView(userId, v);
+  }
 
   const standaloneSessions = useMemo(() => sessions.filter((s) => !s.project_id).sort(byActivityDesc), [sessions]);
   const sessionsByProject = useMemo(() => {
@@ -118,17 +177,19 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   }
 
   function newChat() {
+    loadSeqRef.current += 1; // invalidate any in-flight selectSession/restoreSession load
     abortRef.current?.abort();
-    setView({ kind: "draft", projectId: null });
+    openView({ kind: "draft", projectId: null });
     setItems([]);
     setInput("");
     focusComposer();
   }
 
   function newChatInProject(pid: string) {
+    loadSeqRef.current += 1; // invalidate any in-flight selectSession/restoreSession load
     abortRef.current?.abort();
     setExpanded((prev) => new Set(prev).add(pid));
-    setView({ kind: "draft", projectId: pid });
+    openView({ kind: "draft", projectId: pid });
     setItems([]);
     setInput("");
     focusComposer();
@@ -136,7 +197,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
 
   async function selectSession(sid: string, pid: string | null) {
     abortRef.current?.abort();
-    setView({ kind: "session", sid, projectId: pid });
+    openView({ kind: "session", sid, projectId: pid });
     setInput("");
     const seq = ++loadSeqRef.current;
     setItems([]);
@@ -160,6 +221,32 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
     }
   }
 
+  /** Re-open a session restored from `chat_open_view:<userId>` on mount (screen-switch/reload).
+   * Unlike `selectSession` (a live user click on a session that's visibly still in the sidebar),
+   * a restored sid may no longer exist or be readable (deleted, revoked, backend hiccup) — fail
+   * closed to a clean draft rather than surfacing a load-error banner for a chat the user never
+   * explicitly opened this visit. This does a real network round-trip, so the user CAN interact
+   * (new chat / send / pick another session) before it resolves — `loadSeqRef` is what protects
+   * against a late resolution clobbering whatever the user did in the meantime (see newChat,
+   * newChatInProject and send, which all bump it). */
+  async function restoreSession(sid: string, pid: string | null) {
+    openView({ kind: "session", sid, projectId: pid });
+    const seq = ++loadSeqRef.current;
+    setItems([]);
+    try {
+      const res = await getSessionMessages(sid, userId);
+      if (loadSeqRef.current !== seq) return;
+      setItems(rowsToItems(res.messages));
+      scrollToBottom();
+    } catch {
+      if (loadSeqRef.current !== seq) return;
+      // sid no longer exists/readable — clean the dead pointer out of localStorage too, else the
+      // next mount would try (and fail) to restore it again.
+      openView({ kind: "draft", projectId: null });
+      setItems([]);
+    }
+  }
+
   function startCreateProject() {
     setCreatingProject(true);
     setNewProjectName("");
@@ -178,7 +265,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       setProjects((prev) => [proj, ...prev]);
       setExpanded((prev) => new Set(prev).add(proj.project_id));
       abortRef.current?.abort();
-      setView({ kind: "draft", projectId: proj.project_id });
+      openView({ kind: "draft", projectId: proj.project_id });
       setItems([]);
     } catch (e) {
       window.alert(`Không tạo được dự án: ${e instanceof Error ? e.message : String(e)}`);
@@ -234,7 +321,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       });
       if (view.projectId === pid) {
         abortRef.current?.abort();
-        setView({ kind: "draft", projectId: null });
+        openView({ kind: "draft", projectId: null });
         setItems([]);
       }
     } catch (e) {
@@ -247,7 +334,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       const updated = await updateSession(sid, { project_id: projectId }, userId);
       setSessions((prev) => prev.map((s) => (s.session_id === sid ? updated : s)));
       if (view.kind === "session" && view.sid === sid) {
-        setView({ kind: "session", sid, projectId: updated.project_id ?? null });
+        openView({ kind: "session", sid, projectId: updated.project_id ?? null });
       }
       if (updated.project_id) setExpanded((prev) => new Set(prev).add(updated.project_id as string));
     } catch (e) {
@@ -263,7 +350,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       setSessions((prev) => prev.filter((s) => s.session_id !== sid));
       if (view.kind === "session" && view.sid === sid) {
         abortRef.current?.abort();
-        setView({ kind: "draft", projectId: row?.project_id ?? null });
+        openView({ kind: "draft", projectId: row?.project_id ?? null });
         setItems([]);
       }
     } catch (e) {
@@ -282,7 +369,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       /* best-effort — a leftover empty session is harmless, keeping the UI honest matters more */
     }
     setSessions((prev) => prev.filter((s) => s.session_id !== sid));
-    setView({ kind: "draft", projectId });
+    openView({ kind: "draft", projectId });
     setItems((prev) => prev.filter((it) => it.id === aid));
     setInput(text);
   }
@@ -299,6 +386,8 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   async function send(overrideText?: string) {
     const text = (overrideText ?? input).trim();
     if (!text || sendingRef.current) return;
+    loadSeqRef.current += 1; // invalidate any in-flight selectSession/restoreSession load — a
+    // late-resolving getSessionMessages must never clobber the message we're about to append
     sendingRef.current = true;
     setBusy(true);
     setInput("");
@@ -337,7 +426,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
         const row: SessionSummary = { ...created, title: created.title || optimisticTitle };
         setSessions((prev) => [row, ...prev]);
         currentView = { kind: "session", sid: row.session_id, projectId: row.project_id ?? null };
-        setView(currentView);
+        openView(currentView);
         if (row.project_id) setExpanded((prev) => new Set(prev).add(row.project_id as string));
       }
 
