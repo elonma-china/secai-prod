@@ -11,6 +11,7 @@ from linch.loop_guard import LoopGuard
 from ..config import get_settings
 from ..poc.backend import _MAX_FETCH_PER_RUN
 from .hooks import (
+    EphemeralTurnContextHook,
     RequireChatGroundingHook,
     RequireKbSearchBeforeSynthesisHook,
     RequireRunInstructionsHook,
@@ -50,6 +51,11 @@ def make_gateway_agent(
         features=FeatureFlags(skills=False, subagents=False, mcp=False),
         loop_guard=LoopGuard(max_identical_tool_calls=3, force_final_answer=True),
         hooks=[
+            # Must be able to see session.meta["ephemeral_context"] on every turn (any
+            # order works — build_context is collected from ALL agent.hooks independent of
+            # dispatch order — kept first for readability, alongside the other per-run
+            # state hooks below).
+            EphemeralTurnContextHook(),
             ToolCallBudgetHook({"poc_fetch": _MAX_FETCH_PER_RUN, "web_fetch": 4}),
             RequireSearchBeforeAnswerHook(search_tool="poc_search", fetch_tool="poc_fetch",
                                           profile="exploit_research"),

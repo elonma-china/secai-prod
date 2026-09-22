@@ -21,14 +21,16 @@ the linch async protocol — always ``await``.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from linch.types import message_to_dict
+from linch.types import Message, message_to_dict
 
+from ..agent.hooks import CHAT_PRE_FETCH_MARKER
 from .schemas import (
     CreateProjectRequest,
     CreateSessionRequest,
@@ -49,6 +51,80 @@ def _forbidden(message: str) -> HTTPException:
 
 def _bad_request(message: str) -> HTTPException:
     return HTTPException(status_code=400, detail={"error": "bad_request", "message": message})
+
+
+# linch's own ``build_user_message()`` (linch/loop/request.py) unconditionally prepends this
+# EXACT block as a separate content block to EVERY user turn it persists — there is no public
+# hook/config on linch.Agent to suppress it at the source (verified: it's a hardcoded literal
+# in a free function, not gated by any Agent/RunOptions field). It carries no sensitive data
+# (just today's date), but it IS internal-prompt scaffolding the chat UI should not render, so
+# it is stripped here — at the API-response serialization layer ONLY. The underlying session
+# store row is left untouched (no schema/persisted-data change, just what this endpoint returns).
+_ENV_DATE_BLOCK_RE = re.compile(r"^<env>\nToday's date: \d{4}-\d{2}-\d{2}\n</env>$")
+
+# 2026-09-21 (Opus review round 2, MAJOR-2): sessions created BEFORE the ephemeral-context fix
+# (agent/hooks.py::EphemeralTurnContextHook) have the KB-grounding block baked directly into
+# their ALREADY-PERSISTED user-turn text — the leak this whole fix targets, just already written
+# to the store for any session that had a turn before the fix landed. The env-block strip above
+# does nothing for those (the contaminated text is the SECOND block, not the env one). This marks
+# the split point ``_ground_chat_prompt`` (api/routes.py, pre-fix) always inserted right before
+# the real question: ``CHAT_PRE_FETCH_MARKER + " ... ]\n" + kb_dump + "\n\n" + _SPLIT + prompt``.
+_CHAT_PRE_FETCH_SPLIT = "[Câu hỏi của người dùng]\n"
+
+
+def _recover_pre_fetch_question(text: str) -> str | None:
+    """For a user-turn text block starting with ``CHAT_PRE_FETCH_MARKER`` (an old,
+    pre-fix contaminated turn — see the comment above), recover just the user's
+    original question: the substring after the LAST ``_CHAT_PRE_FETCH_SPLIT`` marker
+    (``rfind``, in case the KB dump itself happens to contain that literal phrase).
+    Returns ``None`` when the split marker isn't present at all — the caller then
+    drops the whole block rather than showing the raw marker+KB-dump text."""
+    idx = text.rfind(_CHAT_PRE_FETCH_SPLIT)
+    if idx == -1:
+        return None
+    return text[idx + len(_CHAT_PRE_FETCH_SPLIT):]
+
+
+def _display_message_dict(message: Message) -> dict[str, Any]:
+    """``message_to_dict(message)``, cleaned for display:
+
+    - Strips linch's own injected ``<env>...</env>`` date preamble block (see
+      ``_ENV_DATE_BLOCK_RE`` above) — any role, harmless either way (only ever appears
+      on user turns in practice).
+    - For role=``user`` turns ONLY (assistant/tool content is never touched): a text
+      block contaminated by the pre-fix grounding leak (starts with
+      ``CHAT_PRE_FETCH_MARKER``) is replaced by just the recovered original question
+      (``_recover_pre_fetch_question``), or dropped entirely if the question can't be
+      recovered — never shown raw.
+
+    Never ends up with empty ``content`` — falls back to the unfiltered blocks if every
+    block would otherwise be dropped, so a (theoretical) content-only-contaminated
+    message still round-trips with SOMETHING rather than vanishing. This is a response-
+    serialization-layer transform only: the underlying session-store row is untouched
+    (no schema/persisted-data change)."""
+    out = message_to_dict(message)
+    content = out.get("content")
+    if not isinstance(content, list):
+        return out
+    is_user = out.get("role") == "user"
+    filtered: list[Any] = []
+    for block in content:
+        if not (isinstance(block, dict) and block.get("type") == "text"):
+            filtered.append(block)
+            continue
+        text = block.get("text") or ""
+        if _ENV_DATE_BLOCK_RE.match(text):
+            continue
+        if is_user and text.startswith(CHAT_PRE_FETCH_MARKER):
+            recovered = _recover_pre_fetch_question(text)
+            if recovered is None:
+                continue  # can't recover the real question — drop the grounding dump
+            filtered.append({**block, "text": recovered})
+            continue
+        filtered.append(block)
+    if filtered:
+        out["content"] = filtered
+    return out
 
 
 def _norm_owner(user_id: str | None) -> str:
@@ -336,4 +412,4 @@ async def get_session_messages(sid: str, request: Request, user_id: str | None =
         # GET: 404 rather than 403, so a non-owner can't tell the session exists.
         raise _not_found(f"session not found: {sid}")
     rows = await store.load_messages(sid)
-    return {"messages": [{"seq": r.seq, "appended_at": r.appended_at, "message": message_to_dict(r.message)} for r in rows]}
+    return {"messages": [{"seq": r.seq, "appended_at": r.appended_at, "message": _display_message_dict(r.message)} for r in rows]}

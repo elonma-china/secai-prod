@@ -239,9 +239,18 @@ async def test_sse_and_admin_key(monkeypatch) -> None:
 
 
 def test_registry_isolation() -> None:
-    # chat may search PoC metadata but must NOT fetch artifacts (exploit-only).
-    assert "poc_fetch" not in registry_for("chat")
+    # Decision 2026-09-21: chat drill-down on ONE specific PoC already surfaced by
+    # poc_search needs poc_fetch to show real evidence (code/README) instead of the model
+    # fabricating a summary when asked to go deeper (see prompts/chat.md's
+    # poc_drilldown_policy). poc_fetch is READ-ONLY and gated by the same internal license
+    # check (poc/backend.py::_allow_code) regardless of profile — enabling it for chat does
+    # NOT grant any new capability beyond what exploit_research already had; it only lets
+    # chat call a tool that was already unconditionally built. chat must still NEVER get
+    # the write-scoped/active tools (poc_verify/poc_scan/poc_exec/poc_kt_exploit) — those
+    # remain exploit_research-only.
+    assert "poc_fetch" in registry_for("chat")
     assert "poc_search" in registry_for("chat")
+    assert not ({"poc_verify", "poc_scan", "poc_exec", "poc_kt_exploit"} & registry_for("chat"))
     assert not registry_for("translate")
     # report may retrieve from the KB, but the exploit-only PoC tools must never leak in.
     assert registry_for("report") == {"qdrant_search", "neo4j_search"}
