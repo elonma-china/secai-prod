@@ -45,17 +45,31 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     reranker_api_key: str = ""
 
-    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, fail-open) ────────────────
     # ONLY the /ai/exploit PoC-generation path (poc/prefetch.py → routes.exploit_prefetch)
     # uses this — chat/report/statistical are untouched. For a FREE-TEXT prompt (no CVE id),
     # it embeds the prompt, retrieves KB candidates and takes the reranker's top relevance_score
     # as a confidence signal; below the floor → the prompt maps to no real/known vulnerability,
     # so prefetch reports "nothing found" instead of building a PoC from a weak keyword match
     # (the "user nhập linh tinh vẫn ra PoC tự tin" gap). A NAMED CVE keeps using cve_exists_in_kb.
-    # Measured 2026-09-02: in-KB ~1.0, off-topic ~0.0 (clean at 0.5). No reranker / any error →
-    # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
-    exploit_relevance_gate_enabled: bool = False
-    exploit_rerank_min_score: float = 0.5
+    # Measured 2026-09-02: in-KB ~1.0, off-topic pure-gibberish ~0.0 (clean at 0.5) — BUT
+    # re-measured 2026-09-22 while fixing bug #1/PC1: a security-FLAVORED but non-specific
+    # "how do I hack <generic target>" prompt ("how do I hack wifi" ~0.978, "how to hack
+    # facebook" ~0.944) also scores high with this cross-encoder reranker (it responds to
+    # security vocabulary, not to whether the query names an actual specific vulnerability),
+    # landing well above the old 0.5 floor and indistinguishable from it. Genuine specific
+    # product/CVE descriptions cluster tighter, ~0.9975-0.9997 (wordpress sqli, log4j RCE,
+    # struts2 RCE, phpmyadmin auth bypass, openssh exploit). 0.99 sits in the gap between the
+    # two clusters — no reranker / any error → no gate (fail-open).
+    # DEFAULT ON since 2026-09-22 (bug #1 / PC1, HIGH safety): a free-text off-topic prompt
+    # ("how do I hack wifi") with no CVE id and no relevant KB match was still returning a
+    # loosely keyword-matched, unrelated PoC tiered `section1_tier=real_consolidated` +
+    # `reference_code_injected=true` — presented as a grounded real exploit. This gate was
+    # already built (2026-09-02) but shipped opt-in/OFF (and at a threshold too low to catch
+    # this exact class of prompt), so it never protected prod. Set
+    # `EXPLOIT_RELEVANCE_GATE_ENABLED=false` to restore the old (unsafe) always-on behaviour.
+    exploit_relevance_gate_enabled: bool = True
+    exploit_rerank_min_score: float = 0.99
     # ── Input sanitization classifier (model-based, chat path) ─────────────────
     # A tiny numpy linear head over the sec-embedding vector classifies each chat
     # prompt into a combined taxonomy (intent: security|chitchat|offtopic + risk:

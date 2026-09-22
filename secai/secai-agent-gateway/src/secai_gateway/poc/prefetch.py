@@ -35,7 +35,9 @@ results merge by sha256 before Section-1 injection.
 """
 from __future__ import annotations
 
+import logging
 import re
+import unicodedata
 from collections import OrderedDict
 from typing import Any, Literal
 
@@ -46,6 +48,8 @@ from ..state import SqliteLedger
 from .backend import LocalPocBackend, PocError
 from .normalize import normalize_cve_ids
 from .tools import record_fetch_evidence
+
+logger = logging.getLogger(__name__)
 
 _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 # Exploit-capable redistributable sources first. nuclei is intentionally absent — detection
@@ -196,7 +200,53 @@ def extract_cve_id(prompt: str) -> str | None:
     return m.group(0).upper() if m else None
 
 
-# ── Layer-4 exploit relevance gate (EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+def _fold(text: str) -> str:
+    """Lowercase + strip Vietnamese tone/diacritic marks (đ→d isn't decomposed by NFD, so map
+    it explicitly) — local copy of routes.py's ``_fold_diacritics`` (kept independent to avoid
+    a poc→api import; both are tiny pure functions over the same normalization)."""
+    decomposed = unicodedata.normalize("NFD", text or "")
+    stripped = "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+    return stripped.replace("đ", "d").replace("Đ", "d").lower().strip()
+
+
+# ── Layer-4b: deterministic generic-hack-intent denylist (EXPLOIT-ONLY, free-text only) ──
+# Bug #1/PC1 round 2: the rerank score alone can't reliably separate a security-flavored but
+# NON-specific "how do I hack <generic target>" prompt from a genuine specific product/CVE
+# description — some phrasings cluster too close together (measured: EN "how do I hack
+# wifi" ~0.978, VI "làm sao hack wifi" ~0.9925 — the LATTER sits ABOVE the 0.99 floor, which
+# already sits in the gap right below genuine descriptions at ~0.9975; raising the floor
+# further would start rejecting genuine free-text). This is a SECOND, deterministic,
+# score-INDEPENDENT layer: a narrow EN+VI regex on the casual "hack"/"crack"/"break into"
+# verb shape — a real vulnerability-research question says "exploit"/"khai thác" or names a
+# CVE/specific product+version, never bare "hack" — runs BEFORE the rerank score is even
+# consulted, so it also closes the fail-open gap for this exact class of prompt when the
+# embed/rerank backend is unreachable (see the warning log in ``exploit_relevance_ok``).
+# Deliberately NARROW: must NOT match "how to exploit CVE-…", "cách khai thác Apache
+# Struts", "wordpress 6.x sqli", etc. — only the casual generic-hack shape.
+_GENERIC_HACK_TARGETS = (
+    r"wifi|wi-fi|facebook|gmail|instagram|account|someone|a phone|phone|password|network|"
+    r"router|computer|pc|snapchat|whatsapp|tiktok|tai khoan|mat khau|dien thoai|may tinh|mang"
+)
+_GENERIC_HACK_RE = re.compile(
+    r"\bhow (do i|to|can i|would i|could i)\s+(hack|crack|break into)\b"
+    r"|\bhack\s+(into\s+)?(" + _GENERIC_HACK_TARGETS + r")\b"
+    r"|\b(crack|break into)\s+(" + _GENERIC_HACK_TARGETS + r")\b"
+    r"|\blam sao\s*(de\s*)?hack\b"
+    r"|\bcach\s*hack\b"
+    r"|\bhuong dan\s*hack\b",
+    re.I,
+)
+
+
+def is_generic_hack_intent(prompt: str) -> bool:
+    """True when ``prompt`` is a casual "how do I hack <generic target>" / "cách hack…" /
+    "làm sao hack…" style request — no CVE id, no specific product+version framing, just the
+    bare "hack" verb over a generic target. Deterministic, score-independent; see the module
+    comment above for the rationale and the false-positive guardrails."""
+    return bool(_GENERIC_HACK_RE.search(_fold(prompt)))
+
+
+# ── Layer-4 exploit relevance gate (EXPLOIT-ONLY, default ON since 2026-09-22, fail-open) ──
 async def kb_top_rerank_score(prompt: str) -> float | None:
     """Top reranker relevance_score of the KB candidates for ``prompt`` (0..1), or ``None``
     when no signal is available (no embedding/reranker configured, no hits, or any error —
@@ -224,13 +274,32 @@ async def kb_top_rerank_score(prompt: str) -> float | None:
 async def exploit_relevance_ok(prompt: str) -> bool | None:
     """Layer-4 decision for the exploit path. ``None`` = INERT (gate off, or no signal →
     fail-open, treat as pass); ``True``/``False`` = the reranker top score compared to
-    ``exploit_rerank_min_score``. Used ONLY by routes.exploit_prefetch, for FREE-TEXT prompts
-    (a named CVE keeps using cve_exists_in_kb)."""
+    ``exploit_rerank_min_score``, UNLESS the deterministic Layer-4b denylist
+    (``is_generic_hack_intent``) already says the prompt is a generic "how do I hack …"
+    request, in which case that decides (``False``) WITHOUT ever calling the (network-
+    dependent) reranker — so this class of prompt is blocked even when the embed/rerank
+    backend is unreachable (the score path alone would otherwise fail open — see the warning
+    log below). Both checks are gated by ``exploit_relevance_gate_enabled`` — the single
+    kill-switch (``EXPLOIT_RELEVANCE_GATE_ENABLED=false``) still restores the old, fully-
+    inert behaviour for BOTH layers, not just the score. Used ONLY by routes.exploit_prefetch,
+    for FREE-TEXT prompts — a named CVE keeps using cve_exists_in_kb and is re-checked here
+    defensively (a CVE id anywhere in the prompt always bypasses both the denylist and the
+    score, even if a future caller reaches this function without having already branched on
+    cve_id)."""
     s = get_settings()
     if not s.exploit_relevance_gate_enabled:
         return None
+    if _CVE.search(normalize_cve_ids(prompt or "")):
+        return True
+    if is_generic_hack_intent(prompt):
+        return False
     score = await kb_top_rerank_score(prompt)
     if score is None:
+        logger.warning(
+            "exploit relevance gate INERT (no rerank signal — embed/reranker unreachable or "
+            "no KB hits): a free-text off-topic prompt can slip through unfiltered by score "
+            "for this request (the Layer-4b generic-hack denylist above already ran and "
+            "would have blocked a recognized 'how do I hack …' shape regardless)")
         return None
     return score >= s.exploit_rerank_min_score
 
