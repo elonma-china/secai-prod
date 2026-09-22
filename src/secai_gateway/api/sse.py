@@ -30,6 +30,12 @@ from ..security import neutralize_active_content, remove_chinese_content
 # `regenerate` SSE event so the client knows to reset its assistant-text buffer here.
 _REGENERATE_ACTIONS = {"force_continue", "retry"}
 
+# H3 (2026-09-22): short preview length for the `tool_result` frame's `result` field — see
+# ToolCallEndEvent branch below (same rationale/constant as
+# `routes.py::_SSE_RESULT_PREVIEW_CHARS`, duplicated rather than imported to avoid a
+# routes<->sse import cycle: routes.py imports `sse_frame`/`event_to_sse` from this module).
+_TOOL_RESULT_PREVIEW_CHARS = 200
+
 
 def sse_frame(event_name: str, payload: dict[str, Any]) -> bytes:
     """One named SSE event. UIs switch on the event name to render tool activity
@@ -64,17 +70,29 @@ def event_to_sse(event: Any) -> bytes | None:
             "input": event.input, "summary": event.summary,
         })
     if isinstance(event, ToolCallEndEvent):
-        # Include the retrieved content so the UI can render citations (sources).
+        # H3 (2026-09-22): this used to forward up to 4000 raw chars of tool content
+        # (``result``) so the UI could render citations — but ToolTimeline.tsx (FE) only
+        # ever renders ``summary``, falling back to ``result.slice(0, 140)`` only when
+        # ``summary`` is absent (this branch never set one). Always set a clean ``summary``
+        # now (the tool's own ``ToolResult.summary`` when the runner captured it, else a
+        # short preview of ``content`` — the same 140-char convention the FE falls back to
+        # itself) and shrink ``result`` to a short preview — the raw multi-KB payload the
+        # model already saw in its own context had no reader on the SSE wire. ``result`` is
+        # still ALWAYS present (even ``""``) — ToolTimeline's ``result === undefined`` check
+        # is how it knows a tool_call is still pending, so dropping the key would leave the
+        # UI spinning forever for this frame's row.
         raw = getattr(event, "tool_result", None)
         content = getattr(raw, "content", None)
         if content is None:
             content = getattr(event, "result", None)
         if not isinstance(content, str):
             content = "" if content is None else json.dumps(content, ensure_ascii=False, default=str)
+        summary = getattr(raw, "summary", None) or (content[:140] or None)
         return sse_frame("tool_result", {
             "id": event.tool_use_id, "name": event.tool_name,
             "is_error": event.is_error, "duration_ms": event.duration_ms,
-            "result": content[:4000],
+            "summary": summary,
+            "result": content[:_TOOL_RESULT_PREVIEW_CHARS],
         })
     if isinstance(event, WorkflowEvent):
         # Deterministic bughunt phases (Recon → Hunt → Validate → …).

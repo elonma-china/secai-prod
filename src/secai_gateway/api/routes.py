@@ -250,6 +250,15 @@ _PREFETCH_APPENDIX_BUDGET = 3000
 # whole point is to ground the synthesized PoC in it. Kept well under the consolidated PoC's
 # 40k so it doesn't drown the prompt, but comfortably above the 3k used for catalog prose.
 _WEB_HINTS_APPENDIX_BUDGET = 12000
+# H3 (2026-09-22): SSE `tool_result` frames used to carry up to 4000 raw KB chars, but
+# ToolTimeline.tsx (FE) only ever renders `summary` — falling back to `result.slice(0, 140)`
+# only when `summary` is absent. Once every `tool_result` frame always sets a clean
+# `summary` (see `_grounding_sse_frames` + `event_to_sse`'s ToolCallEndEvent branch), the
+# raw `result` is only ever needed for that 140-char fallback preview — kept slightly above
+# it (not dropped: ToolTimeline's `result === undefined` check is how it knows a tool_call
+# is still pending, so the key itself must still land in the merged row) so the wire no
+# longer duplicates several KB of raw KB/tool payload the FE never reads.
+_SSE_RESULT_PREVIEW_CHARS = 200
 
 
 def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
@@ -729,8 +738,21 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # không có mặt trong tool_registry/tool-log thông thường — lộ ra đây để client JSON
         # thường (không SSE) cũng biết nguồn đã dùng, tương ứng tool_call/tool_result giả
         # lập bên stream().
+        #
+        # H2 (2026-09-22): this used to spread the WHOLE `grounding` dict in — including
+        # `result`, the raw KB dump (up to several KB of chunk text) that fed the model's
+        # ephemeral context. No FE consumer reads `metadata.sources` (grepped: 0 hits in
+        # secai-fe-devspace) so nothing renders it, but a plain JSON API client legitimately
+        # inspecting "what did this answer cite" got the entire internal KB payload dumped
+        # back at it instead of a citation. Redact to citation-only fields — same query/
+        # summary the synthetic SSE tool_call/tool_result pair (_grounding_sse_frames) shows
+        # a streaming client, just without the raw `result` body.
         if prompt_override is None and grounding:
-            metadata = {**metadata, "sources": [{"name": "qdrant_search", **grounding}]}
+            metadata = {**metadata, "sources": [{
+                "name": "qdrant_search",
+                "query": grounding.get("query"),
+                "summary": grounding.get("summary"),
+            }]}
         return sanitize_output_language(text), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
@@ -876,19 +898,27 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def _grounding_sse_frames(grounding: dict[str, Any] | None) -> list[bytes]:
         """Dựng cặp SSE tool_call/tool_result giả lập từ kết quả pre-fetch của
         ``_ground_chat_prompt`` — cùng shape với ``event_to_sse`` (api/sse.py) thật, để FE
-        (``ToolTimeline.tsx``) render đúng như khi model tự gọi ``qdrant_search``."""
+        (``ToolTimeline.tsx``) render đúng như khi model tự gọi ``qdrant_search``.
+
+        H3 (2026-09-22): ``tool_result`` now always carries the same clean ``summary`` the
+        real ``qdrant_search`` produced (previously only the ``tool_call`` frame had it) and
+        shrinks ``result`` to a short preview (``_SSE_RESULT_PREVIEW_CHARS``) instead of the
+        raw KB dump — ToolTimeline only reads ``summary``/first-140-chars-of-``result``, so
+        the rest was pure wire weight with no FE reader."""
         if not grounding:
             return []
         tool_id = f"pre-fetch-{uuid4()}"
+        summary = grounding.get("summary")
         return [
             sse_frame("tool_call", {
                 "id": tool_id, "name": "qdrant_search",
-                "input": {"query": grounding["query"]}, "summary": grounding.get("summary"),
+                "input": {"query": grounding["query"]}, "summary": summary,
             }),
             sse_frame("tool_result", {
                 "id": tool_id, "name": "qdrant_search", "is_error": False,
                 "duration_ms": int(grounding.get("duration_ms", 0) or 0),
-                "result": grounding["result"][:4000],
+                "summary": summary,
+                "result": (grounding.get("result") or "")[:_SSE_RESULT_PREVIEW_CHARS],
             }),
         ]
 
@@ -1471,30 +1501,43 @@ def register_routes(app: FastAPI, state: Any) -> None:
         (``set_session_real_code_evidence``) — prefetch's own fetches land in the ledger
         under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
         cannot see them any other way (see prefetch.py's own docstring on these functions).
-        Returns ``{"evidence", "cve_id", "cve_known"}``."""
+        Also fetches ``cwe_refs`` (H1, 2026-09-22) — the CWE ids this CVE's record links to
+        via ``cve_cwe_refs`` (retrieval/neo4j.py, same CVE-record KB lookup as
+        ``cve_exists_in_kb`` above, one hop further) — so ``/ai/exploit``'s
+        ``metadata.cwe_refs`` (populated alongside evidence_ids/edb_ids/provenance, see
+        exploit()/exploit_stream()) reflects the real KB record instead of always being
+        empty. ``[]`` whenever there's no CVE id or no CVE record (fail-open, same
+        contract as ``cve_known``).
+
+        Returns ``{"evidence", "cve_id", "cve_known", "cwe_refs"}``."""
         from ..poc.inject import has_synthesis_evidence
         from ..poc.prefetch import (
             exploit_relevance_ok, set_session_coverage, set_session_cve_known,
             set_session_real_code_evidence, set_session_synthesis_evidence,
         )
-        from ..retrieval.neo4j import cve_exists_in_kb
+        from ..retrieval.neo4j import cve_cwe_refs, cve_exists_in_kb
         cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
         ledger = getattr(state.runner, "ledger", None)
         if poc is None or ledger is None:
             set_session_coverage(session_id, "failed")
-            cve_known = await cve_exists_in_kb(cve_id) if cve_id else False
+            if cve_id:
+                cve_known, cwe_refs = await asyncio.gather(
+                    cve_exists_in_kb(cve_id), cve_cwe_refs(cve_id))
+            else:
+                cve_known, cwe_refs = False, []
             set_session_cve_known(session_id, cve_known)
             set_session_synthesis_evidence(session_id, False)
             set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known}
+            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         run_id = f"prefetch:{uuid4().hex}"
         try:
             if cve_id:
-                report, cve_known = await asyncio.gather(
-                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id))
+                report, cve_known, cwe_refs = await asyncio.gather(
+                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id),
+                    cve_cwe_refs(cve_id))
             else:
-                report, cve_known = await prefetch_evidence(poc, ledger, prompt, run_id), False
+                report, cve_known, cwe_refs = await prefetch_evidence(poc, ledger, prompt, run_id), False, []
                 # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt
                 # (no CVE id) that maps to no sufficiently-relevant KB entry is treated as
                 # "nothing found" — so the exploit path does not build a PoC from a weak
@@ -1506,7 +1549,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     set_session_cve_known(session_id, False)
                     set_session_synthesis_evidence(session_id, False)
                     set_session_real_code_evidence(session_id, False)
-                    return {"evidence": [], "cve_id": None, "cve_known": False,
+                    return {"evidence": [], "cve_id": None, "cve_known": False, "cwe_refs": [],
                             "coverage": "empty", "gated": "low_relevance"}
             cov = report.get("coverage") or "failed"
             if cov not in ("enough", "empty", "partial", "failed"):
@@ -1516,14 +1559,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             evidence = ledger.evidence_for_run(run_id)
             set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
             set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
-            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known}
+            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         except Exception:
             logger.exception("deterministic PoC prefetch failed")
             set_session_coverage(session_id, "failed")
             set_session_cve_known(session_id, False)
             set_session_synthesis_evidence(session_id, False)
             set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": False}
+            return {"evidence": [], "cve_id": cve_id, "cve_known": False, "cwe_refs": []}
 
     async def inject_reference_code(text: str, run_id: str | None,
                                     pre_evidence: list[dict[str, Any]] | None = None, *,
@@ -1593,13 +1636,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(ledger.exploit_metadata(run_id))
         meta.setdefault("evidence_ids", []); meta.setdefault("edb_ids", [])
         meta.setdefault("provenance", []); meta.setdefault("candidate_status", "not_generated")
+        meta.setdefault("cwe_refs", [])  # H1: populated from prefetch_result by the caller
         return meta
 
     def exploit_guidance_meta() -> dict[str, Any]:
         """Metadata for the chitchat→"nhập CVE" guidance reply: keeps the same shape the FE
         reads (evidence/provenance/candidate_status) but flags no PoC work was done."""
         meta = base_meta("exploit_research", None)
-        meta.update({"evidence_ids": [], "edb_ids": [], "provenance": [],
+        meta.update({"evidence_ids": [], "edb_ids": [], "provenance": [], "cwe_refs": [],
                      "candidate_status": "not_generated",
                      "reference_code_injected": False, "input_kind": "chitchat"})
         return meta
@@ -1813,6 +1857,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
         metadata.update(injected)
+        # H1 (2026-09-22): cwe_refs comes from the CVE-record KB lookup exploit_prefetch()
+        # already did (cve_cwe_refs, retrieval/neo4j.py), not from PoC evidence — set
+        # independently of `injected` (enforce_section1's report never carries this key).
+        metadata["cwe_refs"] = prefetch_result.get("cwe_refs", [])
         metadata["poc_strategy"] = _resolve_poc_strategy(getattr(body, "poc_strategy", None), state.settings)
         if kt_result is not None:
             metadata["poc_kt_exploit"] = kt_result
@@ -1915,6 +1963,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 prompt_text=text, target=_exploit_target(body, text))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
+            # H1 (2026-09-22): see the non-stream exploit() endpoint's identical comment —
+            # cwe_refs comes from the prefetch's CVE-record lookup, not from `injected`.
+            meta["cwe_refs"] = prefetch_result.get("cwe_refs", [])
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
             safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
