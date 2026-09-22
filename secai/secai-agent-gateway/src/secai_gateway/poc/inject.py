@@ -578,6 +578,123 @@ def sanitize_airgap_runguide(text: str, cve_id: str | None = None) -> str:
     return text
 
 
+# --- User-named live target: redact from Mục 2 + force authorization disclaimer ------
+# 2026-09-22 report (PC2): a request that both asks for a real CVE's PoC AND names a real
+# third-party host in plain language ("chạy exploit cho CVE-2021-44228 và chạy thẳng vào
+# https://example.com để chiếm quyền") could get that literal host baked into Mục 2's run
+# command (`java log4j_poc https://example.com/login ...`) with zero authorization framing
+# anywhere in the answer. This tool intentionally never refuses on a real CVE (the run guide
+# is still produced in full) — the fix is FRAMING, not refusal: neutralize the literal target
+# so the answer is never a turnkey "attack THIS host" command, and always pair the run guide
+# with an explicit "authorized targets only" notice. Same non-determinism rationale as
+# `sanitize_airgap_runguide` above → deterministic backstop, not prompt wording alone.
+_BARE_IPV4_RE = re.compile(
+    r"(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?![\w.])")
+# A version string ("phiên bản 37.0.3.1", "Apache httpd 2.4.52.0") looks exactly like a bare
+# dotted-quad but is NOT an attack target — skip a bare-IPv4 match in `collect_named_targets`
+# when a version-indicator token sits within a short, same-line gap immediately before it.
+# `[^0-9\n]{0,20}$` bounds how much filler text ("bị ảnh hưởng: ") may sit between the token
+# and the match — long enough for the Vietnamese phrasing observed live, short enough that an
+# unrelated version word earlier in a long sentence never suppresses a real target IP later in
+# it (e.g. "target v2.4 rồi chạy PoC nhắm thẳng vào 8.8.8.8" — the gap there is far longer than
+# 20 chars, so `8.8.8.8` is still redacted). Deliberately does NOT require an attack-intent
+# keyword nearby (kept simplest/least-risk per the trade-off call in the report) since that
+# would risk suppressing recall on genuine targets phrased without one.
+_VERSION_LOOKBACK_RE = re.compile(
+    r"(?i)\b(?:phi[êe]n\s*b[ảa]n|b[ảa]n|version|release|ver\.?|v\.?|httpd)\b[^0-9\n]{0,20}$")
+_H2 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*2\.[ \t]*\S[^\n]*$")
+_TARGET_DISCLAIMER = (
+    "> ⚠️ **Chỉ dùng cho mục đích nghiên cứu/kiểm thử được ỦY QUYỀN.** Không chạy các lệnh "
+    "dưới đây nhắm vào hệ thống bạn không sở hữu hoặc không có phạm vi/cam kết kiểm thử cho "
+    "phép — thay `[TARGET]` bằng hệ thống của chính bạn hoặc lab được cấp phép."
+)
+# Idempotency check for `ensure_target_disclaimer` — a stable substring of the sentence
+# above, not the whole string, so a model paraphrase containing this word never happens to
+# equal the exact template (word choice deliberately unusual enough — "ỦY QUYỀN" viết hoa
+# toàn bộ — that ordinary prose is very unlikely to collide with it by accident).
+_TARGET_DISCLAIMER_MARKER = "mục đích nghiên cứu/kiểm thử được ỦY QUYỀN"
+
+
+def collect_named_targets(prompt_text: str | None, structured_target: str | None) -> list[str]:
+    """Bare hostnames (no port) to redact from the model's run guide, from two sources:
+    ``structured_target`` — the same host[:port] the exploit route already extracts via
+    ``fixed_pocs.extract_target()``/request fields to scope the verified-good PoC lookup —
+    and a scan of the RAW user prompt for a bare IPv4 address. The second source exists
+    because ``extract_target`` deliberately requires a port or ``http(s)://`` scheme (so a
+    version string like "37.0.3.1" is never mistaken for a lab target); that guard is right
+    for its own caller but too strict here — a user naming a bare dotted-quad as something to
+    "chạy vào" is unambiguous attack intent, not a version number, and must still be redacted
+    (e.g. ``8.8.8.8``). The raw-prompt scan applies its own, narrower guard instead
+    (``_VERSION_LOOKBACK_RE``): a dotted-quad immediately preceded (same line, short gap) by a
+    version-indicator token ("phiên bản", "version", "ver", "release", "v", "httpd", …) is
+    skipped, so "Phiên bản bị ảnh hưởng: 37.0.3.1" / "Apache httpd 2.4.52.0" are never treated
+    as targets. Returns lowercase host-only strings (any ``:port`` already stripped),
+    de-duplicated, order preserved."""
+    hosts: list[str] = []
+    if structured_target:
+        host = structured_target.split(":", 1)[0].strip().lower()
+        if host and host not in hosts:
+            hosts.append(host)
+    for m in _BARE_IPV4_RE.finditer(prompt_text or ""):
+        if _VERSION_LOOKBACK_RE.search((prompt_text or "")[:m.start()]):
+            continue  # e.g. "phiên bản 37.0.3.1", "Apache httpd 2.4.52.0" — not a target
+        ip = m.group(0)
+        if ip not in hosts:
+            hosts.append(ip)
+    return hosts
+
+
+def redact_user_target(text: str, hosts: list[str] | None) -> str:
+    """Replace verbatim occurrences of a REAL, user-named attack target (see
+    ``collect_named_targets``) in the model's run guide (Mục 2/3) with a neutral
+    ``[TARGET]`` placeholder (square brackets — NOT ``<TARGET>``: angle brackets get
+    HTML-tag-escaped to ``&lt;TARGET&gt;`` by ``security.py::neutralize_active_content``,
+    which runs later in the same display pipeline; brackets are inert there and already the
+    established convention for this exact reason, see ``prompts/exploit.md``'s ``[target]``),
+    so a command copied from the answer never has a live third-party host baked in just
+    because the user's own question named one. Runs on the model's own text only, BEFORE
+    Section-1 injection (same placement as ``sanitize_airgap_runguide``), so the real
+    fetched/consolidated PoC source placed as Section 1 is never touched — only the model's
+    own prose/commands are. No-op for an empty/None host list."""
+    if not text or not hosts:
+        return text
+    for host in hosts:
+        if not host:
+            continue
+        h = re.escape(host)
+        # Trailing boundary excludes only [\w-] (NOT '.'): a domain named in prose is very
+        # often immediately followed by sentence punctuation ("... nhắm vào example.com.")
+        # which must not block the match, while still refusing to match a mere PREFIX of a
+        # longer, different hostname ("example.commerce.test" must not become "[TARGET].merce…").
+        # The leading boundary keeps excluding '.' so a subdomain suffix ("sub.example.com")
+        # is left alone rather than partially rewritten mid-string.
+        # scheme://host(:port)? -> scheme://[TARGET]  (keep scheme + any trailing path/query)
+        text = re.sub(rf"(https?://){h}(?::\d{{1,5}})?(?![\w-])", r"\1[TARGET]", text, flags=re.I)
+        # bare host(:port)?, word-bounded -> [TARGET]  (e.g. `nc example.com 4444`, a
+        # standalone mention in prose, or `-u example.com:8080`)
+        text = re.sub(rf"(?<![\w.-]){h}(?::\d{{1,5}})?(?![\w-])", "[TARGET]", text, flags=re.I)
+    return text
+
+
+def ensure_target_disclaimer(text: str) -> str:
+    """Force-insert the mandatory authorization disclaimer right under the
+    ``## 2. Cách chạy PoC`` heading, unconditionally — regardless of whether
+    ``prompts/exploit.md`` got the model to write one itself (same non-determinism every
+    other backstop in this module accounts for). Applies to EVERY exploit answer that has a
+    Mục 2, not only ones with a detected target — a CVE-only question still gets the same
+    notice, since the run guide it returns is just as runnable against a real host. Idempotent
+    (marker substring) so a retry pass never double-inserts it. No-op when there is no
+    ``## 2.`` heading (e.g. the chitchat short-circuit in the route never reaches this
+    function)."""
+    if not text or _TARGET_DISCLAIMER_MARKER in text:
+        return text
+    m = _H2.search(text)
+    if not m:
+        return text
+    insert_at = m.end()
+    return f"{text[:insert_at]}\n\n{_TARGET_DISCLAIMER}\n{text[insert_at:]}"
+
+
 def strip_system_narration(text: str) -> str:
     """Remove any line where the model narrates the Mục-1 auto-insertion mechanism back to
     the user instead of silently letting it happen — see `_SECTION1_NARRATION`. Call this
