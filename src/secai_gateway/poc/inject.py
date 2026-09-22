@@ -275,6 +275,195 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
     return "\n\n".join(parts)
 
 
+# ── PC4 (2026-09-22): stub-content sanity filter for the "real" Section-1 tiers ─────────
+# QA report: CVE-2025-30065 came back `section1_tier=real_consolidated` (implying real
+# fetched/merged exploit code) while Mục 1's actual body was a content-free static HTML shell —
+# `<!DOCTYPE html>...<h1>CVE-2025-30065 Exploit Executed</h1>...` — a narrative "it worked" page
+# with zero exploit logic, directly contradicting Mục 3's own "no CVSS / no specific info"
+# admission for the SAME CVE. Root cause: `_blocks_for` (and therefore
+# `has_real_code_evidence`/`enforce_reference_code`/`enforce_section1`'s tier dispatch) treats
+# ANY non-empty `source_code`/`source_files` as injectable "real" code — nothing downstream ever
+# asks whether the bytes contain actual exploit/payload logic. The LLM consolidation pass
+# (poc/consolidate.py) apparently ignored its real (non-Python) source input and hallucinated
+# this narrative page instead; its own validator (`validation_failure`) only syntax-checks
+# Python or a short interpreter allow-list (ruby/php/bash/js/perl — `_SYNTAX_CHECK_CMDS`) and
+# fails OPEN (accepts) for any other language, including html — exactly the shape this stub used.
+#
+# Fix: a narrow, deterministic, CONTENT-based filter — never a language ban. Real markup PoCs
+# (XSS `<script>`, CSRF auto-submit `<form>`, SSRF via `<img src="http://internal/…">`, an
+# arbitrary event-handler attribute such as `ontoggle=`/`onchange=`/`onpageshow=` — WAF-bypass
+# XSS vectors are common in real exploit-db PoCs and are NOT a fixed handful of handler names)
+# carry a delivery/payload mechanism and are matched by `_STUB_CODE_MARKER_RE` — this only
+# rejects the exact "static narrative shell" shape reported: markup (or a bare "it worked"
+# sentence) with ZERO code/payload markers anywhere. Deliberately biased toward keeping real
+# PoCs — a single marker match ANYWHERE in the text is enough to keep an entry "real" — per
+# this module's existing "never mistake a description for evidence" philosophy (see
+# `_is_detection_evidence` above for the same fail-safe-toward-real bias applied to nuclei
+# YAML). Still a HEURISTIC, not a guarantee: a real PoC whose only delivery mechanism is a
+# marker shape not on this list (e.g. neither a known tag/attribute/handler/call/keyword) could
+# in principle be missed — reviewed live against exploit-db XSS/CSRF/SSRF samples including
+# exotic event-handler-only payloads (2026-09-22 review round).
+_STUB_CODE_MARKER_RE = re.compile(
+    r"\bimport\s|from\s+\S+\s+import|require\s*\(|def\s+\w+\s*\(|class\s+\w+|"
+    r"function\s*\w*\s*\(|=>\s*\{|\bexec\(|\beval\(|\bsocket\.|\brequests\.|\burllib|"
+    r"\bsubprocess|os\.system|os\.popen|payload\s*=|base64\.|struct\.|pickle\.|serialize|"
+    r"\bcurl\s|\bwget\s|\bnc\s+-|python3?\s+-c|sys\.argv|argparse|\.add_argument\(|"
+    r"<script[\s>]|<form[^>]*\baction\s*=|\bon[a-z]{2,}\s*=|"
+    r"fetch\(|XMLHttpRequest|\.ajax\(|axios\.|document\.cookie|document\.location|"
+    r"window\.location|<iframe[\s>]|<object[\s>]|<embed[\s>]|javascript:|new\s+Image\(|"
+    r"\$\.get\(|\$\.post\(|WebSocket\(|http\.client|net/http|HttpClient|URLConnection|"
+    r"ProcessBuilder|Runtime\.getRuntime|InetSocketAddress|new\s+Socket\(|"
+    r"""(?:src|href|action|formaction|data|poster|background)\s*=\s*["'][^"']*"""
+    r"(?:://|/|localhost|\d{1,3}\.\d{1,3}\.\d{1,3})",
+    re.I,
+)
+_HTML_DOC_RE = re.compile(r"<!doctype\s+html|<html[\s>]", re.I)
+# Narrow "it worked" narration — the exact phrasing observed live ("CVE-2025-30065 Exploit
+# Executed"). Only relevant when combined with a total absence of code markers (see
+# `_is_stub_markup`), so a real PoC that happens to print a success message alongside its
+# actual exploit logic is never affected.
+_STUB_NARRATION_RE = re.compile(
+    r"exploit(?:ed)?\s+executed|exploited\s+successfully|successfully\s+exploited|"
+    r"vulnerability\s+has\s+been\s+exploited|khai\s+th[áa]c\s+th[àa]nh\s+c[ôo]ng|"
+    r"đã\s+khai\s+th[áa]c\s+th[àa]nh\s+c[ôo]ng",
+    re.I,
+)
+
+# ── PC4/R3 (2026-09-22): stricter active-exploitation markers for a FULL html document ──
+# Live E2E false-negative: CVE-2025-30065 had a real Java PoC (exploit-db 88399/88401) PLUS a
+# companion HTML file the LLM had hallucinated ("Parquet Exploitation Scenarios" — styled with
+# `<div class="card">`, a `<code>curl -X POST …</code>` USAGE EXAMPLE in prose, and an
+# `<a href="https://fonts.googleapis.com/…">` CDN font link). Only that narrative HTML file got
+# rendered as Mục 1 (`section1_tier=real_pruned`) — the exact bug class this whole filter exists
+# to catch — yet `_is_stub_markup` returned False because the BROAD `_STUB_CODE_MARKER_RE`
+# matched `\bcurl\s` and the generic `href=…://` attribute pattern purely from that prose/
+# decoration, not from any actual exploit logic.
+#
+# A full HTML *document* (`_HTML_DOC_RE` matches — has its own `<!doctype html>`/`<html>`
+# wrapper, i.e. it is plausibly a whole rendered "report" rather than an injected code snippet)
+# therefore gets a NARROWER, STRICT marker set requiring genuine active-exploitation shape —
+# `curl`/`wget` and a bare href/src-URL attribute are EXCLUDED here (a documentation page
+# routinely contains both without any delivery mechanism). Content that is NOT a full document
+# (a bash/shell script, a bare `<script>`/`<form>` fragment, …) is UNCHANGED — it still goes
+# through the original broad `_STUB_CODE_MARKER_RE`, where `curl`/`wget` correctly still count
+# as real (a real curl-based shell PoC must never be flagged just because it isn't "html").
+_HTML_JS_LOGIC_RE = re.compile(
+    r"fetch\(|XMLHttpRequest|\.ajax\(|axios\.|\beval\(|document\.cookie|document\.location|"
+    r"window\.location|\batob\(|String\.fromCharCode\(|new\s+Image\(|WebSocket\(|"
+    r"navigator\.sendBeacon\(|\bimport\(",
+    re.I,
+)
+_HTML_EVENT_HANDLER_RE = re.compile(r"\bon[a-z]{2,}\s*=", re.I)
+_HTML_FORM_ACTION_RE = re.compile(r"<form[^>]*\baction\s*=", re.I)
+# R4 (2026-09-22, reviewer probe): restored from the pre-R3 broad `_STUB_CODE_MARKER_RE` —
+# `<object data=…>`/`<embed src=…>` are classic active-content delivery tags, and a
+# `<meta http-equiv="refresh" ...>` is a real (if old-school) redirect/delivery vector. R3's
+# strict-HTML-doc branch had dropped both when it stopped falling through to the broad regex.
+_HTML_OBJECT_EMBED_RE = re.compile(r"<object[\s>]|<embed[\s>]", re.I)
+_HTML_META_REFRESH_RE = re.compile(r"""<meta\b[^>]*\bhttp-equiv\s*=\s*["']?refresh""", re.I)
+# `<img>`/`<svg>`/`<iframe>` pointing somewhere is a real SSRF/XSS delivery shape UNLESS that
+# somewhere is just a common CDN/web-font host a styled report page decorates itself with.
+_HTML_SRC_TAG_RE = re.compile(r"""<(?:img|svg|iframe)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+# NOTE (reviewer nit, R4): a few of these (notably `cdn.jsdelivr.net/gh/...` — arbitrary GitHub
+# content — and, in principle, `cdnjs.cloudflare.com`) CAN be made to serve attacker-controlled
+# content, so this allowlist is a probabilistic "this is almost certainly decorative" signal,
+# not a hard trust boundary. Accepted trade-off (see the module comment above): the whole point
+# of this allowlist is that a styled report page routinely self-decorates with exactly these
+# hosts, so a real PoC using one of them AS its actual delivery vector is the rare case, and
+# missing that rare case is far cheaper than the reported bug (a fake PoC labelled "real").
+_CDN_FONT_DOMAIN_RE = re.compile(
+    r"fonts\.googleapis\.com|fonts\.gstatic\.com|ajax\.googleapis\.com|"
+    r"cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|stackpath\.bootstrapcdn\.com|"
+    r"maxcdn\.bootstrapcdn\.com|use\.fontawesome\.com",
+    re.I,
+)
+# A <script> element: group(1) = its opening tag's attributes, group(2) = its body (for a
+# paired open/close tag; DOTALL so a multi-line script body is captured).
+_HTML_SCRIPT_TAG_RE = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.I | re.S)
+_SRC_ATTR_RE = re.compile(r"""\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+
+
+def _has_active_script(text: str) -> bool:
+    """R4 (2026-09-22, reviewer probe): the PRIMARY gap in the R3 strict-HTML-doc branch — it
+    never checked for a `<script>` element at all, so a textbook `<script>alert(document.
+    domain)</script>` / DOM-XSS (`innerHTML=location.hash`, `document.write(location.search)`)
+    full-page PoC was misclassified as a stub (the exact class of false-negative this whole
+    filter exists to avoid). A `<script src=…>` pointing off-page is treated like the img/svg/
+    iframe check (real unless it's just a common CDN host); an INLINE `<script>...</script>`
+    with any non-empty body is real regardless of its specific content — deliberately not
+    pattern-matching individual JS APIs here, since an inline script in a full HTML document has
+    no legitimate "decorative" reason to exist at all (unlike an `<img>`/`<a href>`, which a
+    styled report page always has some of)."""
+    for m in _HTML_SCRIPT_TAG_RE.finditer(text):
+        attrs, body = m.group(1), m.group(2)
+        src_m = _SRC_ATTR_RE.search(attrs)
+        if src_m:
+            if not _CDN_FONT_DOMAIN_RE.search(src_m.group(1)):
+                return True
+        elif body.strip():
+            return True
+    return False
+
+
+def _has_active_html_marker(text: str) -> bool:
+    """Strict "this full HTML document actually does something" check — see the PC4/R3 module
+    comment above for why this is narrower than `_STUB_CODE_MARKER_RE`. True when the document
+    contains a real `<script>` (see `_has_active_script`), real JS delivery logic, ANY
+    event-handler attribute, a `<form action=…>`, a `javascript:` URI, `<object>`/`<embed>`/a
+    `<meta http-equiv="refresh">`, or an `<img>`/`<svg>`/`<iframe>` pointing somewhere other
+    than a common CDN/web-font host."""
+    if _has_active_script(text):
+        return True
+    if _HTML_JS_LOGIC_RE.search(text) or _HTML_EVENT_HANDLER_RE.search(text):
+        return True
+    if _HTML_FORM_ACTION_RE.search(text):
+        return True
+    if "javascript:" in text.lower():
+        return True
+    if _HTML_OBJECT_EMBED_RE.search(text) or _HTML_META_REFRESH_RE.search(text):
+        return True
+    for m in _HTML_SRC_TAG_RE.finditer(text):
+        if not _CDN_FONT_DOMAIN_RE.search(m.group(1)):
+            return True
+    return False
+
+
+def _is_stub_markup(code: str, language: str = "") -> bool:
+    """True only for a content-free "it worked" shell (the CVE-2025-30065 class of bug) —
+    static markup or a bare narration sentence with NO real code/payload marker anywhere.
+
+    A FULL html document (`_HTML_DOC_RE` — has its own `<!doctype html>`/`<html>` wrapper) is
+    checked with the STRICT `_has_active_html_marker` set only (see the PC4/R3 comment above):
+    `curl`/`wget` mentions and a bare href/src-URL attribute do NOT rescue it, because a
+    narrative/report-style page routinely contains both as prose/decoration with zero real
+    delivery mechanism (the live CVE-2025-30065 "Parquet Exploitation Scenarios" false
+    negative). A real XSS/CSRF/SSRF full-page PoC still matches this strict set via its
+    `<script>` JS logic, an event-handler attribute (`onclick=`/`ontoggle=`/`onchange=`/… —
+    deliberately not a fixed handler allow-list, since WAF-bypass XSS PoCs pick an uncommon one
+    on purpose), a `<form action=…>`, `javascript:`, or an `<img>`/`<svg>`/`<iframe src=…>` that
+    isn't just a CDN font.
+
+    Any OTHER content (not a full document — a bash/shell script, a bare `<script>`/`<form>`
+    fragment, …) keeps using the original broad `_STUB_CODE_MARKER_RE`, where a real `curl`/
+    `wget`-based shell PoC is correctly still "real" (only a full rendered document narrating
+    about curl in prose is the failure mode this branch exists for).
+
+    This is a heuristic, not a formal guarantee: content whose only payload/delivery signal
+    falls entirely outside every marker above would still be missed. Deliberately biased toward
+    never rejecting genuine evidence the rest of this module already treats as real."""
+    text = code or ""
+    if not text.strip():
+        return False  # emptiness is handled by the existing `if not code` checks, not this one
+    if _HTML_DOC_RE.search(text):
+        return not _has_active_html_marker(text)
+    if _STUB_CODE_MARKER_RE.search(text):
+        return False  # any real code/payload marker anywhere -> never a stub
+    lang = (language or "").strip().lower()
+    if lang in ("html", "htm"):
+        return True  # an html-tagged FRAGMENT (no <html>/doctype wrapper) with zero markers
+    return bool(_STUB_NARRATION_RE.search(text))  # non-markup "it worked" sentence, no code at all
+
+
 def _is_detection_evidence(ev: dict[str, Any]) -> bool:
     """Nuclei / kind=detection templates detect a vuln — they are NOT exploit PoCs for T1
     injection. Their YAML body is synthesis grounding (T2) instead: method/path/payload/
@@ -299,13 +488,39 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
         return ""
     files = ev.get("source_files")
     if files:
-        block = render_files(files, default_lang=_lang_from_evidence(ev),
+        usable = [f for f in files if f.get("code")]
+        # Reject only when EVERY usable file is a content-free stub shell (see
+        # `_is_stub_markup`) — a companion asset being stub-like must never sink an otherwise
+        # real multi-file entry; conversely a set that is ENTIRELY narrative shells (the
+        # collapsed single-file consolidated/pruned case included) must not render as Mục 1.
+        if usable and all(_is_stub_markup(f.get("code") or "",
+                                          f.get("language") or _lang_from_path(f.get("path", "")))
+                          for f in usable):
+            return ""
+        # PC4/R4 (2026-09-22, reviewer nit): the check above only guards the AGGREGATE case
+        # (every file is a stub). A fetched PoC set can legitimately mix a real entry file with
+        # an individually stub-shell companion (the live case: a real Java exploit plus an
+        # LLM-hallucinated "Parquet Exploitation Scenarios" HTML file bundled in the same
+        # source_files list) — that companion must not be dumped into Mục 1 next to the real
+        # code. Drop only the per-file stub-shell CONTENT files (never a README — those are
+        # already skipped by `render_files`' own `role == "readme"` check below, not part of
+        # Mục 1's body either way, so filtering them here would only ever affect the file-tree
+        # listing for no benefit). The `all(...)` check above already guarantees at least one
+        # usable file is real, so this can never drop every file.
+        stub_ids = {id(f) for f in usable
+                   if (f.get("role") or "") != "readme"
+                   and _is_stub_markup(f.get("code") or "",
+                                       f.get("language") or _lang_from_path(f.get("path", "")))}
+        files_to_render = [f for f in files if id(f) not in stub_ids] if stub_ids else files
+        block = render_files(files_to_render, default_lang=_lang_from_evidence(ev),
                              show_tree=not ev.get("companion_doc_only", False), cve_id=cve_id)
         return _with_consolidated_banner(block, ev)
     code = ev.get("source_code")
     if not code:
         return ""
     lang = _lang_from_evidence(ev)
+    if _is_stub_markup(code, lang):
+        return ""
     name = _airgap_name(cve_id, lang, ev.get("source_ref") or ev.get("edb_id") or "")
     header = f"**`{name}`**"
     if ev.get("code_truncated"):
