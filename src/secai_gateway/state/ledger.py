@@ -69,6 +69,21 @@ class SqliteLedger:
         return [json.loads(row[0]) for row in rows]
 
     def exploit_metadata(self, run_id: str | None) -> dict[str, Any]:
+        """Best-effort evidence/candidate snapshot for ONE run_id's own ledger rows.
+
+        NOTE (PC3/PC6, 2026-09-22): for `/ai/exploit`, this is called with the MODEL's own
+        agentic-turn run_id, which routinely has NO rows here at all — the real grounding
+        evidence lives under `poc/prefetch.py`'s own scratch run_id (`prefetch:{uuid}`), and
+        pruned/consolidated/extracted evidence (poc/slicer.py, poc/consolidate.py) is never
+        written back to this table under ANY run_id. `candidate_status` here is also always
+        "not_generated" in practice: `poc_drafts` has no writer anywhere in this codebase
+        (`draft_once` is defined but never called). `api/routes.py::exploit_final_meta`/the
+        non-stream `/ai/exploit` handler call this FIRST as a best-effort seed, then overlay
+        `poc/inject.py::enforce_section1`'s report (`metadata.update(injected)`), which
+        derives all four fields directly from the evidence that actually grounded Section 1
+        this turn — that overlay is the reliable source for the exploit endpoints; this
+        method is kept for whatever it can still add (e.g. the model's own extra tool calls
+        under its own run_id) and for any other caller of `agent/runner.py::complete()`."""
         if not run_id:
             return {"evidence_ids": [], "edb_ids": [], "provenance": [], "candidate_status": "not_generated"}
         with self._lock, self._connect() as conn:
