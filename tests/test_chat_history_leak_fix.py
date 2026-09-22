@@ -48,6 +48,7 @@ from secai_gateway.agent.hooks import (
     EphemeralTurnContextHook,
     RequireChatGroundingHook,
 )
+from secai_gateway.agent.runner import _ephemeral_context_text
 from secai_gateway.api.projects import _display_message_dict
 from secai_gateway.app import create_app
 
@@ -337,3 +338,58 @@ async def test_chat_grounding_hook_uses_explicit_flag_not_marker_sniff() -> None
     # need_kb was satisfied by the explicit flag despite no qdrant_search/neo4j_search
     # tool call being recorded for this run_id — must NOT force a retry.
     assert result is None, f"expected no force_continue/mutate, got {result!r}"
+
+
+# ── 2026-09-22 regression: date-banner mistaken for a new user turn ────────────────────
+#
+# Bug (separate from, but adjacent to, the leak fix above): EphemeralTurnContextHook
+# delivers ``_ephemeral_context_text()``'s output as a SEPARATE ``Message(role="user")``
+# appended AFTER the real, already-persisted question (linch's ``Message.role`` only
+# supports "user"/"assistant", and the OpenAI-chat-completions serializer emits each
+# Message as its own dict — it never merges consecutive same-role messages). Live
+# reproduction (isolated instance, 2026-09-22): asking "OWASP Top 10 2021 gồm những
+# gì?" made the model answer the bare trailing date line instead of the real question —
+# "Cảm ơn bạn đã cung cấp thông tin ngày tháng...". Fix: ``_ephemeral_context_text()``
+# now wraps its output in explicit open/close markers stating this is internal,
+# non-conversational context (not a new question) and instructing the model to keep
+# answering the real question above it. These tests pin that wrapping's presence/
+# structure at the unit level (the live behavior itself was verified manually against a
+# running instance, not re-asserted here).
+_EPHEMERAL_OPEN_MARKER = "[GHI CHÚ NGỮ CẢNH HỆ THỐNG"
+_EPHEMERAL_CLOSE_MARKER = "[HẾT GHI CHÚ NGỮ CẢNH"
+
+
+def test_ephemeral_context_text_date_only_has_wrapper_and_no_grounding_mention() -> None:
+    text = _ephemeral_context_text("chat", None)
+    assert text is not None
+    assert _EPHEMERAL_OPEN_MARKER in text
+    assert _EPHEMERAL_CLOSE_MARKER in text
+    assert "[Hôm nay là" in text
+    # Date-only case: must not claim it also carries KB grounding data.
+    assert "dữ liệu tra cứu KB" not in text
+    # The close marker must anchor the model back onto the real (preceding) question,
+    # not invite it to treat this message as a new question to process.
+    assert "câu hỏi" in text.lower()
+
+
+def test_ephemeral_context_text_with_grounding_mentions_kb_and_keeps_marker() -> None:
+    grounding_block = (
+        CHAT_PRE_FETCH_MARKER + " — PHẢI dùng để trả lời chính xác, KHÔNG bịa/suy đoán "
+        "khi thiếu thông tin]\n### Result 1 (score: 1.7250)\nCVE-2021-44228 — Log4Shell — "
+        "CVSS 10.0 — KEV: yes"
+    )
+    text = _ephemeral_context_text("chat", grounding_block)
+    assert text is not None
+    assert _EPHEMERAL_OPEN_MARKER in text
+    assert _EPHEMERAL_CLOSE_MARKER in text
+    assert "dữ liệu tra cứu KB" in text
+    # The pre-fetch marker + KB body must still be carried through unchanged.
+    assert CHAT_PRE_FETCH_MARKER in text
+    assert "CVE-2021-44228" in text
+    assert "[Hôm nay là" in text  # date line still present alongside grounding
+
+
+def test_ephemeral_context_text_translate_profile_skips_date_and_stays_none_without_grounding() -> None:
+    # translate has no date/context need (see _ephemeral_context_text's docstring) — with
+    # no grounding_context either, there is nothing to deliver at all.
+    assert _ephemeral_context_text("translate", None) is None
