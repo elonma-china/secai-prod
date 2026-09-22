@@ -30,13 +30,16 @@ This suite is hermetic (no live server), mirroring ``test_projects_sessions.py``
 """
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 
 import httpx
 
 from linch.events import PartialAssistantEvent
 from linch.sessions.memory import InMemorySessionStore
+from linch.tools.base import ToolResult
 
+import secai_gateway.api.routes as routes_mod
 from secai_gateway.app import create_app
 from secai_gateway.state import ProjectStore
 
@@ -172,3 +175,104 @@ async def test_language_gate_short_circuit_debug_flag_restores_full_tool_registr
 def test_expose_internal_tool_metadata_defaults_off() -> None:
     from secai_gateway.config import Settings
     assert Settings().expose_internal_tool_metadata is False
+
+
+# ── H2/H3 (2026-09-22): grounding metadata/SSE hygiene ──────────────────────────────────
+# H2: non-stream `metadata.sources` used to spread the WHOLE pre-fetch `grounding` dict in
+# (`{"name": "qdrant_search", **grounding}`), including `result` — the raw KB dump (up to
+# several KB of chunk text) that fed the model's ephemeral context. No FE consumer reads
+# `metadata.sources` (grepped: 0 hits in secai-fe-devspace), so nothing rendered it, but a
+# plain JSON API client got the entire internal KB payload dumped back instead of a
+# citation. Fixed: each source item is now citation-only (name/query/summary) — no `result`.
+#
+# H3: the synthetic pre-fetch `tool_result` SSE frame (`_grounding_sse_frames`) carried
+# `result[:4000]` raw KB text and NO `summary` at all (only the paired `tool_call` frame
+# had one) — ToolTimeline.tsx (FE) only ever renders `summary`, falling back to a 140-char
+# `result` preview only when `summary` is absent. Fixed: the tool_result frame now always
+# carries the same clean `summary` too, and `result` is shrunk to a short preview (kept,
+# not dropped — ToolTimeline's `result === undefined` check is how it knows a row is still
+# pending). Covers BOTH `/ai/chat` (module-level) and `/sessions/{sid}/chat` (session-scoped)
+# since both funnel through the same `complete()`/`_ground_chat_prompt` helpers.
+#
+# `_qdrant_search` is imported into `secai_gateway.api.routes` at module level and looked
+# up as a bare global at call time (see test_chat_grounding_duration_regression.py's own
+# note on this seam), so monkeypatching `routes_mod._qdrant_search` reaches the pre-fetch
+# grounding path without needing an entity-id message to hit a real KB.
+
+_RAW_KB_DUMP = "RAW KB DUMP — internal Qdrant chunk text, never meant for the wire. " * 100
+
+
+def _patch_qdrant_search(monkeypatch, *, content: str = _RAW_KB_DUMP,
+                         summary: str = "qdrant_search(CVE-2021-44228) 2 hits") -> None:
+    async def _fake_qdrant_search(*, query, ctx=None, top_k=10, **kwargs):
+        return ToolResult(content=content, summary=summary)
+    monkeypatch.setattr(routes_mod, "_qdrant_search", _fake_qdrant_search)
+
+
+def _tool_result_frames(sse_text: str) -> list[dict]:
+    frames = []
+    for block in sse_text.split("\n\n"):
+        if not block.startswith("event: tool_result"):
+            continue
+        _, data_line = block.split("\n", 1)
+        frames.append(json.loads(data_line[len("data: "):]))
+    return frames
+
+
+async def test_session_chat_sources_are_citation_only_no_raw_kb_dump(tmp_path, monkeypatch) -> None:
+    _patch_qdrant_search(monkeypatch)
+    runner = _MetaFakeRunner(tmp_path)
+    async with _client(runner) as client:
+        sid = await _make_session(client)
+        resp = await client.post(f"/sessions/{sid}/chat",
+                                 json={"user_id": "alice", "message": "CVE-2021-44228 là gì?"})
+        assert resp.status_code == 200
+        body = resp.json()
+        metadata = body["metadata"]
+        assert "sources" in metadata
+        sources = metadata["sources"]
+        assert isinstance(sources, list) and len(sources) == 1
+        source = sources[0]
+        assert source["name"] == "qdrant_search"
+        assert source.get("query")
+        assert source.get("summary") == "qdrant_search(CVE-2021-44228) 2 hits"
+        assert "result" not in source, "raw KB result must not be spread into metadata.sources"
+        assert _RAW_KB_DUMP not in json.dumps(body), "raw KB dump leaked somewhere into the response"
+
+
+async def test_ai_chat_sources_are_citation_only_no_raw_kb_dump(monkeypatch) -> None:
+    """Same fix, via the module-level `/ai/chat` endpoint (not session-scoped)."""
+    _patch_qdrant_search(monkeypatch)
+
+    class _PlainFakeRunner:  # /ai/chat needs no project/session store, unlike _MetaFakeRunner
+        async def complete(self, profile_name, prompt, session_id=None, **_kwargs):
+            return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(_PlainFakeRunner())),
+                                 base_url="http://test") as client:
+        resp = await client.post("/ai/chat", json={"user_id": "u1", "message": "CVE-2021-44228 là gì?"})
+    assert resp.status_code == 200
+    metadata = resp.json()["metadata"]
+    source = metadata["sources"][0]
+    assert "result" not in source
+    assert source["name"] == "qdrant_search"
+
+
+async def test_session_chat_stream_tool_result_has_summary_and_shrunk_result(tmp_path, monkeypatch) -> None:
+    _patch_qdrant_search(monkeypatch)
+    runner = _MetaFakeRunner(tmp_path)
+    async with _client(runner) as client:
+        sid = await _make_session(client)
+        resp = await client.post(f"/sessions/{sid}/chat/stream",
+                                 json={"user_id": "alice", "message": "CVE-2021-44228 là gì?"})
+        assert resp.status_code == 200
+        body = resp.text
+        assert "event: tool_result" in body, "tool_result frame must not be removed"
+        frames = _tool_result_frames(body)
+        prefetch = [f for f in frames if f.get("name") == "qdrant_search"]
+        assert prefetch, f"no qdrant_search tool_result frame found; got {frames}"
+        frame = prefetch[0]
+        assert frame.get("summary") == "qdrant_search(CVE-2021-44228) 2 hits"
+        assert "result" in frame, "result key must stay (FE pending-state check)"
+        assert len(frame["result"]) <= 200
+        assert _RAW_KB_DUMP not in body, "raw KB dump must not appear anywhere in the SSE stream"
