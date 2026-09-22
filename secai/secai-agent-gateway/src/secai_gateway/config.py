@@ -118,6 +118,17 @@ class Settings(BaseSettings):
     language_gate_enabled: bool = True
     language_gate_nonlatin_ratio: float = 0.5
 
+    # Bug #13/CQ4: `metadata.tool_registry` on /sessions/{sid}/chat and /chat/stream listed
+    # internal retrieval-tool names (qdrant_search, neo4j_search, poc_search, fetch_reference,
+    # web_fetch) on EVERY reply, including plain greetings — an internal-implementation detail
+    # with no legitimate public use (confirmed: the FE's sse.ts types this field but nothing
+    # renders it). Default OFF returns an empty list (key/shape unchanged: still list[str]);
+    # turn on only to debug which tools a profile actually exposes. Deliberately does NOT
+    # touch the SSE `tool_call`/`tool_result` frames — those ARE consumed by the FE's live
+    # "Hoạt động công cụ" timeline (ToolTimeline.tsx / ChatbotScreen.tsx) for every chat
+    # message, so redacting their content would break a real, user-facing feature.
+    expose_internal_tool_metadata: bool = False
+
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
