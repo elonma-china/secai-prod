@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -749,6 +750,83 @@ def override_section3(text: str, section3_body: str) -> str:
     return f"{text[:m.start()]}{_SECTION3_HEADING}\n\n{body}\n"
 
 
+# ── PC3 (2026-09-22): metadata.evidence_ids/edb_ids/provenance grounding ────────────────
+# `state/ledger.py::SqliteLedger.exploit_metadata(run_id)` builds these three fields from the
+# `evidence_ledger` SQL table filtered by ONE run_id — the model's OWN agentic-turn run_id.
+# That is the wrong lookup key for the common case: the real grounding evidence for a turn is
+# `poc/prefetch.py::prefetch_evidence`'s (written under ITS OWN scratch `run_id`,
+# `f"prefetch:{uuid4().hex}"` — see routes.py's `exploit_prefetch`), not the model's tool
+# calls (which routinely skip poc_fetch entirely — prefetch exists BECAUSE of that). On top
+# of that, a pruned/consolidated/extracted evidence dict (poc/slicer.py, poc/consolidate.py)
+# is a TRANSIENT dict built at request time and never written back to the ledger under ANY
+# run_id — so even a caller that queried the right run_id would still see nothing for those
+# tiers. Net effect observed live: evidence_ids/edb_ids/provenance came back empty on 16/16
+# calls, including cases with `reference_code_injected=true` + a real `sha256` (Log4Shell).
+#
+# Fix: derive these fields directly from the evidence dicts that actually grounded Section 1
+# this turn (passed here as plain dicts, already merged prefetch+model-run+pruned/consolidated
+# by the caller) instead of a ledger run_id lookup. Same output shape the ledger method
+# promises (`provenance` = list of `{edb_id, sha256, canonical_url}`), so this is a drop-in,
+# more-reliable replacement wherever `enforce_section1`/`enforce_reference_code`'s report
+# already flows into the API's `metadata` dict (routes.py's `metadata.update(injected)`).
+def _evidence_grounding_id(ev: dict[str, Any]) -> str:
+    """Stable id for one evidence entry, independent of any ledger run_id.
+
+    NOT the same id format as the ledger: `poc/tools.py::record_fetch_evidence` keys its
+    `evidence_ledger` row `evidence:{run_id}:{key}`; this function returns
+    `evidence:sha256:{key}` / `evidence:ref:{key}` (no run_id — pruned/consolidated/extracted
+    evidence never has one). Only the 24-hex-char `key` itself is derived the SAME way as
+    `record_fetch_evidence`, and only in the sha256 case (sha256 first 24 hex chars) — so
+    cross-checking this id against a ledger row means comparing that trailing 24-char
+    sha256 slice, never the full id string. In the no-sha256 fallback, `record_fetch_evidence`
+    hashes `source:source_ref` only; this function additionally falls back to `url` when
+    `source_ref` is missing (tools.py does not), so that specific fallback branch's key will
+    NOT match any ledger-derived key — acceptable here since the only requirement is a
+    stable id across THIS module's own real/pruned/consolidated variants of the same
+    artifact (which all preserve `sha256`/`source`/`source_ref`), not equality with the
+    ledger's own key."""
+    sha256 = str(ev.get("sha256") or "").strip()
+    if sha256:
+        return f"evidence:sha256:{sha256[:24]}"
+    basis = f"{ev.get('source') or ''}:{ev.get('source_ref') or ev.get('url') or ''}"
+    return f"evidence:ref:{hashlib.sha256(basis.encode()).hexdigest()[:24]}"
+
+
+def _evidence_edb_id(ev: dict[str, Any]) -> str | None:
+    """EDB id for one evidence entry — the same derivation `poc/tools.py::record_fetch_evidence`
+    applies at fetch time (`source == "exploitdb"` -> `source_ref` IS the EDB id). Re-applied
+    here because `poc/slicer.py` (prune/extract) and `poc/consolidate.py` rebuild a NEW evidence
+    dict from the original's `source`/`source_ref` but never copy over an already-computed
+    `edb_id` key, which would otherwise silently disappear the moment an exploitdb PoC gets
+    pruned or consolidated."""
+    edb_id = ev.get("edb_id")
+    if edb_id:
+        return str(edb_id)
+    if str(ev.get("source") or "").strip().lower() == "exploitdb" and ev.get("source_ref"):
+        return str(ev["source_ref"])
+    return None
+
+
+def _grounding_metadata(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    """`{evidence_ids, edb_ids, provenance}` for the evidence entries that actually grounded
+    Section 1 this turn (T1 real refs, or the T2/T3 description/README refs synthesis was
+    built from) — see the module comment above for why this replaces a ledger run_id lookup."""
+    evidence_ids: list[str] = []
+    edb_ids: set[str] = set()
+    provenance: list[dict[str, Any]] = []
+    for ev in evidence or []:
+        evidence_ids.append(_evidence_grounding_id(ev))
+        edb_id = _evidence_edb_id(ev)
+        if edb_id:
+            edb_ids.add(edb_id)
+        provenance.append({
+            "edb_id": edb_id,
+            "sha256": ev.get("sha256"),
+            "canonical_url": ev.get("canonical_url") or ev.get("url") or "",
+        })
+    return {"evidence_ids": evidence_ids, "edb_ids": sorted(edb_ids), "provenance": provenance}
+
+
 def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
                            cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
     """Place the canonical fetched code as Section 1 for this run.
@@ -773,12 +851,18 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
     canonical = "\n\n".join(_blocks_for(e, cve_id) for e in refs)
     new_text = _place_section1(text, canonical)
     n_files = sum(len(e.get("source_files") or [None]) for e in refs)
-    return new_text, {
+    report = {
         "reference_code_injected": True,
         "refs": len(refs),
         "files": n_files,
         "sha256": [e.get("sha256") for e in refs if e.get("sha256")],
     }
+    # PC3: evidence_ids/edb_ids/provenance from the EXACT refs rendered as Section 1 (after
+    # the fixed/canonical narrowing above) — real code, consistent across the real/
+    # real_pruned/real_consolidated tiers (enforce_section1 tags the tier right after this
+    # call returns; the fields below don't change per sub-tier, only `section1_tier` does).
+    report.update(_grounding_metadata(refs))
+    return new_text, report
 
 
 def force_no_poc_notice(text: str, evidence: list[dict[str, Any]],
@@ -826,6 +910,21 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
                        show real CWE/CVSS/CAPEC data from the same tool calls).
     not_found        : no evidence and no confirmed CVE at all → the canonical notice,
                        naming `cve_id` when one was identified.
+
+    Every branch also sets `candidate_status` (PC6, 2026-09-22 — the API's
+    `metadata.candidate_status` was previously ALWAYS "not_generated": it read
+    `state/ledger.py`'s `poc_drafts` table, which nothing in this codebase ever writes to via
+    `draft_once`). "draft_not_executed" and "not_generated" reuse the existing vocabulary
+    `poc/models.py::FetchResult.candidate_status` already uses for a single fetched artifact
+    ("draft_not_executed" = real code, "metadata_only" = no code — not applicable to this
+    aggregate outcome, "not_generated" is FetchResult's own no-op default), applied here to
+    the aggregate Section-1 outcome: "draft_not_executed" when a real PoC (T1, any of real/
+    real_pruned/real_consolidated) was placed. "synthesized_not_executed" is a NEW value,
+    added here specifically for the model's own AI-written code kept under the SYNTHESIZED
+    banner (T2/T3) — there is no prior FetchResult status for "code exists but it's AI-
+    synthesized, not fetched", and conflating it with "draft_not_executed" would misstate a
+    fabricated PoC as a real fetched one. Else "not_generated" (no candidate PoC exists in
+    the answer at all — synthesis_failed / not_found).
     """
     text = text or ""
     text, report = enforce_reference_code(text, evidence, cve_id=cve_id)
@@ -844,6 +943,7 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
             report["pruned"] = True
         else:
             report["section1_tier"] = "real"
+        report["candidate_status"] = "draft_not_executed"
         return text, report
 
     readme_refs = [e for e in (evidence or []) if _description_for(e)]
@@ -857,10 +957,16 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
             new_text = text if body.startswith(_SYNTHESIS_BANNER) else \
                 _place_section1(text, f"{_SYNTHESIS_BANNER}\n\n{body}")
             new_text = _append_synthesis_footer(new_text, evidence)
-            return new_text, {**report, "section1_tier": tier, "synthesized": True}
+            # PC3: ground evidence_ids/edb_ids/provenance in the description/README refs the
+            # synthesis was built from (T3 cve_known-only, no catalog refs, correctly stays
+            # all-empty — there is no catalog evidence to point at, only a CVE-KB boolean).
+            grounding = _grounding_metadata(readme_refs)
+            return new_text, {**report, **grounding, "section1_tier": tier, "synthesized": True,
+                              "candidate_status": "synthesized_not_executed"}
         text, fallback = force_no_poc_notice(text, evidence, notice=_SYNTHESIS_FAILED_NOTE)
         report.update(fallback)
         report["section1_tier"] = "synthesis_failed"
+        report["candidate_status"] = "not_generated"
         return text, report
 
     # not_found: no evidence and no confirmed CVE at all. Emit ONE canonical notice as a clean,
@@ -873,7 +979,9 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
               "không đủ căn cứ để phân tích hay sinh PoC cho mã CVE này." if cve_id else _NO_POC_NOTE)
     canonical = f"{_SECTION1_HEADING}\n\n{notice}"
     if (text or "").strip() == canonical:
-        report.update({"no_poc_forced": False, "reason": "already_canonical", "section1_tier": "not_found"})
+        report.update({"no_poc_forced": False, "reason": "already_canonical",
+                       "section1_tier": "not_found", "candidate_status": "not_generated"})
         return text, report
-    report.update({"no_poc_forced": True, "section1_tier": "not_found"})
+    report.update({"no_poc_forced": True, "section1_tier": "not_found",
+                   "candidate_status": "not_generated"})
     return canonical, report
