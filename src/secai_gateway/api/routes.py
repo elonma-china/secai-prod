@@ -26,7 +26,9 @@ from ..agent.hooks import CHAT_PRE_FETCH_MARKER
 from ..poc import (
     canonical_block,
     cli_surface,
+    collect_named_targets,
     consolidate_poc,
+    ensure_target_disclaimer,
     enforce_section1,
     extract_cve_id,
     has_real_code_evidence,
@@ -35,6 +37,7 @@ from ..poc import (
     override_section3,
     prefetch_evidence,
     prune_evidence,
+    redact_user_target,
     sanitize_airgap_runguide,
     slice_entry,
     strip_system_narration,
@@ -1412,7 +1415,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
     async def inject_reference_code(text: str, run_id: str | None,
                                     pre_evidence: list[dict[str, Any]] | None = None, *,
                                     cve_known: bool = False,
-                                    cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
+                                    cve_id: str | None = None,
+                                    prompt_text: str | None = None,
+                                    target: str | None = None) -> tuple[str, dict[str, Any]]:
         """Deterministic Section-1 placement via `enforce_section1` (poc/inject.py): the
         tier (real fetched code / synthesized-from-README / synthesized-from-CVE-definition
         / not-found) is decided from the merged evidence (deterministic prefetch + whatever
@@ -1429,7 +1434,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
         Before rendering, each evidence file's context-truncated code is swapped for its FULL
         store bytes (`_fullen_evidence_for_display`) — the model already ran on the bounded
         slice, so the DISPLAYED Section 1 (which the FE renders) shows the complete PoC while
-        the model context stays capped. No new endpoint, no FE change needed."""
+        the model context stays capped. No new endpoint, no FE change needed.
+
+        Also redacts any REAL target host the user named in `prompt_text`/`target` (see
+        `collect_named_targets`) out of the model's Mục 2/3 prose and force-inserts the
+        mandatory authorization disclaimer under Mục 2 — PC2 (2026-09-22): a request that
+        both asked for a real CVE's PoC and named a live third-party host got that host
+        baked verbatim into a runnable Mục 2 command with no authorization framing at all."""
         ledger = getattr(state.runner, "ledger", None)
         try:
             text = strip_system_narration(text)
@@ -1442,6 +1453,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # may still emit in Mục 2/3 despite prompt rules. Runs on model text only, before
             # Section-1 injection, so the real injected PoC code is never rewritten.
             text = sanitize_airgap_runguide(text, cve_id)
+            # Deterministic target-redaction + authorization backstop (PC2): same placement
+            # (model text only, before Section-1 injection) so the real injected PoC source
+            # is never touched — only the model's own Mục 2/3 prose/commands are.
+            text = redact_user_target(text, collect_named_targets(prompt_text, target))
+            text = ensure_target_disclaimer(text)
             run_evidence = ledger.evidence_for_run(run_id) if (ledger is not None and run_id) else []
             evidence = merge_evidence(pre_evidence or [], run_evidence)
             evidence = await _fullen_evidence_for_display(evidence, getattr(state.runner, "poc", None))
@@ -1659,8 +1675,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         web_hints = await _maybe_web_hints(prefetch_result)
         # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
+        exploit_target = _exploit_target(body, prompt_text)
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
-            prefetch_result, web_hints, session_id, target=_exploit_target(body, prompt_text),
+            prefetch_result, web_hints, session_id, target=exploit_target,
             strategy_override=getattr(body, "poc_strategy", None))
         agent_prompt = (prompt_text
                         + (_kt_prompt_appendix(kt_result) if kt_result else "")
@@ -1669,7 +1686,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                         prompt_override=agent_prompt)
         text, injected = await inject_reference_code(
             text, metadata.get("run_id"), pre_evidence,
-            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
+            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+            prompt_text=prompt_text, target=exploit_target)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
@@ -1772,7 +1790,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
             final, injected = await inject_reference_code(
                 final, run_id, pre_evidence,
-                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
+                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                prompt_text=text, target=_exploit_target(body, text))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
             if kt_result is not None:
