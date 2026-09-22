@@ -1102,10 +1102,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
     # mid-chunk) — stripped as two separate passes rather than one combined pattern so
     # either survives without the other.
     _DATE_BRACKET_RE = re.compile(r"\[Hôm nay là [^\]]*\]\s*")
-    _INSTRUCTION_RE = re.compile(r"Dịch văn bản sau\b.{0,400}?\n\n?", re.DOTALL)
+    # Bound raised 400 → 2000 (TR2/F1 fix, 2026-09-22): messages.build_translate_prompt's
+    # instruction "head" grew from ~150-300 chars to up to ~1410 chars once the TR2
+    # anti-injection spotlighting guard (_INJECTION_GUARD) was added in front of the wrapped
+    # input — the old 400-char cap silently stopped matching the (now longer) head, so an
+    # echoed preamble — INCLUDING the anti-injection guard text itself — leaked straight into
+    # the translated output instead of being stripped. Anchored on the
+    # `<untrusted_retrieved_content` wrapper tag (always immediately follows the head's
+    # trailing blank line — see build_translate_prompt) so the match reliably covers the
+    # WHOLE head regardless of its exact length, with the raised numeric cap kept as a
+    # backstop (never eats arbitrarily far into real translated content if the tag anchor
+    # doesn't apply for some reason) and a bare `\n\n?` fallback for that same case.
+    _INSTRUCTION_RE = re.compile(
+        r"Dịch văn bản sau\b.{0,2000}?(?:\n\n(?=<untrusted_retrieved_content\b)|\n\n?)",
+        re.DOTALL,
+    )
+    # F3 fix (2026-09-22): strip the `<untrusted_retrieved_content>` spotlighting wrapper
+    # itself out of the OUTPUT if the model echoes it verbatim (open tag, close tag, or the
+    # angle-escaped `&lt;...&gt;` form a forged closing tag inside the input is neutralized
+    # to — see security.wrap_untrusted_content) — belt-and-suspenders alongside
+    # _INSTRUCTION_RE, which only strips the head that precedes the tag, not the tag itself.
+    _WRAPPER_TAG_RE = re.compile(
+        r"(?:<|&lt;)/?untrusted_retrieved_content(?:\s[^>&]*)?(?:>|&gt;)\s*", re.IGNORECASE)
 
     def _strip_prompt_echo(text: str) -> str:
-        return _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+        cleaned = _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+        return _WRAPPER_TAG_RE.sub("", cleaned)
 
     # A caller can post a whole JSON record as the text to translate — the ias.id.vn
     # datalake page sends the entire "cves_detail" object. Round-tripping that through
