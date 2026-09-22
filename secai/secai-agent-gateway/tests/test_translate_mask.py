@@ -12,7 +12,7 @@ import re
 import pytest
 
 from secai_gateway.api.literal_mask import mask_literals, unmask_literals
-from secai_gateway.api.messages import translate_prompt
+from secai_gateway.api.messages import build_translate_prompt, translate_langs, translate_prompt
 from secai_gateway.api.schemas import LegacyRequest
 
 _PH = re.compile(r"⟦L\d+⟧")
@@ -113,3 +113,124 @@ def test_translate_prompt_returns_prompt_and_literals_without_422():
 def test_empty_input_is_noop():
     assert mask_literals("") == ("", [])
     assert unmask_literals("", []) == ""
+
+
+# ── TR1: target_lang must always drive the output language, independent of source_lang,
+# including the source==target ("no-op") case — see messages.py's TR1 fix comment for the
+# live-reproduced model behaviour these tests pin down deterministically (no LLM call). ──
+
+VI_TEXT = "Kẻ tấn công khai thác lỗ hổng tràn bộ đệm để chiếm quyền điều khiển hệ thống."
+EN_TEXT = "An attacker exploits a buffer overflow vulnerability to gain control of the system."
+
+# Round-2 residual repro material (live-verified separately, see messages.py's "ROUND 2"
+# comment): a changelog/diff-style sentence and a CVE-title-style sentence both flipped to
+# English even with the round-1 guard, despite target_lang=vi + source text already vi.
+CHANGELOG_TEXT = "Mô tả lỗ hổng trước khi được cập nhật bởi đội ngũ phân tích."
+TITLE_TEXT = "Lỗ hổng thực thi mã từ xa trong Apache Struts2"
+
+# Marker substring of the absolute language-lock guard (round 2): checked instead of the
+# round-1 "GIỮ NGUYÊN" wording, which no longer appears verbatim in the unconditional form.
+LANG_LOCK_MARKER = "QUY TẮC NGÔN NGỮ BẮT BUỘC"
+
+
+def test_translate_langs_target_lang_wins_over_language_field():
+    # target_lang takes priority; `language` (the FE's legacy field) is only a fallback.
+    body = LegacyRequest(text=VI_TEXT, source_lang="vi", target_lang="en", language="vi")
+    assert translate_langs(body) == ("vi", "en")
+
+
+def test_vi_to_vi_keeps_vietnamese_and_guards_against_english_drift():
+    """The reported bug: source_lang=vi + target_lang=vi must NOT be treated as an implicit
+    "translate to English" — the prompt must explicitly anchor the target as Vietnamese and
+    lock the whole output to it unconditionally."""
+    body = LegacyRequest(text=VI_TEXT, source_lang="vi", target_lang="vi")
+    prompt, _literals = translate_prompt(body)
+    assert "sang vi" in prompt
+    assert "tiếng Việt" in prompt          # target spelled out, not left as a bare code
+    assert LANG_LOCK_MARKER in prompt      # explicit anti-drift-to-English guard
+    assert "tiếng Anh" in prompt           # guard names the wrong language it forbids
+
+
+def test_target_only_vi_no_source_still_guards_against_english():
+    # FE's real contract: only `language`/target_lang is sent, source is auto (None).
+    body = LegacyRequest(text=VI_TEXT, target_lang="vi")
+    prompt, _literals = translate_prompt(body)
+    assert "sang vi" in prompt
+    assert "tiếng Việt" in prompt
+    assert LANG_LOCK_MARKER in prompt
+
+
+def test_en_to_vi_targets_vietnamese():
+    body = LegacyRequest(text=EN_TEXT, source_lang="en", target_lang="vi")
+    prompt, _literals = translate_prompt(body)
+    assert "từ en sang vi" in prompt
+    assert "tiếng Việt" in prompt
+
+
+def test_vi_to_en_targets_english():
+    body = LegacyRequest(text=VI_TEXT, source_lang="vi", target_lang="en")
+    prompt, _literals = translate_prompt(body)
+    assert "từ vi sang en" in prompt
+    assert "tiếng Anh" in prompt
+
+
+def test_en_to_en_keeps_english_and_guards_against_drift():
+    body = LegacyRequest(text=EN_TEXT, source_lang="en", target_lang="en")
+    prompt, _literals = translate_prompt(body)
+    assert "sang en" in prompt
+    assert "tiếng Anh" in prompt
+    assert LANG_LOCK_MARKER in prompt
+
+
+def test_unmapped_target_code_left_as_is_no_redundant_repetition():
+    # An unknown code (e.g. "fr") isn't in the display map — already works untranslated
+    # live, so it must NOT get a redundant "fr (fr)" self-referential label.
+    prompt, _literals = build_translate_prompt(VI_TEXT, "vi", "fr")
+    assert "sang fr" in prompt
+    assert "fr (fr)" not in prompt
+    assert LANG_LOCK_MARKER in prompt      # guard still present, just without a display name
+
+
+def test_auto_detect_branch_unchanged_when_no_target_given():
+    # No target_lang/language at all → bidirectional auto-detect branch, untouched by TR1.
+    body = LegacyRequest(text=VI_TEXT)
+    prompt, _literals = translate_prompt(body)
+    assert "tự nhận diện ngôn ngữ nguồn" in prompt
+    assert LANG_LOCK_MARKER not in prompt  # no target stated → no anti-drift guard needed
+
+
+# ── Round 2: the guard must be unconditional/general, not a list of trigger phrases — it
+# must cover content shapes the round-1 wording missed (changelog/diff framing, CVE-title-
+# style headlines), without being re-litigated per new shape found. ──────────────────────
+
+
+def test_changelog_style_text_vi_to_vi_still_locks_language():
+    """Round-2 residual: 'mô tả ... TRƯỚC KHI được cập nhật bởi ...' (the CVE-record
+    history[].old/.new changelog framing) live-flipped to English under the round-1 guard.
+    The guard text itself must name this shape explicitly so it isn't whack-a-mole."""
+    body = LegacyRequest(text=CHANGELOG_TEXT, source_lang="vi", target_lang="vi")
+    prompt, _literals = translate_prompt(body)
+    assert LANG_LOCK_MARKER in prompt
+    assert "changelog" in prompt or "history" in prompt  # names the failing shape generically
+    assert "không có ngoại lệ" in prompt or "TOÀN BỘ" in prompt  # unconditional, not "if already..."
+
+
+def test_title_style_text_vi_to_vi_still_locks_language():
+    """Round-2 residual: a short CVE-title-style sentence ('Lỗ hổng thực thi mã từ xa trong
+    Apache Struts2') live-flipped to its memorized canonical English CVE title. The guard
+    must explicitly forbid reverting to a "familiar" English phrasing, not just block a
+    literal source==target no-op."""
+    body = LegacyRequest(text=TITLE_TEXT, source_lang="vi", target_lang="vi")
+    prompt, _literals = translate_prompt(body)
+    assert LANG_LOCK_MARKER in prompt
+    assert "quen thuộc" in prompt          # forbids drifting to "familiar" English phrasing
+    assert "tiêu đề" in prompt             # names title/headline-style content explicitly
+
+
+def test_lang_lock_guard_is_unconditional_not_source_equals_target_only():
+    # The round-1 wording was conditional ("if source is already in target, keep it"), which
+    # left the guard silent/weaker for shapes that don't read as a literal no-op. Round 2
+    # must be an unconditional rule that applies the same way regardless of content shape.
+    prompt, _literals = build_translate_prompt(VI_TEXT, "vi", "vi")
+    assert "không có ngoại lệ" in prompt
+    assert "bất kể văn bản gốc nói về chủ đề gì" in prompt
