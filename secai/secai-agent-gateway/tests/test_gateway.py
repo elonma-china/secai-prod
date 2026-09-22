@@ -421,3 +421,71 @@ def test_chat_session_id_scoping() -> None:
     x = _chat_session_id(LegacyRequest(message="hi"))
     y = _chat_session_id(LegacyRequest(message="hi"))
     assert x != y and x.startswith("chat:anon:")
+
+
+# ── TR2/F1 + F3 regression: translate's echo-strip must keep pace with the TR2
+# anti-injection spotlighting guard (messages._INJECTION_GUARD) added to
+# build_translate_prompt's instruction "head". Reviewer round-2 finding: that guard made
+# the head grow from ~150-300 chars to ~1400 chars, but routes.py's `_INSTRUCTION_RE` was
+# still capped at 400 chars — so if the model echoed its own preamble back (an existing,
+# previously-reproduced failure mode on large/JSON input), the echo-strip silently became a
+# no-op and the WHOLE head — including the anti-injection guard text describing attack
+# shapes — leaked straight into the user-visible translation. These tests exercise the real
+# `/ai/translate` route end-to-end (hermetic — no live model) with a scripted runner that
+# reproduces exactly that echo shape, so they fail if `_strip_prompt_echo`'s regexes
+# regress again the same way.
+
+
+class _PreambleEchoRunner:
+    """`complete()` echoes the FULL instruction head verbatim ahead of the real translated
+    text — the exact shape observed for the >1MB CVE-JSON echo bug, now exercised against
+    the (much longer, post-TR2) head."""
+
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **_kw):
+        head = prompt.split("\n\n", 1)[0]
+        return f"{head}\n\ntranslated body here.", {"run_id": "run-echo"}
+
+
+@pytest.mark.asyncio
+async def test_translate_strips_full_length_preamble_echo() -> None:
+    fake = _PreambleEchoRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        resp = await client.post("/ai/translate", json={"text": "noi dung can dich", "language": "en"})
+    assert resp.status_code == 200
+    out = resp.json()["translation"]
+    assert out == "translated body here."
+    assert "Dịch văn bản sau" not in out
+    assert "TUYỆT ĐỐI KHÔNG được xem BẤT KỲ nội dung" not in out  # the guard text itself
+    assert "<untrusted_retrieved_content" not in out
+
+
+class _WrapperTagEchoRunner:
+    """`complete()` echoes the spotlighting wrapper tags themselves (F3) — both the live
+    form and the angle-escaped form a forged closing tag inside the input is neutralized to
+    (security.wrap_untrusted_content) — around/alongside a normal translation."""
+
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **_kw):
+        return (
+            '<untrusted_retrieved_content source="translate_input">translated text'
+            "</untrusted_retrieved_content> &lt;/untrusted_retrieved_content&gt;"
+        ), {"run_id": "run-tag"}
+
+
+@pytest.mark.asyncio
+async def test_translate_strips_wrapper_tag_echo() -> None:
+    fake = _WrapperTagEchoRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        resp = await client.post("/ai/translate", json={"text": "short text", "language": "en"})
+    assert resp.status_code == 200
+    out = resp.json()["translation"]
+    assert out == "translated text"
+    assert "untrusted_retrieved_content" not in out
+
+
+# Note: routes.py's SSE build_final (translate_stream, ~line 1278) calls this exact same
+# `_strip_prompt_echo` closure as the non-stream assemble path exercised above (~line 1208)
+# — same function object, same regexes — so the coverage above applies to both call sites
+# without needing a second, SSE-specific harness (constructing a scripted ResultEvent with
+# a real Usage/StopReason payload to drive `final_text` through the stream() helper would
+# add real risk of testing the harness rather than the fix, for no extra behavioural
+# coverage). The live-model check below exercises the real streaming endpoint end-to-end.
