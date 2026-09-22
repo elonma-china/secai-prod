@@ -669,6 +669,18 @@ async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
+    def _chat_tool_registry() -> list[str]:
+        """Bug #13/CQ4: the ``tool_registry`` VALUE only — key stays, shape stays list[str].
+        Internal retrieval-tool names (qdrant_search/neo4j_search/poc_search/fetch_reference/
+        web_fetch) are gateway-internal detail; hidden (empty list) from the public chat
+        metadata by default, restored in full only when ``expose_internal_tool_metadata`` is
+        explicitly turned on for debugging. Scoped to the "chat" profile only (the profile the
+        bug report is about) — other profiles' tool_registry (translate/report/exploit_research)
+        are untouched."""
+        if getattr(state.settings, "expose_internal_tool_metadata", False):
+            return sorted(registry_for("chat"))
+        return []
+
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
                        session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         grounding_context: str | None = None
@@ -706,6 +718,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # Mirrors the streaming path (see stream()), which already surfaces failures
             # as an SSE error event instead of tearing down the response.
             raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
+        if profile == "chat":
+            # Bug #13/CQ4: state.runner.complete() (agent/runner.py) builds tool_registry from
+            # the full profile.tool_names for every profile — gate it back down to the public
+            # default here too. This is the path a PLAIN GREETING takes (no gate short-circuit
+            # fires), so without this the fix in _chat_gate()'s 3 refusal branches below would
+            # only cover refusals, not the common case the bug report calls out.
+            metadata = {**metadata, "tool_registry": _chat_tool_registry()}
         # pre-fetch grounding (xem _ground_chat_prompt) không qua tool-call của model nên
         # không có mặt trong tool_registry/tool-log thông thường — lộ ra đây để client JSON
         # thường (không SSE) cũng biết nguồn đã dùng, tương ứng tool_call/tool_result giả
@@ -715,7 +734,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return sanitize_output_language(text), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
-        return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
+        # Bug #13/CQ4: only "chat" is gated (public tool_registry default → []); other
+        # profiles (translate/report/exploit_research) are out of the bug's scope and keep
+        # their existing full list.
+        tool_registry = _chat_tool_registry() if profile == "chat" else sorted(registry_for(profile))
+        return {"run_id": run_id, "profile": profile, "tool_registry": tool_registry}
 
     def stream(profile: str, prompt: str, session_id: str | None, build_final,
               pre_frames: list[bytes] | None = None,
@@ -889,7 +912,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    {"label": "unsupported_language", "action": "refuse_language", "pii": False})
             metadata = {
                 "run_id": run_id, "profile": "chat",
-                "tool_registry": sorted(registry_for("chat")),
+                "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
                 "input_classification": {"label": "unsupported_language",
                                          "action": "refuse_language", "blocked": True, "pii": False},
                 "short_circuit": True,
@@ -910,7 +933,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                               "blocked": True, "pii": False, "reason": "unicode_smuggling"}
             metadata = {
                 "run_id": run_id, "profile": "chat",
-                "tool_registry": sorted(registry_for("chat")),
+                "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
                 "input_classification": classification, "short_circuit": True,
             }
             return REFUSE_INJECTION_MSG, metadata
@@ -972,7 +995,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return None
         metadata = {
             "run_id": run_id, "profile": "chat",
-            "tool_registry": sorted(registry_for("chat")),
+            "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
             "input_classification": classification, "short_circuit": True,
         }
         return decision.message, metadata
