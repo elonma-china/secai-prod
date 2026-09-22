@@ -1642,7 +1642,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                  _resolve_poc_strategy(strategy_override, settings), cve_id)
                 consolidated = None
 
-        if consolidated:
+        # PC4 (2026-09-22): a stub/degenerate merge output (poc/inject.py::_is_stub_markup —
+        # e.g. the LLM ignoring its real source and emitting a narrative "it worked" HTML shell,
+        # observed live for CVE-2025-30065, tagged `section1_tier=real_consolidated` even though
+        # Mục 1 had zero exploit logic) must NOT be used as Section 1 just because *some* bytes
+        # came back. Treat it exactly like a failed consolidation (`consolidated is None`) and
+        # fall through to the verbatim/synthesis path below, which still has the genuinely real
+        # fetched evidence (`base_evidence`/`extra_real`, untouched by consolidate_poc) to inject
+        # instead of silently losing a real PoC just because its LLM merge degraded.
+        if consolidated and has_real_code_evidence([consolidated]):
             desc_only = [e for e in list(base_evidence) + list(web_hints or [])
                          if not has_real_code_evidence([e])]
             pre_evidence = [consolidated] + merge_evidence(desc_only)
