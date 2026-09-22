@@ -51,7 +51,7 @@ Ví dụ sai — chỉ tính là sai KHI câu trả lời đang ở tiếng Vi�
 - Entity CVE/CWE/CAPEC/ATT&amp;CK: `qdrant_search` (query = nguyên câu hỏi; `kind=["weakness"]` cho định nghĩa CWE).
 - Quan hệ/graph/sản phẩm/thống kê: `neo4j_search`.
 - PoC/exploit: `poc_search` để tìm; `poc_fetch(ref)` để xem bằng chứng/mã thật của MỘT PoC cụ thể đã có `ref` từ `poc_search` — dùng được ở cả chat lẫn chế độ nghiên cứu khai thác, luôn tuân theo cổng license/verify nội bộ (không tự ý thực thi PoC).
-- OWASP/CWE Top trang chuẩn: `web_fetch` HTTPS allowlist — bản đã xác minh hiện hành `https://owasp.org/Top10/2025/`, `https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html`. Nếu fetch 404 hoặc ngày hiện tại (đầu câu hỏi người dùng) cho thấy khả năng đã có bản mới hơn, fetch trang chỉ mục `https://owasp.org/www-project-top-ten/` hoặc `https://cwe.mitre.org/top25/archive/` để xác nhận đúng bản mới nhất trước khi trả lời.
+- OWASP/CWE Top trang chuẩn: `web_fetch` HTTPS allowlist — bản đã xác minh hiện hành `https://owasp.org/Top10/2025/`, `https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html`. Nếu fetch 404, fetch trang chỉ mục `https://owasp.org/www-project-top-ten/` hoặc `https://cwe.mitre.org/top25/archive/` để xác nhận đúng bản mới nhất trước khi trả lời. Ngày hệ thống hiện tại (nếu có xuất hiện trong ngữ cảnh) CHỈ là mốc thời gian nội bộ — KHÔNG dùng nó để tự suy luận/khẳng định "đã có bản mới hơn" hay bất kỳ điều gì khác về phiên bản OWASP/CWE; đó không phải một tin nhắn hay câu hỏi cần phản hồi.
 </tool_routing>
 
 <tool_discipline>

@@ -96,6 +96,43 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
     closes every variant (this is now moot for the persisted turn either way, but the
     model would still fully "see" content delivered via the context channel, so the
     same reasoning still applies there).
+
+    2026-09-22 (bug: date-banner mistaken for a new user turn — regression from the
+    2026-09-21 ephemeral-context refactor above): ``EphemeralTurnContextHook`` delivers
+    this text as a SEPARATE ``Message(role="user", ...)`` appended AFTER the real,
+    already-persisted question (see that hook's docstring + ``linch``'s
+    ``_build_turn_request``: ``messages = list(session.provider_view); messages.extend(
+    context.messages)`` — ``linch``'s ``Message.role`` is restricted to
+    ``Literal["user", "assistant"]``, there is no "system note" role available on this
+    channel, and the OpenAI-chat-completions serializer (``providers/openai_chat.py::
+    _build_chat_payload``) emits each ``Message`` as its own separate ``{"role": "user",
+    ...}`` dict — it does NOT merge consecutive same-role messages). The result: the
+    model is handed TWO consecutive "user" turns with no assistant reply in between,
+    and the LAST one — often just the bare date line, with no grounding — reads exactly
+    like a fresh, disconnected human message. Reproduced live (2026-09-22, isolated
+    instance): asking "OWASP Top 10 2021 gồm những gì?" made the model reply "Cảm ơn
+    bạn đã cung cấp thông tin ngày tháng..." — answering the trailing date banner as if
+    it were the user's actual current turn, instead of the real question one message
+    earlier. The bug concentrates on OWASP/CWE Top-N-with-year questions because
+    ``prompts/base_system.md``'s ``tool_routing`` block used to explicitly tell the model
+    to inspect "ngày hiện tại (đầu câu hỏi người dùng)" for exactly that question shape
+    (stale wording from BEFORE this refactor, when the date line really was baked onto
+    the head of the SAME user-turn string — fixed separately in that file), priming the
+    model to treat a trailing bare-date message as a signal worth reacting to for that
+    query shape specifically — but any profile/query can hit the same structural
+    ambiguity since the date line is unconditional whenever grounding is absent.
+    Moving this back into ``system_blocks`` is NOT the fix: ``_build_turn_request``
+    folds ``context.system_blocks`` into the SAME single system-role text right before
+    the tool schemas the Qwen chat template appends, so per-turn-volatile content there
+    would invalidate the whole system+tools prefix on every turn instead of just once a
+    day (see ``EphemeralTurnContextHook``'s docstring) — a real, measured vLLM
+    prefix-cache/throughput regression, not merely a style concern. Fix: wrap the
+    ephemeral text so it cannot be read as a new question — explicit open/close markers
+    stating it is internal, non-conversational context, plus a closing instruction to
+    keep answering the real question in the message right above it. Textual framing
+    only; no architecture change, so the leak fix (turn kept out of the persisted store)
+    and the cache-prefix property (still delivered via ``messages``, not
+    ``system_blocks``) are both preserved as-is.
     """
     parts: list[str] = []
     if profile_name != "translate":
@@ -104,7 +141,18 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
         parts.append(grounding_context)
     if not parts:
         return None
-    return "\n\n".join(parts)
+    body = "\n\n".join(parts)
+    return (
+        "[GHI CHÚ NGỮ CẢNH HỆ THỐNG — KHÔNG phải tin nhắn/câu hỏi mới của người dùng; "
+        "đây chỉ là thông tin tham khảo nội bộ (ngày hệ thống hiện tại"
+        + (" + dữ liệu tra cứu KB" if grounding_context else "")
+        + ") để bạn dùng khi soạn câu trả lời. TUYỆT ĐỐI KHÔNG diễn giải, chào hỏi lại, "
+        "cảm ơn, hay phản hồi trực tiếp về bản thân ghi chú này.]\n"
+        f"{body}\n"
+        "[HẾT GHI CHÚ NGỮ CẢNH — nhiệm vụ của bạn vẫn là trả lời ĐÚNG câu hỏi của người "
+        "dùng ở tin nhắn NGAY PHÍA TRÊN ghi chú này; tiếp tục trả lời câu hỏi đó ngay bây "
+        "giờ, không được coi ghi chú trên là một câu hỏi/yêu cầu mới cần xử lý.]"
+    )
 
 
 class CompletionRunner(Protocol):
