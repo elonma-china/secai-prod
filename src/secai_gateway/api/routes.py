@@ -1215,6 +1215,69 @@ def register_routes(app: FastAPI, state: Any) -> None:
             raise HTTPException(413, f"Văn bản quá dài để dịch (>{state.settings.translate_max_chunks} "
                                      "khối). Vui lòng chia nhỏ yêu cầu.")
 
+    # TR5 fix (2026-09-22): source_lang/target_lang used to flow straight into
+    # build_translate_prompt() with zero validation — it just interpolates whatever string
+    # arrives ("Dịch văn bản sau từ {src} sang {tgt}."). A typo'd/garbage code (e.g.
+    # source_lang="xx", target_lang="zz") silently produced an unrecognizable instruction
+    # instead of failing — reproduced live as HTTP 200 with a silently-ignored code instead
+    # of an error. Validate against the real ISO 639-1 two-letter codes — a superset that
+    # covers everything the gateway documents/tests (vi, en — see docs/api-guide.md §3 and
+    # tests/test_translate_mask.py) while keeping any other language already reachable
+    # through this same permissive field (e.g. "fr") working, unchanged. `None`/omitted
+    # (→ the documented bidirectional vi/en auto-detect default) and the explicit sentinel
+    # "auto" are always valid: they mean "unspecified", not a language choice, so there is
+    # nothing to validate.
+    _ISO_639_1_LANGS = frozenset({
+        "aa", "ab", "ae", "af", "ak", "am", "an", "ar", "as", "av", "ay", "az",
+        "ba", "be", "bg", "bh", "bi", "bm", "bn", "bo", "br", "bs",
+        "ca", "ce", "ch", "co", "cr", "cs", "cu", "cv", "cy",
+        "da", "de", "dv", "dz",
+        "ee", "el", "en", "eo", "es", "et", "eu",
+        "fa", "ff", "fi", "fj", "fo", "fr", "fy",
+        "ga", "gd", "gl", "gn", "gu", "gv",
+        "ha", "he", "hi", "ho", "hr", "ht", "hu", "hy", "hz",
+        "ia", "id", "ie", "ig", "ii", "ik", "io", "is", "it", "iu",
+        "ja", "jv",
+        "ka", "kg", "ki", "kj", "kk", "kl", "km", "kn", "ko", "kr", "ks", "ku", "kv", "kw", "ky",
+        "la", "lb", "lg", "li", "ln", "lo", "lt", "lu", "lv",
+        "mg", "mh", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my",
+        "na", "nb", "nd", "ne", "ng", "nl", "nn", "no", "nr", "nv", "ny",
+        "oc", "oj", "om", "or", "os",
+        "pa", "pi", "pl", "ps", "pt",
+        "qu",
+        "rm", "rn", "ro", "ru", "rw",
+        "sa", "sc", "sd", "se", "sg", "si", "sk", "sl", "sm", "sn", "so", "sq", "sr", "ss",
+        "st", "su", "sv", "sw",
+        "ta", "te", "tg", "th", "ti", "tk", "tl", "tn", "to", "tr", "ts", "tt", "tw", "ty",
+        "ug", "uk", "ur", "uz",
+        "ve", "vi", "vo",
+        "wa", "wo",
+        "xh",
+        "yi", "yo",
+        "za", "zh", "zu",
+    })
+
+    def _validate_lang_code(code: Any, field: str) -> None:
+        """400 if `code` is a non-empty value that isn't a real ISO 639-1 code. Omitted/None
+        (the pre-existing auto-detect default) and the explicit sentinel "auto" are always
+        accepted — they carry no language-code claim to validate, so must NOT be rejected."""
+        if code is None:
+            return
+        normalized = str(code).strip().lower()
+        if not normalized or normalized == "auto":
+            return
+        if normalized not in _ISO_639_1_LANGS:
+            raise HTTPException(
+                400,
+                f"{field} không hợp lệ: {code!r}. Dùng mã ngôn ngữ ISO 639-1 (vd: vi, en) "
+                "hoặc bỏ trống/'auto' để tự nhận diện.",
+            )
+
+    def _validate_translate_langs(body: LegacyRequest) -> None:
+        src, tgt = translate_langs(body)
+        _validate_lang_code(src, "source_lang")
+        _validate_lang_code(tgt, "target_lang")
+
     # Chunks below this aren't worth the per-call overhead and start costing coherence
     # (each chunk is translated without its neighbours' context).
     _MIN_CHUNK_CHARS = 800
@@ -1236,7 +1299,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return split_for_translation(text, _chunk_budget(len(text)))
 
     def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
-        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt)."""
+        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt).
+
+        TR4/TR5 fix (2026-09-22): reject an empty/whitespace-only input up front (400) — no
+        text means there is nothing to translate, so there is no legitimate reason to still
+        call the model (which would otherwise either echo nothing back, giving the old
+        200-empty bug its input, or burn a call for no reason) — and validate source_lang/
+        target_lang before any model call, not after."""
+        if not body.supplied_text().strip():
+            raise HTTPException(400, "Thiếu nội dung cần dịch (text rỗng).")
+        _validate_translate_langs(body)
         src, tgt = translate_langs(body)
         chunks = _split_adaptive(body.supplied_text())
         _guard_chunk_cap(len(chunks))
@@ -1246,14 +1318,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
         """Translate the whole input, chunking long text so no single model turn has to emit
         a translation past its output-token cap (which would truncate). Each chunk runs the
         full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
-        separators. complete() already sanitizes; we unmask each chunk's literals here."""
+        separators. complete() already sanitizes; we unmask each chunk's literals here.
+
+        TR5 fix (2026-09-22): validated here (before EITHER the record or the plain-text
+        branch below runs) so a garbage source_lang/target_lang 400s regardless of which
+        shape the input takes — not just the plain-text path covered by _translate_chunks."""
+        _validate_translate_langs(body)
         src, tgt = translate_langs(body)
         sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
 
         async def render(chunk_text: str) -> str:
             prompt, literals = build_translate_prompt(chunk_text, src, tgt)
             out, _meta = await complete("translate", body, prompt_override=prompt)
-            return _strip_prompt_echo(unmask_literals(out, literals))
+            cleaned = _strip_prompt_echo(unmask_literals(out, literals))
+            if not cleaned.strip():
+                # TR4 fix (2026-09-22): a blank/whitespace-only completion used to flow
+                # straight through as a "successful" 200 with translated_text="" — the
+                # caller had no signal the translation actually failed. The input itself is
+                # guaranteed non-empty here (empty input is rejected earlier, in
+                # _translate_chunks/this function's top, before any model call), so an empty
+                # result here can only mean the model/provider failed to produce a
+                # translation — surface that as a real error instead of a silent success.
+                raise HTTPException(
+                    502,
+                    "Dịch thất bại: mô hình trả về kết quả rỗng (translation failed / empty completion).",
+                )
+            return cleaned
 
         async def render_bounded(chunk_text: str) -> str:
             async with sem:
