@@ -180,6 +180,68 @@ def test_gate_offtopic_below_threshold_passes() -> None:
     assert decide(v, s).action is Action.PASS
 
 
+def test_gate_offtopic_near_tie_with_security_passes() -> None:
+    # Real repro (PoC drill-down follow-up, 2026-09-21): offtopic=0.5096/security=0.4901 —
+    # both clear the 0.5 offtopic threshold on their own, but the margin over security is only
+    # ~0.02, far under the 0.15 default margin. Must PASS through to the agent, not refuse.
+    v = InputVerdict(True, "offtopic", False, False,
+                      {"security": 0.4901, "offtopic": 0.5096, "chitchat": 0.0003}, 1.0)
+    assert decide(v, _Settings).action is Action.PASS
+
+
+def test_gate_offtopic_dominant_over_security_still_refuses() -> None:
+    # Off-topic clearly ahead of security (large margin) must still hard-refuse.
+    v = InputVerdict(True, "offtopic", False, False,
+                      {"security": 0.10, "offtopic": 0.85, "chitchat": 0.05}, 1.0)
+    assert decide(v, _Settings).action is Action.REFUSE_OFFTOPIC
+
+
+def test_gate_offtopic_margin_configurable_to_zero_restores_legacy() -> None:
+    # margin=0.0 disables the margin check entirely — legacy threshold-only behavior.
+    s = _Settings()
+    s.input_classifier_offtopic_margin = 0.0
+    v = InputVerdict(True, "offtopic", False, False,
+                      {"security": 0.4901, "offtopic": 0.5096}, 1.0)
+    assert decide(v, s).action is Action.REFUSE_OFFTOPIC
+
+
+def test_gate_injection_blocks_even_on_offtopic_near_tie() -> None:
+    # Injection must always take priority, regardless of the offtopic/security margin.
+    v = InputVerdict(True, "offtopic", True, False,
+                      {"security": 0.4901, "offtopic": 0.5096}, 1.0)
+    assert decide(v, _Settings).action is Action.BLOCK_INJECTION
+
+
+def test_gate_offtopic_chitchat_near_tie_low_security_still_refuses() -> None:
+    # NIT-2 (reviewer): the margin check compares offtopic against SECURITY specifically, not
+    # against whichever label is runner-up. offtopic=0.51/chitchat=0.48 are a near-tie with
+    # EACH OTHER, but security is confidently low (0.01) — a genuine off-topic/chitchat message
+    # with no plausible security reading must still hard-refuse. Guards against a wrong
+    # implementation that accidentally widens the near-tie band using the second-highest score
+    # instead of security specifically.
+    v = InputVerdict(True, "offtopic", False, False,
+                      {"security": 0.01, "offtopic": 0.51, "chitchat": 0.48}, 1.0)
+    assert decide(v, _Settings).action is Action.REFUSE_OFFTOPIC
+
+
+def test_gate_offtopic_margin_boundary_inclusive() -> None:
+    # NIT-2 (reviewer): pin the boundary semantics of `(off_p - sec_p) >= margin`. Exactly at
+    # the 0.15 default margin must REFUSE (inclusive `>=`); just under it (0.149) must PASS.
+    at_margin = InputVerdict(True, "offtopic", False, False,
+                              {"security": 0.35, "offtopic": 0.50}, 1.0)
+    assert decide(at_margin, _Settings).action is Action.REFUSE_OFFTOPIC
+
+    below_margin = InputVerdict(True, "offtopic", False, False,
+                                 {"security": 0.351, "offtopic": 0.50}, 1.0)
+    assert decide(below_margin, _Settings).action is Action.PASS
+
+
+def test_gate_security_clear_passes() -> None:
+    v = InputVerdict(True, "security", False, False,
+                      {"security": 0.95, "offtopic": 0.03, "chitchat": 0.02}, 1.0)
+    assert decide(v, _Settings).action is Action.PASS
+
+
 def test_gate_chitchat_passes_by_default() -> None:
     v = InputVerdict(True, "chitchat", False, False, {"offtopic": 0.0}, 1.0)
     assert decide(v, _Settings).action is Action.PASS
@@ -241,7 +303,7 @@ class _FakeRunner:
         # a judge-call failure).
         self.judge_response: str | BaseException | None = None
 
-    async def complete(self, profile, prompt, session_id=None):
+    async def complete(self, profile, prompt, session_id=None, *, grounding_context=None):
         self.calls.append((profile, prompt))
         if profile == "injection_judge" and self.judge_response is not None:
             if isinstance(self.judge_response, BaseException):
@@ -249,7 +311,7 @@ class _FakeRunner:
             return self.judge_response, {"run_id": "r", "profile": profile}
         return f"{profile}: {prompt}", {"run_id": "r", "profile": profile}
 
-    async def stream(self, profile, prompt, session_id=None):
+    async def stream(self, profile, prompt, session_id=None, *, grounding_context=None):
         self.calls.append((profile, prompt))
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile}: {prompt}"})
 

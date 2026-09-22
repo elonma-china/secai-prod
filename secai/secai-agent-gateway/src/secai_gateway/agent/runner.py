@@ -60,43 +60,58 @@ def _is_turn_limit(event: Any) -> bool:
     return isinstance(event, LoopGuardEvent) and getattr(event, "reason", "") == "max_turns"
 
 
-def _dated_prompt(prompt: str) -> str:
-    """Prefix the user turn with today's date (Vietnam local time, weekday included).
+def _date_line() -> str:
+    """Today's date (Vietnam local time, weekday included) as a standalone line.
 
-    Deliberately NOT part of the system prompt: the system block (+ the tool
-    schemas the Qwen chat template appends right after it) is meant to stay a
-    byte-identical, indefinitely prefix-cacheable prefix under vLLM
-    ``--enable-prefix-caching`` (see factory.py's ``compaction_ladder`` note).
-    The user turn is already unique per request/never cached across requests,
-    so prefixing it here costs nothing extra — while landing the date in the
-    system block would invalidate that whole cached prefix (system + tools)
-    once a day. ``meta["last_user_prompt"]`` keeps the unwrapped prompt so
-    grounding-classification hooks aren't affected.
+    2026-09-21: used to be prefixed directly onto the user-turn STRING passed to
+    ``session.run()`` — but linch persists exactly that string as the user turn (see
+    ``linch/loop/runner.py``), so it ended up baked verbatim into the session store
+    and re-displayed whenever a client reloaded chat history (``GET
+    /sessions/{sid}/messages``) — one leg of the internal-prompt-leak bug. Delivered
+    now via ``session.meta["ephemeral_context"]`` + ``EphemeralTurnContextHook``
+    (agent/hooks.py) instead: a per-turn, non-persisted extra message appended to the
+    outgoing provider request only. The user turn passed to ``session.run()`` is the
+    caller's ORIGINAL, unwrapped prompt again.
     """
     now = datetime.now(_VN_TZ)
     weekday = _VN_WEEKDAYS[now.weekday()]
     today = now.strftime("%d/%m/%Y")
-    return f"[Hôm nay là {weekday}, ngày {today} (giờ Việt Nam)]\n{prompt}"
+    return f"[Hôm nay là {weekday}, ngày {today} (giờ Việt Nam)]"
 
 
-def _maybe_dated_prompt(profile_name: str, prompt: str) -> str:
-    """Skip the date-prefix for ``translate``: it's a pure text-transformation task
-    with no need for date context, and unlike other profiles the model is told to
-    reproduce/transform the ENTIRE user turn — so a leaked or (worse) paraphrased
-    copy of the injected preamble can land in the output verbatim. Reproduced
-    2026-09-12: the model rendered ``[Hôm nay là Thứ 7, ngày 12/09/2026 (giờ Việt
-    Nam)]`` as ``[Tuần thứ 7, ngày 12/09/2026 (giờ Việt Nam)]`` inside a translated
-    CVE title — a paraphrase, not a literal echo, so no fixed regex can reliably
-    strip every variant after the fact. Removing the date from the prompt entirely
-    is the only fix that closes every variant at once."""
-    if profile_name == "translate":
-        return prompt
-    return _dated_prompt(prompt)
+def _ephemeral_context_text(profile_name: str, grounding_context: str | None) -> str | None:
+    """Build the per-turn ephemeral context text (date + optional KB grounding block)
+    for ``session.meta["ephemeral_context"]`` — see ``_date_line`` and
+    ``EphemeralTurnContextHook`` (agent/hooks.py) for why this is a separate channel
+    from the persisted user turn.
+
+    Skips the date line for ``translate``: it's a pure text-transformation task with
+    no need for date context, and unlike other profiles the model is told to
+    reproduce/transform the ENTIRE user turn — so a leaked or (worse) paraphrased copy
+    of an injected preamble could land in the output verbatim. Reproduced 2026-09-12:
+    the model rendered ``[Hôm nay là Thứ 7, ngày 12/09/2026 (giờ Việt Nam)]`` as
+    ``[Tuần thứ 7, ngày 12/09/2026 (giờ Việt Nam)]`` inside a translated CVE title — a
+    paraphrase, not a literal echo, so no fixed regex could reliably strip every
+    variant after the fact. Not exposing the date line to that profile at all is what
+    closes every variant (this is now moot for the persisted turn either way, but the
+    model would still fully "see" content delivered via the context channel, so the
+    same reasoning still applies there).
+    """
+    parts: list[str] = []
+    if profile_name != "translate":
+        parts.append(_date_line())
+    if grounding_context:
+        parts.append(grounding_context)
+    if not parts:
+        return None
+    return "\n\n".join(parts)
 
 
 class CompletionRunner(Protocol):
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]: ...
-    def stream(self, profile_name: str, prompt: str, session_id: str | None = None) -> AsyncIterator[Any]: ...
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
+                        *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]: ...
+    def stream(self, profile_name: str, prompt: str, session_id: str | None = None,
+               *, grounding_context: str | None = None) -> AsyncIterator[Any]: ...
 
 
 class LinchRunner:
@@ -157,7 +172,8 @@ class LinchRunner:
             run_store=self.run_store, ledger=self.ledger,
         )
 
-    def _apply_profile(self, session: Any, profile_name: str, prompt: str = "") -> None:
+    def _apply_profile(self, session: Any, profile_name: str, prompt: str = "",
+                        *, grounding_context: str | None = None) -> None:
         # Override both runnable registry and system context per session. The exploit tools
         # are absent from chat, rather than merely hidden from model instructions.
         profile = PROFILES[profile_name]
@@ -166,11 +182,24 @@ class LinchRunner:
         session.tools_override = empty_tools(
             *(self.tools[name] for name in profile.tool_names if name in self.tools))
         session.system_blocks_override = [SystemBlock(text=compose_system_prompt(profile, settings=get_settings()))]
-        # RequireChatGroundingHook reads last_user_prompt from session.meta.
+        # RequireChatGroundingHook reads last_user_prompt from session.meta. `prompt` here
+        # is always the caller's ORIGINAL, unwrapped text (routes.py no longer bakes KB
+        # grounding/date into it) — session.meta is in-memory-only (set via plain attribute
+        # assignment, never session.update_meta()), so nothing here reaches the durable
+        # SessionRecord/`GET /sessions/{sid}` endpoints.
         meta = dict(getattr(session, "meta", None) or {})
         meta["profile"] = profile.name
         if prompt:
             meta["last_user_prompt"] = prompt
+        # Explicit flag replacing the old "sniff CHAT_PRE_FETCH_MARKER inside the persisted
+        # prompt" trick (see agent/hooks.py::CHAT_PRE_FETCH_MARKER comment) — tells
+        # RequireChatGroundingHook that the pre-fetch in routes.py::_ground_chat_prompt
+        # already satisfied the KB-grounding requirement for this turn.
+        meta["chat_prefetch_grounded"] = bool(grounding_context)
+        # Per-turn context delivered via EphemeralTurnContextHook (agent/hooks.py) — the
+        # date line (skipped for translate) plus, for chat, the pre-fetched KB grounding
+        # block. Never part of the string passed to session.run(), so never persisted.
+        meta["ephemeral_context"] = _ephemeral_context_text(profile_name, grounding_context)
         session.meta = meta
 
     @asynccontextmanager
@@ -197,14 +226,18 @@ class LinchRunner:
             if self._session_locks.get(session_id) is lock:
                 del self._session_locks[session_id]
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None) -> tuple[str, dict[str, Any]]:
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
+                        *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-            self._apply_profile(session, profile_name, prompt)
+            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
             final = ""
             run_id = None
-            async for event in session.run(_maybe_dated_prompt(profile_name, prompt)):
+            # `prompt` is the caller's ORIGINAL, unwrapped text — date + any KB grounding
+            # reach the model via session.meta["ephemeral_context"] (set just above), never
+            # via this string, so linch persists exactly this clean prompt as the user turn.
+            async for event in session.run(prompt):
                 run_id = session.active_run_id or run_id
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
@@ -231,7 +264,8 @@ class LinchRunner:
             metadata.update(self.ledger.exploit_metadata(run_id))
         return final, metadata
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None,
+                      *, grounding_context: str | None = None):
         """Yield raw linch run events (SystemEvent, ToolCallStart/End, PartialAssistant,
         Result, …) so the caller can render tool calls separately from assistant text
         over SSE. Applies the same per-profile tool/system override as ``complete()`` —
@@ -239,11 +273,13 @@ class LinchRunner:
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
-            self._apply_profile(session, profile_name, prompt)
+            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
             turn_limited = False
-            async for event in session.run(_maybe_dated_prompt(profile_name, prompt)):
+            # See complete()'s comment: `prompt` is the caller's original text; date/KB
+            # grounding are delivered via session.meta["ephemeral_context"], not this string.
+            async for event in session.run(prompt):
                 got_text = got_text or _has_text(event)
                 if salvageable and _is_turn_limit(event):
                     # Swallow the max_turns terminal (guard → error → empty result);

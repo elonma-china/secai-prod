@@ -60,11 +60,22 @@ def decide(verdict: InputVerdict, settings: Any) -> Decision:
         return Decision(Action.BLOCK_INJECTION, REFUSE_INJECTION_MSG, "injection", pii=verdict.pii)
 
     # 2) Off-topic — deterministic scope refusal (thresholded, so borderline stays PASS).
+    #    Off-topic and security are two classes of the SAME softmax race, not independent
+    #    signals: a raw `off_p >= off_thr` check refuses a 0.51/0.49 near-tie just as readily
+    #    as a confident 0.85/0.10 call, even though the former is a coin-flip on a message that
+    #    is plausibly still a security question (e.g. a natural drill-down follow-up on a PoC).
+    #    Require offtopic to also beat security by a margin before refusing; a near-tie PASSes
+    #    through to the agent, which still has the LLM <scope_policy> as a second line of
+    #    defense — genuine off-topic (weather/cooking/math/...) scores nowhere near a tie, so
+    #    this only widens the near-tie band, it does not weaken the off-topic-dominant case.
     off_p = float(verdict.scores.get("offtopic", 0.0))
     off_thr = float(getattr(settings, "input_classifier_offtopic_threshold", 0.5) or 0.5)
+    sec_p = float(verdict.scores.get("security", 0.0))
+    margin = float(getattr(settings, "input_classifier_offtopic_margin", 0.15))
     if (
         verdict.intent == "offtopic"
         and off_p >= off_thr
+        and (off_p - sec_p) >= margin
         and bool(getattr(settings, "input_classifier_block_offtopic", True))
     ):
         return Decision(Action.REFUSE_OFFTOPIC, REFUSE_OFFTOPIC_MSG, "offtopic", pii=verdict.pii)

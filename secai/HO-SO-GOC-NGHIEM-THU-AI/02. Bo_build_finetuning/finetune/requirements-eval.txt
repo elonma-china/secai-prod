@@ -1,0 +1,12 @@
+# Deps cho eval_embedding.py/eval_reranker.py (giai đoạn 3/9 của mlops/ — drift-check, KHÔNG
+# cần GPU, chạy được cả ở dry-run mặc định). Tách riêng khỏi requirements-train.txt (unsloth/trl/
+# bitsandbytes/... nặng, chỉ máy chạy --execute mới cần) — máy điều phối chỉ làm drift-check
+# không nên phải cài cả bộ train để có được sentence-transformers.
+#
+# CPU đủ dùng cho eval (model nhỏ: BGE-M3, Qwen3-Reranker-0.6B, vài chục mẫu/lần) — cài torch
+# CPU-only cho nhẹ:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements-eval.txt
+sentence-transformers>=3.3
+transformers>=4.46
+accelerate>=0.34

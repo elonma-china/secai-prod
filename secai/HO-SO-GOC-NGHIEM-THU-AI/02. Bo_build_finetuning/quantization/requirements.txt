@@ -1,0 +1,19 @@
+# Exact versions verified working on the Vast.ai A100-80GB box.
+# torch/torchvision are cu126 wheels — install them from the PyTorch cu126 index
+# (see README), the rest come from PyPI.
+#
+#   pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu126
+#   pip install "llmcompressor[qwen]==0.12.0" hf_transfer
+#
+torch==2.10.0+cu126
+torchvision==0.25.0+cu126
+llmcompressor==0.12.0
+transformers==5.10.1
+compressed-tensors==0.17.1
+accelerate==1.13.0
+datasets==5.0.0
+numpy==2.2.6
+safetensors==0.8.0
+huggingface-hub>=1.0
+hf-xet==1.5.1
+qwen-vl-utils==0.0.14

@@ -87,7 +87,37 @@ services:
     # 0.4.0-session (feat/session): + project/session mgmt + durable SQLite session store
     # (SESSION_STORE_BACKEND=sqlite, sessions.db trong volume secai-gw-data). Ảnh cũ
     # 0.3.0-merged giữ nguyên để rollback (đổi lại image: + `docker compose up -d gateway`).
-    image: secai-agent-gateway:0.4.0-session
+    # 0.5.2-chat-grounding (2026-09-19, commit 69553fe): pre-fetch KB grounding cho câu
+    # hỏi có CVE/CWE/CAPEC/ATT&CK-id ở /ai/chat[/stream] + /sessions/{sid}/chat[/stream] —
+    # fix 46.9% câu trả lời không gọi tool → model bịa nhầm CVE (đo faithfulness 58-63%
+    # trước fix). Ảnh 0.5.1-kpi-live giữ nguyên để rollback.
+    # 0.5.3-faith-tune (2026-09-20): faithfulness sau 0.5.2 đo được 88.63% (n=834/850),
+    # phân tích 4 pattern lỗi còn sót → 2 fix product: (a) top_k 5→10 trong
+    # _ground_chat_prompt() — EXACT-CVE FAST PATH của _qdrant_search scroll rồi cắt cứng
+    # top_k, CVE nhiều chunk có thể rớt mất chunk "context" (chứa KEV/severity) ngẫu
+    # nhiên; (b) prompts/chat.md grounding_and_honesty thêm rule chặn suy diễn văn xuôi
+    # vượt context (chuỗi tấn công/kịch bản khai thác/tác động kinh doanh không có
+    # trong KB) — pattern lỗi lớn nhất còn lại (121/850). Ảnh 0.5.2-chat-grounding giữ
+    # nguyên để rollback.
+    # 0.5.4-source-sse (2026-09-21): FE (ToolTimeline.tsx) đã wire đúng onToolCall/
+    # onToolResult nhưng không hiện "nguồn" vì _ground_chat_prompt() (0.5.2) pre-fetch
+    # KB thay hẳn việc model tự gọi tool → không còn tool_call/tool_result SSE event
+    # nào phát ra dù answer vẫn có grounding thật. Fix: dựng cặp tool_call/tool_result
+    # giả lập từ kết quả pre-fetch (api/routes.py _grounding_sse_frames, stream()
+    # pre_frames param) — /ai/chat[/stream] + /sessions/{sid}/chat[/stream] đều có.
+    # Ảnh 0.5.3-faith-tune giữ nguyên để rollback.
+    # 0.5.5-regen-fix (2026-09-21): bug thật do 0.5.2 gây ra — RequireChatGroundingHook.
+    # on_before_final_answer chỉ coi "đã tra KB" qua tool_result thật (on_post_tool_use);
+    # pre-fetch của _ground_chat_prompt() gọi _qdrant_search() thẳng, không qua tool-call
+    # nên hook không biết, ép force_continue (regenerate) 2 LẦN/câu dù context đã đúng —
+    # user báo "gen gần xong thì giật, sinh lại" (đúng UI hành vi clear buffer khi nhận
+    # regenerate). Xác nhận live: CVE-2021-44228/CVE-2026-53963 đều 2 regenerate trước
+    # fix, 0 sau fix — 2-3x lãng phí compute mỗi câu, và có rủi ro hết max_retries thì
+    # SHIP _CHAT_EMPTY_FALLBACK đè lên câu trả lời pre-fetch vốn đã đúng. Fix: marker
+    # CHAT_PRE_FETCH_MARKER (agent/hooks.py) chèn đầu prompt khi pre-fetch, hook check
+    # prompt.startswith(marker) → coi need_kb=False, bỏ qua force_continue cho nhánh đó.
+    # Ảnh 0.5.4-source-sse giữ nguyên để rollback.
+    image: secai-agent-gateway:0.5.5-regen-fix
     container_name: secai-docker-gateway
     restart: unless-stopped
     # Cho container phân giải host.docker.internal → IP host (để reverse-proxy /tb tới TensorBoard :6006 trên host).
@@ -134,6 +164,12 @@ services:
       # với trang + API nên FE chỉ cần proxy một dòng /showcase.
       SHOWCASE_TENSORBOARD_BASE_URL: /showcase-tb
       SHOWCASE_TENSORBOARD_UPSTREAM: http://host.docker.internal:6006
+      # Service kích hoạt MLOps (trigger_api) chạy trên HOST :8877 — gateway reverse-proxy
+      # /showcase-api/retraining/* tới đây (tab "Retraining tự động" của trang nghiệm thu).
+      SHOWCASE_RETRAINING_UPSTREAM: http://host.docker.internal:8877
+      # Nếu trigger_api bật Basic Auth (khi expose ra internet), khai cùng "user:pass" ở đây để
+      # proxy tự thêm Authorization: Basic. Để trống nếu Basic Auth tắt. Đọc từ .env, KHÔNG hardcode.
+      SHOWCASE_RETRAINING_BASIC_AUTH: ${SHOWCASE_RETRAINING_BASIC_AUTH:-}
     ports:
       - "${GATEWAY_HOST_PORT:-8140}:8131"
     volumes:
@@ -150,6 +186,11 @@ services:
       - /home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI:/srv/showcase/hosogoc:ro      # hồ sơ gốc (dossier+KPI+build)
       - /home/ict/Downloads/CVE-DB/sync_cve.log:/srv/showcase/sync_cve.log:ro           # log cập nhật KB
       - /home/ict/AIEngines/secai/secai-docker/docker-compose.yml:/srv/showcase/docker-compose.yml:ro
+      # KPI Studio Live-run: script bench 19 KPI (B/C: bench_kpi.py; A: chay_eval_gateway_moi.sh) +
+      # BM25 index cho retrieval nhóm A. RO: B/C ghi --out ra /tmp (writable); nhóm A ghi runs/
+      # cần rw nên chỉ chạy được trên HOST, không trong container này (xem README).
+      - /home/ict/AIEngines/secai/KPI-VA-GEN-TEST:/home/ict/AIEngines/secai/KPI-VA-GEN-TEST:ro
+      - /home/ict/secai-88/source/data:/home/ict/secai-88/source/data:ro
     depends_on:
       qdrant:
         condition: service_healthy

@@ -1,0 +1,42 @@
+{
+  "run_id": "qwen35-cyber-f1-dpo",
+  "base_model": "DuyTa/Cyber-F1",
+  "output_dir": "outputs/qwen35-cyber-f1-dpo",
+  "epochs": 1,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 16,
+  "learning_rate": 5e-6,
+  "dpo_beta": 0.1,
+  "warmup_ratio": 0.03,
+  "scheduler": "cosine",
+  "eval_strategy": "steps",
+  "eval_steps": 50,
+  "save_strategy": "steps",
+  "save_steps": 50,
+  "save_total_limit": 2,
+  "max_seq_length": 8192,
+  "load_in_4bit": false,
+  "fast_inference": false,
+  "device_map": "cuda:0",
+  "moe_backend": "unsloth_triton",
+  "gradient_checkpointing": "unsloth",
+  "peft": {
+    "r": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "gate_up_proj",
+      "down_proj"
+    ]
+  },
+  "logging": {
+    "tensorboard_dir": "outputs/tensorboard/qwen35-cyber-f1-dpo"
+  },
+  "comment": "max_seq_length nhỏ hơn bản SFT (32768) vì prompt DPO ở đây chỉ 1 câu hỏi CVE + câu trả lời, không có tool-call trace dài như Cyber_F1_v2. base_model mặc định là checkpoint gốc DuyTa/Cyber-F1 — 05_dpo_llm.py ghi đè bằng candidate SFT nếu Giai đoạn 4 vừa train lại LLM, hoặc bằng chính production nếu Giai đoạn 3 đã NO_FINETUNE_REQUIRED nhưng vẫn muốn tinh chỉnh thêm bằng DPO."
+}

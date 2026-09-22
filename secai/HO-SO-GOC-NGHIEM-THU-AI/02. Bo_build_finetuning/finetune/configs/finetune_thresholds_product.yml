@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "policy_id": "secai-finetune-product-gate-v1",
+  "baseline_file": "../../benchmarks/baselines/approved_metrics.json",
+  "trigger": "PRODUCT-KPI gate — đo qua pipeline sản phẩm (hybrid dense+BM25 native Qdrant + id-aware + rerank), NEO vào TRẦN KPI HỢP ĐỒNG × 0.95 (biên suy giảm 5% theo R-RETRAIN-DRIFT5). KHÁC finetune_thresholds.yml cũ (đo standalone dense-only/bare, sai thang đo). Phase 1 = 2 chỉ tiêu truy hồi (embedding Hit@10 id-aware, reranker Precision@1). Phase 2/3 sẽ thêm faithfulness/relevance/entity/hallucination + SAST/exploit/remediation. Số floor = trần hợp đồng × 0.95: Hit@10 0.96->0.912, P@1 0.90->0.855.",
+  "checks": [
+    {
+      "id": "embedding-hit-at-10-product",
+      "report": "embedding",
+      "finetune_target": "embedding",
+      "suite_id": "secai-retrieval-product-v1",
+      "metric": "hit_rate_at_10",
+      "min": 0.912,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-EMB96",
+      "note": "Hit@10 id-aware (headline hợp đồng, hybrid dense+BM25+lọc cve_id — khớp product qdrant_search). Trần HĐ >96% × 0.95 = 91.2%. Lưu ý: id-aware ít nhạy với suy giảm embedding thuần (lọc cve_id cứu hit); sub-metric hit_rate_at_10_dense_only trong report lộ chất lượng embedding thật để soi."
+    },
+    {
+      "id": "reranker-precision-at-1-product",
+      "report": "reranker",
+      "finetune_target": "reranker",
+      "suite_id": "secai-retrieval-product-v1",
+      "metric": "precision_at_1",
+      "min": 0.855,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-RERANK90",
+      "note": "Reranking Precision@1: rerank top-20 ứng viên id-aware -> top-1 khớp gold cve_id. Trần HĐ >90% × 0.95 = 85.5%."
+    },
+    {
+      "id": "llm-faithfulness-product",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-product-v1",
+      "metric": "faithfulness",
+      "min": 0.931,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-FAITH98",
+      "note": "RAGAS faithfulness (answer vs gold/retrieved context), đo trên FULL RAG agent. Trần HĐ >98% × 0.95 = 93.1%."
+    },
+    {
+      "id": "llm-answer-relevance-product",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-product-v1",
+      "metric": "answer_relevance",
+      "min": 0.855,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-RELEV90",
+      "note": "Answer relevance (LLM-judge độc lập). Trần HĐ >90% × 0.95 = 85.5%."
+    },
+    {
+      "id": "llm-entity-precision-product",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-product-v1",
+      "metric": "entity_precision",
+      "min": 0.95,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-ENTITY100",
+      "note": "Entity Precision CVE/CWE (mỗi id nhắc phải grounded). Trần HĐ =100% × 0.95 = 95% (ca =100% không trừ hao tuyến tính được → lấy 0.95)."
+    },
+    {
+      "id": "llm-hallucination-product",
+      "report": "llm",
+      "finetune_target": "llm",
+      "suite_id": "secai-llm-product-v1",
+      "metric": "hallucination_rate",
+      "max": 0.021,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-KPI-HALLU2",
+      "note": "Hallucination rate (id bịa không grounded). Trần HĐ <2% + biên 5% -> ≤ 2.1% = 0.021 (lower-is-better)."
+    },
+    {
+      "id": "task-sast-accuracy-product",
+      "report": "sast",
+      "finetune_target": "llm",
+      "suite_id": "secai-tasks-product-v1",
+      "metric": "accuracy",
+      "min": 0.8075,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-LLM-SAST85",
+      "note": "SAST accuracy: grader tất định tự-sinh (must_find_cwe=CWE của CVE) trên mã inline. Trần HĐ ≥85% × 0.95 = 80.75%."
+    },
+    {
+      "id": "task-exploit-accuracy-product",
+      "report": "exploit",
+      "finetune_target": "llm",
+      "suite_id": "secai-tasks-product-v1",
+      "metric": "accuracy",
+      "min": 0.8075,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-LLM-EXPLOIT85",
+      "note": "Exploit explanation accuracy (must_contain_any=CWE_INFO mechanism kw + EXPLOIT_KW). Trần HĐ ≥85% × 0.95 = 80.75%. min_examples=15: exploit là nhánh hiếm (tinh_huong ~6% CVE) -> <15 mẫu thì 1 câu trượt đã đổi 20% (nhiễu), gate DEFER (not_evaluated) tránh false-trigger; kỳ nhiều CVE (≥~250) sẽ đủ mẫu để chấm thật."
+    },
+    {
+      "id": "task-remediation-accuracy-product",
+      "report": "remediation",
+      "finetune_target": "llm",
+      "suite_id": "secai-tasks-product-v1",
+      "metric": "accuracy",
+      "min": 0.57,
+      "min_examples": 5,
+      "required": true,
+      "platform_kpi": "R-LLM-REMED60",
+      "note": "Auto-remediation accuracy (must_have_sections + fix kw). Trần HĐ ≥60% × 0.95 = 57%."
+    }
+  ],
+  "sufficiency_note": "min_examples=5 chỉ là guard cuối. SUFFICIENCY thật do run_product_kpi.sh:MIN_SAMPLES (mặc định 15) — report có examples<MIN_SAMPLES bị BỎ khỏi --report -> check not_evaluated (DEFER, không false-trigger). Kỳ mỏng (ít CVE) -> nhiều metric defer; nếu tất cả defer -> INSUFFICIENT_EVIDENCE -> không retrain."
+}

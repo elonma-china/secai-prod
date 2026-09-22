@@ -1,0 +1,44 @@
+{
+  "run_id": "qwen35-cyber-f1-v2",
+  "base_model": "DuyTa/Cyber-F1",
+  "dataset_ref": "Cyber_F1_v2",
+  "dataset_path": "data/llm/train.jsonl",
+  "validation_path": "data/llm/validation.jsonl",
+  "test_path": "data/llm/test.jsonl",
+  "output_dir": "outputs/qwen35-cyber-f1-v2-lora",
+  "epochs": 2,
+  "batch_size": 1,
+  "gradient_accumulation_steps": 32,
+  "learning_rate": 0.0002,
+  "warmup_ratio": 0.03,
+  "scheduler": "cosine",
+  "eval_strategy": "steps",
+  "eval_steps": 250,
+  "save_strategy": "steps",
+  "save_steps": 250,
+  "save_total_limit": 2,
+  "max_seq_length": 32768,
+  "load_in_4bit": false,
+  "fast_inference": false,
+  "device_map": "cuda:0",
+  "moe_backend": "unsloth_triton",
+  "gradient_checkpointing": "unsloth",
+  "peft": {
+    "r": 8,
+    "alpha": 16,
+    "dropout": 0.0,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "gate_up_proj",
+      "down_proj"
+    ]
+  },
+  "logging": {
+    "tensorboard_dir": "outputs/tensorboard/qwen35-cyber-f1-v2"
+  }
+}
