@@ -40,8 +40,10 @@ from linch import Agent, InMemoryRunStore, InMemorySessionStore
 from linch.config import FeatureFlags
 from linch.evals import ScriptedProvider, TextTurn
 from linch.hooks.contexts import BeforeFinalAnswerContext
+from linch.sessions.store import StoredMessage
+from linch.skills.system_reminder import wrap_in_system_reminder
 from linch.tools.registry import empty_tools
-from linch.types import SystemBlock, message_to_dict
+from linch.types import Message, SystemBlock, TextBlock, ToolResultBlock, ToolUseBlock, message_to_dict
 
 from secai_gateway.agent.hooks import (
     CHAT_PRE_FETCH_MARKER,
@@ -49,7 +51,7 @@ from secai_gateway.agent.hooks import (
     RequireChatGroundingHook,
 )
 from secai_gateway.agent.runner import _ephemeral_context_text
-from secai_gateway.api.projects import _display_message_dict
+from secai_gateway.api.projects import _display_message_dict, _filter_display_rows, _is_retry_tail_message
 from secai_gateway.app import create_app
 
 # Markers OUR OWN code used to bake into the persisted prompt (the high-severity part of
@@ -393,3 +395,158 @@ def test_ephemeral_context_text_translate_profile_skips_date_and_stays_none_with
     # translate has no date/context need (see _ephemeral_context_text's docstring) — with
     # no grounding_context either, there is nothing to deliver at all.
     assert _ephemeral_context_text("translate", None) is None
+
+
+# ── 2026-09-26 regression: retry-tail persistence leak + phantom "regenerate" ───────────
+#
+# Bug 1 (BE hook cap vs linch's real reentry cap): RequireChatGroundingHook's own
+# `max_retries` used to default to 3, but linch only ever HONORS ONE `force_continue`-induced
+# reentry per run (`linch/loop/runner.py::_MAX_FINAL_ANSWER_REENTRIES = 1`, hardcoded, not
+# configurable). Past that one real reentry, `api/sse.py::event_to_sse` still turns the hook's
+# 2nd/3rd `force_continue` into an SSE `regenerate` frame (it maps on the HookEventRecord's
+# raw action, before linch's own reentry-budget check runs) — but linch silently ships the
+# STALE draft instead of actually re-running the model. The FE resets its buffer for nothing.
+# Fix: this hook's default now matches linch's real cap (1), so past that one attempt it falls
+# back to `HookResult.mutate(...)` (never a 2nd `force_continue`) — `mutate` is not one of
+# `api/sse.py::_REGENERATE_ACTIONS`, so no phantom `regenerate` frame is ever sent for it.
+#
+# Bug 2 (persistence leak): when that one real retry happens, linch's own
+# `loop/terminals.py::_gate_retry_tail` appends the hook's English repair feedback as a
+# role=user message wrapped in `<system-reminder>...</system-reminder>`
+# (`linch/skills/system_reminder.py::wrap_in_system_reminder`) — plus the model's rejected
+# draft answer right before it. `GET /sessions/{sid}/messages` used to show both verbatim.
+# Fix: `api/projects.py::_filter_display_rows` drops the retry-tail row and the rejected
+# draft that triggered it, so only [user question] -> [assistant final answer] remains.
+
+
+def _row(seq: int, message: Message) -> StoredMessage:
+    return StoredMessage(seq=seq, appended_at=f"2026-09-26T00:00:{seq:02d}Z", message=message)
+
+
+def test_require_chat_grounding_hook_default_matches_linch_reentry_cap() -> None:
+    """The hook's own force_continue budget must not exceed linch's real
+    `_MAX_FINAL_ANSWER_REENTRIES` (1) — see the module comment above for the mechanism."""
+    hook = RequireChatGroundingHook(profile="chat")
+    assert hook.max_retries == 1
+
+
+@pytest.mark.asyncio
+async def test_require_chat_grounding_hook_never_force_continues_past_one_reentry() -> None:
+    """First call (KB not yet satisfied): a real, honored force_continue. Second call, same
+    run, still not satisfied: must NOT force_continue again (that's the exact phantom-
+    regenerate bug) — falls back to the anti-empty/anti-fabrication floor (`mutate`) instead."""
+
+    class _FakeSession:
+        def __init__(self, meta: dict[str, Any]) -> None:
+            self.meta = meta
+
+    hook = RequireChatGroundingHook(profile="chat")
+    session = _FakeSession({
+        "profile": "chat",
+        "last_user_prompt": "CVE-2021-44228 có trong KEV không?",
+        # no chat_prefetch_grounded flag and no qdrant/neo4j tool call recorded for this
+        # run_id — KB requirement is genuinely unsatisfied, both calls below.
+    })
+    ctx = BeforeFinalAnswerContext(
+        session=session, run_id="run-phantom-1", turn_index=0, deps=None,
+        final_text="Có, CVE-2021-44228 nằm trong KEV.",
+    )
+
+    first = await hook.on_before_final_answer(ctx)
+    assert first is not None and first.action == "force_continue", (
+        "the ONE reentry linch actually honors must still happen")
+
+    second = await hook.on_before_final_answer(ctx)
+    assert second is not None
+    assert second.action != "force_continue", (
+        "a 2nd force_continue here is exactly the phantom-regenerate bug: linch won't honor "
+        "it (reentry budget already spent) but api/sse.py would still emit a `regenerate` "
+        "SSE frame for it")
+    assert second.action == "mutate"
+
+
+def test_is_retry_tail_message_matches_gate_retry_tail_shape_only() -> None:
+    feedback = "Route=entity/kb: call qdrant_search or neo4j_search for CVE/CWE evidence."
+    retry_tail = Message(role="user", content=[TextBlock(text=wrap_in_system_reminder(feedback))])
+    assert _is_retry_tail_message(retry_tail) is True
+
+    # A real user message that merely mentions the tag text is NOT mistaken for one — only
+    # linch's own exact single-block wrapper shape matches.
+    lookalike = Message(role="user", content=[TextBlock(text="what does <system-reminder> mean?")])
+    assert _is_retry_tail_message(lookalike) is False
+
+    # Same wrapped text on the assistant role never matches (linch never produces this on
+    # assistant turns, but the check must be role-strict regardless).
+    assistant_copy = Message(role="assistant", content=[TextBlock(text=wrap_in_system_reminder(feedback))])
+    assert _is_retry_tail_message(assistant_copy) is False
+
+    # A real user message plus other content blocks alongside a system-reminder-shaped text
+    # block does not match either — linch's wrapper is always the ONLY block in the message.
+    multi_block = Message(role="user", content=[
+        TextBlock(text=wrap_in_system_reminder(feedback)), TextBlock(text="also this"),
+    ])
+    assert _is_retry_tail_message(multi_block) is False
+
+
+def test_filter_display_rows_drops_retry_tail_and_its_rejected_draft() -> None:
+    rows = [
+        _row(1, Message(role="user", content=[TextBlock(text="OWASP Top 10 2025 gồm gì?")])),
+        _row(2, Message(role="assistant", content=[TextBlock(text="(rejected draft, no grounding)")])),
+        _row(3, Message(role="user", content=[
+            TextBlock(text=wrap_in_system_reminder("Route=taxonomy: call web_fetch on the canonical page.")),
+        ])),
+        _row(4, Message(role="assistant", content=[TextBlock(text="(final grounded answer)")])),
+    ]
+    kept = _filter_display_rows(rows)
+    assert [r.seq for r in kept] == [1, 4]
+    assert kept[0].message.content[0].text == "OWASP Top 10 2025 gồm gì?"
+    assert kept[1].message.content[0].text == "(final grounded answer)"
+
+
+def test_filter_display_rows_drops_every_round_of_multiple_retries() -> None:
+    """Old (pre-2026-09-26) sessions could have up to 3 retry rounds — every rejected draft
+    must be dropped, leaving only the single accepted final."""
+    rows = [
+        _row(1, Message(role="user", content=[TextBlock(text="Q")])),
+        _row(2, Message(role="assistant", content=[TextBlock(text="draft 1")])),
+        _row(3, Message(role="user", content=[TextBlock(text=wrap_in_system_reminder("feedback 1"))])),
+        _row(4, Message(role="assistant", content=[TextBlock(text="draft 2")])),
+        _row(5, Message(role="user", content=[TextBlock(text=wrap_in_system_reminder("feedback 2"))])),
+        _row(6, Message(role="assistant", content=[TextBlock(text="final")])),
+    ]
+    kept = _filter_display_rows(rows)
+    assert [r.seq for r in kept] == [1, 6]
+    assert kept[1].message.content[0].text == "final"
+
+
+def test_filter_display_rows_keeps_tool_call_exchange_and_multi_turn_history_intact() -> None:
+    """Must not collapse a legitimate assistant tool-call message (always followed by a
+    tool_result user row, never a retry-tail one) and must not bleed a retry in one turn
+    into an unrelated, earlier or later, clean turn."""
+    rows = [
+        # Turn 1: clean, with a real tool-use exchange — nothing here should be dropped.
+        _row(1, Message(role="user", content=[TextBlock(text="CVE-2021-44228 là gì?")])),
+        _row(2, Message(role="assistant", content=[
+            ToolUseBlock(id="t1", name="qdrant_search", input={"query": "CVE-2021-44228"}),
+        ])),
+        _row(3, Message(role="user", content=[ToolResultBlock(tool_use_id="t1", content="Log4Shell ...")])),
+        _row(4, Message(role="assistant", content=[TextBlock(text="Log4Shell là CVE-2021-44228, CVSS 10.0.")])),
+        # Turn 2: one rejected draft, then the grounded final.
+        _row(5, Message(role="user", content=[TextBlock(text="Còn CVE-2020-1472 thì sao?")])),
+        _row(6, Message(role="assistant", content=[TextBlock(text="draft chưa tra KB")])),
+        _row(7, Message(role="user", content=[
+            TextBlock(text=wrap_in_system_reminder("Route=entity/kb: call qdrant_search ...")),
+        ])),
+        _row(8, Message(role="assistant", content=[TextBlock(text="Zerologon là CVE-2020-1472, CVSS 10.0.")])),
+    ]
+    kept = _filter_display_rows(rows)
+    assert [r.seq for r in kept] == [1, 2, 3, 4, 5, 8]
+
+
+def test_filter_display_rows_noop_when_no_retries_present() -> None:
+    rows = [
+        _row(1, Message(role="user", content=[TextBlock(text="hello")])),
+        _row(2, Message(role="assistant", content=[TextBlock(text="hi there")])),
+    ]
+    kept = _filter_display_rows(rows)
+    assert kept == rows
