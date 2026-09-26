@@ -826,8 +826,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gọi tool hay không.
 
         Lý do: cơ chế ép grounding có sẵn (``RequireChatGroundingHook.on_before_final_answer``,
-        agent/hooks.py) đang INERT trong production vì linch không dispatch hook đó (xem
-        agent/hooks.py:616-624). Đo thật 2026-09-19 (KPI-VA-GEN-TEST, 1000 câu độc lập):
+        agent/hooks.py) CÓ được linch dispatch (correction 2026-09-26 — claim "INERT" trước đây
+        là chẩn đoán sai, xem agent/hooks.py::chat_final_text docstring) nhưng KHÔNG đủ: nó chỉ
+        ép model gọi tool trong một số lần retry giới hạn rồi bỏ cuộc nếu model vẫn không gọi —
+        không đảm bảo context tồn tại. Đo thật 2026-09-19 (KPI-VA-GEN-TEST, 1000 câu độc lập):
         46.9% câu trả lời có ``tools: []`` — model không tra KB — và với câu có CVE-id cụ
         thể, model thường bịa nhầm sang 1 CVE nổi tiếng khác có id gần giống (vd
         CVE-2021-37630 bị trả lời như thể là CVE-2021-44228/Log4Shell). Faithfulness đo

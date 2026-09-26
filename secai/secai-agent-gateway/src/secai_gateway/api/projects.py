@@ -127,6 +127,73 @@ def _display_message_dict(message: Message) -> dict[str, Any]:
     return out
 
 
+# ── Retry-tail persistence leak (2026-09-26) ─────────────────────────────────────────────
+# When a `chat` run's would-be-final answer fails RequireChatGroundingHook's grounding check
+# (agent/hooks.py), linch's own `force_continue` bounce (`linch/loop/terminals.py::
+# _gate_retry_tail`) appends an internal, English, model-facing repair instruction as a
+# role="user" message: `wrap_in_system_reminder(feedback)` = literally
+# `f"<system-reminder>\n{feedback}\n</system-reminder>"` (`linch/skills/system_reminder.py`),
+# with NOTHING else in that message's content. This is never something the human user said —
+# it's linch talking to the model — but it lands in the SAME session-store row stream as real
+# turns, so `GET /sessions/{sid}/messages` used to show it verbatim: a stray English
+# "<system-reminder>...</system-reminder>" bubble, plus the REJECTED draft answer right before
+# it (the model's turn that triggered the bounce), both surfacing on refetch/F5 for a single
+# logical Q&A turn that should only ever show [user question] -> [assistant final answer].
+#
+# Same wrapper shape is also used by linch's own loop-guard "stuck in a loop" reminder
+# (`linch/loop/runner.py`, force_final branch) — filtering on the wrapper itself (rather than
+# hardcoding _gate_retry_tail's specific feedback strings) catches that too, which is
+# consistent: neither is something the user said.
+_RETRY_TAIL_RE = re.compile(r"\A<system-reminder>\n.*\n</system-reminder>\Z", re.DOTALL)
+
+
+def _is_retry_tail_message(message: Message) -> bool:
+    """True for a role=``user`` message that IS linch's own system-reminder-wrapped internal
+    feedback (see module comment above) — never real user-authored content. Deliberately
+    strict (whole-message match, single text block) so an ordinary user message that happens
+    to mention the literal string ``<system-reminder>`` is never mistaken for one: linch's
+    wrapper always produces the ENTIRE message content as exactly one such block."""
+    if message.role != "user" or len(message.content) != 1:
+        return False
+    text = getattr(message.content[0], "text", None)
+    return isinstance(text, str) and bool(_RETRY_TAIL_RE.match(text))
+
+
+def _filter_display_rows(rows: list[Any]) -> list[Any]:
+    """Row-list-level cleanup for ``GET /sessions/{sid}/messages``, applied BEFORE
+    ``_display_message_dict`` (which only ever cleans inside a single message's content
+    blocks, never drops/merges whole rows).
+
+    (a) Drops every retry-tail row (see ``_is_retry_tail_message``) — internal
+        model-facing text that must never render as a chat bubble.
+    (b) Drops the REJECTED draft assistant answer that triggered a retry-tail: a row is that
+        rejected draft iff it is role=``assistant`` and the very next row (in original,
+        unfiltered order) is a retry-tail row — that adjacency is exactly what
+        ``_gate_retry_tail`` produces (it's appended immediately after the draft that failed
+        the gate) and it does NOT occur for a legitimate assistant tool-call message, which is
+        always followed by a tool_result-carrying user row, never a retry-tail one. When a
+        turn had N rejected drafts (N retry rounds) before the accepted final, each one is
+        individually followed by its own retry-tail row, so all N are dropped and only the
+        LAST (accepted) assistant message survives — exactly "giữ assistant cuối cùng".
+
+    Everything else — real user questions, tool_call/tool_result exchanges, multi-turn
+    history, turns that never triggered a retry — passes through untouched. This is a
+    response-serialization-layer filter only; the underlying session-store rows (and their
+    ``seq``/``appended_at``) are never modified."""
+    is_retry_tail = [_is_retry_tail_message(row.message) for row in rows]
+    kept: list[Any] = []
+    for i, row in enumerate(rows):
+        if is_retry_tail[i]:
+            continue  # (a)
+        is_rejected_draft = (
+            row.message.role == "assistant" and i + 1 < len(rows) and is_retry_tail[i + 1]
+        )
+        if is_rejected_draft:
+            continue  # (b)
+        kept.append(row)
+    return kept
+
+
 def _norm_owner(user_id: str | None) -> str:
     """Missing/blank user_id → "anonymous", matching the anonymous-caller default used
     throughout the gateway (see LegacyRequest.user_id)."""
@@ -412,4 +479,5 @@ async def get_session_messages(sid: str, request: Request, user_id: str | None =
         # GET: 404 rather than 403, so a non-owner can't tell the session exists.
         raise _not_found(f"session not found: {sid}")
     rows = await store.load_messages(sid)
+    rows = _filter_display_rows(rows)
     return {"messages": [{"seq": r.seq, "appended_at": r.appended_at, "message": _display_message_dict(r.message)} for r in rows]}
