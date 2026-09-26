@@ -449,10 +449,14 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           userId,
           {
             onToken: (delta) => {
-              patchAssistant(aid, (m) => ({ text: m.text + delta }));
+              patchAssistant(aid, (m) => ({ text: m.text + delta, regenerating: false }));
               scrollToBottom();
             },
-            onRegenerate: () => patchAssistant(aid, () => ({ text: "" })),
+            // Backend (require_chat_grounding) discarded a fabricated draft and is restarting the
+            // answer on purpose — don't just blank the buffer back to the plain empty placeholder
+            // (looked like a glitch); flag it so the thread can show a meaningful "đang tra cứu
+            // lại…" indicator until the next token/final lands.
+            onRegenerate: () => patchAssistant(aid, () => ({ text: "", regenerating: true })),
             onToolCall: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
             onToolResult: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
             onPhase: (p) => patchAssistant(aid, (m) => ({ phases: foldPhase(m.phases, p) })),
@@ -461,6 +465,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
               patchAssistant(aid, (m) => ({
                 text: String(payload.content ?? payload.answer ?? m.text),
                 streaming: false,
+                regenerating: false,
                 runId: (payload.metadata?.run_id as string | undefined) ?? undefined,
               })),
           },
