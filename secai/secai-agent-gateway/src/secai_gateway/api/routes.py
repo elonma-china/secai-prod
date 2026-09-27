@@ -1054,7 +1054,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
                         "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
                     verdict = replace(verdict, injection=judge_verdict)
-            decision = decide(verdict, state.settings)
+            decision = decide(verdict, state.settings, text=prompt)
         except Exception:  # a guard must never break chat
             logger.exception("input classifier failed → fail-open")
             return None

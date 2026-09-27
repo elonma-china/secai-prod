@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     # second line of defense for genuine off-topic (weather/cooking/etc. score nowhere near a
     # tie). 0.0 disables the margin check (legacy threshold-only behavior).
     input_classifier_offtopic_margin: float = 0.15
+    # Security-domain override (gate.py::decide, residual #2 fix 2026-09-27): the margin guard
+    # above only rescues near-tie offtopic/security scores — it does NOT catch Top-N/taxonomy
+    # security questions the head misclassifies CONFIDENTLY as off-topic (e.g. "Hãy liệt kê CWE
+    # Top 25" scored offtopic=0.98/security=0.01, margin 0.97). When the raw prompt names an
+    # explicit security taxonomy/framework (CWE/CVE/CAPEC/CVSS/OWASP/SANS/ATT&CK/MITRE) and is
+    # not ALSO flagged as injection, the off-topic refusal is skipped and the prompt passes to
+    # the agent (which still has the LLM <scope_policy> as a second line of defense). True →
+    # keep the override; False → restore the pre-fix threshold+margin-only behavior (rollback).
+    input_classifier_security_marker_override: bool = True
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
     # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
