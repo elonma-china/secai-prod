@@ -16,6 +16,7 @@ from typing import Any
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
 from linch.hooks.types import HookResult, ToolResult
 
+from ..config import get_settings
 from ..poc.inject import has_real_code_evidence, has_synthesis_evidence, section1_has_body
 from ..poc.prefetch import (
     COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known,
@@ -883,6 +884,28 @@ class RequireChatGroundingHook:
         has_kb = RequireSearchBeforeAnswerHook._get(self._kb, run_id, False)
         missing_web = plan.need_web and not has_web
         missing_kb = plan.need_kb and not has_kb
+
+        # 2026-09-27 (🅱2 Lớp 2 fix): when web is unreachable (airgap → web_fetch_enabled=
+        # False), agent/runner.py never even REGISTERS the web_fetch tool (`**({web_fetch.name:
+        # web_fetch} if get_settings().web_fetch_enabled else {})`) — so the model has no way
+        # to call it, ever. Enforcing missing_web here in that state is unsatisfiable by
+        # construction: force_continue burns the single reentry (max_retries=1, see this
+        # class's docstring) asking for a tool call that literally cannot happen, and once
+        # exhausted this hook ships `_CHAT_EMPTY_FALLBACK` OVER an already-correct, already-
+        # streamed draft — the exact "giật"/false-apology bug this fix targets. prompts/
+        # chat.md already tells the model what to do in this state (answer Top-N/taxonomy from
+        # parametric knowledge + an explicit "không lấy được trang nguồn hiện tại" disclaimer),
+        # so once web is confirmed off, accept that answer instead of fighting it.
+        #
+        # Deliberately narrow: this ONLY clears the WEB leg of the requirement for THIS turn.
+        # It does NOT touch missing_kb (id_lookup/entity KB grounding stays enforced exactly
+        # as before — the KB IS reachable, so there's nothing unsatisfiable about asking for
+        # it), and it does NOT change behavior at all when web_fetch_enabled=True (non-airgap):
+        # missing_web enforcement below is byte-for-byte the same as before this fix in that
+        # case, since this branch is simply never taken.
+        if missing_web and not get_settings().web_fetch_enabled:
+            missing_web = False
+
         if not missing_web and not missing_kb:
             return None
 
