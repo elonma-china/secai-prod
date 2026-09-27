@@ -130,6 +130,41 @@ def test_rule_forbids_confident_latest_year_claim() -> None:
     assert 'TUYỆT ĐỐI KHÔNG tự khẳng định chắc nịch "bản mới nhất hiện nay là năm Y"' in _CHAT_MD
 
 
+def test_rule_forbids_assigning_a_year_when_user_did_not_ask_one() -> None:
+    # Residual bug (found 2026-09-27, live isolated testing): the round-2 block above only
+    # covered "user names a year" — it said nothing about what happens when the user asks
+    # a bare "OWASP Top 10 gồm những gì?"/"CWE Top 25 gồm những gì?" with NO year at all.
+    # Live probes (N=5 each, temperature default, isolated instance) found the model
+    # self-assigned a specific year into the TITLE with no evidence in 8/10 calls -- mostly
+    # "(2025)"/"2025" (matching base_system.md's tool_routing hint that
+    # https://owasp.org/Top10/2025/ is the "verified current" fetch URL, which leaked into
+    # the answer as a label even though web_fetch was never actually called/available under
+    # airgap) while the listed content underneath was the real 2021 edition -- the exact
+    # label/content mismatch this suite exists to catch, just triggered from the "no year"
+    # angle instead of the "explicit year" angle the earlier tests cover.
+    assert "Người dùng KHÔNG nêu năm/phiên bản nào" in _CHAT_MD
+    assert (
+        'TUYỆT ĐỐI CẤM tự gắn MỘT NĂM CỤ THỂ vào TIÊU ĐỀ hay khẳng định "đây là bản/phiên '
+        'bản mới nhất hiện hành là năm X"' in _CHAT_MD
+    )
+
+
+def test_rule_no_year_case_requires_actual_successful_fetch_before_labeling() -> None:
+    assert (
+        "trừ khi vừa `web_fetch` THÀNH CÔNG một trang OWASP/CWE chính thức trong CHÍNH "
+        "LƯỢT NÀY" in _CHAT_MD
+    )
+    assert "không phải lý do để tự bịa nhãn năm thay thế" in _CHAT_MD
+
+
+def test_rule_no_year_case_has_concrete_wrong_example() -> None:
+    # Must name the exact failure pattern observed live so the model has a concrete
+    # negative example, not just an abstract prohibition (abstract-only wording is what
+    # let the "explicit year" version of this bug slip through in earlier rounds).
+    assert '"## OWASP Top 10 (2025)"' in _CHAT_MD
+    assert "nội dung 2021 bị gán nhãn năm khác" in _CHAT_MD
+
+
 def test_composed_chat_prompt_still_well_formed_xml() -> None:
     # The new block must not break the XML well-formedness Qwen's chat template and
     # test_prompts.py rely on.
