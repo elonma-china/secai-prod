@@ -152,6 +152,59 @@ def test_pre_blocks_non_allowlisted_web_fetch(monkeypatch) -> None:
     assert allowed is None
 
 
+def test_missing_web_accepted_when_airgap_disables_web_fetch(monkeypatch) -> None:
+    """🅱2 Lớp 2: when web_fetch_enabled=False (airgap), agent/runner.py never registers the
+    web_fetch tool, so the model has no way to satisfy plan.need_web. The hook must accept
+    the model's answer instead of force_continuing toward an impossible tool call (that used
+    to burn the single reentry and end in `_CHAT_EMPTY_FALLBACK` overwriting an already-good
+    parametric-knowledge answer with a disclaimer, per prompts/chat.md)."""
+    monkeypatch.setenv("AIRGAP", "true")
+    hook = RequireChatGroundingHook(max_retries=1)
+    result = asyncio.run(hook.on_before_final_answer(
+        _final("r1", "chat", "OWASP Top 10 2021 gồm những gì, liệt kê")))
+    assert result is None
+
+
+def test_missing_web_still_forces_when_web_fetch_enabled(monkeypatch) -> None:
+    """Non-airgap (web_fetch_enabled=True): missing_web enforcement is untouched — the model
+    CAN call web_fetch, so it must still be forced to before answering, exactly as before this
+    fix."""
+    monkeypatch.setenv("AIRGAP", "false")
+    hook = RequireChatGroundingHook(max_retries=1)
+    result = asyncio.run(hook.on_before_final_answer(
+        _final("r1", "chat", "OWASP Top 10 2021 gồm những gì, liệt kê")))
+    assert result is not None and result.action == "force_continue"
+    assert result.reason == "chat_web_fetch_required"
+
+
+def test_id_lookup_missing_kb_still_forces_when_web_disabled(monkeypatch) -> None:
+    """KB grounding (id_lookup route) must stay enforced regardless of web_fetch_enabled — the
+    KB IS reachable in airgap (only internet fetches are disabled), so nothing here is
+    unsatisfiable and the anti-fabrication floor must not be weakened."""
+    monkeypatch.setenv("AIRGAP", "true")
+    hook = RequireChatGroundingHook(max_retries=1)
+    result = asyncio.run(hook.on_before_final_answer(
+        _final("r1", "chat", "Điểm yếu buffer copy không kiểm tra size — CWE nào?")))
+    assert result is not None and result.action == "force_continue"
+    assert result.reason == "chat_id_lookup_required"
+
+
+def test_taxonomy_web_off_kb_missing_still_forces_kb_not_web(monkeypatch) -> None:
+    """Mixed route (taxonomy + need_kb, e.g. OWASP-and-CVE question): with web off, the WEB
+    leg is bypassed but the KB leg is untouched — the hook must still force a KB lookup (not
+    a web_fetch one), proving the fix nới đúng nhánh missing_web only."""
+    monkeypatch.setenv("AIRGAP", "true")
+    hook = RequireChatGroundingHook(max_retries=3)
+    prompt = "OWASP top 3 hiện tại đang là gì và nó có liên quan gì đến các CVE?"
+    result = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", prompt)))
+    assert result is not None and result.action == "force_continue"
+    assert "qdrant_search" in result.feedback or "neo4j_search" in result.feedback
+    assert "web_fetch" not in result.feedback
+    asyncio.run(hook.on_post_tool_use(_post("qdrant_search", "r1")))
+    result2 = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", prompt)))
+    assert result2 is None
+
+
 def test_gives_up_after_retries() -> None:
     hook = RequireChatGroundingHook(max_retries=2)
     ctx = _final("r1", "chat", "OWASP Top 10")

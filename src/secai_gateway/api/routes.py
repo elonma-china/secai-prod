@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from linch.events import ResultEvent, SystemEvent
 
 from ..agent import registry_for
-from ..agent.hooks import CHAT_PRE_FETCH_MARKER
+from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -703,7 +703,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 gated = await _chat_gate(prompt)
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
-                prompt, grounding = await _ground_chat_prompt(prompt)
+                prompt, grounding = await _ground_chat_prompt(prompt, session_id)
                 grounding_context = _grounding_context_text(grounding)
         try:
             # grounding_context is delivered to the model via LinchRunner's ephemeral
@@ -820,7 +820,45 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    async def _ground_chat_prompt(prompt: str) -> tuple[str, dict[str, Any] | None]:
+    async def _resolve_followup_entity_id(session_id: str | None) -> str | None:
+        """🅱2 lớp 1 (entity-follow-up): khi câu hỏi HIỆN TẠI không nêu ID tường minh
+        nhưng là một câu hỏi kiểu "có CVE nào?" / "còn CVE nào khác không?" / "CWE
+        nào?" (route ``id_lookup``, xem ``classify_chat_grounding``), thực thể cần tra
+        thường nằm ở LƯỢT HỎI TRƯỚC của cùng phiên, không phải ở câu hiện tại.
+
+        Chỉ quét các message role=``user`` ĐÃ PERSIST trong session store (linch
+        ``load_messages``), từ MỚI NHẤT về CŨ NHẤT, trả về entity-id đầu tiên khớp
+        ``ENTITY_ID_RES`` (CVE/CWE/CAPEC/ATT&CK). Cố tình KHÔNG qt message role=
+        ``assistant``: câu trả lời trước có thể trích dẫn nhiều CVE ví dụ không liên
+        quan trực tiếp đến chủ đề người dùng đang hỏi (vd trả lời "CWE-89 là gì?" có
+        thể nêu vài CVE minh hoạ) — quét cả hai vai sẽ dễ resolve nhầm sang một entity
+        không phải chủ đề hội thoại. Chủ đề hội thoại luôn do NGƯỜI DÙNG đặt ra.
+
+        Fail-open: không có session_id / session rỗng / lỗi store → None (giữ nguyên
+        hành vi cũ — không pre-fetch, hook vẫn ép model tự tra như trước)."""
+        if not session_id:
+            return None
+        try:
+            rows = await state.runner.session_store.load_messages(session_id)
+        except Exception:
+            logger.exception("follow-up entity resolve: load_messages lỗi cho sid=%s", session_id)
+            return None
+        for row in reversed(rows):
+            message = getattr(row, "message", None)
+            if message is None or getattr(message, "role", None) != "user":
+                continue
+            for block in message.content or []:
+                text = getattr(block, "text", None)
+                if not text:
+                    continue
+                for regex in ENTITY_ID_RES.values():
+                    match = regex.search(text)
+                    if match:
+                        return match.group(0).upper()
+        return None
+
+    async def _ground_chat_prompt(prompt: str, session_id: str | None = None,
+                                  ) -> tuple[str, dict[str, Any] | None]:
         """Chủ động tra KB (qdrant_search) TRƯỚC khi đưa prompt vào agent, nếu câu hỏi
         nêu CVE/CWE/CAPEC/ATT&CK-id tường minh — KHÔNG phụ thuộc việc model tự quyết định
         gọi tool hay không.
@@ -856,9 +894,28 @@ def register_routes(app: FastAPI, state: Any) -> None:
         tool_call/tool_result SSE event nào phát ra cho UI (ToolTimeline.tsx) render trích
         dẫn, dù model vẫn dùng đúng context. Gọi nơi này (chat_stream/session_chat_stream)
         tự dựng cặp tool_call/tool_result giả lập từ ``grounding`` để khôi phục tín hiệu
-        nguồn cho FE."""
+        nguồn cho FE.
+
+        🅱2 lớp 1 (2026-09-26, entity-follow-up): khi câu hỏi HIỆN TẠI không nêu ID
+        tường minh, KHÔNG còn bỏ cuộc ngay — nếu câu thuộc route ``id_lookup``
+        (``classify_chat_grounding``: "CVE nào?", "còn CVE nào khác không?", "CWE
+        nào?", … mà không kèm ID) thì thử resolve entity từ LƯỢT HỎI TRƯỚC của cùng
+        phiên (``_resolve_followup_entity_id``) rồi tra KB bằng entity đó + câu hỏi
+        hiện tại. Trước fix này route ``id_lookup`` không có ID luôn rơi vào nhánh
+        early-return này → không pre-fetch → hook ép model tự gọi tool → Cyber-F1 (mô
+        hình nhỏ) thường không gọi/gọi sai → hết ``max_retries`` → mutate xin lỗi đè
+        lên draft đã stream ("giật" — xem ``RequireChatGroundingHook`` + FE
+        ToolTimeline). Route ``taxonomy``/``concept`` không đổi (vẫn early-return
+        None) — lớp 1 CHỈ mở rộng cho id_lookup, KHÔNG đụng semantics `missing_web`."""
+        query = prompt
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
-            return prompt, None
+            plan = classify_chat_grounding(prompt)
+            if plan.route != "id_lookup":
+                return prompt, None
+            entity_id = await _resolve_followup_entity_id(session_id)
+            if not entity_id:
+                return prompt, None
+            query = f"{entity_id} {prompt}".strip()
         try:
             # top_k=10 (không phải 5): khi có cve_id pin, _qdrant_search dùng "EXACT-CVE FAST
             # PATH" (retrieval/qdrant.py) — scroll max(top_k,8) dòng theo THỨ TỰ LƯU TRỮ
@@ -867,7 +924,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # một cách ngẫu nhiên — đo thật 2026-09-20: câu hỏi KEV-status trả lời sai vì thiếu
             # đúng chunk. top_k=10 đủ dư cho số chunk/CVE thực tế mà vẫn không làm loãng context.
             _t0 = time.monotonic()
-            result = await _qdrant_search(query=prompt, ctx=None, top_k=10)
+            result = await _qdrant_search(query=query, ctx=None, top_k=10)
             grounding_ms = int(round((time.monotonic() - _t0) * 1000))
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
@@ -876,7 +933,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return prompt, None
         # duration_ms: đo thời gian tra qdrant THẬT ở bước pre-fetch để event tool_result
         # giả lập (xem _grounding_sse_frames) hiển thị đúng độ trễ thay vì hard-code 0ms.
-        return prompt, {"query": prompt, "result": result.content,
+        # "query" phản ánh CHUỖI THẬT đã gửi cho qdrant_search (có thể là entity-id resolved
+        # + câu hỏi gốc, không chỉ câu hỏi gốc) — minh bạch cho FE ToolTimeline/API JSON.
+        return prompt, {"query": query, "result": result.content,
                         "summary": result.summary, "duration_ms": grounding_ms}
 
     def _grounding_context_text(grounding: dict[str, Any] | None) -> str | None:
@@ -1054,8 +1113,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text, grounding = await _ground_chat_prompt(text)
         session_id = _chat_session_id(body)
+        text, grounding = await _ground_chat_prompt(text, session_id)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run — nothing to do
@@ -1137,7 +1196,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text, grounding = await _ground_chat_prompt(text)
+        text, grounding = await _ground_chat_prompt(text, sid)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run; the meta
