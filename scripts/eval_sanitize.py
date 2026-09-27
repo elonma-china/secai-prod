@@ -116,7 +116,7 @@ def _classify(rows: list[dict], X: np.ndarray, head, s: Settings) -> list[dict]:
     out = []
     for r, x in zip(rows, X):
         v = decode(x, head, s)
-        d = decide(v, s)
+        d = decide(v, s, text=r.get("text"))
         out.append({**r, "_ok": v.ok, "_intent": v.intent, "_inj_score": v.scores.get("injection"),
                     "_sec_score": v.scores.get("security"), "_off_score": v.scores.get("offtopic"),
                     "_action": d.action.value, "_blocked": d.short_circuit, "_label": d.label})
