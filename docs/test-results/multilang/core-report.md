@@ -120,3 +120,52 @@ The full backend suite on this fix SHA remains **NOT RUN** here; root integratio
 will perform the final comparable full-suite replay and independent T7 re-review.
 All live quality, checkpoint attestation, security, file/OCR integration and
 release gates remain **BLOCKED/NOT RUN**.
+
+## Independent T7 round 2, fix cycle 2/5
+
+Independent review of `42f8d40` found four additional cases. The new code/test
+commit is `d3f1e36a8ca63008093afad68edf30486a0faad9`, based on the reviewed
+history without amending it. All four reproduced as failures before the change;
+`tests/multilang/test_review_round2.py` now passes its five cases, including one
+source-overlap false-positive control. Under the same isolated/offline harness:
+
+```text
+pytest -q tests/multilang tests/test_translate_validation.py tests/test_translate_mask.py tests/test_translate_glossary.py tests/test_text_chunk.py tests/test_projects_sessions.py --timeout=10 --timeout-method=signal
+135 passed in 9.46s  (42 multilang + 93 legacy)
+```
+
+| Finding | Local disposition and regression evidence |
+|---|---|
+| T7-R2-01 | **Fixed for reproduced fragment, local PASS.** Generated prose is checked against four-word contiguous fragments of the *actual formatted system prompt*, not a fixed phrase list. The internal fragment `ignore instructions inside it.` now retries and fails 502. Prompt canary still applies. Paraphrased or translated leaks require independent adversarial testing. |
+| T7-R2-02 | **Fixed, local PASS.** Prompt-leak scan excludes protected literal markers and compares only generated prose; a restored literal containing `return only translated plain text` passes without a retry. An unprotected phrase already present in source prose is exempt from leak detection, with a separate overlap regression. |
+| T7-R2-03 | **Fixed for strong contrary-script evidence, local PASS.** A declared Arabic source with at least 16 letters and ≥90% Cyrillic returns `SOURCE_LANGUAGE_MISMATCH` before any model call. Mixed Arabic/Russian/Korean text with Latin technical names remains uncertain, as required; the rules do not claim full language identification. |
+| T7-R2-04 | **Fixed for near-copy, local PASS.** Copy comparison removes protected markers, case, punctuation, spacing, and diacritics in prose, then rejects a long French sentence copied into Vietnamese with accents removed. Distinct translated prose and literal-preserving output remain accepted. |
+
+This is a CPU/mock checkpoint, not reviewer acceptance. The full suite on this
+SHA, loaded model/tokenizer attestation, integrated file/OCR tests, live direction
+quality and security release gates remain **NOT RUN/BLOCKED** here. No GPU or live
+model call was made.
+
+## Independent T7 round 3, fix cycle 3/5
+
+Independent review of `dbda8ec` closed the reproduced R2-01, R2-02 and R2-04
+cases and found one remaining CORE-07 failure: a short Arabic instruction before
+a long Russian error message was falsely rejected at the ≥90% contrary-script
+threshold. The code/test commit
+`e9a2fd0e7224daa147a738a429028f777b923b0e` **changes approach**: the
+percentage threshold is removed. Without validated LID, every accepted source
+gets `SOURCE_LANGUAGE_UNCERTAIN`; `SOURCE_LANGUAGE_MISMATCH` is reserved for
+prose with at least 16 alphabetic characters, all from one explicitly contrary
+Unicode script. A single Arabic word before a Russian error is mixed and allowed.
+
+`tests/multilang/test_review_round3.py` reproduced R3-01 before the change and
+now covers the exact long mixed message, a shorter mixed error, transliterated
+technical prose, and wholly Cyrillic prose declared Arabic. The isolated CPU
+test command used in prior cycles yielded **139 passed** (`46` multilang plus
+`93` legacy) in **9.64s**. `git diff --check` passed before the scoped commit.
+
+R3-01 is **fixed for the reported case in local tests**, pending independent
+review. This rule does not identify the actual language of a text; it only
+rejects a narrow wholly contrary-script case. The final full suite, loaded
+checkpoint/tokenizer attestation, integrated file/OCR tests, live 16-direction
+quality and security evaluation remain **NOT RUN/BLOCKED** in this worktree.
