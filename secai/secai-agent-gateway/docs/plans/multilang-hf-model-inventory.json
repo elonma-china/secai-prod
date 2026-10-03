@@ -1,0 +1,21 @@
+{
+  "checked_date": "2026-10-03",
+  "status": "DuyTa HF reference only; actual deployed checkpoint authoritative and unverified; no alternative translation model selected; no weights downloaded or GPU tests run",
+  "models": [
+    {
+      "model": "DuyTa/Cyber-F1-AWQ",
+      "hf_revision": "7e7e6718ce268d2b00adc6e3ea43fcd33452f516",
+      "source": "https://huggingface.co/DuyTa/Cyber-F1-AWQ",
+      "config_source": "https://huggingface.co/DuyTa/Cyber-F1-AWQ/raw/7e7e6718ce268d2b00adc6e3ea43fcd33452f516/config.json",
+      "license": "apache-2.0",
+      "architectures": [
+        "Qwen3_5MoeForConditionalGeneration"
+      ],
+      "model_type": "qwen3_5_moe",
+      "quant_method": "compressed-tensors",
+      "quant_format": "pack-quantized",
+      "max_position_embeddings": 262144,
+      "live_serving_verified": false
+    }
+  ]
+}
