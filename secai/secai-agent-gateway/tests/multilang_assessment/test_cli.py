@@ -96,7 +96,7 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
         "instance_id": 53846446, "endpoint": endpoint, "model_id": "DuyTa/Cyber-F1-AWQ",
         "model_revision": REVISION, "starts_at": (now - timedelta(minutes=1)).isoformat(),
         "ends_at": (now + timedelta(minutes=5)).isoformat(), "max_requests": 1,
-        "max_rpm": 6000, "max_cost_usd": 0.05,
+        "max_rpm": 60, "max_cost_usd": 0.05,
         "worst_case_cost_usd_per_request": 0.01,
         "allowed_modes": ["model-only"],
     }))
@@ -117,8 +117,11 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
         })
 
     real_client = httpx.Client
+    real_async_client = httpx.AsyncClient
     monkeypatch.setattr("evals.multilang.run.httpx.Client",
                         lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs))
+    monkeypatch.setattr("evals.multilang.run.httpx.AsyncClient",
+                        lambda **kwargs: real_async_client(transport=httpx.MockTransport(handle), **kwargs))
     output = tmp_path / "results.jsonl"
     assert run_main([
         "--manifest", str(manifest), "--mode", "model-only", "--split", "DEV",

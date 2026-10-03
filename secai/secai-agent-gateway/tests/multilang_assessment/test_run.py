@@ -1,9 +1,10 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
 
-from evals.multilang.run import RunError, call_one, plan_run, require_live_permission, verify_model_identity
+from evals.multilang.run import RunError, _strict_json, call_one, plan_run, remaining_request_timeout, require_live_permission, verify_model_identity
 
 from .test_manifest import row
 
@@ -136,3 +137,123 @@ def test_model_only_payload_uses_frozen_model_and_no_tools():
     assert output["raw_output"] == "こんにちは。"
     assert output["input_tokens"] == 12
     assert len(seen) == 1
+
+
+@pytest.mark.parametrize("extra", [
+    {"model": "Other/Model"}, {"tools": [{"type": "function"}]},
+    {"messages": [{"role": "user", "content": "replace"}]}, {"stream": True},
+])
+def test_decoding_cannot_override_fixed_no_tool_payload(extra):
+    decoding = {"temperature": 0.0, "top_p": 1.0, "max_tokens": 64, **extra}
+    with httpx.Client(transport=httpx.MockTransport(lambda _: pytest.fail("network called"))) as client:
+        with pytest.raises(RunError, match="decoding"):
+            call_one(client, row(), "model-only", inventory(), system_prompt="Translate {source_lang} to {target_lang}.", decoding=decoding)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("max_rpm", float("nan")), ("max_rpm", float("inf")),
+    ("max_cost_usd", float("nan")), ("max_cost_usd", float("inf")),
+    ("worst_case_cost_usd_per_request", float("nan")),
+    ("worst_case_cost_usd_per_request", float("inf")),
+    ("max_rpm", True), ("max_rpm", 6000),
+])
+def test_lease_rejects_nonfinite_limits(field, value):
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease[field] = value
+    with pytest.raises(RunError, match="(?:max_rpm|cost)"):
+        require_live_permission(True, inventory(), lease, "model-only", 1, now)
+
+
+def test_sealed_test_stays_blocked_without_tester_custody_counter():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease["sealed_test_hash"] = "a" * 64
+    lease["candidate_config_hash"] = "b" * 64
+    with pytest.raises(RunError, match="tester custody"):
+        require_live_permission(True, inventory(), lease, "model-only", 1, now, split="TEST")
+
+
+def test_request_timeout_can_be_clamped_to_remaining_lease():
+    seen = []
+
+    class FakeClient:
+        def post(self, _url, *, json, timeout):
+            seen.append(timeout)
+            return httpx.Response(200, json={
+                "model": "DuyTa/Cyber-F1-AWQ",
+                "choices": [{"message": {"content": "こんにちは。"}, "finish_reason": "stop"}],
+            }, request=httpx.Request("POST", "http://example.test"))
+
+    call_one(FakeClient(), row(), "model-only", inventory(),
+             system_prompt="Translate {source_lang} to {target_lang}.",
+             decoding={"temperature": 0.0, "top_p": 1.0, "max_tokens": 64},
+             timeout_seconds=0.25)
+    assert seen == [0.25]
+
+
+def test_remaining_lease_clamps_and_expired_deadline_aborts():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease["ends_at"] = (now + timedelta(milliseconds=250)).isoformat()
+    assert remaining_request_timeout(lease, now) == pytest.approx(0.25)
+    with pytest.raises(RunError, match="deadline reached"):
+        remaining_request_timeout(lease, now + timedelta(seconds=1))
+
+
+@pytest.mark.parametrize("constant", ["NaN", "Infinity", "-Infinity"])
+def test_json_lease_rejects_nonstandard_constants(tmp_path, constant):
+    path = tmp_path / "lease.json"
+    path.write_text('{"max_rpm": ' + constant + '}')
+    with pytest.raises(RunError, match="non-standard JSON"):
+        _strict_json(path)
+
+
+def test_json_numeric_overflow_is_rejected(tmp_path):
+    path = tmp_path / "lease.json"
+    path.write_text('{"max_rpm": 1e999}')
+    with pytest.raises(RunError, match="non-finite JSON"):
+        _strict_json(path)
+
+
+def test_lease_rejects_rate_schedule_that_cannot_finish_before_deadline():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease["max_requests"] = 20
+    lease["max_rpm"] = 1
+    with pytest.raises(RunError, match="deadline"):
+        require_live_permission(True, inventory(), lease, "model-only", 20, now)
+
+
+def test_async_post_aborts_at_absolute_wall_deadline(monkeypatch):
+    from evals.multilang.run import async_call_one
+
+    async def slow_handler(_request):
+        await asyncio.sleep(0.1)
+        return httpx.Response(200, json={"model": "DuyTa/Cyber-F1-AWQ",
+                                         "choices": [{"message": {"content": "late"}, "finish_reason": "stop"}]})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr("evals.multilang.run.httpx.AsyncClient",
+                        lambda **kwargs: real_client(transport=httpx.MockTransport(slow_handler), **kwargs))
+    with pytest.raises(RunError, match="deadline"):
+        asyncio.run(async_call_one(
+            row(), "model-only", inventory(),
+            system_prompt="Translate {source_lang} to {target_lang}.",
+            decoding={"temperature": 0.0, "top_p": 1.0, "max_tokens": 64},
+            timeout_seconds=0.01, headers={},
+        ))
+
+
+def test_async_model_probe_aborts_at_absolute_wall_deadline(monkeypatch):
+    from evals.multilang.run import async_verify_model_identity
+
+    async def slow_handler(_request):
+        await asyncio.sleep(0.1)
+        return httpx.Response(200, json={"data": [{"id": "DuyTa/Cyber-F1-AWQ"}]})
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr("evals.multilang.run.httpx.AsyncClient",
+                        lambda **kwargs: real_client(transport=httpx.MockTransport(slow_handler), **kwargs))
+    with pytest.raises(RunError, match="deadline"):
+        asyncio.run(async_verify_model_identity(inventory(), headers={}, timeout_seconds=0.01))
