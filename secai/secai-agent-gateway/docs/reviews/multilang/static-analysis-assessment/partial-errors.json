@@ -1,0 +1,124 @@
+[
+  {
+    "ruleset": "https://github.com/elttam/semgrep-rules",
+    "errors": [
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.class-extends-action-support",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.class-extends-action-support:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\nclass $CLASS extends ActionSupport\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules.java.spring.security.audit.remoting.UnsafeHttpInvokerServiceExporter-extends",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules.java.spring.security.audit.remoting.UnsafeHttpInvokerServiceExporter-extends:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\nclass $CLASS extends org.springframework.remoting.rmi.RemoteInvocationSerializingExporter\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-CrossOrigin",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-CrossOrigin:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@org.springframework.web.bind.annotation.CrossOrigin(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-RestController",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-RestController:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@org.springframework.web.bind.annotation.RestController(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.java.servlet.filter",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.java.servlet.filter:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\nclass $CLASS implements javax.servlet.Filter\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-Priority",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-Priority:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@javax.annotation.Priority(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-RequestMapping",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-RequestMapping:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@org.springframework.web.bind.annotation.RequestMapping(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.convention-annotation-class",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.convention-annotation-class:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@$ANNOTATION($...PARAMS)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-Order",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.spring.security.audit.entrypoints.rest-Order:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@org.springframework.core.annotation.Order(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.convention-annotation-class-method",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.struts2.security.audit.entrypoints.convention-annotation-class-method:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@$ANNOTATION($...PARAMS)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.jax-rs.security.audit.entrypoints.path-class",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.jax-rs.security.audit.entrypoints.path-class:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@jakarta.ws.rs.Path(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.elttam-semgrep-rules.rules-audit.java.jax-rs.security.audit.entrypoints.jax-rs.path-class",
+        "message": "Rule parse error in rule repos.elttam-semgrep-rules.rules-audit.java.jax-rs.security.audit.entrypoints.jax-rs.path-class:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\n@jakarta.ws.rs.Path(...)\nclass $CLASS\n\n----- end pattern -----\n"
+      }
+    ]
+  },
+  {
+    "ruleset": "https://github.com/apiiro/malicious-code-ruleset",
+    "errors": [
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.apiiro-malicious-code-ruleset.dynamic_execution.dart.dart-dynamic-system-commands",
+        "message": "Rule parse error in rule repos.apiiro-malicious-code-ruleset.dynamic_execution.dart.dart-dynamic-system-commands:\n Invalid pattern for Dart: Stdlib.Parsing.Parse_error\n----- pattern -----\n$P = Process;\n...\n$P.$RUN('dart', ['-e', ...]);\n\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.apiiro-malicious-code-ruleset.obfuscation.javascript_typescript.javascript-obfuscation-conditions",
+        "message": "Rule parse error in rule repos.apiiro-malicious-code-ruleset.obfuscation.javascript_typescript.javascript-obfuscation-conditions:\n Invalid pattern for JavaScript: Stdlib.Parsing.Parse_error\n----- pattern -----\nswitch ($VAR) { case ... }\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.apiiro-malicious-code-ruleset.obfuscation.java.java-obfuscation-declarations",
+        "message": "Rule parse error in rule repos.apiiro-malicious-code-ruleset.obfuscation.java.java-obfuscation-declarations:\n Invalid pattern for Java: Stdlib.Parsing.Parse_error\n----- pattern -----\nclass $VAR\n----- end pattern -----\n"
+      },
+      {
+        "code": 2,
+        "level": "error",
+        "type": "Rule parse error",
+        "rule_id": "repos.apiiro-malicious-code-ruleset.obfuscation.dart.dart-obfuscation-conditions",
+        "message": "Rule parse error in rule repos.apiiro-malicious-code-ruleset.obfuscation.dart.dart-obfuscation-conditions:\n Invalid pattern for Dart: Stdlib.Parsing.Parse_error\n----- pattern -----\nswitch ($VAR) { ... }\n----- end pattern -----\n"
+      }
+    ]
+  }
+]
