@@ -25,7 +25,7 @@ Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized 
 |---|---|---:|---:|
 | T0 preflight | CPUbaseline905pass19fail1skip0error; exact failureIDs in assessment baseline.json | 0/5 | 0/3 |
 | T1 criteria | CRITERIA_READY, six documents committedb94e5ea | 0/5 | 0/3 |
-| T2 assessment | Fix2bf06bc4,86targetedpass; independentround3active, signedmechanismsimplemented | 2/5 | 0/3 |
+| T2 assessment | Round3FAIL5remaining (9→6→5), fix3active strictprotocol/globallease/minima/phase/outputfd | 3/5 | 0/3 |
 | T3/T4 core | f6b7834 spec/codePASS round4,17independentcasespass; author139targetedpass | 3/5 | 0/3 |
 | T5 FE | 21test/build/audit0; code reviewed, FE-03 CDN finding fixed and re-reviewPASS | 1/5 | 0/3 |
 | T6 adapter | Conditional Gate C, not created or run | 0/5 | 0/3 |
@@ -40,7 +40,7 @@ Serving inventory: authenticated modelID confirms DuyTa/Cyber-F1-AWQ; sole cache
 
 ## Current orchestration
 - Native new-thread limit reached; independent reviewers/warden launched as fresh Codex CLI sessions with specified Sol model and separate reviewcheckouts. No review waiver. Read-only bwrap first failed beforeinspection; retry uses existing unrestricted environment with strict read-only task instructions.
-- Core reviewclosedPASS; Vanguardfinalcore replaycomplete23pass; Vanguard CPUcheckpointcomplete; assessment independentround3active; FE docscomplete.
+- Core reviewclosedPASS; Vanguardfinalcore replaycomplete23pass; Vanguard CPUcheckpointcomplete; assessmentfix3active; FE docscomplete.
 - Next: finish independent code reviews/fixes, Vanguard CPU/security tests, fresh Astra B integration with exact-SHA fullsuite and protectedbranch simulations; API docs. Keep all languageflagsOFF. Mainmerge requires later user confirmation per spec.
 - Pending release blockers: verified servingtokenizer/template/revision, licensed/reference corpus+independent scoring/holdout,18-direction/3round quality, margins/perf, security/integration gates evidence.
 
