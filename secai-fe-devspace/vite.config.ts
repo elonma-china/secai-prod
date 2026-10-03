@@ -6,7 +6,7 @@ const gateway = process.env.VITE_GATEWAY_PROXY || "http://127.0.0.1:8131";
 export default defineConfig({
   plugins: [react()],
   server: {
-    host: "0.0.0.0",
+    host: "127.0.0.1",
     port: 5173,
     // Cloudflare quick tunnel + LAN access
     allowedHosts: [
@@ -41,5 +41,8 @@ export default defineConfig({
       "/sessions": { target: gateway, changeOrigin: true },
       "/admin": { target: gateway, changeOrigin: true },
     },
+  },
+  preview: {
+    host: "127.0.0.1",
   },
 });
