@@ -1,6 +1,6 @@
 # API dịch văn bản đa ngôn ngữ v3
 
-Tài liệu này mô tả implementation tại core commit `42f8d40` và contract v1. Hai endpoint mới chỉ có trong ứng dụng ASGI `secai_gateway.multilang_app:app` khi `MULTILANG_ENABLED=true`. Mặc định cờ này **tắt**: ứng dụng trả nguyên legacy app và các đường dẫn v3 trả 404. Việc có route hoặc bật cờ không chứng nhận chất lượng dịch; chưa có kết quả suy luận live được trình bày ở đây. Các ví dụ dưới đây chỉ minh họa wire format.
+Tài liệu này mô tả implementation tại core commit `f6b7834` và contract v1. Hai endpoint mới chỉ có trong ứng dụng ASGI `secai_gateway.multilang_app:app` khi `MULTILANG_ENABLED=true`. Mặc định cờ này **tắt**: ứng dụng trả nguyên legacy app và các đường dẫn v3 trả 404. Việc có route hoặc bật cờ không chứng nhận chất lượng dịch; chưa có kết quả suy luận live được trình bày ở đây. Các ví dụ dưới đây chỉ minh họa wire format.
 
 API mới chỉ dịch **text JSON, không stream**, không nhận file/OCR, không tạo job, history hoặc session. Cặp hợp lệ là `vi` hai chiều với `zh-Hans`, `ja`, `ko`, `fr`, `de`, `es`, `ru`, `ar` (16 hướng). `zh` là alias của `zh-Hans`; Arabic dùng Modern Standard Arabic. `en↔vi` tiếp tục dùng `/ai/translate` và `/ai/translate/stream` của legacy. File/OCR cũng giữ API cũ; không tự có thêm ngôn ngữ từ v3.
 

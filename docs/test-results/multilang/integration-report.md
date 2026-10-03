@@ -1,3 +1,103 @@
+# Multilang CPU runtime integration — corrected dependency checkpoint
+
+2026-10-04. **CPU runtime checkpoint complete; assessment integration incomplete; release BLOCKED.** This section supersedes the earlier dependency, security-merge, browser, scanner and API-provenance statuses retained below. The full suite is **not green**.
+
+## Exact snapshots and authorization
+
+| Item | Exact revision |
+|---|---|
+| Fresh baseline | `ce9cd47ee1273018fec1c5cbab944a86d68d6ed5` |
+| Runtime plus reviewed tests actually run | **`929b19997116a2d7b193ebc44912ef1fdcaf0feb`**, tree `1bb7b6fdb9be3c25ab3d8d80e375a562ba34a5fc` |
+| Product source/browser identity | `43e5f2233256a74b091c41b3f14b325f44161a6a`; backend source, deploy files, Python declaration/lock, complete canonical FE and old FE sibling identical |
+| Security authorized / clean merge | `11ec898bd712ba1add2bf56c0ac4f9918c5b1bf8` / `b9e9515fe28feabba8b339dbf3b1c18d7a78ec9a` |
+| Planning evidence authorized / clean merge | `2c222625aa169f5678a73f0ca05233fd9f63fc4f` / `929b19997116a2d7b193ebc44912ef1fdcaf0feb` |
+| Reviewed core / FE | `f6b7834d5fb215075cb0cdbc448e3b538d93f7b3` / `788da975cf9eed0e0bf72089fd137e00fd8ad2b2` |
+| Disposable combined actually run | **`0097da34f5043a07812e5cf09385140312cc2eec`**, tree `bdf7efb04b8e938e3716c0e4c6555275010d635e` |
+| Import / OCR committed parents | `bfab8ebc96e25b23325fd72a1d3bf034e9aea315` / `ff311c12f97a1dd453495b0ff2b9ca269a49aba2` |
+| Assessment excluded | `bf06bc4311a8c2487abce8bf7612c04025eb9d56`; round 3 FAIL with 5 findings; fix cycle 3 committed at closeout as 8e53a00, still excluded pending independent acceptance and authorization |
+
+The report commit is a documentation-only descendant of tested snapshot `929b19997116a2d7b193ebc44912ef1fdcaf0feb`. It contains this report, final-report.md, integration-evidence.json and the authorized one-line API provenance correction. Its exact SHA is recorded in root scratch `integration-correctdeps-checkpoint.md` after committing; retrieve with `git log -1 --format=%H -- docs/test-results/multilang/integration-report.md` from the gateway directory. Do not label the report SHA as the test or browser execution SHA. All prior reports, complete evidence.json, frozen criteria/contract, root STATE, handoff notes, full final-core security report and current round3 assessment feedback were read. No source fix or assessment merge was made.
+
+## Comparable full regression with correct dependencies
+
+| Snapshot | Total | Passed | Failed | Skipped | Errors | Duration / exit |
+|---|---:|---:|---:|---:|---:|---|
+| Fresh base in prepared environment | 925 | 905 | 19 | 1 | 0 | 154.06s / 1 |
+| Runtime `929b199` | 988 | 968 | 19 | 1 | 0 | 159.19s / 1 |
+| Combined `0097da3` | 1095 | 1075 | 19 | 1 | 0 | 168.78s / 1 |
+| Separate composed probes | 7 | 7 | 0 | 0 | 0 | 9.28s / 0 |
+
+Every one of the **925 fresh baseline IDs and outcomes** is retained in runtime and combined; fresh baseline also matches all925 archived assessment baseline IDs/outcomes. All984 prior runtime and1091 prior combined IDs/outcomes remain. All **1014 archived import** and **966 archived OCR** IDs/outcomes remain in combined. No missing IDs, changed outcomes, new failure IDs, collection errors or deselections. Runtime adds46 core and **17 security cases**; all17 pass (four more than the earlier13). Exact outcome maps and comparisons are in integration-evidence.json; no failure was hidden by timeout adjustment.
+
+Interpreter `/tmp/secai-multilang-final-env/bin/python`, Python3.12.3, **67 distributions**. Verified all57 core-baseline packages unchanged, no removals, ten additions: colorama0.4.6, lingua-language-detector2.0.2, lxml6.1.3, **olefile0.47**, portalocker4.4.0, python-docx1.2.0, python-multipart0.0.20, regex2026.9.29, sacrebleu2.5.1, tabulate0.10.0. All17 declared combined project/dev requirements satisfy constraints; all7 assessmentbf06bc4 metric-lock pins match. Preparation installed that lock with `--require-hashes`; current independent inventory/constraints check and `uv pip check` pass. Lock SHA256 `7b2cef3aa3cefb5481f7e26b64b89784242bbed3b502c51e6613c50dc7006555`. No further package download or environment mutation was needed in this continuation. The former olefile0.46 mismatch is **closed**, with original failed setup and compatibility-only results retained as historical evidence.
+
+All three full runs use the **same prepared interpreter and command**, no supplement or editable package: `timeout 600s /tmp/secai-multilang-final-env/bin/python -m pytest -q --tb=short --timeout=10 --timeout-method=signal --junitxml=<private-output>`. Working directory and explicit `PYTHONPATH=<exact-snapshot>/src` select base/runtime/combined; actual imported module path and the complete67-package inventory were asserted separately for each. Identical clean environment apart from snapshot/private paths: private HOME/cache/HF/databases/catalog/artifacts, memory sessions, empty Redis, unavailable classifier, offline HF/Transformers, disabled bytecode, loopback-deny proxies and bounded DNS. Proxies are isolation guards, not exhaustive egress certification. No live service/model/GPU run. Timings are test execution times, not performance benchmarks.
+
+Exact inherited failures (all remain release limitations):
+
+```text
+tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal
+tests/test_chat_poc_drilldown_regression.py::test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref
+tests/test_chat_poc_drilldown_regression.py::test_uc2b_fetch_same_run_returns_real_grounded_source_code
+tests/test_chat_poc_drilldown_regression.py::test_uc2c_ref_reused_in_a_different_turn_run_is_rejected
+tests/test_chat_poc_drilldown_regression.py::test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref
+tests/test_chat_poc_drilldown_regression.py::test_uc4_fetch_budget_enforced_within_a_single_chat_run
+tests/test_consolidate.py::test_exploit_endpoint_consolidated_tier
+tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_cwe_refs_empty_when_no_cve_record
+tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_populates_cwe_refs_from_cve_record
+tests/test_exploit_metadata_grounding.py::test_exploit_stream_endpoint_populates_cwe_refs
+tests/test_exploit_relevance_gate.py::test_exploit_freetext_at_threshold_still_tiers_real
+tests/test_exploit_relevance_gate.py::test_exploit_genuine_freetext_no_cve_still_tiers_real
+tests/test_exploit_relevance_gate.py::test_exploit_named_cve_bypasses_freetext_gate
+tests/test_exploit_relevance_gate.py::test_exploit_offtopic_freetext_gated_to_not_found
+tests/test_exploit_relevance_gate.py::test_exploit_vi_generic_hack_gated_even_with_a_passing_score
+tests/test_gateway.py::test_exploit_chitchat_returns_cve_guide
+tests/test_gateway.py::test_exploit_stream_section1_preview_arrives_before_final
+tests/test_gateway.py::test_legacy_contract_paths_and_profiles
+tests/test_gateway.py::test_streaming_endpoints
+```
+
+Exact skip: `tests/test_chat_poc_drilldown_regression.py::test_uc3_license_gated_or_unfetched_poc_returns_metadata_only_not_fabricated`. Prior attribution: one external Bughunt dependency, five unavailable isolated PoC-data cases and13 ten-second timeouts; their unchanged IDs do not make them harmless or passing.
+
+## Actual composition and owner boundaries
+
+Refreshed merge-tree: main+runtime, runtime+import and runtime+OCR clean; **import+OCR still conflicts independently** in the same two source files. The disposable update is a clean merge of runtime929b199 into previous simulationeb984d4, with exact parents `eb984d4d1d689b1eabc7e4be9bb5b62671e9196c 929b19997116a2d7b193ebc44912ef1fdcaf0feb`. Its entire backend source and dependency declaration equal previouseb984d4; no new resolution or runtime code was introduced. It contains committed snapshots only, no owner WIP.
+
+| Inherited conflict hunk | Preserved minimal union |
+|---|---|
+| profiles.yaml lines59–67 of conflicted tree, after legacy translate and before translate_v2 | Retain OCR `ocr_correction` mapping: prompt ocr_correction.md, tools[], base false, max_turns2; retain import translate_v2 |
+| translation/settings.py lines23–26 of conflicted tree, after worker_db_path | Retain import `converter_image: str = "secai-doc-converter:1"` |
+
+Raw merge tree and exact numbered conflict text, resolved blob IDs and SHA256 hashes are recorded in integration-evidence.json. These remain **temporary simulation choices**, not accepted product integration, not a clean file/OCR merge, and not merged into feature/protected branches. Importbfab8eb and OCRff311c1 HEADs and WIP match before/after: import untracked `.venv-import/` and AGENTS.md; OCR untracked AGENTS.md. Main unchangedce9cd47. Assessment HEAD advanced from bf06bc4 with five modified test/source files to `8e53a00a8adf710dd630196de8341a2585e5d97a` with only untracked AGENTS.md. These owner changes were observed read-only and not merged; the assessment scan still covers bf06bc4 only.
+
+Owner task remains **STOPPED/BLOCKED** after two review rounds with two High. Correct-dependency repros still show R2-01 expired failed-job input retained and subsequent admission STORAGE_UNAVAILABLE with no worker/reaper; R2-02 CJK-adjacent URL has no protected span and fake-provider mutation is accepted. No fix, reopen or additional owner review.
+
+Seven reused socket-guarded probes pass against actual combined factory: masterOFF/ON × v2OFF/ON, capabilities and disabled bidirectionalPOST, v2 storage and OpenAPI boundaries, separate legacy/v3 HTTP-client lifecycle and legacy lifespan forwarding, real standalone worker/API/job/result handoff under outer factoryOFF/ON, optional tokenizer absent startup. Native imported file/OCR tests, including networkless DOC conversion, run in full suite. Worker remains separately supervised; web lifespan does not start it.
+
+Fresh fixed-PYTHONHASHSEED0 fingerprints match across base, runtimeOFF/ON and combinedOFF/ON: **69 legacy paths /15 schemas**, both en↔vi JSON/SSE and invalid/empty input behavior. SHA256 remains `db5e5df0a891c91d9c372a67524fbc8ff16513f6d4a7f03640d31eb217f60ad2`. Fake legacy runner only; not all live behavior.
+
+## Browser, frontend, security scans and API documentation
+
+Root's [actual HTTP/browser replay](browser-http.md) **executed at43e5f22**: 9languages/16pairs, exact CORS allowed/denied, vi→zh-Hans/ja→vi/vi→ar200 preserving CVE/IP, disabledfr403 and extra model400, legacy en↔vi JSON/SSE200. Browser awaited returned text; ArabicRTL/technicalLTR, exact copyAPI-stub text and390px mobile no page overflow passed; screenshots inspected by root. Backend used fakeLLM/token counter/legacy runner and denied outbound sockets. Existing header/navigation mobile clipping, expected projects/session404 and one restart-time health connection refusal are recorded. OS clipboard permissions and live model quality untested.
+
+Product/FE/lock identity to43e5f22 is verified by Git object IDs and SHA256 manifests. Thus browser evidence **applies by verified source identity**, not a claim that929b199 was newly browser-executed. No repeated staging/browser or unnecessary FE rebuild. Earlier **21tests/buildPASS**,253 installed lock matches, lock SHA256 `9ef40829cd3c6b2c2d18c342deda83209e36dd3c348bb0059fa863b9bcc9eb1f` remain applicable; bundle warning and prior author npm audit0 dated2026-10-03 retain their limits. No fresh advisory audit.
+
+Authorized security11ec898 full report: **23 selected final-core CPU cases passed, zero new actionable findings**, security release BLOCKED. Current runtime full suite additionally confirms all17 Vanguard cases and baseline legacy cases with correct dependencies.
+
+New committed [runtime Semgrep report](../../reviews/multilang/static-analysis/report.md) **supersedes older scanner NOT RUN**: Semgrep OSS1.179.0,14 allowlisted files (11Python/1TS/2TSX),9 units,7 complete and2 partial,0findings. All14 source hashes verified against current identical runtime; no rerun claimed. Elttam12 and Apiiro4 compilation errors remain, including one relevant JS/TS obfuscation rule; **partial scan, not blanket security PASS**. Pro unavailable; CodeQL NOT RUN. [Assessment scan](../../reviews/multilang/static-analysis-assessment/report.md) is separate evidence for **bf06bc4 only**,7Python files/6units,4complete+2partial/0findings; source hashes verified against that committed snapshot, not current owner WIP. It does not approve assessment or its fixes. Full errors, scope, revisions, unit results and raw checksums remain committed.
+
+**INT-RC-01 (Low / DOC-01) CLOSED**: API guide opening core reference corrected42f8d40→f6b7834, the sole new documentation fix. No wire/runtime change.
+
+## Remaining gates
+
+Assessment round 3 failed with five findings at bf06bc4; owner fix cycle 3 advanced to `8e53a00a8adf710dd630196de8341a2585e5d97a` during this checkpoint and is still excluded pending independent acceptance; its later independently accepted, explicitly authorized merge needs a **separate final integrated SHA and full suite**. This checkpoint completes CPU runtime work while those fixes continue. All18direction×3roundlive quality cells stay NOT RUN; corpus/reference licensing, independent qualified scoring/sealed custody, serving revision/tokenizer/template/context attestation, en↔vi noninferiority and perf/cost, production traces/egress/multiworker limits and release decision remain blocked. GateC not entered. Flags defaultOFF; DuyTa only; auxiliary ours0/shared3of3 exhausted. Counters core3/5,FE1/5,assessment3/5,integration0/5productfixes,Vanguardreturns0/3; none reset. No mainmerge/push/deploy/protected-source edits/spawns.
+
+Machine evidence: [integration-evidence.json](integration-evidence.json). Raw logs, full JUnit, dependency manifests, exact commands and probes: `/tmp/multilang-correctdeps-evidence`. Historical records below are superseded where this checkpoint explicitly updates them; no historic run was rewritten as a new result.
+
+---
+
+## Historical checkpoint at report0263286 (preserved)
+
 # Multilang CPU runtime integration checkpoint
 
 2026-10-04 local / 2026-10-03 UTC. **Intermediate runtime checkpoint complete; release BLOCKED.** Assessment is excluded pending independent acceptance. This is not whole-feature completion, a green full suite, a clean file/OCR merge, or permission to enable flags/main-merge/deploy.
