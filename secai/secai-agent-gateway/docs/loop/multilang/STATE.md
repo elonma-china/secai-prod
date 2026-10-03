@@ -16,7 +16,7 @@ Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized 
 - Core: /home/ict/secai-multilang-core-wt, feature/multilang-core @f6b7834d5fb215075cb0cdbc448e3b538d93f7b3.
 - FE: /home/ict/secai-multilang-fe-wt, feature/fe-devspace-multilang @788da975cf9eed0e0bf72089fd137e00fd8ad2b2; canonical nested snapshot baseline8b41f62, no sibling deletion.
 - Assessment: /home/ict/secai-multilang-assessment-wt, feature/multilang-assessment; @368afcd7e9ee02c3b9ad850ef4229bdc45cc6d9f; independentround2active.
-- Integration: /home/ict/secai-multilang-integration-wt, integration/multilang-translate; created from base, not merged yet. Fresh Astra B will integrate reviewed commits only.
+- Integration: /home/ict/secai-multilang-integration-wt, integration/multilang-translate; Fresh AstraB CLI18640 active: reviewedruntimecore/FE/securitytests/docs integration, assessmentexcludedpendingreview.
 - Protected import current observed: bfab8ebc96e25b23325fd72a1d3bf034e9aea315; OCR: ff311c12f97a1dd453495b0ff2b9ca269a49aba2. Their source/state/log read-only. Recheck before integration.
 - Pre-existing protected-branch cross-conflicts observed at365e9e0/99cd0a2: profiles.yaml and translation/settings.py. Not caused by our code; refresh current snapshots at integration.
 
@@ -30,8 +30,8 @@ Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized 
 | T5 FE | 21test/build/audit0; code reviewed, FE-03 CDN finding fixed and re-reviewPASS | 1/5 | 0/3 |
 | T6 adapter | Conditional Gate C, not created or run | 0/5 | 0/3 |
 | T7 integration tests | NOT RUN on combined finaltree | 0/5 | 0/3 |
-| T8 Vanguard | CPUround1 4883e87:19pass,0new actionablefindings; finalSHA replayneeded | 0/5 | 0/3 |
-| T9 AstraB integration | NOT RUN; no main merge | 0/5 | 0/3 |
+| T8 Vanguard | Finalcore11ec898:23pass,0new actionablefindings; live/scanners/composedreleaseBLOCKED | 0/5 | 0/3 |
+| T9 AstraB integration | CPUruntime checkpoint running, assessmentexcluded; no main merge | 0/5 | 0/3 |
 | T10 API/finaldocs | API docs788da97 complete; finalreport pending | 0/5 | 0/3 |
 
 FE browser: mocked T3 checks recorded separately; real HTTP/fakeLLM Playwright smoke on corebfe4e6b passes vi→zh-Hans,ja→vi,vi→ar,RTL/literal/copy,desktop/mobile screenshot checks. Screenshots inspected; repeat finalSHA needed. See browser-http.md. No genuine model quality claim.
@@ -40,7 +40,7 @@ Serving inventory: authenticated modelID confirms DuyTa/Cyber-F1-AWQ; sole cache
 
 ## Current orchestration
 - Native new-thread limit reached; independent reviewers/warden launched as fresh Codex CLI sessions with specified Sol model and separate reviewcheckouts. No review waiver. Read-only bwrap first failed beforeinspection; retry uses existing unrestricted environment with strict read-only task instructions.
-- Core reviewclosedPASS; Vanguardfinalcore replayactive; Vanguard CPUcheckpointcomplete; assessmentfix2active; FE docscomplete.
+- Core reviewclosedPASS; Vanguardfinalcore replaycomplete23pass; Vanguard CPUcheckpointcomplete; assessmentfix2active; FE docscomplete.
 - Next: finish independent code reviews/fixes, Vanguard CPU/security tests, fresh Astra B integration with exact-SHA fullsuite and protectedbranch simulations; API docs. Keep all languageflagsOFF. Mainmerge requires later user confirmation per spec.
 - Pending release blockers: verified servingtokenizer/template/revision, licensed/reference corpus+independent scoring/holdout,18-direction/3round quality, margins/perf, security/integration gates evidence.
 
