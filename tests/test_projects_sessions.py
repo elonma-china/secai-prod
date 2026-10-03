@@ -801,8 +801,8 @@ async def test_uc27_repeated_list_calls_and_rate_limit_table(tmp_path) -> None:
 
     assert route_limit("/sessions") == 120
     assert route_limit("/projects/p1/sessions") == 120
-    assert route_limit("/sessions/sess:abc/chat/stream") == 90
-    assert route_limit("/ai/chat") == 90
+    assert route_limit("/sessions/sess:abc/chat/stream") == 150
+    assert route_limit("/ai/chat") == 150
     assert route_limit("/ai/translate") == 10
 
 
