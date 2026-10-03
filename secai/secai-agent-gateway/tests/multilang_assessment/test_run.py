@@ -10,6 +10,7 @@ from .test_manifest import row
 
 
 REVISION = "7e7e6718ce268d2b00adc6e3ea43fcd33452f516"
+RESPONSE_MARKERS = ("tool_calls", "function_call", "tool_call_id", "tool_choice", "tools", "functions")
 
 
 def inventory(endpoint="http://192.165.134.28:10739/v1"):
@@ -168,6 +169,39 @@ def test_legacy_function_call_response_is_rejected_even_with_translation_text():
             call_one(client, row(), "model-only", inventory(),
                      system_prompt="Translate {source_lang} to {target_lang}.",
                      decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+
+
+@pytest.mark.parametrize("location", ("top", "choice", "message"))
+@pytest.mark.parametrize("marker", RESPONSE_MARKERS)
+@pytest.mark.parametrize("value", ({}, [], "call_42"), ids=("empty-object", "empty-list", "nonempty-string"))
+def test_no_tool_response_rejects_every_protocol_marker_at_every_level(location, marker, value):
+    body = {
+        "model": "DuyTa/Cyber-F1-AWQ",
+        "choices": [{"message": {"role": "assistant", "content": "Bonjour"}, "finish_reason": "stop"}],
+    }
+    locations = {"top": body, "choice": body["choices"][0],
+                 "message": body["choices"][0]["message"]}
+    locations[location][marker] = value
+
+    with httpx.Client(transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=body))) as client:
+        with pytest.raises(RunError, match="tool_call_forbidden"):
+            call_one(client, row(), "model-only", inventory(),
+                     system_prompt="Translate {source_lang} to {target_lang}.",
+                     decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+
+
+def test_no_tool_response_allows_null_protocol_markers_on_assistant_envelope():
+    body = {
+        "model": "DuyTa/Cyber-F1-AWQ",
+        "choices": [{"message": {"role": "assistant", "content": "Bonjour"}, "finish_reason": "stop"}],
+    }
+    for scope in (body, body["choices"][0], body["choices"][0]["message"]):
+        scope.update({marker: None for marker in RESPONSE_MARKERS})
+    with httpx.Client(transport=httpx.MockTransport(lambda _request: httpx.Response(200, json=body))) as client:
+        response = call_one(client, row(), "model-only", inventory(),
+                            system_prompt="Translate {source_lang} to {target_lang}.",
+                            decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+    assert response["validated_output"] == "Bonjour"
 
 
 @pytest.mark.parametrize("message,extra", [
