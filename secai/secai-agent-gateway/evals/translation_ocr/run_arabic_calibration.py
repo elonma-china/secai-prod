@@ -13,15 +13,20 @@ def main() -> None:
     manifest = Path(sys.argv[1])
     token_file = Path(sys.argv[2])
     output = Path(sys.argv[3])
+    model = sys.argv[4] if len(sys.argv) > 4 else "PaddlePaddle/PaddleOCR-VL-1.6"
     corpus = json.loads(manifest.read_text())
     token = token_file.read_text().strip()
     rows = []
-    for prompt in ("standard", "logical", "arabic"):
+    prompts = (("natural", "arabic", "verbatim") if model.startswith("Qwen/")
+               else ("standard", "logical", "arabic"))
+    if len(sys.argv) > 5:
+        prompts = tuple(sys.argv[5].split(","))
+    for prompt in prompts:
         for item in corpus["images"]:
             image = (manifest.parent / item["image"]).read_bytes()
-            body = json.dumps({"model": "PaddlePaddle/PaddleOCR-VL-1.6",
-                               "image_base64": base64.b64encode(image).decode(),
-                               "calibration_prompt": prompt}).encode()
+            payload = {"model": model, "image_base64": base64.b64encode(image).decode()}
+            payload["calibration_prompt"] = prompt
+            body = json.dumps(payload).encode()
             request = urllib.request.Request(
                 "http://127.0.0.1:18083/v1/ocr", body,
                 {"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
