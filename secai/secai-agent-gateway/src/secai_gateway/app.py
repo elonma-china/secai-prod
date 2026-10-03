@@ -72,6 +72,15 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     register_routes(app, state)
     from .api import projects as _projects_router
     app.include_router(_projects_router.router)
+    from .api.translate_v2 import router as translation_v2_router
+    from .translation.settings import TranslationSettings
+    from .translation.jobs import JobStore
+    app.state.translation_v2_settings = TranslationSettings()
+    app.state.translation_v2_store = (
+        JobStore(app.state.translation_v2_settings)
+        if app.state.translation_v2_settings.enabled else None
+    )
+    app.include_router(translation_v2_router)
     return app
 
 

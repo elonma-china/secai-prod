@@ -56,6 +56,18 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
 
     @app.middleware("http")
     async def rate_limit(request: Request, call_next):
+        if request.url.path.startswith("/ai/v2/translate/"):
+            origin = request.headers.get("origin", "")
+            if request.method == "OPTIONS" and origin in state.settings.cors_origins:
+                return JSONResponse(None, status_code=204, headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+                    "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key",
+                    "Cache-Control": "no-store",
+                })
+            response = await call_next(request)
+            response.headers["Cache-Control"] = "no-store"
+            return response
         if request.url.path == "/health":
             return await call_next(request)
         limit = route_limit(request.url.path)

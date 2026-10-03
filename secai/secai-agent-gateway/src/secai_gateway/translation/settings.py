@@ -20,6 +20,7 @@ class TranslationSettings(BaseSettings):
     db_path: str = "./data/translate-v2/jobs.sqlite3"
     artifact_dir: str = "./data/translate-v2/artifacts"
     worker_db_path: str = "./data/translate-v2/worker-gateway.sqlite3"
+    converter_image: str = "secai-doc-converter:1"
     max_upload_bytes: int = 10 * 1024 * 1024
     max_request_bytes: int = 11 * 1024 * 1024
     max_multipart_parts: int = 8
