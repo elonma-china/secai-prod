@@ -86,3 +86,37 @@ the request/response model ID but cannot attest that loaded revision. Until the
 inventory confirms the matching tokenizer, chat template overhead and context
 limit, enabled POSTs fail closed before model calls. No quality percentage is
 claimed from mock tests.
+
+## Independent T7 round 1, fix cycle 1/5
+
+The preceding sections describe the original `bfe4e6b` checkpoint. Independent
+review marked that code **FAIL** with eight reproduced findings. This section
+records the follow-up code/test commit
+`373661d92e8f8efde5d499b9729c95dacd9feb35`; it does not claim reviewer
+acceptance. The reviewed history was not amended. No protected legacy source,
+live service, GPU, `.env`, deployment, push, or merge was touched.
+
+The new `tests/multilang/test_review_round1.py` reproduced 14 failing cases
+before the fixes (two malformed provider cases were already safe). Under the
+same isolated/offline test environment, after the fixes:
+
+```text
+pytest -q tests/multilang tests/test_translate_validation.py tests/test_translate_mask.py tests/test_translate_glossary.py tests/test_text_chunk.py tests/test_projects_sessions.py --timeout=10 --timeout-method=signal
+130 passed in 9.61s  (37 multilang + 93 legacy)
+```
+
+| Finding | Local disposition and regression evidence |
+|---|---|
+| T7-01 | **Fixed in code, local test PASS.** A hash-pinned tokenizer with serialized truncation is rejected before inference; encoder errors fail closed. `test_t7_01_serialized_truncation_cannot_bypass_source_budget`. The live serving tokenizer/template/context correspondence still needs independent inventory evidence. |
+| T7-02 | **Fixed in code, local tests PASS.** Generated bidi overrides or unpaired surrogates cause an output-validation retry, then a JSON 502 envelope; no invalid character reaches JSON encoding. Both parameter cases test direct service and ASGI POST. |
+| T7-03 | **Fixed in code, local tests PASS.** Mixed Arabic/Russian/Korean technical prose with Latin product names continues with `SOURCE_LANGUAGE_UNCERTAIN`; script-only evidence no longer asserts a 422 source mismatch. Independent LID/quality assessment remains pending. |
+| T7-04 | **Fixed for reproduced bypass, local test PASS.** The validator rejects known internal instruction fragments and a fresh per-request prompt canary; the system prompt is included in the full token budget. `test_t7_04_internal_prompt_fragment_and_canary_fail_closed`. This deterministic guard is not proof against paraphrased or translated prompt leakage; adversarial evaluation remains required. |
+| T7-05 | **Fixed in code, local test PASS.** Prose copy comparison removes protected markers and normalizes Unicode, case, whitespace, and punctuation, catching a French sentence with doubled internal spacing. |
+| T7-06 | **Fixed in code, local tests PASS.** Scalar/list and malformed nested HTTP 200 JSON shapes map to `MODEL_UNAVAILABLE` without echoing provider content; six malformed shapes are tested. |
+| T7-07 | **Fixed in code, local test PASS.** A hash-matched but invalid `{}` tokenizer parse returns unavailable; no library exception leaves the tokenizer boundary. |
+| T7-08 | **Fixed in code, local test PASS.** A returned tool call is still rejected without execution, then uses the single output-validation retry; the second valid mock response returns `attempts=2`. Transport failures remain non-retryable. |
+
+The full backend suite on this fix SHA remains **NOT RUN** here; root integration
+will perform the final comparable full-suite replay and independent T7 re-review.
+All live quality, checkpoint attestation, security, file/OCR integration and
+release gates remain **BLOCKED/NOT RUN**.
