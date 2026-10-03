@@ -1,0 +1,20 @@
+[
+  {
+    "pid": 1153543,
+    "cmdline": "python3 -m http.server 5178 --bind 100.74.146.12 --directory /home/ict/secai-multilang-fe-wt/secai/secai-agent-gateway/secai-fe-devspace/dist ",
+    "cwd": "/home/ict/AIEngines/secai/secai-agent-gateway",
+    "action": "SIGTERM only verified owned process"
+  },
+  {
+    "pid": 1128637,
+    "cmdline": "node /home/ict/secai-multilang-fe-wt/secai/secai-agent-gateway/secai-fe-devspace/node_modules/.bin/vite --port 5177 --strictPort ",
+    "cwd": "/home/ict/secai-multilang-fe-wt/secai/secai-agent-gateway/secai-fe-devspace",
+    "action": "SIGTERM only verified owned process"
+  },
+  {
+    "pid": 1407822,
+    "cmdline": "/home/ict/secai-multilang-core-wt/secai/secai-agent-gateway/.venv/bin/python -m uvicorn server:app --host 100.74.146.12 --port 5180 --no-access-log ",
+    "cwd": "/tmp/secai-multilang-http-smoke",
+    "action": "SIGTERM only verified owned process"
+  }
+]
