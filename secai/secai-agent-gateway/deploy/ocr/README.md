@@ -39,7 +39,8 @@ downloads the pinned snapshot with `chat_template.jinja`, verifies the model
 weight SHA-256, then starts one loopback worker in offline mode. Keep the process
 under an operator-managed supervisor and record only its own PID for shutdown.
 
-The bounded Qwen3-VL candidate uses `qwen_server.py` and `start_qwen3vl.sh`
+The bounded Qwen3-VL candidate uses `server.py` (shared GPU guard),
+`qwen_server.py`, and `start_qwen3vl.sh`
 instead, with the same private endpoint and token file. Its pinned default prompt
 asks for each script's logical reading order, explicitly including Arabic RTL;
 the calibration-only prompt variants are never sent by the gateway client. The

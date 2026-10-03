@@ -1,0 +1,9 @@
+{"id": "cal-vi", "prompt": "conditional", "reference": "Bản vá đã được kiểm tra trên máy chủ.", "raw_text": "Bản vá đã được kiểm tra trên máy chủ.", "latency_seconds": 1.414}
+{"id": "cal-en", "prompt": "conditional", "reference": "The security patch is ready for review.", "raw_text": "The security patch is ready for review.", "latency_seconds": 1.163}
+{"id": "cal-zh", "prompt": "conditional", "reference": "请检查最新的安全更新。", "raw_text": "请检查最新的安全更新。", "latency_seconds": 1.194}
+{"id": "cal-ja", "prompt": "conditional", "reference": "安全更新を確認してください。", "raw_text": "安全更新を確認してください。", "latency_seconds": 1.13}
+{"id": "cal-ko", "prompt": "conditional", "reference": "최신 보안 업데이트를 확인하세요.", "raw_text": "최신 보안 업데이트를 확인하세요.", "latency_seconds": 1.409}
+{"id": "cal-fr", "prompt": "conditional", "reference": "La mise à jour de sécurité est prête.", "raw_text": "La mise à jour de sécurité est prête.", "latency_seconds": 1.23}
+{"id": "cal-de", "prompt": "conditional", "reference": "Das Sicherheitsupdate ist bereit.", "raw_text": "Das Sicherheitsupdate ist bereit.", "latency_seconds": 1.267}
+{"id": "cal-es", "prompt": "conditional", "reference": "La actualización de seguridad está lista.", "raw_text": "La actualización de seguridad está lista.", "latency_seconds": 1.208}
+{"id": "cal-ru", "prompt": "conditional", "reference": "Обновление безопасности готово.", "raw_text": "Обновление безопасности готово.", "latency_seconds": 1.109}

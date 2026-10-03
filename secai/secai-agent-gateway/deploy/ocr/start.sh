@@ -15,8 +15,8 @@ mkdir -p "$OCR_RUNTIME_ROOT/model" "$OCR_RUNTIME_ROOT/runtime"
 OCR_RUNTIME_ROOT="$OCR_RUNTIME_ROOT" python3 - <<'PY'
 import os, shutil
 free = shutil.disk_usage(os.environ['OCR_RUNTIME_ROOT']).free
-if free < 20 * 1024**3:
-    raise SystemExit('OCR disk reserve below 20 GiB')
+if free < 25 * 1024**3:
+    raise SystemExit('OCR disk reserve cannot cover model download')
 PY
 
 if [ ! -x "$OCR_RUNTIME_ROOT/runtime/venv/bin/python" ]; then
@@ -25,7 +25,7 @@ fi
 
 # Download happens only here, before the service enters offline inference mode.
 OCR_RUNTIME_ROOT="$OCR_RUNTIME_ROOT" "$OCR_RUNTIME_ROOT/runtime/venv/bin/python" - <<'PY'
-import hashlib, os
+import hashlib, os, shutil
 from pathlib import Path
 from huggingface_hub import snapshot_download
 root = Path(os.environ['OCR_RUNTIME_ROOT'])
@@ -41,6 +41,8 @@ with (root / 'model/model.safetensors').open('rb') as weights:
 digest = hasher.hexdigest()
 if digest != '85a479d506a11e724e7285d395c551be69f41dbc16b6342d3cacfb189aed71db':
     raise SystemExit('OCR model checksum mismatch')
+if shutil.disk_usage(root).free < 20 * 1024**3:
+    raise SystemExit('OCR disk reserve below 20 GiB after download')
 PY
 
 export OCR_MODEL_PATH="$OCR_RUNTIME_ROOT/model"

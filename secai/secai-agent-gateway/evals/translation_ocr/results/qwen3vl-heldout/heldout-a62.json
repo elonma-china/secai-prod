@@ -1,0 +1,9 @@
+{
+  "id": "a62",
+  "reference": "الثغرة CVE-2024-3018 تخص 192.0.2.18.",
+  "raw_text": "الثغرة CVE-2024-3018 تخص 18.192.0.2.1",
+  "http_status": 200,
+  "latency_seconds": 5.886,
+  "model": "Qwen/Qwen3-VL-2B-Instruct",
+  "prompt_policy": "conditional-default"
+}

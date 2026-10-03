@@ -13,8 +13,8 @@ fi
 mkdir -p "$OCR_RUNTIME_ROOT/qwen3vl-model" "$OCR_RUNTIME_ROOT/runtime"
 OCR_RUNTIME_ROOT="$OCR_RUNTIME_ROOT" python3 - <<'PY'
 import os, shutil
-if shutil.disk_usage(os.environ['OCR_RUNTIME_ROOT']).free < 20 * 1024**3:
-    raise SystemExit('OCR disk reserve below 20 GiB')
+if shutil.disk_usage(os.environ['OCR_RUNTIME_ROOT']).free < 30 * 1024**3:
+    raise SystemExit('OCR disk reserve cannot cover model download')
 PY
 
 if [ ! -x "$OCR_RUNTIME_ROOT/runtime/venv/bin/python" ]; then
@@ -22,7 +22,7 @@ if [ ! -x "$OCR_RUNTIME_ROOT/runtime/venv/bin/python" ]; then
 fi
 
 OCR_RUNTIME_ROOT="$OCR_RUNTIME_ROOT" "$OCR_RUNTIME_ROOT/runtime/venv/bin/python" - <<'PY'
-import hashlib, os
+import hashlib, os, shutil
 from pathlib import Path
 from huggingface_hub import snapshot_download
 root = Path(os.environ['OCR_RUNTIME_ROOT'])
@@ -37,6 +37,8 @@ with (root / 'qwen3vl-model/model.safetensors').open('rb') as weights:
         hasher.update(chunk)
 if hasher.hexdigest() != '7de1838c87a5349b016c26a1c3f7d2bc400a3d485f95ef39a7059ffd734977a0':
     raise SystemExit('OCR model checksum mismatch')
+if shutil.disk_usage(root).free < 20 * 1024**3:
+    raise SystemExit('OCR disk reserve below 20 GiB after download')
 PY
 
 export OCR_MODEL_ID='Qwen/Qwen3-VL-2B-Instruct'

@@ -1,0 +1,59 @@
+{
+  "started_utc": "2026-10-03T17:19:14Z",
+  "probes": [
+    {
+      "service": "llm",
+      "iteration": 0,
+      "latency_seconds": 0.855,
+      "response_nonempty": true
+    },
+    {
+      "service": "embedding",
+      "iteration": 0,
+      "latency_seconds": 1.256,
+      "response_nonempty": true
+    },
+    {
+      "service": "rerank",
+      "iteration": 0,
+      "latency_seconds": 0.892,
+      "response_nonempty": true
+    },
+    {
+      "service": "llm",
+      "iteration": 1,
+      "latency_seconds": 0.934,
+      "response_nonempty": true
+    },
+    {
+      "service": "embedding",
+      "iteration": 1,
+      "latency_seconds": 1.242,
+      "response_nonempty": true
+    },
+    {
+      "service": "rerank",
+      "iteration": 1,
+      "latency_seconds": 0.752,
+      "response_nonempty": true
+    },
+    {
+      "service": "llm",
+      "iteration": 2,
+      "latency_seconds": 0.944,
+      "response_nonempty": true
+    },
+    {
+      "service": "embedding",
+      "iteration": 2,
+      "latency_seconds": 0.878,
+      "response_nonempty": true
+    },
+    {
+      "service": "rerank",
+      "iteration": 2,
+      "latency_seconds": 0.884,
+      "response_nonempty": true
+    }
+  ]
+}
