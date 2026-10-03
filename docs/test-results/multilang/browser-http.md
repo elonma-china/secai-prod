@@ -10,3 +10,7 @@ T3 preview initially worked for mocked-response checks but later returned explic
 - Runtime Google-font links0. Prior browser-mock report covers malicious HTML as literal text, Russian and master404 hiding with mocked capabilities.
 
 Artifacts outside tracked source: output/playwright/multilang-http-ar-desktop.png, multilang-http-ar-mobile.png, multilang-http-ar-mobile-result.png in orchestration worktree. Screenshot of result captured after scrolling the existing main container. No production endpoints/keys used. HTTP staging details/lifecycle are ephemeral, not deployment instructions.
+
+## Replay at core dbda8ec
+
+Restarted only the owned local fake-LLM staging on frozen core `dbda8ecc1967d6aa2d33e887560379fd0bb7cddb`; same FE build and isolation. HTTP client passed capabilities/CORS, three v3 pairs, disabled403/extra-field400, and both legacy directions JSON plus SSE token/final. Playwright repeated all three directions with HTTP200 and awaited actual returned text in the UI. Screenshots `output/playwright/core-dbda8ec-ar-mobile.png` and `core-dbda8ec-ar-desktop.png` were captured and visually inspected. Literal text remains exact; Arabic RTL renders, mobile result reachable without page horizontal overflow. This replay uses fake LLM/token counter and remains non-quality evidence. Final combined integration replay remains pending.
