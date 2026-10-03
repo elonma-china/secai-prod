@@ -5,7 +5,9 @@ import re
 import os
 import posixpath
 import shutil
+import secrets
 import subprocess
+import unicodedata
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -19,6 +21,16 @@ _W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 _R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
 _VI = set("ăâđêôơưĂÂĐÊÔƠƯ")
 _SIGNATURES = (b"%PDF", b"PK\x03\x04", b"\xd0\xcf\x11\xe0", b"\x89PNG", b"\xff\xd8\xff")
+
+
+def _vietnamese_signal(text: str) -> bool:
+    if _VI & set(text):
+        return True
+    decomposed = unicodedata.normalize("NFD", text)
+    for match in re.finditer(r"[aeiouyAEIOUY][\u0300-\u036f]*", decomposed):
+        if any(mark in match.group() for mark in "\u0300\u0301\u0303\u0309\u0323"):
+            return True
+    return False
 
 
 def _bad_controls(text: str) -> bool:
@@ -59,7 +71,9 @@ def extract_txt(payload: bytes, settings: TranslationSettings) -> ExtractedDocum
                 text = payload.decode("utf-8", errors="strict")
             except UnicodeDecodeError:
                 text = payload.decode("cp1258", errors="strict")
-                if text.encode("cp1258", errors="strict") != payload or not (_VI & set(text)):
+                if (text.encode("cp1258", errors="strict") != payload
+                        or sum(char.isalpha() for char in text) < 4
+                        or not _vietnamese_signal(text)):
                     raise TranslationError("UNSUPPORTED_ENCODING", "Text encoding is unsupported.")
                 warnings.append(WarningItem(code="ENCODING_ASSUMED",
                                             message="CP1258 encoding was assumed."))
@@ -118,7 +132,7 @@ def _xml(data: bytes) -> ET.Element:
 
 def _paragraph_text(element: ET.Element) -> str:
     return "".join(node.text or "" for node in element.iter()
-                   if node.tag in {_W + "t", _W + "delText"})
+                   if node.tag == _W + "t")
 
 
 def _children_text(element: ET.Element) -> str:
@@ -165,7 +179,8 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
             if note is None:
                 warnings.append(WarningItem(code="UNSUPPORTED_PART", message="Footnote is unavailable."))
             else:
-                items.append(("footnote", _children_text(note), {"footnote_id": note_id}))
+                note_text = "\n".join(_paragraph_text(p) for p in note.iter(_W + "p"))
+                items.append(("footnote", note_text, {"footnote_id": note_id}))
 
     rels: dict[str, str] = {}
     if "word/_rels/document.xml.rels" in parts:
@@ -208,24 +223,44 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
         nonlocal table_number
         table_number += 1
         current_table = table_number
-        for row_index, row in enumerate(table.findall(_W + "tr")):
+        table_rows: list[list[tuple[int, ET.Element, int]]] = []
+        for row in table.findall(_W + "tr"):
             col_index = 0
+            cells: list[tuple[int, ET.Element, int]] = []
             for cell in row.findall(_W + "tc"):
                 span = cell.find("./" + _W + "tcPr/" + _W + "gridSpan")
                 width = int(span.attrib.get(_W + "val", "1")) if span is not None else 1
+                if width < 1:
+                    raise TranslationError("CORRUPT_DOCUMENT", "Table span is invalid.")
+                cells.append((col_index, cell, width))
+                col_index += width
+            table_rows.append(cells)
+        for row_index, row_cells in enumerate(table_rows):
+            for col_index, cell, width in row_cells:
                 merge = cell.find("./" + _W + "tcPr/" + _W + "vMerge")
                 if merge is not None and merge.attrib.get(_W + "val") != "restart":
-                    col_index += width
                     continue
                 meta = {"section": section, "table": current_table, "row": row_index,
                         "column": col_index}
                 if width > 1:
                     meta["column_span"] = width
+                if merge is not None:
+                    row_span = 1
+                    for next_row in table_rows[row_index + 1:]:
+                        following = next((other for column, other, other_width in next_row
+                                          if column == col_index and other_width == width), None)
+                        if following is None:
+                            break
+                        continuation = following.find("./" + _W + "tcPr/" + _W + "vMerge")
+                        if continuation is None or continuation.attrib.get(_W + "val") == "restart":
+                            break
+                        row_span += 1
+                    if row_span > 1:
+                        meta["row_span"] = row_span
                 items.append(("table_cell", _children_text(cell), meta))
                 add_notes(cell)
                 for nested in cell.findall(_W + "tbl"):
                     walk_table(nested)
-                col_index += width
 
     emit_part("header", section)
     for child in body:
@@ -241,6 +276,10 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
     emit_part("footer", section)
     if any("endnotes" in name or "comments" in name for name in parts):
         warnings.append(WarningItem(code="UNSUPPORTED_PART", message="Some document parts are unsupported."))
+    if any(node.tag.endswith("}txbxContent") or node.tag in {_W + "instrText", _W + "fldSimple"}
+           for node in root.iter()):
+        warnings.append(WarningItem(code="UNSUPPORTED_PART",
+                                    message="Floating or field content needs review."))
     return _make_blocks(items, settings, warnings)
 
 
@@ -262,9 +301,12 @@ def validate_doc(path: Path) -> None:
 def converter_available(settings: TranslationSettings) -> bool:
     if not shutil.which("docker"):
         return False
-    return subprocess.run(["docker", "image", "inspect", settings.converter_image],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                          timeout=5, check=False).returncode == 0
+    try:
+        return subprocess.run(["docker", "image", "inspect", settings.converter_image],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              timeout=5, check=False).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def convert_doc(path: Path, work_dir: Path, settings: TranslationSettings) -> Path:
@@ -274,15 +316,17 @@ def convert_doc(path: Path, work_dir: Path, settings: TranslationSettings) -> Pa
         raise TranslationError("DEPENDENCY_UNAVAILABLE", "DOC converter is unavailable.")
     incoming = work_dir / "incoming"
     outgoing = work_dir / "outgoing"
-    incoming.mkdir(mode=0o755)
-    outgoing.mkdir(mode=0o777)
+    incoming.mkdir(mode=0o700)
+    outgoing.mkdir(mode=0o700)
     source = incoming / "document.doc"
     source.write_bytes(path.read_bytes())
-    source.chmod(0o644)
+    name = "secai-convert-" + secrets.token_hex(8)
     argv = [
-        "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+        "docker", "run", "--rm", "--name", name,
+        "--network", "none", "--read-only", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--pids-limit", "64", "--memory", "768m",
-        "--cpus", "1", "--user", "65534:65534", "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m",
+        "--cpus", "1", "--user", f"{os.getuid()}:{os.getgid()}",
+        "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m",
         "--mount", f"type=bind,source={incoming.resolve()},target=/input,readonly",
         "--mount", f"type=bind,source={outgoing.resolve()},target=/output",
         settings.converter_image,
@@ -292,6 +336,9 @@ def convert_doc(path: Path, work_dir: Path, settings: TranslationSettings) -> Pa
                                    stderr=subprocess.DEVNULL,
                                    timeout=settings.converter_timeout_seconds, check=False)
     except subprocess.TimeoutExpired as exc:
+        subprocess.run(["docker", "rm", "-f", name], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=5, check=False)
         raise TranslationError("PROCESSING_TIMEOUT", "DOC conversion timed out.") from exc
     result = outgoing / "document.docx"
     if completed.returncode != 0 or not result.is_file():

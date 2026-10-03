@@ -44,11 +44,13 @@ def test_lease_reclaim_invalidates_stale_worker(tmp_path):
     assert first["job_id"] == job["job_id"]
     second = store.claim(now=1061)
     assert second["generation"] == 2
-    assert store.finish(job["job_id"], 1, result={}) is False
-    assert store.finish(job["job_id"], 2, result={"translated_text": "ok"}) is True
+    assert store.finish(job["job_id"], 1, result={}, now=1062) is False
+    assert store.finish(job["job_id"], 2, result={"translated_text": "ok"}, now=1062) is True
 
 
 def test_idempotency_tombstone_and_reuse(tmp_path):
+    import sqlite3
+
     store = _store(tmp_path)
     key = "b" * 32
     job = store.admit("file", b"one", ".txt", "en", "vi", "a", key, now=1000)
@@ -58,6 +60,20 @@ def test_idempotency_tombstone_and_reuse(tmp_path):
     with pytest.raises(TranslationError) as e:
         store.admit("file", b"other", ".txt", "en", "vi", "b", key, now=expired)
     assert e.value.code == "JOB_EXPIRED"
+    store.reap(now=expired)
+    with sqlite3.connect(store.db_path) as db:
+        assert db.execute("SELECT count(*) FROM jobs WHERE id=?", (job["job_id"],)).fetchone()[0] == 0
+        assert db.execute("SELECT status FROM tombstones WHERE id=?",
+                          (job["job_id"],)).fetchone()[0] == "succeeded"
     reused = store.admit("file", b"other", ".txt", "en", "vi", "b", key,
                          now=expired + store.settings.tombstone_ttl_seconds)
     assert reused["job_id"] != job["job_id"]
+
+
+def test_expired_lease_cannot_publish_or_heartbeat(tmp_path):
+    store = _store(tmp_path)
+    job = store.admit("file", b"hello", ".txt", "en", "vi", "a", None, now=1000)
+    claim = store.claim(now=1000)
+    expired = 1000 + store.settings.lease_seconds + 1
+    assert store.heartbeat(job["job_id"], claim["generation"], now=expired) is False
+    assert store.finish(job["job_id"], claim["generation"], result={"x": 1}, now=expired) is False

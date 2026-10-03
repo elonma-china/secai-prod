@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 
@@ -18,6 +19,14 @@ from .state import FixedWindowRateLimiter
 # .warning()/.exception() ever reached the process's stderr via logging's last-resort handler.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class _TranslationV2AccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/ai/v2/translate/" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_TranslationV2AccessFilter())
 
 
 class GatewayState:
@@ -76,10 +85,13 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     from .translation.settings import TranslationSettings
     from .translation.jobs import JobStore
     app.state.translation_v2_settings = TranslationSettings()
-    app.state.translation_v2_store = (
-        JobStore(app.state.translation_v2_settings)
-        if app.state.translation_v2_settings.enabled else None
-    )
+    try:
+        app.state.translation_v2_store = (
+            JobStore(app.state.translation_v2_settings)
+            if app.state.translation_v2_settings.enabled else None
+        )
+    except (OSError, sqlite3.Error):
+        app.state.translation_v2_store = None
     app.include_router(translation_v2_router)
     return app
 

@@ -19,8 +19,10 @@ from ...translation.types import TranslationError
 router = APIRouter(prefix="/ai/v2/translate", include_in_schema=True)
 _HEX = re.compile(r"[0-9a-f]{32}\Z")
 _OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+_LANGUAGES = frozenset({"vi", "en", "zh", "ja", "ko", "fr", "de", "es", "ru", "ar"})
 _STATUS = {
-    "INVALID_REQUEST": 400, "INVALID_LANGUAGE": 400, "EMPTY_FILE": 400,
+    "INVALID_REQUEST": 400, "INVALID_LANGUAGE": 400,
+    "UNSUPPORTED_LANGUAGE_PAIR": 400, "EMPTY_FILE": 400,
     "JOB_NOT_FOUND": 404, "JOB_EXPIRED": 410, "RESULT_NOT_READY": 409,
     "IDEMPOTENCY_CONFLICT": 409, "JOB_ALREADY_FINISHED": 409,
     "JOB_FAILED": 409, "JOB_CANCELLED": 409,
@@ -71,10 +73,13 @@ def _store(request: Request) -> tuple[JobStore, TranslationSettings]:
     settings: TranslationSettings = request.app.state.translation_v2_settings
     if not settings.enabled:
         raise TranslationError("DEPENDENCY_UNAVAILABLE", "Translation service is unavailable.")
+    if request.app.state.translation_v2_store is None:
+        raise TranslationError("STORAGE_UNAVAILABLE", "Translation storage is unavailable.")
     return request.app.state.translation_v2_store, settings
 
 
 async def _admit(request: Request, kind: str) -> JSONResponse:
+    form = None
     try:
         store, settings = _store(request)
         peer = request.client.host if request.client else "unknown"
@@ -120,8 +125,10 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
             raise TranslationError("INVALID_REQUEST", "Multipart fields are invalid.")
         source = fields.get("source_lang", "auto")
         target = fields["target_lang"]
-        if source not in {"auto", "en", "vi"} or target not in {"en", "vi"}:
+        if source not in _LANGUAGES | {"auto"} or target not in _LANGUAGES:
             raise TranslationError("INVALID_LANGUAGE", "Language is invalid.")
+        if source != "auto" and source != target and source != "vi" and target != "vi":
+            raise TranslationError("UNSUPPORTED_LANGUAGE_PAIR", "Language pair is unsupported.")
         key = request.headers.get("Idempotency-Key")
         if key is not None and not _HEX.fullmatch(key):
             raise TranslationError("INVALID_REQUEST", "Idempotency key is invalid.")
@@ -162,6 +169,9 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
         return _error(exc.code, exc.message)
     except Exception:
         return _error("INTERNAL_ERROR", "Internal processing error.")
+    finally:
+        if form is not None:
+            await form.close()
 
 
 @router.post("/files", status_code=202)
