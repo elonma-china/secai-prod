@@ -1,0 +1,5 @@
+**Round 4 spec/code: PASS** for the `dbda8ec..f6b7834` change. No remaining concrete finding in the changed CORE-07 branch.
+
+Independent offline fake-LLM repros passed **17/17**: long quoted Russian errors with Arabic context stayed uncertain; transliteration and mixed scripts were accepted with `SOURCE_LANGUAGE_UNCERTAIN`; wholly contrary scripts were rejected before inference; unsafe bidi controls were rejected. The behavior matches the changed check in [service.py](/home/ict/secai-multilang-review-core4-wt/secai/secai-agent-gateway/src/secai_gateway/multilang/service.py:89). The checkout is clean and `git diff --check` passed. The author’s 139 targeted passes were reported, not rerun here.
+
+**Quality and release: BLOCKED** pending live quality, serving/tokenizer attestation, corpus adjudication, and integrated file/OCR and security evidence. Mock results do not establish those gates.
