@@ -1,6 +1,6 @@
 # Multilang final report — assessment-integrated CPU checkpoint
 
-2026-10-04. **CPU implementation and authorized final integration complete; full suites NOT GREEN; live quality/release BLOCKED.** Ready for final Warden review. Assessment round 5 independently passed and is now integrated.
+2026-10-04. **CPU implementation and authorized final integration complete; full suites NOT GREEN; live quality/release BLOCKED.** Final independent Warden permits CPU implementation handoff; see [Warden verdict](../../reviews/multilang/warden-final.md). Assessment round 5 independently passed and is now integrated.
 
 The report commit is a documentation-only descendant recorded after commit in root scratch integration-assessment-final-checkpoint.md. Resolve it with `git log -1 --format=%H -- docs/test-results/multilang/integration-report.md` from the gateway directory. It is not the executed test or browser SHA.
 

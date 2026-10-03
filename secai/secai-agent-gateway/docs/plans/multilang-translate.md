@@ -8,15 +8,15 @@
 
 **Tech Stack:** Python/FastAPI/Pydantic/Linch/httpx; React/TypeScript/Vite; pytest; bộ đánh giá offline tách dependency khỏi runtime.
 
-**Spec:** [Yêu cầu gốc, giữ nguyên văn](multilang-source-requirements.txt). Ngày khảo sát: 2026-10-03. Trạng thái: **EXECUTION được user yêu cầu; criteria/preflight đang chạy, chưa benchmark live hoặc kết luận năng lực LLM**.
+**Spec:** [Yêu cầu gốc, giữ nguyên văn](multilang-source-requirements.txt). Ngày khảo sát: 2026-10-03. Trạng thái cập nhật 2026-10-04: **code và review độc lập đã hoàn tất; CPU integration đã kiểm chứng tại 877e619. Chưa benchmark live hoặc nghiệm thu chất lượng/phát hành.** Xem [STATE hiện hành](../loop/multilang/STATE.md) và [báo cáo tích hợp](/home/ict/secai-multilang-integration-wt/secai/secai-agent-gateway/docs/test-results/multilang/final-report.md) trong nhánh integration/multilang-translate. Các checklist bên dưới mô tả yêu cầu và gates của plan; trạng thái thực thi được ghi ở STATE/LOG và báo cáo theo SHA, không suy từ ô checklist chưa cập nhật.
 
 ## Workspace đã tạo
 
 - Branch điều phối/plan: `feature/multilang-translate`.
 - Git worktree: `/home/ict/secai-multilang-wt`; gateway: `/home/ict/secai-multilang-wt/secai/secai-agent-gateway`.
 - Base đã fetch: `main = origin/main = ce9cd47ee1273018fec1c5cbab944a86d68d6ed5`.
-- Đây là bản plan tiếp tục cập nhật; các bản trong workspace ban đầu là snapshot. Worktree worker tách tiếp khi task đủ entry gate.
-- [Đề xuất criteria của astra A](../criteria/multilang-planning-proposal.md) là draft, chưa đóng băng tiêu chí nghiệm thu.
+- Worktree worker đã được tách riêng cho backend, frontend, assessment, security và review. Nhánh bàn giao: `integration/multilang-translate`; main chưa thay đổi. Các bản trong workspace ban đầu là snapshot.
+- [Đề xuất criteria của astra A](../criteria/multilang-planning-proposal.md) là draft lịch sử. Sáu bộ criteria chính thức đã đóng băng tại b94e5ea; dùng `docs/criteria/multilang-*.md` và [API contract](../api/multilang-contract.md) làm tiêu chí review.
 
 ## Cập nhật yêu cầu: 70% và tối đa 3 model tuần tự
 
