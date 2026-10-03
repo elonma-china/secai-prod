@@ -142,7 +142,7 @@ def test_margin_policy_must_be_signed_and_precede_candidate_run(tmp_path, monkey
                                   familywise_alpha=0.05, frozen_at_utc=before.isoformat()))
 
 
-def test_signed_alignment_and_review_can_open_hard_gates_without_claiming_release(tmp_path, monkeypatch):
+def test_signed_alignment_and_review_require_three_complete_rounds_for_hard_gates(tmp_path, monkeypatch):
     private, _ = configure_signer(tmp_path, monkeypatch)
     rows = [row(f"sample-{i}", "vi>ja", source=f"Corpus text {i} {hashlib.sha256(str(i).encode()).hexdigest()[:16]}.",
                 group=f"doc-{i}") for i in range(30)]
@@ -156,9 +156,28 @@ def test_signed_alignment_and_review_can_open_hard_gates_without_claiming_releas
     verified = score_results(rows, outputs, reviews, mode="model-only", phase="DEV", rounds=1,
                              alignment_attestation=alignment, review_attestation=signed_review)
     gates = verified["directions"]["vi>ja"]["rounds"]["1"]
-    assert gates["quality_gate"] == "PASS"
-    assert gates["off_target_gate"] == "PASS"
+    assert gates["rubric_threshold_gate"] == "PASS"
+    assert gates["quality_gate"] == "BLOCKED"
+    assert gates["off_target_gate"] == "BLOCKED"
+    repeated_outputs = [dict(result(item["id"], turn), data_hash=canonical_hash(rows))
+                        for item in rows for turn in (1, 2, 3)]
+    repeated_reviews = [annotation(item["id"], turn) for item in rows for turn in (1, 2, 3)]
+    repeated_attestation = sign_reviews(tmp_path, private, rows, repeated_outputs, repeated_reviews)
+    verified = score_results(rows, repeated_outputs, repeated_reviews, mode="model-only", phase="DEV",
+                             rounds=3, min_samples_per_direction=1, alignment_attestation=alignment,
+                             review_attestation=repeated_attestation)
+    assert {item["quality_gate"] for item in verified["directions"]["vi>ja"]["rounds"].values()} == {"PASS"}
+    assert {item["off_target_gate"] for item in verified["directions"]["vi>ja"]["rounds"].values()} == {"PASS"}
     assert verified["release_gate"] == "BLOCKED"
+    incomplete_outputs = repeated_outputs[:-1]
+    incomplete_reviews = repeated_reviews[:-1]
+    incomplete_attestation = sign_reviews(tmp_path, private, rows, incomplete_outputs, incomplete_reviews)
+    incomplete = score_results(rows, incomplete_outputs, incomplete_reviews, mode="model-only", phase="DEV",
+                               rounds=3, min_samples_per_direction=1,
+                               alignment_attestation=alignment,
+                               review_attestation=incomplete_attestation)
+    assert {item["quality_gate"] for item in incomplete["directions"]["vi>ja"]["rounds"].values()} == {"BLOCKED"}
+    assert {item["off_target_gate"] for item in incomplete["directions"]["vi>ja"]["rounds"].values()} == {"BLOCKED"}
 
 
 def test_frozen_signed_margin_can_open_en_vi_noninferiority_gate(tmp_path, monkeypatch):

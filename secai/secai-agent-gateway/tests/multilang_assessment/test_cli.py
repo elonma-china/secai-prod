@@ -1,15 +1,15 @@
-import fcntl
 import hashlib
 import json
+import threading
 from datetime import datetime, timedelta, timezone
 
 import httpx
 
 import pytest
 
-from evals.multilang.run import RunError, main as run_main
+from evals.multilang.run import PinnedOutputDestination, RunError, main as run_main
 from evals.multilang.manifest import canonical_hash
-from evals.multilang.evidence import EvidenceError, digest
+from evals.multilang.evidence import EvidenceError, digest, protected_live_slot
 from evals.multilang.score import main as score_main
 from evals.multilang.validate_corpus import CorpusError, load_jsonl, main as corpus_main
 
@@ -102,14 +102,15 @@ def test_score_cli_accepts_tester_signed_alignment_and_review_bundle(tmp_path, m
     ]) == 0
     report = json.loads(output.read_text())
     direction = report["directions"]["vi>ja"]["rounds"]["1"]
-    assert direction["quality_gate"] == "PASS"
-    assert direction["off_target_gate"] == "PASS"
+    assert direction["rubric_threshold_gate"] == "PASS"
+    assert direction["quality_gate"] == "BLOCKED"
+    assert direction["off_target_gate"] == "BLOCKED"
     assert report["release_gate"] == "BLOCKED"
 
 
 @pytest.mark.parametrize("split", ["DEV", "TEST"])
 def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_path, monkeypatch, split):
-    private, _ = configure_signer(tmp_path, monkeypatch)
+    private, ledger = configure_signer(tmp_path, monkeypatch)
     sample = row(split=split)
     sample["data_classification"] = "public"
     manifest = write_jsonl(tmp_path / "manifest.jsonl", [sample])
@@ -143,7 +144,9 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
     }, sort_keys=True, separators=(",", ":"))
     config_hash = hashlib.sha256(config_data.encode()).hexdigest()
 
-    def make_lease(run_id, output_path, max_requests=1, holdout_id=None):
+    def make_lease(run_id, output_path, max_requests=1, holdout_id=None, reservation_path=None):
+        with PinnedOutputDestination(output_path) as destination:
+            output_binding = destination.binding_sha256
         payload = {
             "status": "granted", "owner": "multilang-assessment", "ocr_released": True,
             "instance_id": 53846446, "endpoint": endpoint, "model_id": "DuyTa/Cyber-F1-AWQ",
@@ -152,17 +155,18 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
             "max_rpm": 60, "max_cost_usd": 0.05,
             "worst_case_cost_usd_per_request": 0.01,
             "allowed_modes": ["model-only"], "run_id": run_id,
+            "phase": split, "scheduled_requests": max_requests,
             "data_hash": canonical_hash([sample]), "config_hash": config_hash,
             "inventory_sha256": digest(inventory_data),
             "alignment_map_sha256": digest(alignment["payload"]),
-            "output_path_sha256": hashlib.sha256(str(output_path.resolve()).encode()).hexdigest(),
+            "output_destination_sha256": output_binding,
         }
         if split == "TEST":
             payload.update(sealed_test_hash=canonical_hash([sample]),
                            candidate_config_hash=config_hash,
                            holdout_id=holdout_id or "sealed-" + run_id)
         envelope = sign(tmp_path, private, "run-lease", **payload)
-        lease.write_text(json.dumps(envelope))
+        (reservation_path or lease).write_text(json.dumps(envelope))
         return envelope
     seen = []
 
@@ -172,7 +176,7 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
             return httpx.Response(200, json={"data": [{"id": "DuyTa/Cyber-F1-AWQ"}]})
         return httpx.Response(200, json={
             "model": "DuyTa/Cyber-F1-AWQ",
-            "choices": [{"message": {"content": "こんにちは。"}, "finish_reason": "stop"}],
+            "choices": [{"message": {"role": "assistant", "content": "こんにちは。"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 7, "completion_tokens": 3},
         })
 
@@ -198,6 +202,29 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
     assert recorded[0]["error"] is None
     assert recorded[0]["cost_usd"] == 0.00001
 
+    invalid_output = tmp_path / "wrong-phase-or-count.jsonl"
+    invalid_envelope = make_lease("assessment-run-007", invalid_output)
+    for field, replacement, expected_error in (
+        ("phase", "TEST" if split == "DEV" else "DEV", "phase"),
+        ("scheduled_requests", 2, "scheduled_requests"),
+    ):
+        altered = dict(invalid_envelope["payload"])
+        altered.pop("schema")
+        altered.pop("kind")
+        altered[field] = replacement
+        lease.write_text(json.dumps(sign(tmp_path, private, "run-lease", **altered)))
+        seen.clear()
+        with pytest.raises(RunError, match=expected_error):
+            run_main([
+                "--manifest", str(manifest), "--mode", "model-only", "--split", split,
+                "--rounds", "1", "--output", str(invalid_output), "--live",
+                "--inventory", str(inventory), "--reservation", str(lease),
+                "--alignment-attestation", str(alignment_path),
+                "--prompt", str(prompt), "--decoding", str(decoding),
+            ])
+        assert seen == []
+        assert len(list(ledger.glob("run-*.json"))) == 1
+
     replay_output = tmp_path / "replay.jsonl"
     make_lease("assessment-run-002" if split == "TEST" else "assessment-run-001",
                replay_output, holdout_id="sealed-assessment-run-001")
@@ -211,6 +238,84 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
             "--prompt", str(prompt), "--decoding", str(decoding),
         ])
     assert seen == []
+
+    # The final parent is pinned by fd even if an ancestor symlink changes mid-run.
+    first_parent = tmp_path / "parent-a" / "nested"
+    second_parent = tmp_path / "parent-b" / "nested"
+    first_parent.mkdir(parents=True, mode=0o700)
+    second_parent.mkdir(parents=True, mode=0o700)
+    alias = tmp_path / "ancestor-alias"
+    alias.symlink_to(first_parent.parent, target_is_directory=True)
+    swapped_output = alias / "nested" / "swap.jsonl"
+    make_lease("assessment-run-006", swapped_output)
+    seen.clear()
+
+    async def swap_ancestor_during_probe(_inventory, *, headers, timeout_seconds):
+        alias.unlink()
+        alias.symlink_to(second_parent.parent, target_is_directory=True)
+
+    with monkeypatch.context() as patch:
+        patch.setattr("evals.multilang.run.async_verify_model_identity", swap_ancestor_during_probe)
+        assert run_main([
+            "--manifest", str(manifest), "--mode", "model-only", "--split", split,
+            "--rounds", "1", "--output", str(swapped_output), "--live",
+            "--inventory", str(inventory), "--reservation", str(lease),
+            "--alignment-attestation", str(alignment_path),
+            "--prompt", str(prompt), "--decoding", str(decoding),
+        ]) == 0
+    assert (first_parent / "swap.jsonl").is_file()
+    assert not (second_parent / "swap.jsonl").exists()
+    assert seen == ["/v1/chat/completions"]
+
+    first_concurrent_lease = tmp_path / "concurrent-first-lease.json"
+    second_concurrent_lease = tmp_path / "concurrent-second-lease.json"
+    first_concurrent_output = tmp_path / "concurrent-first.jsonl"
+    second_concurrent_output = tmp_path / "concurrent-second.jsonl"
+    make_lease("assessment-run-008", first_concurrent_output,
+               reservation_path=first_concurrent_lease)
+    make_lease("assessment-run-009", second_concurrent_output,
+               reservation_path=second_concurrent_lease)
+    entered_probe, release_probe = threading.Event(), threading.Event()
+    first_errors = []
+
+    async def hold_first_probe(_inventory, *, headers, timeout_seconds):
+        entered_probe.set()
+        if not release_probe.wait(timeout=5):
+            raise AssertionError("first mocked run did not receive release")
+
+    def run_first():
+        try:
+            run_main([
+                "--manifest", str(manifest), "--mode", "model-only", "--split", split,
+                "--rounds", "1", "--output", str(first_concurrent_output), "--live",
+                "--inventory", str(inventory), "--reservation", str(first_concurrent_lease),
+                "--alignment-attestation", str(alignment_path),
+                "--prompt", str(prompt), "--decoding", str(decoding),
+            ])
+        except BaseException as exc:
+            first_errors.append(exc)
+
+    with monkeypatch.context() as patch:
+        patch.setattr("evals.multilang.run.async_verify_model_identity", hold_first_probe)
+        thread = threading.Thread(target=run_first, daemon=True)
+        thread.start()
+        try:
+            assert entered_probe.wait(timeout=5)
+            with pytest.raises(EvidenceError, match="lock is held"):
+                run_main([
+                    "--manifest", str(manifest), "--mode", "model-only", "--split", split,
+                    "--rounds", "1", "--output", str(second_concurrent_output), "--live",
+                    "--inventory", str(inventory), "--reservation", str(second_concurrent_lease),
+                    "--alignment-attestation", str(alignment_path),
+                    "--prompt", str(prompt), "--decoding", str(decoding),
+                ])
+        finally:
+            release_probe.set()
+            thread.join(timeout=5)
+    assert not thread.is_alive()
+    assert first_errors == []
+    assert first_concurrent_output.is_file()
+    assert not second_concurrent_output.exists()
 
     revoked_output = tmp_path / "revoked.jsonl"
     lease_envelope = make_lease("assessment-run-004", revoked_output, max_requests=2)
@@ -237,15 +342,15 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
     assert seen == ["/v1/models", "/v1/chat/completions"]
 
     locked_output = tmp_path / "locked.jsonl"
-    make_lease("assessment-run-005", locked_output)
-    lock_path = lease.with_suffix(lease.suffix + ".lock")
-    with lock_path.open("a+") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        with pytest.raises(RunError, match="lock is held"):
+    other_lease = tmp_path / "distinct-signed-lease.json"
+    make_lease("assessment-run-005", locked_output, reservation_path=other_lease)
+    assert other_lease.read_bytes() != lease.read_bytes()
+    with protected_live_slot():
+        with pytest.raises(EvidenceError, match="lock is held"):
             run_main([
                 "--manifest", str(manifest), "--mode", "model-only", "--split", split,
                 "--rounds", "1", "--output", str(locked_output), "--live",
-                "--inventory", str(inventory), "--reservation", str(lease),
+                "--inventory", str(inventory), "--reservation", str(other_lease),
                 "--alignment-attestation", str(alignment_path),
                 "--prompt", str(prompt), "--decoding", str(decoding),
             ])

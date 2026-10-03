@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import fcntl
 import hashlib
 import json
 import math
@@ -19,7 +18,7 @@ from urllib.parse import urlparse
 import httpx
 
 from .manifest import validate_manifest
-from .evidence import claim_signed_run, digest, verify_alignment, verify_envelope
+from .evidence import claim_signed_run, digest, protected_live_slot, verify_alignment, verify_envelope
 
 
 MODES = frozenset({"model-only", "legacy-api", "multilang-api"})
@@ -30,6 +29,50 @@ DECODING_FIELDS = frozenset({"temperature", "top_p", "max_tokens", "seed"})
 
 class RunError(ValueError):
     """Run configuration or model evidence fails closed."""
+
+
+class PinnedOutputDestination:
+    """Bind and create output relative to one protected parent directory inode."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        self.fd: int | None = None
+        self.binding_sha256: str | None = None
+
+    def __enter__(self):
+        if self.path.name in {"", ".", ".."}:
+            raise RunError("result output filename is invalid")
+        try:
+            fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            info = os.fstat(fd)
+            if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o022:
+                raise RunError("result parent must be a protected directory")
+            actual_parent = os.readlink(f"/proc/self/fd/{fd}")
+            if not os.path.isabs(actual_parent) or actual_parent.endswith(" (deleted)"):
+                raise RunError("result parent has no stable resolved path")
+            self.binding_sha256 = digest({
+                "resolved_path": str(Path(actual_parent) / self.path.name),
+                "parent_device": info.st_dev,
+                "parent_inode": info.st_ino,
+            })
+            self.fd = fd
+            return self
+        except BaseException:
+            if "fd" in locals():
+                os.close(fd)
+            raise
+
+    def __exit__(self, *_exc):
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+
+    def create(self):
+        if self.fd is None:
+            raise RunError("result destination is not pinned")
+        fd = os.open(self.path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=self.fd)
+        return os.fdopen(fd, "w", encoding="utf-8")
 
 
 def _strict_json(path: Path) -> dict[str, Any]:
@@ -84,6 +127,7 @@ def plan_run(rows: Iterable[dict[str, Any]], mode: str, split: str, rounds: int)
 def require_live_permission(
     live: bool, inventory: dict[str, Any], reservation: dict[str, Any] | None,
     mode: str, requested: int, now: datetime, *, split: str = "DEV",
+    total_scheduled: int | None = None,
 ) -> None:
     if not live:
         raise RunError("explicit --live is required for network calls")
@@ -104,6 +148,8 @@ def require_live_permission(
         raise RunError("endpoint mismatch")
     if mode not in MODES or mode not in reservation.get("allowed_modes", []):
         raise RunError("mode is not included in reservation")
+    if reservation.get("phase") != split:
+        raise RunError("signed reservation phase differs from selected split")
     try:
         start = datetime.fromisoformat(reservation["starts_at"])
         end = datetime.fromisoformat(reservation["ends_at"])
@@ -114,6 +160,10 @@ def require_live_permission(
     max_requests = reservation.get("max_requests")
     if type(max_requests) is not int or not 1 <= max_requests <= 10000 or requested < 1 or requested > max_requests:
         raise RunError("max_requests exceeded")
+    scheduled = reservation.get("scheduled_requests")
+    if (type(scheduled) is not int or scheduled < 1 or
+            (total_scheduled is not None and scheduled != total_scheduled) or requested > scheduled):
+        raise RunError("signed reservation scheduled_requests differs from full schedule")
     if not _finite_number(reservation.get("max_rpm"), lower=0.001, upper=60):
         raise RunError("max_rpm is required")
     if (end - start).total_seconds() > 3600 or (requested - 1) * 60 / reservation["max_rpm"] >= (end - now).total_seconds():
@@ -223,12 +273,21 @@ def _parse_response(response: httpx.Response, mode: str) -> dict[str, Any]:
         if mode == "model-only":
             if body.get("model") != MODEL_ID:
                 raise RunError("response model identity mismatch")
-            choice = body["choices"][0]
-            if choice.get("message", {}).get("tool_calls") or choice.get("message", {}).get("function_call"):
+            choices = body.get("choices")
+            if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], dict):
+                raise RunError("assistant_response_envelope_invalid")
+            choice = choices[0]
+            message = choice.get("message")
+            if (not isinstance(message, dict) or message.get("role") != "assistant" or
+                    choice.get("delta") is not None):
+                raise RunError("assistant_response_envelope_invalid")
+            if any(message.get(field) is not None for field in ("tool_calls", "function_call", "tool_call_id")) or any(
+                choice.get(field) is not None for field in ("tool_calls", "function_call")
+            ):
                 raise RunError("tool_call_forbidden")
             if choice.get("finish_reason") != "stop":
                 raise RunError("truncated_completion")
-            output = choice["message"]["content"]
+            output = message["content"]
             usage = body.get("usage") or {}
             input_tokens, output_tokens = usage.get("prompt_tokens"), usage.get("completion_tokens")
         else:
@@ -331,7 +390,8 @@ def main(argv: list[str] | None = None) -> int:
     lease = verify_envelope(lease_envelope, "run-lease")
     lease_digest = digest(lease_envelope)
     now = datetime.now(timezone.utc)
-    require_live_permission(True, inventory, lease, parsed.mode, len(schedule), now, split=parsed.split)
+    require_live_permission(True, inventory, lease, parsed.mode, len(schedule), now,
+                            split=parsed.split, total_scheduled=len(schedule))
     if parsed.mode == "model-only" and inventory.get("endpoint") != "http://192.165.134.28:10739/v1":
         raise RunError("model-only endpoint is not the verified incumbent Vast port")
     if parsed.mode != "model-only" and inventory.get("gateway_model_attested") is not True:
@@ -360,103 +420,95 @@ def main(argv: list[str] | None = None) -> int:
         lease.get("candidate_config_hash") != config_hash
     ):
         raise RunError("sealed TEST or candidate config hash differs from frozen lease")
-    output_digest = hashlib.sha256(str(parsed.output.resolve()).encode()).hexdigest()
-    if (lease.get("data_hash") != summary.data_hash or
-            lease.get("config_hash") != config_hash or
-            lease.get("inventory_sha256") != digest(inventory) or
-            lease.get("alignment_map_sha256") != alignment_digest or
-            lease.get("output_path_sha256") != output_digest):
-        raise RunError("signed lease does not bind exact corpus, config, inventory, alignment and output path")
-    worst_case = lease.get("worst_case_cost_usd_per_request")
-    if not _finite_number(worst_case, lower=0.000000001, upper=1000) or len(schedule) * worst_case > lease["max_cost_usd"]:
-        raise RunError("worst-case cost exceeds reservation max_cost_usd")
-    lock_path = parsed.reservation.with_suffix(parsed.reservation.suffix + ".lock")
-    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(lock_fd, "r+") as lock:
-        lock_stat = os.fstat(lock.fileno())
-        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_mode & 0o022:
-            raise RunError("assessment lock file must be a protected regular file")
-        try:
-            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RunError("shared assessment lock is held") from exc
-        claim_signed_run(lease, lease_envelope)
-        headers = {}
-        token = os.environ.get("MULTILANG_ASSESSMENT_API_KEY")
-        if token:
-            headers["Authorization"] = "Bearer " + token
-        if parsed.mode == "model-only":
-            asyncio.run(async_verify_model_identity(
-                inventory, headers=headers,
-                timeout_seconds=min(5, remaining_request_timeout(lease, datetime.now(timezone.utc))),
-            ))
-        next_request_at = time.monotonic()
-        with parsed.output.open("x", encoding="utf-8") as output:
-            for index, sample in enumerate(schedule):
-                remaining_requests = len(schedule) - index
-                current_envelope = _strict_json(parsed.reservation)
-                if digest(current_envelope) != lease_digest:
-                    raise RunError("signed reservation artifact changed during run")
-                current_lease = verify_envelope(current_envelope, "run-lease")
-                require_live_permission(
-                    True, inventory, current_lease, parsed.mode, remaining_requests,
-                    datetime.now(timezone.utc), split=parsed.split,
-                )
-                wait = next_request_at - time.monotonic()
-                if wait > 0:
-                    time.sleep(wait)
-                # A lease can expire or be revoked while rate limiting sleeps.
-                current_envelope = _strict_json(parsed.reservation)
-                if digest(current_envelope) != lease_digest:
-                    raise RunError("signed reservation artifact changed during run")
-                current_lease = verify_envelope(current_envelope, "run-lease")
-                require_live_permission(
-                    True, inventory, current_lease, parsed.mode, remaining_requests,
-                    datetime.now(timezone.utc), split=parsed.split,
-                )
-                started = time.monotonic()
-                started_utc = datetime.now(timezone.utc).isoformat()
-                error = None
-                response = {}
-                try:
-                    response = asyncio.run(async_call_one(
-                        sample, parsed.mode, inventory,
-                        system_prompt=system_prompt, decoding=decoding, headers=headers,
-                        timeout_seconds=remaining_request_timeout(current_lease, datetime.now(timezone.utc)),
-                    ))
-                except RunError as exc:
-                    error = str(exc)
-                if datetime.now(timezone.utc) >= datetime.fromisoformat(current_lease["ends_at"]):
+    with PinnedOutputDestination(parsed.output) as destination:
+        output_digest = destination.binding_sha256
+        if (lease.get("data_hash") != summary.data_hash or
+                lease.get("config_hash") != config_hash or
+                lease.get("inventory_sha256") != digest(inventory) or
+                lease.get("alignment_map_sha256") != alignment_digest or
+                lease.get("output_destination_sha256") != output_digest):
+            raise RunError("signed lease does not bind exact corpus, config, inventory, alignment and output path")
+        worst_case = lease.get("worst_case_cost_usd_per_request")
+        if not _finite_number(worst_case, lower=0.000000001, upper=1000) or len(schedule) * worst_case > lease["max_cost_usd"]:
+            raise RunError("worst-case cost exceeds reservation max_cost_usd")
+        with protected_live_slot():
+            claim_signed_run(lease, lease_envelope)
+            headers = {}
+            token = os.environ.get("MULTILANG_ASSESSMENT_API_KEY")
+            if token:
+                headers["Authorization"] = "Bearer " + token
+            if parsed.mode == "model-only":
+                asyncio.run(async_verify_model_identity(
+                    inventory, headers=headers,
+                    timeout_seconds=min(5, remaining_request_timeout(lease, datetime.now(timezone.utc))),
+                ))
+            next_request_at = time.monotonic()
+            with destination.create() as output:
+                for index, sample in enumerate(schedule):
+                    remaining_requests = len(schedule) - index
+                    current_envelope = _strict_json(parsed.reservation)
+                    if digest(current_envelope) != lease_digest:
+                        raise RunError("signed reservation artifact changed during run")
+                    current_lease = verify_envelope(current_envelope, "run-lease")
+                    require_live_permission(
+                        True, inventory, current_lease, parsed.mode, remaining_requests,
+                        datetime.now(timezone.utc), split=parsed.split, total_scheduled=len(schedule),
+                    )
+                    wait = next_request_at - time.monotonic()
+                    if wait > 0:
+                        time.sleep(wait)
+                    # A lease can expire or be revoked while rate limiting sleeps.
+                    current_envelope = _strict_json(parsed.reservation)
+                    if digest(current_envelope) != lease_digest:
+                        raise RunError("signed reservation artifact changed during run")
+                    current_lease = verify_envelope(current_envelope, "run-lease")
+                    require_live_permission(
+                        True, inventory, current_lease, parsed.mode, remaining_requests,
+                        datetime.now(timezone.utc), split=parsed.split, total_scheduled=len(schedule),
+                    )
+                    started = time.monotonic()
+                    started_utc = datetime.now(timezone.utc).isoformat()
+                    error = None
                     response = {}
-                    error = "reservation_deadline_exceeded"
-                elapsed_ms = (time.monotonic() - started) * 1000
-                completed_utc = datetime.now(timezone.utc).isoformat()
-                next_request_at = time.monotonic() + 60 / current_lease["max_rpm"]
-                usage_in, usage_out = response.get("input_tokens"), response.get("output_tokens")
-                input_rate = inventory.get("usd_per_million_input_tokens")
-                output_rate = inventory.get("usd_per_million_output_tokens")
-                cost = (
-                    (usage_in * input_rate + usage_out * output_rate) / 1_000_000
-                    if all(isinstance(v, (int, float)) for v in (usage_in, usage_out, input_rate, output_rate))
-                    else None
-                )
-                record = {
-                    "sample_id": sample["id"], "round": sample["round"],
-                    "phase": parsed.split, "mode": parsed.mode,
-                    "model_id": MODEL_ID, "model_revision": inventory["model_revision"],
-                    "prompt_hash": prompt_hash, "config_hash": config_hash,
-                    "data_hash": summary.data_hash,
-                    "raw_output": response.get("raw_output"),
-                    "validated_output": response.get("validated_output"),
-                    "latency_ms": round(elapsed_ms, 3),
-                    "started_at_utc": started_utc,
-                    "completed_at_utc": completed_utc,
-                    "input_tokens": usage_in, "output_tokens": usage_out,
-                    "cost_usd": cost, "error": error,
-                }
-                output.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-                output.flush()
-    return 0
+                    try:
+                        response = asyncio.run(async_call_one(
+                            sample, parsed.mode, inventory,
+                            system_prompt=system_prompt, decoding=decoding, headers=headers,
+                            timeout_seconds=remaining_request_timeout(current_lease, datetime.now(timezone.utc)),
+                        ))
+                    except RunError as exc:
+                        error = str(exc)
+                    if datetime.now(timezone.utc) >= datetime.fromisoformat(current_lease["ends_at"]):
+                        response = {}
+                        error = "reservation_deadline_exceeded"
+                    elapsed_ms = (time.monotonic() - started) * 1000
+                    completed_utc = datetime.now(timezone.utc).isoformat()
+                    next_request_at = time.monotonic() + 60 / current_lease["max_rpm"]
+                    usage_in, usage_out = response.get("input_tokens"), response.get("output_tokens")
+                    input_rate = inventory.get("usd_per_million_input_tokens")
+                    output_rate = inventory.get("usd_per_million_output_tokens")
+                    cost = (
+                        (usage_in * input_rate + usage_out * output_rate) / 1_000_000
+                        if all(isinstance(v, (int, float)) for v in (usage_in, usage_out, input_rate, output_rate))
+                        else None
+                    )
+                    record = {
+                        "sample_id": sample["id"], "round": sample["round"],
+                        "phase": parsed.split, "mode": parsed.mode,
+                        "model_id": MODEL_ID, "model_revision": inventory["model_revision"],
+                        "prompt_hash": prompt_hash, "config_hash": config_hash,
+                        "data_hash": summary.data_hash,
+                        "raw_output": response.get("raw_output"),
+                        "validated_output": response.get("validated_output"),
+                        "latency_ms": round(elapsed_ms, 3),
+                        "started_at_utc": started_utc,
+                        "completed_at_utc": completed_utc,
+                        "input_tokens": usage_in, "output_tokens": usage_out,
+                        "cost_usd": cost, "error": error,
+                    }
+                    output.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+                    output.flush()
+        return 0
 
 
 if __name__ == "__main__":
