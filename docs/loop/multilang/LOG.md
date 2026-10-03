@@ -66,3 +66,5 @@ Coref6b7834 independentround4spec/codePASS17/17, no remainingfindingchangedCORE0
 Assessmentround2changesrequested R01/02/04/05/07/09; fix2/5active,9→6remaining. Rootrequiresactualdurablecustody/provenance/alignment/margin mechanisms, not unconditionalblock substitutes; realartifacts absent remainsBLOCKED. CPUruntime integration may proceed reviewedcore/FE/securitytests excludingassessment untilreviewclearance; exactfinalfullsuiteafterall merges.
 
 Vanguardfinalcore11ec898 aftermerge4cb54d9,23pass (17independent+6legacy),0newC/H/M findings; ownworktreeclean. No returns counter0/3. Finalintegrationmustadd this reviewedtests/reportSHA afterruntimecheckpoint.
+
+RuntimeAstra checkpoint0263286 (tested43e5f22):964pass19samefail1skip, composedeb984d4 1071pass19samefail1skip,7probespass,legacy69paths15schemas+JSON/SSEsame. Correctenv prepared67packages,olefile0.47,assessmenthashlock; no baselineversionchanges. Assessmentbf06bc486testsPASS reviewround3active.
