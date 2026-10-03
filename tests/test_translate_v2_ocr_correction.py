@@ -3,6 +3,7 @@ import json
 import pytest
 
 from secai_gateway.translation.ocr_correction import correct_ocr
+from secai_gateway.translation.ocr_correction import _has_ambiguous_technical
 from secai_gateway.translation.types import DocumentBlock, OcrResult
 
 
@@ -20,6 +21,12 @@ class Context:
 def result(text):
     block = DocumentBlock(id="b000001", kind="ocr_text", order=0, text=text, metadata={})
     return OcrResult(blocks=(block,), raw_text=text)
+
+
+def test_only_ambiguous_technical_tokens_need_review():
+    assert not _has_ambiguous_technical("CVE-2024-1234 at 192.0.2.1/24")
+    assert _has_ambiguous_technical("CVE-2O24-1234 at 192.0.2.1")
+    assert _has_ambiguous_technical("server 192.O.2.1")
 
 
 @pytest.mark.asyncio
