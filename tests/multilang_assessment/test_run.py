@@ -37,6 +37,8 @@ def reservation(now, endpoint="http://192.165.134.28:10739/v1"):
         "worst_case_cost_usd_per_request": 0.01,
         "allowed_modes": ["model-only"],
         "ocr_released": True,
+        "phase": "DEV",
+        "scheduled_requests": 1,
     }
 
 
@@ -82,8 +84,22 @@ def test_live_rejects_request_budget_and_test_without_seal():
     lease = reservation(now)
     with pytest.raises(RunError, match="max_requests"):
         require_live_permission(True, inventory(), lease, "model-only", 21, now)
+    lease["phase"] = "TEST"
     with pytest.raises(RunError, match="sealed TEST"):
         require_live_permission(True, inventory(), lease, "model-only", 1, now, split="TEST")
+
+
+def test_signed_phase_and_full_schedule_must_match_before_test_or_dev_claim():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease.update(phase="TEST", sealed_test_hash="a" * 64,
+                 candidate_config_hash="b" * 64, holdout_id="holdout-001")
+    with pytest.raises(RunError, match="phase"):
+        require_live_permission(True, inventory(), lease, "model-only", 1, now, split="DEV")
+    lease["phase"] = "DEV"
+    with pytest.raises(RunError, match="scheduled_requests"):
+        require_live_permission(True, inventory(), lease, "model-only", 1, now,
+                                split="DEV", total_scheduled=2)
 
 
 def test_live_rejects_missing_cost_bound():
@@ -124,7 +140,7 @@ def test_model_only_payload_uses_frozen_model_and_no_tools():
         assert [m["role"] for m in body["messages"]] == ["system", "user"]
         return httpx.Response(200, json={
             "model": "DuyTa/Cyber-F1-AWQ",
-            "choices": [{"message": {"content": "こんにちは。"}, "finish_reason": "stop"}],
+            "choices": [{"message": {"role": "assistant", "content": "こんにちは。"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 12, "completion_tokens": 4},
         })
 
@@ -143,12 +159,54 @@ def test_legacy_function_call_response_is_rejected_even_with_translation_text():
     def handle(_request):
         return httpx.Response(200, json={
             "model": "DuyTa/Cyber-F1-AWQ",
-            "choices": [{"message": {"content": "Bonjour", "function_call": {"name": "tool"}},
+            "choices": [{"message": {"role": "assistant", "content": "Bonjour", "function_call": {"name": "tool"}},
                          "finish_reason": "stop"}],
         })
 
     with httpx.Client(transport=httpx.MockTransport(handle)) as client:
         with pytest.raises(RunError, match="tool_call_forbidden"):
+            call_one(client, row(), "model-only", inventory(),
+                     system_prompt="Translate {source_lang} to {target_lang}.",
+                     decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+
+
+@pytest.mark.parametrize("message,extra", [
+    ({"role": "assistant", "content": "Bonjour", "function_call": {}}, {}),
+    ({"role": "assistant", "content": "Bonjour", "tool_calls": []}, {}),
+    ({"role": "assistant", "content": "Bonjour", "tool_call_id": "call-1"}, {}),
+    ({"role": "tool", "content": "Bonjour"}, {}),
+    ({"role": "function", "content": "Bonjour"}, {}),
+    ({"role": "user", "content": "Bonjour"}, {}),
+    ({"content": "Bonjour"}, {}),
+    ({"role": "assistant", "content": "Bonjour"}, {"delta": {"tool_calls": []}}),
+    ({"role": "assistant", "content": "Bonjour"}, {"function_call": {}}),
+])
+def test_model_response_rejects_non_assistant_or_tool_function_shape(message, extra):
+    def handle(_request):
+        return httpx.Response(200, json={
+            "model": "DuyTa/Cyber-F1-AWQ",
+            "choices": [{"message": message, "finish_reason": "stop", **extra}],
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        with pytest.raises(RunError, match="(?:tool_call_forbidden|assistant_response_envelope_invalid)"):
+            call_one(client, row(), "model-only", inventory(),
+                     system_prompt="Translate {source_lang} to {target_lang}.",
+                     decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+
+
+def test_model_response_rejects_multiple_choices_with_hidden_tool_message():
+    def handle(_request):
+        return httpx.Response(200, json={
+            "model": "DuyTa/Cyber-F1-AWQ",
+            "choices": [
+                {"message": {"role": "assistant", "content": "Bonjour"}, "finish_reason": "stop"},
+                {"message": {"role": "tool", "content": "hidden"}, "finish_reason": "stop"},
+            ],
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        with pytest.raises(RunError, match="assistant_response_envelope_invalid"):
             call_one(client, row(), "model-only", inventory(),
                      system_prompt="Translate {source_lang} to {target_lang}.",
                      decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
@@ -183,6 +241,7 @@ def test_lease_rejects_nonfinite_limits(field, value):
 def test_sealed_test_requires_tester_issued_holdout_id():
     now = datetime(2026, 10, 4, tzinfo=timezone.utc)
     lease = reservation(now)
+    lease["phase"] = "TEST"
     lease["sealed_test_hash"] = "a" * 64
     lease["candidate_config_hash"] = "b" * 64
     with pytest.raises(RunError, match="holdout ID"):
@@ -197,7 +256,7 @@ def test_request_timeout_can_be_clamped_to_remaining_lease():
             seen.append(timeout)
             return httpx.Response(200, json={
                 "model": "DuyTa/Cyber-F1-AWQ",
-                "choices": [{"message": {"content": "こんにちは。"}, "finish_reason": "stop"}],
+                "choices": [{"message": {"role": "assistant", "content": "こんにちは。"}, "finish_reason": "stop"}],
             }, request=httpx.Request("POST", "http://example.test"))
 
     call_one(FakeClient(), row(), "model-only", inventory(),
@@ -236,6 +295,7 @@ def test_lease_rejects_rate_schedule_that_cannot_finish_before_deadline():
     lease = reservation(now)
     lease["max_requests"] = 20
     lease["max_rpm"] = 1
+    lease["scheduled_requests"] = 20
     with pytest.raises(RunError, match="deadline"):
         require_live_permission(True, inventory(), lease, "model-only", 20, now)
 
@@ -246,11 +306,12 @@ def test_lease_rechecks_only_remaining_requests_after_first_call():
     lease["ends_at"] = (now + timedelta(seconds=4.5)).isoformat()
     lease["max_requests"] = 3
     lease["max_rpm"] = 60
-    require_live_permission(True, inventory(), lease, "model-only", 3, now)
+    lease["scheduled_requests"] = 3
+    require_live_permission(True, inventory(), lease, "model-only", 3, now, total_scheduled=3)
     later = now + timedelta(seconds=3)
     with pytest.raises(RunError, match="deadline"):
-        require_live_permission(True, inventory(), lease, "model-only", 3, later)
-    require_live_permission(True, inventory(), lease, "model-only", 2, later)
+        require_live_permission(True, inventory(), lease, "model-only", 3, later, total_scheduled=3)
+    require_live_permission(True, inventory(), lease, "model-only", 2, later, total_scheduled=3)
 
 
 def test_async_post_aborts_at_absolute_wall_deadline(monkeypatch):
@@ -259,7 +320,7 @@ def test_async_post_aborts_at_absolute_wall_deadline(monkeypatch):
     async def slow_handler(_request):
         await asyncio.sleep(0.1)
         return httpx.Response(200, json={"model": "DuyTa/Cyber-F1-AWQ",
-                                         "choices": [{"message": {"content": "late"}, "finish_reason": "stop"}]})
+                                         "choices": [{"message": {"role": "assistant", "content": "late"}, "finish_reason": "stop"}]})
 
     real_client = httpx.AsyncClient
     monkeypatch.setattr("evals.multilang.run.httpx.AsyncClient",

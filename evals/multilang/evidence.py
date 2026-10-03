@@ -10,7 +10,9 @@ import math
 import os
 import re
 import subprocess
+import stat
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -141,16 +143,42 @@ def verify_margin_policy(
     return float(margin), digest(payload)
 
 
-def claim_signed_run(lease: dict[str, Any], envelope: dict[str, Any]) -> Path:
-    """Consume a lease and optional TEST holdout before the first network call."""
-    if verify_envelope(envelope, "run-lease") != lease:
-        raise EvidenceError("run claim does not match signed lease")
+def _ledger_directory() -> Path:
     directory_name = os.environ.get("MULTILANG_TESTER_LEDGER_DIR")
     if not directory_name:
         raise EvidenceError("tester-owned ledger directory is required")
     directory = Path(directory_name)
     if directory.is_symlink() or not directory.is_dir() or directory.stat().st_mode & 0o022:
         raise EvidenceError("tester ledger directory is absent or writable by others")
+    return directory
+
+
+@contextmanager
+def protected_live_slot():
+    """Serialize every assessment lease on the same trusted ledger for the full run."""
+    directory = _ledger_directory()
+    fd = os.open(directory / ".live.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022:
+            raise EvidenceError("shared assessment lock must be a protected regular file")
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise EvidenceError("shared assessment lock is held") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def claim_signed_run(lease: dict[str, Any], envelope: dict[str, Any]) -> Path:
+    """Consume a lease and optional TEST holdout before the first network call."""
+    if verify_envelope(envelope, "run-lease") != lease:
+        raise EvidenceError("run claim does not match signed lease")
+    directory = _ledger_directory()
     run_id = lease.get("run_id")
     if not isinstance(run_id, str) or re.fullmatch(r"[A-Za-z0-9_-]{8,100}", run_id) is None:
         raise EvidenceError("signed lease run_id is invalid")

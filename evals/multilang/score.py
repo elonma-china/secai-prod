@@ -382,7 +382,7 @@ def score_results(
                 "stale_reviews": stale_reviews,
                 "unadjudicated": unadjudicated,
                 "rubric_threshold_gate": rubric_threshold_gate,
-                "quality_gate": rubric_threshold_gate if evidence_verified else "BLOCKED",
+                "quality_gate": "BLOCKED",
                 "off_target": off_target,
                 "off_target_rate": off_target / scheduled,
                 "off_target_wilson95_unique": (
@@ -390,7 +390,7 @@ def score_results(
                     if complete and errors == 0 and len(off_target_groups) == len(group_passes) else None
                 ),
                 "off_target_threshold_gate": off_target_threshold_gate,
-                "off_target_gate": off_target_threshold_gate if evidence_verified else "BLOCKED",
+                "off_target_gate": "BLOCKED",
                 "entity_exact_occurrences": entity_ok,
                 "entity_total_occurrences": entity_total,
                 "entity_unverifiable_samples": entity_unverifiable,
@@ -412,6 +412,19 @@ def score_results(
                 ),
                 "diagnostics": diagnostic_metrics(references, predictions, target_lang=direction.split(">", 1)[1]),
             }
+        # Reporting overrides affect only descriptive thresholds. Hard evidence requires
+        # three complete repetitions and 30 independent sources in every direction.
+        hard_ready = (evidence_verified and rounds >= 3 and
+                      len({sample["source_group"] for sample in selected}) >= 30 and
+                      all(record["missing_results"] == 0 and record["unreviewed_outputs"] == 0 and
+                          record["unadjudicated"] == 0 for record in round_reports.values()))
+        if hard_ready:
+            for record in round_reports.values():
+                record["quality_gate"] = "PASS" if record["quality_rate"] >= 0.70 else "FAIL"
+                record["off_target_gate"] = (
+                    "BLOCKED" if record["errors"] else
+                    ("PASS" if record["off_target_rate"] <= 0.02 else "FAIL")
+                )
         quality_gates = [record["quality_gate"] for record in round_reports.values()]
         directions[direction] = {
             "unique_sources": len({sample["source_group"] for sample in selected}),
