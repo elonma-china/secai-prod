@@ -25,8 +25,13 @@ def distance(reference: str, output: str) -> int:
 
 
 def _tokens(text: str, kind: str) -> list[str]:
-    pattern = r"\bCVE-\d{4}-\d{4,7}\b" if kind == "cve" else r"\b(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?\b"
-    return [m.group() for m in re.finditer(pattern, normalize(text))]
+    # Count malformed OCR guesses as false positives rather than silently
+    # dropping them or accepting a valid-looking prefix of an invalid literal.
+    # ASCII identifier boundaries allow adjacent CJK/Arabic/Cyrillic prose.
+    pattern = (r"(?<![A-Za-z0-9_.-])CVE[-A-Za-z0-9]+(?![A-Za-z0-9_-]|\.[A-Za-z0-9])"
+               if kind == "cve" else
+               r"(?<![A-Za-z0-9_:])(?<![A-Za-z0-9]\.)\d+(?:\.[A-Za-z0-9]+){3,}(?:/[A-Za-z0-9]+)?(?![A-Za-z0-9_/]|\.[A-Za-z0-9])")
+    return [m.group() for m in re.finditer(pattern, normalize(text), flags=re.I)]
 
 
 def score(manifest: dict, rows: list[dict], field: str) -> dict:
