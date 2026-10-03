@@ -1,6 +1,6 @@
 # Multilang — trạng thái hiện tại
 
-Cập nhật 2026-10-04. **Đã code, review độc lập và kiểm thử tích hợp trên CPU. Chờ Warden chốt bàn giao. Chất lượng thực tế và phát hành vẫn BLOCKED.** Toàn bộ suite chưa xanh vì còn lỗi baseline.
+Cập nhật 2026-10-04. **Đã code, review độc lập và kiểm thử tích hợp trên CPU. Warden cuối cho phép bàn giao implementation CPU, không có blocker mới trong phạm vi này. Chất lượng thực tế và phát hành vẫn BLOCKED.** Toàn bộ suite chưa xanh vì còn lỗi baseline.
 
 ## Phạm vi đã chốt
 
@@ -60,4 +60,4 @@ Sự cố preflight: raw tool output trước đó đã lộ credential. Không 
 
 Các report nguyên văn ở docs/reviews/multilang/. Báo cáo cuối, toàn bộ case IDs, commands/config/dependency hashes và minh chứng nằm tại docs/test-results/multilang/ trong worktree integration. Root STATE/LOG là trạng thái điều phối hiện hành; báo cáo cũ chỉ có giá trị tại SHA ghi trong đó.
 
-Bước còn lại: Warden cuối và commit tài liệu bàn giao. **Chưa merge main, push, deploy hoặc bật feature.** Chỉ merge main sau xác nhận tiếp theo theo yêu cầu; rollout và chất lượng là quyết định riêng.
+Bàn giao CPU đã được Warden chấp nhận; xem docs/reviews/multilang/warden-final.md. Tài liệu cuối được nhập vào nhánh integration; mã thực thi/test vẫn đúng 877e619. Các bước tiếp theo thuộc nghiệm thu live và quyết định merge/rollout. **Chưa merge main, push, deploy hoặc bật feature.** Chỉ merge main sau xác nhận tiếp theo theo yêu cầu; rollout và chất lượng là quyết định riêng.
