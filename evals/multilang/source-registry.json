@@ -1,0 +1,25 @@
+{
+  "checked_utc_date": "2026-10-03",
+  "status": "METADATA_ONLY_ACCESS_GATED_NO_CORPUS_DOWNLOADED",
+  "candidate": {
+    "dataset": "openlanguagedata/flores_plus",
+    "revision": "e707e62e762a9e2faca3933aa315f4665cc3cd8f",
+    "license": "cc-by-sa-4.0",
+    "version_on_card": "4.6",
+    "access": "gated_auto_conditions_must_be_accepted_by_dataset_user",
+    "dev_split": "DEV candidate only; freeze source-document groups",
+    "devtest_split": "sealed TEST candidate; tester custody only",
+    "language_map": {
+      "vi": "vie_Latn_viet1252",
+      "zh-Hans": "cmn_Hans_beij1234",
+      "ja": "jpn_Jpan_nucl1643",
+      "ko": "kor_Hang_kore1280",
+      "fr": "fra_Latn_stan1290",
+      "de": "deu_Latn_stan1295",
+      "es": "spa_Latn_amer1254",
+      "ru": "rus_Cyrl_russ1263",
+      "ar": "arb_Arab_stan1318",
+      "en": "eng_Latn_stan1293"
+    }
+  }
+}
