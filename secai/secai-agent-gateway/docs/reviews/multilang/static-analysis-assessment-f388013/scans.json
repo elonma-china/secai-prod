@@ -1,0 +1,77 @@
+{
+  "outputDir": "/tmp/secai-multilang-semgrep/assessment-f388013-results",
+  "rawDir": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw",
+  "reposPath": "/tmp/secai-multilang-semgrep/assessment-f388013-results/repos",
+  "mode": "run-all",
+  "pro": false,
+  "excludePattern": "",
+  "maxTargetBytes": 20000000,
+  "scans": [
+    {
+      "lang": "all",
+      "ruleset": "p/secrets",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-secrets.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-secrets.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": false,
+      "exitCode": 0
+    },
+    {
+      "lang": "all",
+      "ruleset": "p/security-audit",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-security-audit.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-security-audit.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": false,
+      "exitCode": 0
+    },
+    {
+      "lang": "all",
+      "ruleset": "https://github.com/trailofbits/semgrep-rules",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-trailofbits-semgrep-rules.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-trailofbits-semgrep-rules.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": false,
+      "exitCode": 0
+    },
+    {
+      "lang": "all",
+      "ruleset": "https://github.com/elttam/semgrep-rules",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-elttam-semgrep-rules.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-elttam-semgrep-rules.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": true,
+      "exitCode": 2
+    },
+    {
+      "lang": "all",
+      "ruleset": "https://github.com/apiiro/malicious-code-ruleset",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-apiiro-malicious-code-ruleset.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/all-apiiro-malicious-code-ruleset.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": true,
+      "exitCode": 2
+    },
+    {
+      "lang": "python",
+      "ruleset": "p/python",
+      "json": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/python-python.json",
+      "sarif": "/tmp/secai-multilang-semgrep/assessment-f388013-results/raw/python-python.sarif",
+      "findings": 0,
+      "filesScanned": 7,
+      "partial": false,
+      "exitCode": 0
+    }
+  ],
+  "failed": [],
+  "skipped": [],
+  "alsoShared": [],
+  "unscoped": [],
+  "coveredNothing": [],
+  "oversized": []
+}
