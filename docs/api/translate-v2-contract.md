@@ -8,7 +8,7 @@ No login, bearer token, cookie, API key or `user_id` required. No owner/tenant c
 
 | Method/path | Request | Response |
 |---|---|---|
-| POST `/ai/v2/translate/files` | multipart `file` exactly once, `target_lang` required `en|vi`, `source_lang` optional `auto|en|vi` default `auto` | 202 Job; TXT/DOCX/DOC only |
+| POST `/ai/v2/translate/files` | multipart `file` exactly once, `target_lang` required supported language code, `source_lang` optional `auto` or supported code, default `auto` | 202 Job; TXT/DOCX/DOC only |
 | POST `/ai/v2/translate/images` | same fields | 202 Job; PNG/JPEG only |
 | GET `/ai/v2/translate/jobs/{job_id}` | none | 200 Job including failed/cancelled |
 | GET `/ai/v2/translate/jobs/{job_id}/result` | none | 200 Result only when succeeded |
@@ -17,6 +17,24 @@ No login, bearer token, cookie, API key or `user_id` required. No owner/tenant c
 Unknown multipart fields (including `user_id`), duplicate fields, missing fields, non-multipart input or malformed multipart return 400 INVALID_REQUEST; invalid language 400 INVALID_LANGUAGE. Language values are exact lowercase; same source/target permitted and yields identity transform with preserved structure. Filename extension case-insensitive; actual byte/structure validation is mandatory, MIME header advisory. Unknown/malformed job ID returns 404 without differing timing-sensitive lookup paths. Missing/expired job returns 404/410 (tombstone period only). No new 401/403 flows.
 
 Optional `Idempotency-Key`: exactly 32 lowercase hex client-generated random characters (entropy cannot be proven server-side). Invalid format 400 INVALID_REQUEST. Scope `(route kind, key)`, not IP/user. SHA-256 fingerprint over original file bytes, normalized source/target language and lowercase extension, excluding filename stem/MIME/header order. Atomic key registration with durable job creation; simultaneous equal requests resolve to one job. Same payload returns current same Job with HTTP 202, including terminal job; different payload 409 IDEMPOTENCY_CONFLICT. Expired key during tombstone returns 410 JOB_EXPIRED, never new execution. Key mapping retained until tombstone expires; then key can be reused. Keys are capability secrets as well. POST without key always creates independent jobs. Failed sync admission does not reserve key. Validate/size-limit streamed bytes before fingerprint/admission; cleanup duplicates.
+
+### Multilingual expansion (user override; applies to file and image routes)
+
+Supported exact lowercase codes: `vi` Vietnamese, `en` English, `zh` Chinese, `ja` Japanese, `ko` Korean, `fr` French, `de` German, `es` Spanish, `ru` Russian, `ar` Arabic. `zh` accepts simplified/traditional source; target `zh` defaults simplified Chinese; no locale aliases (`zh-CN`, etc.) in v1. Invalid/unknown code remains 400 INVALID_LANGUAGE. Target never accepts auto.
+
+| Requested source | Target | Required behavior |
+|---|---|---|
+| vi | en/zh/ja/ko/fr/de/es/ru/ar | translate, 9 outbound directions |
+| en/zh/ja/ko/fr/de/es/ru/ar | vi | translate, 9 inbound directions |
+| any supported code | same code | identity prose transform, preserving prior same-language behavior |
+| non-vi code | different non-vi code | 400 UNSUPPORTED_LANGUAGE_PAIR at admission; arbitrary all-pairs translation is not in scope |
+| auto | any supported code | resolve source from extracted/corrected prose, then apply the same pair/identity rules below |
+
+`auto` remains default and `source_lang` response remains requested value (auto), preserving existing response convention. Worker resolves one primary prose language before translation using a pinned, bounded language-identification adapter, excluding protected literal spans and isolated quoted technical terms. Record adapter/model revision/config in evidence; no network service or extra OCR model is introduced for detection. Prefer a supported offline detector; an existing translation LLM classification through translate_v2 is permitted with strict enum validation and fixed deterministic decoding settings. Do not equate deterministic routing with perfect statistical identification. Resolution must select exactly one of ten supported codes or unresolved; no silent fallback to en/vi. Mixed prose with no single identifiable primary language, unsupported language, malformed classifier output or ambiguous result fails the job with LANGUAGE_DETECTION_FAILED (semantic 422), asking client to send explicit source_lang. A resolved different non-vi→non-vi pair fails job with UNSUPPORTED_LANGUAGE_PAIR (semantic 422). These occur after 202; status remains 200 failed. Adapter outages use TRANSLATION_UNAVAILABLE; timeouts retain PROCESSING_TIMEOUT. Explicit source bypasses detection and is authoritative; no new rejection of already-supported explicit vi/en inputs by a detector. For nonempty literal-only input, auto follows identity preservation without inventing a language. Blank remains NO_TEXT_DETECTED. Repeated same fixtures/config must exercise stable expected auto pair routing in tests; unresolved outputs never guessed. No new mandatory public response field is introduced.
+
+Create scoped `translate_v2` profile/prompt for multilingual transformation and bounded source classification: tools [], base false, max_turns 2, no date/grounding/session persistence. Sol-1 owns its new prompt, profile registry entry and adapter. Leave legacy translate profile, prompts, sanitization and endpoints unchanged. Sol-2 continues to own only ocr_correction entry; merge additive profiles.yaml changes without overwriting either entry. Do not reuse a VI/EN-only legacy output sanitizer that removes CJK/Arabic/Cyrillic. Correction must retain original language/script, not translate it.
+
+Unicode remains code-point offsets; preserve literal bytes/code points and combining marks. Split CJK prose without assuming whitespace, respect Unicode grapheme boundaries (no detached combining marks/surrogate artifacts), and apply provider token budget in addition to character ceiling. Arabic source/result uses logical Unicode reading order; never reverse strings to simulate RTL, never reverse embedded IP/URL/CVE/code, preserve source bidi controls as data when safe and never insert controls into protected literals. This is a JSON text API, not an RTL rendering/layout guarantee. Test Arabic mixed LTR technical spans, CJK punctuation, Cyrillic, accented Latin/VI, composed/decomposed text and mixed-language technical blocks.
 
 ### Schemas
 
@@ -54,12 +72,12 @@ Error envelope: `{"error":{"code":"INVALID_REQUEST","message":"Invalid request."
 
 | HTTP | Codes | Timing |
 |---|---|---|
-| 400 | INVALID_REQUEST, INVALID_LANGUAGE, EMPTY_FILE | admission |
+| 400 | INVALID_REQUEST, INVALID_LANGUAGE, UNSUPPORTED_LANGUAGE_PAIR, EMPTY_FILE | admission |
 | 404 / 410 | JOB_NOT_FOUND / JOB_EXPIRED | lookup |
 | 409 | RESULT_NOT_READY, IDEMPOTENCY_CONFLICT, JOB_ALREADY_FINISHED, JOB_FAILED, JOB_CANCELLED | lookup/admission |
 | 413 | FILE_TOO_LARGE, REQUEST_TOO_LARGE, TEXT_TOO_LONG, IMAGE_TOO_LARGE, ARCHIVE_LIMIT_EXCEEDED | admission if known, otherwise job failure |
 | 415 | UNSUPPORTED_FILE_TYPE, FILE_TYPE_MISMATCH | admission (extension/magic), deeper mismatch may fail job |
-| 422 | CORRUPT_DOCUMENT, CORRUPT_IMAGE, UNSUPPORTED_ENCODING, UNSAFE_DOCUMENT, NO_TEXT_DETECTED | deeper parsing generally job failure |
+| 422 | CORRUPT_DOCUMENT, CORRUPT_IMAGE, UNSUPPORTED_ENCODING, UNSAFE_DOCUMENT, NO_TEXT_DETECTED, LANGUAGE_DETECTION_FAILED, UNSUPPORTED_LANGUAGE_PAIR | deeper parsing/source resolution generally job failure |
 | 429 | RATE_LIMITED, QUEUE_FULL | admission/lookup; integer Retry-After seconds >=1 |
 | 503 | DEPENDENCY_UNAVAILABLE, STORAGE_UNAVAILABLE | before durable acceptance only |
 
@@ -107,8 +125,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-SourceLang = Literal['auto', 'en', 'vi']
-TargetLang = Literal['en', 'vi']
+SourceLang = Literal['auto', 'vi', 'en', 'zh', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'ar']
+TargetLang = Literal['vi', 'en', 'zh', 'ja', 'ko', 'fr', 'de', 'es', 'ru', 'ar']
 BlockKind = Literal['paragraph', 'table_cell', 'header', 'footer', 'footnote', 'literal', 'ocr_text']
 
 @dataclass(frozen=True)
@@ -180,7 +198,7 @@ class ProcessingContext(Protocol):
     # PROCESSING_TIMEOUT for deadline. Does not reset progress on stage update.
     async def complete(self, profile: str, prompt: str) -> tuple[str, dict[str, Any]]: ...
     # Central LLM semaphore/timeouts via runner.complete(profile,prompt,None),
-    # no grounding; only translate/ocr_correction profiles allowed here.
+    # no grounding; only translate_v2/ocr_correction profiles allowed here.
 
 class OcrPipeline(Protocol):
     async def process(self, input_path: Path, *, work_dir: Path,
@@ -193,7 +211,7 @@ Sol-2 `technical_tokens.py`: `protect_literals(text: str) -> ProtectedText`, `re
 
 Shared TranslationSettings minimum fields: `enabled: bool=False`, `ocr_enabled: bool=False`, `ocr_base_url: str=''`, `ocr_api_key: str=''` (redacted repr), `ocr_model: str=''`, `ocr_timeout_seconds: float=120`, `ocr_max_retries: int=1`; all other resource limits above configurable by sol-1 with documented names. No credentials in examples. Local default disabled prevents missing optional dependency breaking old APIs. Tests enable explicitly. OCR server wire API owned/documented by sol-2, pinned with adapter contract tests; client validates bounded responses before constructing OcrResult.
 
-Correction uses new registry entry `ocr_correction`, tools `[]`, base false, max_turns 2; no chat/session persistence. Sol-1 owns minimal `agent/runner.py` exemption adding this profile to date-context skip; retain every existing profile behavior. Evidence must inspect actual provider payload/tool registry, not only prompt text. Invalid edits: discard whole proposal, preserve raw, warn. No insertions/deletions of whole passages; cap changed code points to 10% of raw block (minimum 1), each edit <=32 code points, no newline changes or edits intersecting protected literals. Correction proposes prose edits only; ambiguous technical tokens remain raw and flagged, no autonomous technical-token repair in v1. Sol-2 may use validated supplementary OCR evidence solely as warning evidence, not relax preservation.
+Correction uses new registry entry `ocr_correction`, tools `[]`, base false, max_turns 2; no chat/session persistence. Sol-1 owns minimal `agent/runner.py` exemption adding ocr_correction and translate_v2 to date-context skip; retain every existing profile behavior. Evidence must inspect actual provider payload/tool registry, not only prompt text. Invalid edits: discard whole proposal, preserve raw, warn. No insertions/deletions of whole passages; cap changed code points to 10% of raw block (minimum 1), each edit <=32 code points, no newline changes or edits intersecting protected literals. Correction proposes prose edits only; ambiguous technical tokens remain raw and flagged, no autonomous technical-token repair in v1. Sol-2 may use validated supplementary OCR evidence solely as warning evidence, not relax preservation.
 
 ## Hardware/performance decisions and evidence
 
@@ -201,7 +219,7 @@ Root preflight reports existing Vast instance 53846446 A100 SXM4 80GB, 71,040 Mi
 
 User override: inference may use at most 3 distinct OCR models/checkpoints in this task. Paddle already inferred counts as model 1, leaving at most 2 additional distinct checkpoints. A changed checkpoint counts separately; preprocessing/prompt/quantization configurations of the same checkpoint do not consume another slot, and metadata-only research uses no slot. Select the first model passing all frozen quality gates; do not require using all 3. If the cap is exhausted with none passing, stop/report and do not run model 4. This supersedes the former minimum-three-model comparison gate only; 3 acceptance rounds, >=65% OCR quality, <=4B parameters, VRAM/token gates and remediation loop limits remain unchanged. Record the inferred-checkpoint ledger and selected-model evidence.
 
-Before loading either remaining model, document shortlist evidence from official Hugging Face model cards/API, with retrieval date: suitability for OCR and Vietnamese/English/technical text; distinguish explicit VI/EN support claims from uncertain generic multilingual claims; release/lastModified timestamps; downloads/likes; and recent discussion or maintainer activity (record unavailable evidence as unknown). Prefer recent viable candidates within <=4B, license and memory limits, without an arbitrary popularity threshold. Community interest informs candidate choice and cannot replace project benchmarks or frozen quality gates. Remaining candidates are provisional until this evidence is reviewed through root; do not infer a final selection from a suggested model name.
+Before loading either remaining model, document shortlist evidence from official Hugging Face model cards/API, with retrieval date: suitability for OCR and all ten languages vi/en/zh/ja/ko/fr/de/es/ru/ar with technical text; distinguish explicit per-language support claims from uncertain generic multilingual claims; release/lastModified timestamps; downloads/likes; and recent discussion or maintainer activity (record unavailable evidence as unknown). Prefer recent viable candidates within <=4B, license and memory limits, without an arbitrary popularity threshold. Community interest informs candidate choice and cannot replace project benchmarks or frozen quality gates. Remaining candidates are provisional until this evidence is reviewed through root; do not infer a final selection from a suggested model name.
 
 Mandatory quality gates are in criteria documents. Provisional design performance budgets: post-upload admission p95 <=2s, status p95 <=300ms at 10 clients within rate limits, warm OCR p95 <=30s for <=2MP inputs, gateway+worker RSS <=2GiB excluding isolated converter/model process. These are NOT claims or hard quality thresholds before measurement. Report pass/fail against budgets; if missed, root must record sizing/optimization decision before production readiness, never falsify or reduce OCR quality gates. Peak memory/resource isolation, no OOM, deadlines and limits are hard gates. Record incumbent service before/after health plus real embedding/reranker request and representative latency; no regression claim without comparative samples.
 
