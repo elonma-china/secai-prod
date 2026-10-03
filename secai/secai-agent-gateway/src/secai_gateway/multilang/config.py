@@ -65,9 +65,21 @@ def verified_counter(settings: MultilangSettings) -> Callable[[str], int] | None
             return None
         from tokenizers import Tokenizer
         tokenizer = Tokenizer.from_file(str(path))
-    except (OSError, ValueError, ImportError):
+        # A serialized max_length silently undercounts every budget; do not trust it.
+        if tokenizer.truncation is not None:
+            return None
+    except Exception:
+        # The Rust tokenizer parser raises plain Exception for malformed JSON.
         return None
-    return lambda text: len(tokenizer.encode(text).ids)
+
+    def count(text: str) -> int:
+        try:
+            return len(tokenizer.encode(text).ids)
+        except Exception:
+            from .errors import TranslationError
+            raise TranslationError("MODEL_UNAVAILABLE") from None
+
+    return count
 
 
 def incumbent_ok(legacy: LegacySettings) -> bool:

@@ -56,16 +56,28 @@ class HttpLlm:
                 self.url, json=payload, headers={"Authorization": f"Bearer {self.api_key}"})
             response.raise_for_status()
             data = response.json()
+            if not isinstance(data, dict):
+                raise ValueError("invalid provider envelope")
             if data.get("model") != EXPECTED_MODEL:
                 raise TranslationError("MODEL_UNAVAILABLE")
+            if not isinstance(data.get("choices"), list) or not data["choices"]:
+                raise ValueError("invalid choices")
             choice = data["choices"][0]
+            if not isinstance(choice, dict):
+                raise ValueError("invalid choice")
             message = choice["message"]
+            if not isinstance(message, dict):
+                raise ValueError("invalid message")
             if message.get("tool_calls") or message.get("function_call"):
                 raise TranslationError("OUTPUT_VALIDATION_FAILED")
             content = message["content"]
             if not isinstance(content, str):
                 raise ValueError("invalid content")
-            usage = data.get("usage") or {}
+            usage = data.get("usage")
+            if usage is None:
+                usage = {}
+            if not isinstance(usage, dict):
+                raise ValueError("invalid usage")
             return GenerationResult(content, choice.get("finish_reason", ""), data["model"],
                                     data.get("model_revision"), usage.get("prompt_tokens"),
                                     usage.get("completion_tokens"))
