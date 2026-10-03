@@ -50,3 +50,11 @@
 Browser realHTTP/fakeLLM vi→ar,vi→zh-Hans,ja→vi PASS on corebfe4e6b; screenshots inspected, repeat finalSHA. FE API docs788da975cf. Independent Vanguard round1 plan/tests started on isolated security branch core42f8d40; final integration/live pending.
 
 Core reviewround2FAIL4 (T7-R2-01..04) vs8prior; fixcycle2/5 active with changed prompt-aware/prose detection approach. No stagnationstop yet; original8reprosclosed,3criteria residual. Full feedback retained docs/reviews/multilang/core-round-2.md. Auxiliary3/3 exhausted byotherOCR; no ownloads.
+
+Core fix2dbda8ec (coded3f1e36),135targetedpass, frozen for independentround3 session75668. Vanguardround1 still tests42f8d40; replaylatestrequired.
+
+Vanguard4883e87 committedplan+13independenttests+report;19pass including6legacy,0new actionableCPUdefects. ScannersNOTRUN/live/compositionBLOCKED. Testcore42f8d40, mustreplayfinalcode. Returncounter0/3 (no coderreturn).
+
+CoreR3FAIL1Medium vs4prior. R3-01mixedArabic+longRussian falsepositive; fix3/5, abandonratioheuristic reservepurecontraryscript mismatch; samecriterion twice triggers approachchange, explicitlyenforced. No stagnantcountstop (8→4→1).
+
+Frozen coref6b7834 codee9a2fd0 (139targetedpass) reviewerround4 session24339; assessment368afcd(75targetedpass) reviewerround2 session52745. Wardencheckpoint2 session53279 ongoing. CPUintegration stillwaitreview.
