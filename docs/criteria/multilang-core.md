@@ -1,0 +1,20 @@
+# Multilang core — frozen criteria v1
+
+2026-10-03, **CRITERIA_READY; implementation tests NOT RUN**. Wire schema, statuses, defaults và provider/composition contract: [multilang-contract.md](../api/multilang-contract.md). Implementation flags OFF được làm ngay; live quality là release gate riêng. Sol core sở hữu module mới `multilang/`, `api/multilang/`, `multilang_app.py`, tests và deploy overlay multilang; không sửa legacy/file/OCR sources.
+
+| ID | Test và điều kiện đạt |
+|---|---|
+| CORE-01 | Registry canonical9 languages/16 pairs; zh alias/case/trim; reject auto/en/zh-Hant/same/foreign→foreign. Cả hai chiều flagOFF→403 zero inference; masterOFF nguyên legacy app/routes/OpenAPI. Request extras/flag/header/model injection bị chặn. |
+| CORE-02 | Stub/transport payload chứng minh cùng incumbent endpoint/model, tools none, không runner session/ledger/global PROFILES mutation, không DeepSeek/model fallback. Mismatch→503. No-tool payload và returned tool_calls test; prompt instruction đơn thuần không đủ. |
+| CORE-03 | POST JSON atomic đúng schema/errors/headers. Không SSE mới. All-chunk validate xong mới trả200; nth chunk fail không trả partial, transport fail503, timeout504, empty502, length/tool/invalid502; CJK/Arabic/Cyrillic đi qua nguyên vẹn. |
+| CORE-04 | Byte body cap + Unicode chars + source/chunk tokens + full prompt/output context budget; không truncate silently. Full request deadline120s default; max16chunks/1retry/chunk, semaphore2 toàn process, admission8 hữu hạn; retry không nhân bởi HTTP/SDK. Fake clock/concurrent test chứng minh limits thật. |
+| CORE-05 | protect→restore identity với cùng map. Nested code chứa credential, CVE/CWE/IP/CIDR/URL/hash/số/ngày/path/version/proper names được annotate, user tự nhập placeholder, duplicate literals, cross-boundary span, nonce collision: occurrence/bytes/order exact. Token missing/changed/duplicate/unknown/reorder→fail closed, không return partial. Không log/mask secret vô tình đổi code giữ nguyên. |
+| CORE-06 | Sentence chunks CJK 。！？/Arabic/Cyrillic và prose NFC, protected spans không normalize/split; oversized protected span reject413. Rejoin đúng separator/order, context overlap không lặp output. No event-loop blocking I/O; cancel/disconnect hủy pending/inflight awaits và release slots. |
+| CORE-07 | Source explicit; unknown/short/mixed → warning theo contract, không false mismatch dựa Han. Output chắc sai/nguyên prose copy/repetition/truncation/leak fail; target uncertainty warning không thay offline adjudication. MSA/zh-Hans/register tests+DEV evidence, không claim rules đủ kiểm mọi quality. |
+| CORE-08 | Inject multilingual instructions chỉ dịch data; system/glossary/placeholder không leak; source URL không fetch. Dangerous bidi controls reject422 nhưng ZWJ/ZWNJ, Arabic joining, valid Unicode giữ; no raw HTML execution. Canary logs/history/source/draft exposure zero. |
+| CORE-09 | Legacy en↔vi JSON/SSE, chat/session ownership và file/OCR contract không thay khi flagsOFF/ON. Không tái dùng VI/EN sanitizer cho new output. New quota429 đúng envelope sau burst >legacy default15; CORS+lifespan startup/shutdown+legacy catch-all tested trong composition. |
+| CORE-10 | Separate config finite validated defaults, no secret/local machine paths; no optional-model dependency startup failure flagsOFF. Snapshot config mỗi request; flip flag chỉ ảnh hưởng request sau, không đổi pair/model giữa chunks. Rollback khôi phục legacy app không stale tasks. |
+
+Đối với literal reorder: implementation v1 bắt thứ tự placeholder strict để fail closed; corpus phải phân biệt acceptable natural-language reordering khi đo quality. Trường hợp strict runtime reject vẫn là quality sample fail, không xóa khỏi denominator. Proper names cần glossary/annotation rõ; không tuyên bố regex tự nhận diện100% mọi tên riêng trong arbitrary prose.
+
+Evidence: pytest node IDs + exact code/dependency/config SHA, transport traces đã redact và regression comparison. Có unit PASS không đồng nghĩa quality PASS; test mock không được ghi làm live1620 evidence. Core review một criterion fail→FAIL; max5 fix/review cycles, lỗi lặp2 lần đổi cách tiếp cận.
