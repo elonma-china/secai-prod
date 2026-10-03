@@ -1,51 +1,63 @@
-# Multilang — STATE
+# Multilang — trạng thái hiện tại
 
-Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized execution; this is not quality acceptance or release approval.
+Cập nhật 2026-10-04. **Đã code, review độc lập và kiểm thử tích hợp trên CPU. Chờ Warden chốt bàn giao. Chất lượng thực tế và phát hành vẫn BLOCKED.** Toàn bộ suite chưa xanh vì còn lỗi baseline.
 
-## Binding decisions
-- Runtime orchestrator and translator: deployed DuyTa only. No alternative translator/fallback/postediting model.
-- New16 vi↔zh-Hans/ja/ko/fr/de/es/ru/ar; old en↔vi unchanged. ArabicMSA, main base.
-- Quality sample pass rate≥70% EACH direction EACH round; off-target≤2%, protected entities100%; live evidence NOT RUN. en↔vi noninferiority/performance margins pending baseline.
-- Auxiliary models max3 TOTAL (OCR/LID/QE), sequential. Other OCR owner reports3used (allowance exhausted); this task loaded0. No restart/unload/change to their services.
-- Existing Vast rental confirmed. No additional rental authorized. OCR owner reports own GPU job/tunnels stopped at17:50UTC; no new auxiliary model allowed. Live inference still requires verified lease/serving/corpus; no live run authorized by this status update. CPU work proceeds flagsOFF.
-- New v3 JSON-only text API, anonymous/stateless, separate namespace/composition; no file/OCR or legacy source edits. Frozen contract: docs/api/multilang-contract.md; criteria: docs/criteria/multilang-*.md.
+## Phạm vi đã chốt
 
-## Worktrees and revisions
-- Planning: /home/ict/secai-multilang-wt, feature/multilang-translate; plan docs/plans/multilang-translate.md; source attachment copied verbatim.
-- Base main snapshot: ce9cd47ee1273018fec1c5cbab944a86d68d6ed5.
-- Core: /home/ict/secai-multilang-core-wt, feature/multilang-core @f6b7834d5fb215075cb0cdbc448e3b538d93f7b3.
-- FE: /home/ict/secai-multilang-fe-wt, feature/fe-devspace-multilang @788da975cf9eed0e0bf72089fd137e00fd8ad2b2; canonical nested snapshot baseline8b41f62, no sibling deletion.
-- Assessment: /home/ict/secai-multilang-assessment-wt, feature/multilang-assessment; @f38801385321b07fd4bc210f5e2d751d1d727795; independentreview5PASS,152tests, no remaining code findings; liveBLOCKED.
-- Integration: /home/ict/secai-multilang-integration-wt, integration/multilang-translate; Correct-dependency checkpoint complete reportac777e5; runtime929b19997116a2d7b193ebc44912ef1fdcaf0feb, assessment acceptedf388013, final merge/tests next.
-- Protected import current observed: bfab8ebc96e25b23325fd72a1d3bf034e9aea315; OCR: ff311c12f97a1dd453495b0ff2b9ca269a49aba2. Their source/state/log read-only. Recheck before integration.
-- Pre-existing protected-branch cross-conflicts observed at365e9e0/99cd0a2: profiles.yaml and translation/settings.py. Not caused by our code; refresh current snapshots at integration.
+- Giữ DuyTa đang phục vụ làm model điều phối và dịch; không thay model, fallback hay post-edit bằng model khác.
+- Thêm 16 hướng vi↔zh-Hans/ja/ko/fr/de/es/ru/ar (Arabic MSA); en↔vi cũ giữ nguyên.
+- Yêu cầu chất lượng ≥70% từng hướng/từng vòng; off-target ≤2%; protected entities 100%; tối thiểu 30 nguồn riêng biệt ×18 hướng ×3 vòng. Chưa chạy đánh giá thật; không suy tỷ lệ chất lượng từ unit test.
+- Tối đa 3 model hỗ trợ dùng tuần tự. Owner OCR đã dùng 3/3; task này không thêm lượt thử. Không đổi dịch vụ hoặc công việc GPU của owner khác.
+- Vast.ai đã thuê; không thuê thêm hoặc huấn luyện adapter. Giá thuê/chi phí tích lũy chưa có bằng chứng; không khai chi phí bằng 0.
+- API v3 JSON stateless/anonymous và module composition riêng. Flags mới mặc định OFF. Không sửa backend cũ, file/OCR hoặc workspace đang có WIP.
 
-## Evidence and counters
-| Task | Current status | Fix cycles | Vanguard returns |
-|---|---|---:|---:|
-| T0 preflight | CPUbaseline905pass19fail1skip0error; exact failureIDs in assessment baseline.json | 0/5 | 0/3 |
-| T1 criteria | CRITERIA_READY, six documents committedb94e5ea | 0/5 | 0/3 |
-| T2 assessment | f388013 independentreview5PASS,152tests; findings9→6→5→1→0 | 4/5 | 0/3 |
-| T3/T4 core | f6b7834 spec/codePASS round4,17independentcasespass; author139targetedpass | 3/5 | 0/3 |
-| T5 FE | 21test/build/audit0; code reviewed, FE-03 CDN finding fixed and re-reviewPASS | 1/5 | 0/3 |
-| T6 adapter | Conditional Gate C, not created or run | 0/5 | 0/3 |
-| T7 integration tests | Runtime replay968pass19samefail1skip; combined0097da3 1075pass19samefail1skip; assessment excluded | 0/5 | 0/3 |
-| T8 Vanguard | Finalcore11ec898:23pass,0new actionablefindings; live/scanners/composedreleaseBLOCKED | 0/5 | 0/3 |
-| T9 AstraB integration | Runtime929b199 tested correct deps; combined replay complete; assessment acceptedf388013, final merge/tests next; no main merge | 0/5 | 0/3 |
-| T10 API/finaldocs | API docs788da97 complete; finalreport pending | 0/5 | 0/3 |
+## Snapshot và quyền sở hữu
 
-FE browser: T3 mock plus real HTTP/fakeLLM Playwright evidence, final runtime43e5f22 replay on vi→zh-Hans,ja→vi,vi→ar with CVE/IP; inspected desktop/mobile RTL screenshots, exact copy API stub (not OS permission). Source identical929b199. See browser-http.md. No model-quality claim.
+| Phần | Nhánh / worktree | SHA và trạng thái |
+|---|---|---|
+| Main | main | ce9cd47ee1273018fec1c5cbab944a86d68d6ed5; chưa merge task này |
+| Điều phối | feature/multilang-translate, /home/ict/secai-multilang-wt | Root sở hữu STATE/LOG và bản gốc yêu cầu, criteria, review artifacts |
+| Backend | feature/multilang-core, /home/ict/secai-multilang-core-wt | f6b7834d5fb215075cb0cdbc448e3b538d93f7b3; review 4 PASS |
+| Frontend | feature/fe-devspace-multilang, /home/ict/secai-multilang-fe-wt | 788da975cf9eed0e0bf72089fd137e00fd8ad2b2; review 2 PASS |
+| Assessment | feature/multilang-assessment, /home/ict/secai-multilang-assessment-wt | f38801385321b07fd4bc210f5e2d751d1d727795; review 5 PASS |
+| Security | test/multilang-security, /home/ict/secai-multilang-security-wt | 11ec898bd712ba1add2bf56c0ac4f9918c5b1bf8; CPU checkpoint, không phải release PASS |
+| Tích hợp | integration/multilang-translate, /home/ict/secai-multilang-integration-wt | Code/tests thực thi tại 877e619514ed2a5ed7dcd5a2353c02b03ca295b4; các commit báo cáo sau đó chỉ tài liệu |
+| Cây ghép mô phỏng | /tmp/secai-multilang-combined-runtime | e6856eda87bbb10668d06a3f2b71896216abb673; không nhập file/OCR vào nhánh sản phẩm |
+| Import được bảo vệ | /home/ict/secai-translate-import-wt | bfab8ebc96e25b23325fd72a1d3bf034e9aea315; STOPPED/BLOCKED, không sửa |
+| OCR được bảo vệ | /home/ict/secai-translate-ocr-wt | ff311c12f97a1dd453495b0ff2b9ca269a49aba2; giữ nguyên HEAD/WIP |
 
-Static analysis: runtime43e5f22 OSS Semgrep1.179.0,9units7complete2partial,14files0findings. Assessmentbf06bc4 six units4complete2partial,7files0findings; replay8e53a00 complete: six units4complete2partial,7files0findings. Third-party rule compile errors recorded; not blanket security PASS. Dependency gap closed in /tmp/secai-multilang-final-env,67compatiblepackages incl olefile0.47,17declaredrequirements+metriclockverified,baseline57versions unchanged.
+## Kết quả kiểm chứng
 
-Serving inventory: authenticated modelID confirms DuyTa/Cyber-F1-AWQ; sole cached snapshot7e7e6718ce268d2b00adc6e3ea43fcd33452f516 with qwen3_5_moe/compressed-tensors. Process has no --revision, so cache-backed inference is not attestation of loadedrevision. Matching config endpoints read from existing secai-docker settings in memory; no .env copied. Linch1.2.1 in isolatedenv; sharedvenv untouched.
+- Baseline cùng môi trường: 925 cases = 905 pass, 19 fail, 1 skip.
+- Tích hợp cuối 877e619: 1.140 cases = **1.120 pass, 19 fail, 1 skip**, không error; bao gồm 152 assessment và 17 Vanguard pass.
+- Cây ghép e6856ed: 1.247 cases = **1.227 pass, 19 fail, 1 skip**, không error. Mọi ID/kết quả baseline/import/OCR/prior runtime được giữ nguyên; không có lỗi mới.
+- 19 lỗi cũ gồm thiếu cây Bughunt (1), dữ liệu PoC riêng không sẵn có (5), timeout legacy (13); 1 skip liên quan catalog. Không bỏ test hoặc nới timeout để đạt.
+- Môi trường riêng /tmp/secai-multilang-final-env: 67 packages, 57 phiên bản baseline giữ nguyên và 10 dependency bổ sung; 17 yêu cầu project và 7 pin metric hợp lệ, uv pip check PASS. Không sửa venv của dịch vụ.
+- FE 21 tests/build PASS. HTTP/browser tại 43e5f22 dùng fake LLM: vi→zh-Hans, ja→vi, vi→ar, CVE/IP, RTL, desktop/mobile. Copy API dùng stub, chưa kiểm OS clipboard. Toàn bộ source/lock/config không đổi ở candidate cuối; tái sử dụng bằng chứng theo hash, không nhận là lượt chạy browser mới.
+- 7 composition probes và fingerprint 69 legacy paths/15 schemas, JSON/SSE giữ nguyên ở checkpoint cùng source/dependency. Thêm import/config/metric coexistence probes ở cả hai snapshot cuối.
+- Semgrep OSS 1.179.0: runtime 14 files/9 units (7 complete, 2 partial); assessment f388013 7 files/6 units (4 complete, 2 partial), không finding. Lỗi compile rules bên thứ ba được giữ nguyên trong báo cáo; không phải security PASS toàn diện. CodeQL chưa chạy.
+- Main/runtime, runtime/import và runtime/OCR merge-tree sạch. File+OCR có 2 conflict kế thừa ở profiles.yaml và translation/settings.py, chỉ giữ minimal union trong cây mô phỏng. Hai High của task file vẫn tồn tại; không sửa hoặc nhận nghiệm thu thay owner.
 
-## Current orchestration
-- Native new-thread limit reached; independent reviewers/warden launched as fresh Codex CLI sessions with specified Sol model and separate reviewcheckouts. No review waiver. Read-only bwrap first failed beforeinspection; retry uses existing unrestricted environment with strict read-only task instructions.
-- Core reviewclosedPASS; Vanguardfinalcore replaycomplete23pass; Vanguard CPUcheckpointcomplete; assessmentf388013review5PASS, ready finalCPUintegration; FE docs complete.
-- Next: finish independent code reviews/fixes, Vanguard CPU/security tests, fresh Astra B integration with exact-SHA fullsuite and protectedbranch simulations; API docs. Keep all languageflagsOFF. Mainmerge requires later user confirmation per spec.
-- Pending release blockers: verified servingtokenizer/template/revision, licensed/reference corpus+independent scoring/holdout,18-direction/3round quality, margins/perf, security/integration gates evidence.
+## Bộ đếm và gates
 
-No quality percentage, production readiness, main merge, push or deployment has been claimed. No new language enabled in production.
+| Task | Fix cycles | Review / kết quả | Vanguard returns |
+|---|---:|---|---:|
+| Core T3/T4 | 3/5 | 4 lượt, findings 8→4→1→0, PASS | 0/3 |
+| FE T5 | 1/5 | 2 lượt, CDN finding đã đóng, PASS | 0/3 |
+| Assessment T2 | 4/5 | 5 lượt, findings 9→6→5→1→0, PASS | 0/3 |
+| Integration T9 | 0/5 | Fresh Astra B, exact-SHA CPU checkpoint hoàn tất | 0/3 |
+| Adapter T6 | 0/5 | Gate C chưa vào; không tạo/huấn luyện | 0/3 |
 
-Other import task STOPPED/BLOCKED by its Warden after two reviewrounds with2High unchanged. Do not reopen/fix its source. Combined simulation may record known defects; no acceptance claim for file/OCR.
+Các criterion tái phát đã đổi cách xử lý: source language dùng pure contrary-script rule thay ratio; protocol dùng ma trận marker/location thay kiểm từng field rời. Không reset bộ đếm hoặc vượt giới hạn; review task file khác dừng theo Warden của họ.
+
+Gate A còn thiếu attestation revision/tokenizer/template/context, corpus/reference có quyền sử dụng, evaluator/adjudication và custody TEST. Metadata có model ID DuyTa/Cyber-F1-AWQ; cache snapshot7e7e6718… không chứng minh revision đang load. Gate B DEV ablation chưa chạy; Gate C chưa vào; Gate D BLOCKED. Chưa có bằng chứng 18 hướng/3 vòng, noninferiority en↔vi, latency/throughput/cost, privacy/egress/rollback production hoặc quota toàn cluster. Mọi ngôn ngữ mới OFF.
+
+## Tài nguyên, sự cố và bàn giao
+
+Private staging đã dừng sau khi đối chiếu PID/cmd/cwd: 1153543 (5178), 1128637 (5177), 1407822 (5180); ss xác nhận không còn listener. Browser multilang-root đã đóng. Giữ worktree, screenshot và môi trường test để review; không chạm Vast hoặc dịch vụ của task khác. Xem resource-closeout.md.
+
+Sự cố preflight: raw tool output trước đó đã lộ credential. Không ghi giá trị vào Git/báo cáo, chưa xoay khóa, không tuyên bố đã xóa transcript. Xem docs/reviews/multilang/preflight-output-incident.md.
+
+Các report nguyên văn ở docs/reviews/multilang/. Báo cáo cuối, toàn bộ case IDs, commands/config/dependency hashes và minh chứng nằm tại docs/test-results/multilang/ trong worktree integration. Root STATE/LOG là trạng thái điều phối hiện hành; báo cáo cũ chỉ có giá trị tại SHA ghi trong đó.
+
+Bước còn lại: Warden cuối và commit tài liệu bàn giao. **Chưa merge main, push, deploy hoặc bật feature.** Chỉ merge main sau xác nhận tiếp theo theo yêu cầu; rollout và chất lượng là quyết định riêng.
