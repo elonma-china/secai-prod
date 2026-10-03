@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
-SourceLang = Literal["auto", "en", "vi"]
-TargetLang = Literal["en", "vi"]
+SourceLang = Literal["auto", "vi", "en", "zh", "ja", "ko", "fr", "de", "es", "ru", "ar"]
+TargetLang = Literal["vi", "en", "zh", "ja", "ko", "fr", "de", "es", "ru", "ar"]
 BlockKind = Literal["paragraph", "table_cell", "header", "footer", "footnote", "literal", "ocr_text"]
 
 
