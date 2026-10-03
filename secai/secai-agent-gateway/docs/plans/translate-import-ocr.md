@@ -294,13 +294,30 @@ Artifacts: `docs/benchmarks/ocr-model-selection.md`, `evals/translation_ocr/mani
 
 ## 8. Bước 3 và 4 — review độc lập, test nhiều lượt
 
+### 8.0. Stage-dependent evidence — clarification 2026-10-04
+
+Criterion PASS vẫn đòi **toàn bộ** assertions/evidence trên SHA cuối. Tách verdict readiness của một stage khỏi verdict nghiệm thu criterion để không đòi TEST/VANGUARD/integration trước khi REVIEW cho phép TEST. Không đổi ngưỡng, mẫu, thứ tự hay quyền độc lập.
+
+| Stage | Bằng chứng phải có để vượt stage | Bằng chứng chưa đến lượt |
+|---|---|---|
+| CODE REVIEW → TEST | Reviewer độc lập kiểm implementation, unit/contract/boundary/security controls, regression và prerequisite vận hành áp dụng cho code hiện tại. IMP-01–14, IMP-18–19: phần implementation/local tests; OCR-01–05, OCR-09–10, OCR-12 và shared criteria: phần implementation/local tests, model/license/config/guard evidence đã áp dụng. Kiểm scorer/harness/manifest design cho criteria chất lượng. Không còn observed FAIL/finding chưa resolve; mọi assertion đến hạn REVIEW có evidence được reviewer xác minh. | Live corpus/qualified-language scoring và load measurements thuộc TEST; independent Vanguard report, integrated SHA và final docs chưa tồn tại. Giữ criterion tổng thể PENDING/BLOCKED, không gán PASS bằng unit mock. |
+| TEST → VANGUARD | Tester độc lập hoàn tất corpus mở rộng ×3, per-language OCR/technical metrics, per-direction translation rubric, real HTTP/model/converter/resource evidence và mọi deferred functional assertions. IMP-15–16, IMP-18–20; OCR-06–08, OCR-11, OCR-13, OCR-15–16 cùng các phần runtime của criteria khác. Không observed FAIL hoặc evidence TEST thiếu. | Independent Vanguard/integration/final docs vẫn PENDING/BLOCKED. |
+| VANGUARD → INTEGRATION | Vanguard độc lập hoàn tất security/scans/runtime attack cases theo plan trên SHA hiện tại; findings xử lý theo gate đã có, không hạ severity hay bỏ reproduction. Review và TEST evidence hiện hành đầy đủ. | Chỉ integration/final handoff evidence còn PENDING/BLOCKED. |
+| INTEGRATION → RELEASE READINESS | Independent astra B revalidate composition/integrated SHA; docs/curl handoff hoàn tất; toàn bộ mandatory criteria PASS, bao gồm IMP-17/OCR-14. | Không còn mandatory evidence thiếu; readiness không tự cho phép merge main/deploy. |
+
+Mapping áp dụng ở **assertion/evidence level**, không miễn toàn bộ ID có một phần downstream. Reviewer phải liệt kê `criterion/assertion | due stage | evidence/SHA | verdict | next owner`; thiếu boundary/security/regression tests đến hạn REVIEW vẫn BLOCKED readiness, không được đổi nhãn thành downstream để đi tiếp. Model/license/VRAM guard và các prerequisite phải đáp ứng trước inference dù live benchmark nằm TEST; biết quality/security fail từ CODE/benchmark thì vẫn chặn progression, không giấu sau stage label. Existing baseline failures được so sánh/giải thích theo criteria, không biến thành suite PASS.
+
+Verdict riêng `CODE_REVIEW_READY_FOR_TEST: PASS` chỉ cấp phép chuyển sang independent TEST khi mọi điều kiện REVIEW ở trên đã đạt. FAIL nếu có violation chưa khắc phục, BLOCKED nếu evidence đến hạn REVIEW thiếu. Report đồng thời giữ overall acceptance/release BLOCKED và liệt kê toàn bộ future-stage evidence; không gọi criterion PASS một phần. Điều phối không thay reviewer để tự cấp readiness. Các stage sau dùng nguyên tắc tương tự; giữ thứ tự REVIEW→TEST→VANGUARD→INTEGRATION→DOCUMENTATION, không waive gate.
+
+IMP-17/OCR-14 là tiêu chí tích lũy cuối quy trình: ở REVIEW chỉ kiểm được phần independent review/current SHA; các phần tester/vanguard/integration giữ PENDING/BLOCKED cho đến đúng stage, nên không dùng chính phần chưa đến lượt này làm prerequisite vòng tròn để bắt đầu TEST. Mọi observed criterion FAIL vẫn chặn bước kế tiếp. Clarification không sửa hoặc đảo verdict review đã phát hành: round-1 import vẫn FAIL với R1-01/R1-02 High; phải fix và independent re-review SHA mới, đồng thời hoàn tất evidence REVIEW còn thiếu.
+
 ### 8.1. Review
 
 Mỗi branch có reviewer sol mới, `fork_turns=none`, worktree riêng checkout commit cần review. Nhận criteria/contract/diff/baseline/evidence, không nhận hội thoại coder.
 
 - [ ] Đọc diff và map; đánh dấu từng criterion PASS/FAIL/BLOCKED với evidence.
 - [ ] Tự chạy tests mới+cũ, kiểm API legacy schema/SSE/error/limit behavior, upload/job-ID-access/resource/security boundaries.
-- [ ] Không sửa feature code. Một tiêu chí FAIL hoặc thiếu evidence là chưa PASS.
+- [ ] Không sửa feature code. Một tiêu chí FAIL hoặc thiếu evidence là chưa acceptance PASS; readiness để sang TEST đánh giá theo mapping assertion/stage mục8.0, không miễn evidence đến hạn REVIEW.
 - [ ] Feedback bắt buộc `ID | tiêu chí hoặc test case | bằng chứng | mức độ | gợi ý sửa`; gửi điều phối, điều phối chuyển nguyên văn cho coder.
 - [ ] Sau fix, reviewer độc lập đọc commit mới và chạy lại affected+regression; lưu `docs/reviews/<task>-round-N.md`. Commit review report riêng; nếu không đổi code, checkpoint ghi lại cùng code hash, không tạo commit rỗng giả tiến độ.
 
