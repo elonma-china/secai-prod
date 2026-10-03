@@ -1,0 +1,25 @@
+{
+  "purpose": "prompt calibration, excluded from acceptance",
+  "language": "ar",
+  "provenance": "manually authored Arabic; native review pending",
+  "images": [
+    {
+      "id": "cal-ar-1",
+      "image": "01.png",
+      "text": "عنوان الخادم 203.0.113.7 مرتبط بالثغرة CVE-2023-4911.",
+      "sha256": "cfe64805be00472345b89f17dd938ceb76e8a7e42bc202781de9849e81e97f0f"
+    },
+    {
+      "id": "cal-ar-2",
+      "image": "02.png",
+      "text": "تم رصد CVE-2022-22800 على 198.51.100.4.",
+      "sha256": "f97a61a01fd39bce29d70afca982ac1610bf001d45076a615ccdab8a2e9a8e71"
+    },
+    {
+      "id": "cal-ar-3",
+      "image": "03.png",
+      "text": "لا تتأثر الخدمة بالثغرة CVE-2021-44228.",
+      "sha256": "cea371ec05677f2800aca803c6ae916f5c90ba7b18d5f989a510c02c2648a083"
+    }
+  ]
+}
