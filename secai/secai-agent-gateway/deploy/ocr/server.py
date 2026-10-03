@@ -6,6 +6,7 @@ import io
 import os
 import subprocess
 import threading
+from typing import Literal
 
 import torch
 from fastapi import FastAPI, Header, HTTPException
@@ -27,6 +28,14 @@ app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 class Request(BaseModel):
     model: str
     image_base64: str = Field(max_length=15_000_000)
+    calibration_prompt: Literal["standard", "logical", "arabic"] = "standard"
+
+
+CALIBRATION_PROMPTS = {
+    "standard": "OCR:",
+    "logical": "Transcribe all visible text in its natural reading order. Preserve identifiers and IP addresses exactly.",
+    "arabic": "Transcribe the Arabic text in logical right-to-left reading order, keeping Latin identifiers and IP addresses exactly as printed.",
+}
 
 
 def _free_mib() -> int:
@@ -140,7 +149,8 @@ def ocr(request: Request, authorization: str = Header(default="")):
         except Exception as exc:
             raise HTTPException(422, "Invalid image") from exc
         messages = [{"role": "user", "content": [
-            {"type": "image", "image": image}, {"type": "text", "text": "OCR:"}]}]
+            {"type": "image", "image": image},
+            {"type": "text", "text": CALIBRATION_PROMPTS[request.calibration_prompt]}]}]
         encoded = _processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True,
             return_tensors="pt", images_kwargs={"size": {
