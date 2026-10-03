@@ -60,3 +60,7 @@ CoreR3FAIL1Medium vs4prior. R3-01mixedArabic+longRussian falsepositive; fix3/5, 
 Frozen coref6b7834 codee9a2fd0 (139targetedpass) reviewerround4 session24339; assessment368afcd(75targetedpass) reviewerround2 session52745. Wardencheckpoint2 session53279 ongoing. CPUintegration stillwaitreview.
 
 Wardencheckpoint2 permits CPUwork flagsOFF, counters3/1/1 andVanguard0return. Requested staleSHA updates alreadyapplied; scratchledger rewrittenauthoritativecurrent snapshot. OtherfileSTOPboundary retained.
+
+Coref6b7834 independentround4spec/codePASS17/17, no remainingfindingchangedCORE07. Priorcorefindingsclosedacrossreviews. Vanguardfinalcore replay session73231 ownsecuritybranch allowedmergeexactcoreonly. Assessmentround2pending.
+
+Assessmentround2changesrequested R01/02/04/05/07/09; fix2/5active,9→6remaining. Rootrequiresactualdurablecustody/provenance/alignment/margin mechanisms, not unconditionalblock substitutes; realartifacts absent remainsBLOCKED. CPUruntime integration may proceed reviewedcore/FE/securitytests excludingassessment untilreviewclearance; exactfinalfullsuiteafterall merges.
