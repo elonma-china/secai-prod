@@ -29,14 +29,14 @@ Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized 
 | T3/T4 core | f6b7834 spec/codePASS round4,17independentcasespass; author139targetedpass | 3/5 | 0/3 |
 | T5 FE | 21test/build/audit0; code reviewed, FE-03 CDN finding fixed and re-reviewPASS | 1/5 | 0/3 |
 | T6 adapter | Conditional Gate C, not created or run | 0/5 | 0/3 |
-| T7 integration tests | Runtime replay968pass19samefail1skip; combined0097da3 replay in progress; assessment excluded | 0/5 | 0/3 |
+| T7 integration tests | Runtime replay968pass19samefail1skip; combined0097da3 1075pass19samefail1skip; assessment excluded | 0/5 | 0/3 |
 | T8 Vanguard | Finalcore11ec898:23pass,0new actionablefindings; live/scanners/composedreleaseBLOCKED | 0/5 | 0/3 |
-| T9 AstraB integration | Runtime929b199 tested correct deps; combined replay finishing; assessment excluded pending review4; no main merge | 0/5 | 0/3 |
+| T9 AstraB integration | Runtime929b199 tested correct deps; combined replay complete; assessment excluded pending review4; no main merge | 0/5 | 0/3 |
 | T10 API/finaldocs | API docs788da97 complete; finalreport pending | 0/5 | 0/3 |
 
 FE browser: T3 mock plus real HTTP/fakeLLM Playwright evidence, final runtime43e5f22 replay on vi→zh-Hans,ja→vi,vi→ar with CVE/IP; inspected desktop/mobile RTL screenshots, exact copy API stub (not OS permission). Source identical929b199. See browser-http.md. No model-quality claim.
 
-Static analysis: runtime43e5f22 OSS Semgrep1.179.0,9units7complete2partial,14files0findings. Assessmentbf06bc4 six units4complete2partial,7files0findings; replay8e53a00 now running. Third-party rule compile errors recorded; not blanket security PASS. Dependency gap closed in /tmp/secai-multilang-final-env,67compatiblepackages incl olefile0.47,17declaredrequirements+metriclockverified,baseline57versions unchanged.
+Static analysis: runtime43e5f22 OSS Semgrep1.179.0,9units7complete2partial,14files0findings. Assessmentbf06bc4 six units4complete2partial,7files0findings; replay8e53a00 complete: six units4complete2partial,7files0findings. Third-party rule compile errors recorded; not blanket security PASS. Dependency gap closed in /tmp/secai-multilang-final-env,67compatiblepackages incl olefile0.47,17declaredrequirements+metriclockverified,baseline57versions unchanged.
 
 Serving inventory: authenticated modelID confirms DuyTa/Cyber-F1-AWQ; sole cached snapshot7e7e6718ce268d2b00adc6e3ea43fcd33452f516 with qwen3_5_moe/compressed-tensors. Process has no --revision, so cache-backed inference is not attestation of loadedrevision. Matching config endpoints read from existing secai-docker settings in memory; no .env copied. Linch1.2.1 in isolatedenv; sharedvenv untouched.
 
