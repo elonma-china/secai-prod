@@ -117,7 +117,44 @@ services:
     # CHAT_PRE_FETCH_MARKER (agent/hooks.py) chèn đầu prompt khi pre-fetch, hook check
     # prompt.startswith(marker) → coi need_kb=False, bỏ qua force_continue cho nhánh đó.
     # Ảnh 0.5.4-source-sse giữ nguyên để rollback.
-    image: secai-agent-gateway:0.5.5-regen-fix
+    # 0.5.6-poc-drilldown (2026-09-21, commits 8a484ee/63d1a15/45f1e70): (1) chat +poc_fetch
+    # để drill-down PoC trả mã thật thay vì bịa/link (airgap); (2) classifier margin guard
+    # chống chặn nhầm câu drill-down là off-topic; (3) đo duration_ms thật cho event pre-fetch
+    # qdrant_search. Build từ working tree (giữ statistical feature + rate-limit 150) NHƯNG đã
+    # BỎ đoạn TEMP TRACE debug (log body /ai/*). Ảnh 0.5.5-regen-fix giữ nguyên để rollback.
+    # 0.5.7-chat-leak-fix (2026-09-21, commit 475871c): hết rò rỉ prompt nội bộ (env+grounding
+    # KB dump) vào lịch sử chat — EphemeralTurnContextHook (linch build_context) đưa context cho
+    # model KHÔNG persist + session.run prompt gốc + _display_message_dict che turn cũ. Faithfulness
+    # matched-eval Δ≈0 (23.84 vs baseline 24.25, judge deepseek-v4.1-flash n=30) → không regress.
+    # Vẫn giữ statistical feature + rate-limit 150, KHÔNG có TEMP TRACE. Ảnh 0.5.6-poc-drilldown
+    # giữ nguyên để rollback.
+    # 0.5.8-qa-batch (2026-09-22): batch 12 fix từ QA report api-quality-safety-2026-09-21 (13 commit
+    # e4330e9..cd1bf83): #1 relevance-gate, #2 target-redact+disclaimer, #3/#4 translate lang+injection,
+    # #5 remediation secure-by-default, #6/#14c exploit metadata grounding+candidate_status, #7 stub-filter,
+    # #8 OWASP version-agnostic, #9/#14b translate 5xx-empty+lang-allowlist, #12 glossary, #13 hide
+    # tool_registry, #14a chat explicit-lang (partial). Build từ working tree (statistical + rate-limit 150),
+    # BỎ TEMP TRACE. Ảnh 0.5.7-chat-leak-fix giữ nguyên để ROLLBACK.
+    # 0.5.9-hardening-regfix (2026-09-22): + hardening H1/H2/H3 (ad454cb: cwe_refs metadata exploit,
+    # redact metadata.sources citation-only, shrink SSE tool_result giữ ToolTimeline) + FIX REGRESSION
+    # (d32f3e0: câu OWASP/CWE-Top-N hết bị trả "Cảm ơn... ngày tháng" — bọc marker ephemeral date/grounding
+    # + bỏ dòng tool_routing stale). Live 0/36 regression, #11 leak nguyên. Ảnh 0.5.8-qa-batch giữ ROLLBACK.
+    # 0.5.10-chat-giat-fix (2026-09-26, 877d469): fix chatbot GIẬT phía BE — 🅱1 RequireChatGroundingHook
+    # max_retries 3→1 (khớp linch cap, hết SSE regenerate "giả" ship draft cũ); 🅲 _filter_display_rows
+    # (api/projects.py) lọc retry-tail <system-reminder> + draft reject khỏi GET /messages (hết leak/giật
+    # refetch); gỡ comment "hook INERT" sai. (FE giật-fix a646741 riêng ở secai-fe-devspace, không qua image.)
+    # Residual flag: text persist store ≠ floor SSE (reload có thể thấy bịa). Ảnh 0.5.9-hardening-regfix ROLLBACK.
+    # 0.5.11-chat-grounding-retry (2026-09-27, f44e593): fix nhóm câu grounding-retry (hết xin lỗi/swap +
+    # live==store). Lớp1 (routes.py): pre-fetch KB cho follow-up không kèm ID ("có CVE nào?" resolve entity
+    # từ history). Lớp2 (hooks.py): nới missing_web khi web_fetch_enabled=False (airgap) → Top-N OWASP/CWE
+    # trả từ kiến thức+disclaimer thay vì bị ép regen→xin lỗi. GIỮ KB enforce. Ảnh 0.5.10-chat-giat-fix ROLLBACK.
+    # 0.5.12-topn-year-fix (2026-09-27, eb76d3c): hết bịa năm khi hỏi Top-N không ghi năm (residual #8) —
+    # chat.md versioned_list_policy thêm rule case không-nêu-năm (cấm gán năm trừ khi web_fetch thành công) +
+    # base_system.md URL 2025 chỉ là đích fetch không phải nhãn. Live 80%→0% bịa năm. Ảnh 0.5.11 ROLLBACK.
+    # 0.5.13-classifier-topn (2026-09-27, 957360d): hết classifier chặn nhầm câu security Top-N (bare
+    # taxonomy+Top-N off_p=0.98) là off-topic — sanitize/gate.py security_marker guard (CWE|CVE|CAPEC|CVSS|
+    # OWASP|SANS|ATT&CK|MITRE) ở nhánh offtopic; injection intact. Rollback flag input_classifier_security_
+    # marker_override. TRADEOFF low-stakes: decoy sáng-tạo nhắc taxonomy dựa scope_policy. Ảnh 0.5.12 ROLLBACK.
+    image: secai-agent-gateway:0.5.13-classifier-topn
     container_name: secai-docker-gateway
     restart: unless-stopped
     # Cho container phân giải host.docker.internal → IP host (để reverse-proxy /tb tới TensorBoard :6006 trên host).

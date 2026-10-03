@@ -43,6 +43,29 @@ interface StatResult {
   detail: string;
 }
 
+// Structured `detail[]` shape the report team asked for (per-machine findings, 6-column
+// table: tên máy/IP/ngày quét/lỗ hổng/mức độ/mô tả) — rendered server-side in code, never
+// paraphrased by the LLM. See secai-agent-gateway messages.py::render_scan_detail_table.
+const SAMPLE_DETAIL = [
+  {
+    name: "WEB-SRV-01",
+    ip: "10.0.0.5",
+    scaned: "2026-09-10",
+    cves: [
+      { cve: "CVE-2021-44228", severity: "critical", description: "Log4Shell — RCE qua JNDI lookup trong Log4j2, cho phép thực thi mã từ xa không cần xác thực." },
+      { cve: "CVE-2019-0708", severity: "high", description: "BlueKeep — lỗ hổng RCE trong RDP (Remote Desktop Services) trên Windows." },
+    ],
+  },
+  {
+    name: "DB-SRV-02",
+    ip: "10.0.0.9",
+    scaned: "2026-09-11",
+    cves: [
+      { cve: "CVE-2012-1823", severity: "medium", description: "PHP-CGI query string injection, cho phép thực thi mã tuỳ ý." },
+    ],
+  },
+];
+
 export default function ReportScreen({ userId }: { userId: string }) {
   const [tab, setTab] = useState<Tab>("create");
 
@@ -59,6 +82,11 @@ export default function ReportScreen({ userId }: { userId: string }) {
   const [statBusy, setStatBusy] = useState(false);
   const [statError, setStatError] = useState<string | null>(null);
   const [statResult, setStatResult] = useState<StatResult | null>(null);
+  const [statSummary, setStatSummary] = useState(
+    "Tổng số mục tiêu thiết bị được đánh giá: 3. Tổng số lỗ hổng phát hiện: 3. Số loại lỗ hổng phát hiện: 3.",
+  );
+  const [statDetailJson, setStatDetailJson] = useState(JSON.stringify(SAMPLE_DETAIL, null, 2));
+  const [statDetailError, setStatDetailError] = useState<string | null>(null);
 
   async function submitReport() {
     const value = logsText.trim();
@@ -103,17 +131,28 @@ export default function ReportScreen({ userId }: { userId: string }) {
 
   async function submitStats() {
     if (statBusy) return;
+    setStatDetailError(null);
+    let detail: unknown = undefined;
+    const trimmedDetail = statDetailJson.trim();
+    if (trimmedDetail) {
+      try {
+        detail = JSON.parse(trimmedDetail);
+      } catch (e) {
+        setStatDetailError(`JSON "Dữ liệu chi tiết" không hợp lệ: ${String(e instanceof Error ? e.message : e)}`);
+        return;
+      }
+    }
     setStatBusy(true);
     setStatError(null);
     setStatResult(null);
     const { from, to } = periodRange(period);
-    const label = PERIOD_OPTS.find((o) => o.id === period)?.label || period;
     try {
       const res = await statisticalReport({
         period,
         from_date: from,
         to_date: to,
-        message: `Tạo thống kê an toàn thông tin cho kỳ: ${label} (${from} → ${to}).`,
+        summary: statSummary.trim() || undefined,
+        detail,
         user_id: userId,
       });
       setStatResult({
@@ -241,6 +280,40 @@ export default function ReportScreen({ userId }: { userId: string }) {
                   Tạo thống kê
                 </button>
               </div>
+            </div>
+
+            <div className="iascard">
+              <div className="iascard-head">
+                <ClipboardList size={14} strokeWidth={1.5} color="var(--teal)" />
+                <span style={{ color: "var(--text)", fontWeight: 600, fontSize: 13.5 }}>Tổng quan (summary)</span>
+              </div>
+              <textarea
+                className="iasin"
+                placeholder="Số máy đã quét, tổng số lỗ hổng, phân loại theo mức độ…"
+                style={{ minHeight: 60, resize: "vertical", border: "none", borderRadius: 0, background: "transparent", padding: "14px 15px" }}
+                value={statSummary}
+                onChange={(e) => setStatSummary(e.target.value)}
+              />
+            </div>
+
+            <div className="iascard">
+              <div className="iascard-head">
+                <ClipboardList size={14} strokeWidth={1.5} color="var(--teal)" />
+                <span style={{ color: "var(--text)", fontWeight: 600, fontSize: 13.5 }}>
+                  Dữ liệu chi tiết (mảng máy/lỗ hổng — name, ip, scaned, cves[cve, severity, description])
+                </span>
+              </div>
+              <textarea
+                className="iasin mono"
+                style={{ minHeight: 220, resize: "vertical", border: "none", borderRadius: 0, background: "transparent", padding: "14px 15px", fontSize: 12 }}
+                value={statDetailJson}
+                onChange={(e) => setStatDetailJson(e.target.value)}
+              />
+              {statDetailError && (
+                <div style={{ padding: "8px 15px", color: "#f0897c", fontSize: 12, borderTop: "1px solid var(--line2)" }}>
+                  {statDetailError}
+                </div>
+              )}
             </div>
 
             <div className="iascard">

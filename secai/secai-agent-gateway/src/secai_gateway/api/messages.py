@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any
 
-from ..security import require_public_input, wrap_untrusted_content
+from ..security import redact_public_input, require_public_input, wrap_untrusted_content
 from .literal_mask import mask_literals
 from .schemas import LegacyRequest
 
@@ -160,14 +160,65 @@ def statistical_prompt(body: LegacyRequest) -> str:
     to_date = _field(body, "to_date") or "?"
     summary = _field(body, "summary")
     detail = _field(body, "detail")
+    # A structured `detail` (array of per-machine findings) is rendered to a table by
+    # statistical_detail_table() below — never fed to the LLM (see routes.py callers).
+    # Long per-CVE descriptions in a prompt risk require_public_input() 422-blocking the
+    # whole report over one hash/credential in a finding, blow the profile's max_turns=6
+    # tool budget (one qdrant_search per CVE code), and get paraphrased/dropped by the model
+    # instead of reproduced verbatim.
+    detail_is_structured = isinstance(detail, list)
     if not summary and not detail:
         summary = body.supplied_text()  # fall back to any free text supplied
     parts = [f"Khoảng thời gian: từ {from_date} đến {to_date}"]
     if summary:
         parts.append(f"Tổng quan: {require_public_input(str(summary))}")
-    if detail:
+    if detail and not detail_is_structured:
         parts.append(f"Chi tiết lỗ hổng: {require_public_input(str(detail))}")
     return "\n".join(parts)
+
+
+def _table_cell(value: Any) -> str:
+    text = redact_public_input(str(value if value is not None else "")).text
+    return text.replace("|", "\\|").replace("\n", " ").strip() or "-"
+
+
+def render_scan_detail_table(machines: list[Any]) -> str:
+    """Deterministically render per-machine/CVE findings into the customer-required
+    6-column table (tên máy, IP, ngày quét, lỗ hổng, mức độ, mô tả) — bypasses the LLM
+    entirely so rows can't be dropped, reordered or paraphrased away."""
+    rows: list[tuple[str, str, str, str, str, str]] = []
+    for machine in machines:
+        if not isinstance(machine, dict):
+            continue
+        name = _table_cell(machine.get("name") or machine.get("ten_may"))
+        ip = _table_cell(machine.get("ip"))
+        scanned = _table_cell(machine.get("scaned") or machine.get("scan_date"))
+        cves = machine.get("cves") or machine.get("vulnerabilities") or []
+        if not isinstance(cves, list) or not cves:
+            rows.append((name, ip, scanned, "-", "-", "-"))
+            continue
+        for cve in cves:
+            if not isinstance(cve, dict):
+                continue
+            cve_id = _table_cell(cve.get("cve") or cve.get("cve_id") or cve.get("name"))
+            severity = _table_cell(cve.get("severity"))
+            description = _table_cell(cve.get("description"))
+            rows.append((name, ip, scanned, cve_id, severity, description))
+    if not rows:
+        return "_Không có dữ liệu chi tiết._\n"
+    header = "| Tên máy | IP | Ngày quét | Lỗ hổng | Mức độ | Mô tả |\n|---|---|---|---|---|---|"
+    body = "\n".join(f"| {n} | {ip} | {sd} | {c} | {sv} | {d} |" for n, ip, sd, c, sv, d in rows)
+    return f"{header}\n{body}\n"
+
+
+def statistical_detail_table(body: LegacyRequest) -> str | None:
+    """Return the code-rendered detail table when `detail` is the new structured array
+    shape, or None when the caller still sends the legacy free-text `detail` (in which case
+    the model's own report_detail from parse_statistical() is used unchanged)."""
+    detail = _field(body, "detail")
+    if isinstance(detail, list):
+        return render_scan_detail_table(detail)
+    return None
 
 
 def parse_statistical(text: str) -> dict[str, str]:
