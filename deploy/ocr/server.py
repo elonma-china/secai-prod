@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import io
 import os
+import subprocess
 import threading
 
 import torch
@@ -31,8 +32,21 @@ def _free_mib() -> int:
     return torch.cuda.mem_get_info()[0] // (1024 * 1024)
 
 
+def _owned_mib() -> int:
+    listing = subprocess.check_output(
+        ["nvidia-smi", "--query-compute-apps=pid,used_gpu_memory", "--format=csv,noheader,nounits"],
+        text=True, timeout=3,
+    )
+    return sum(int(parts[1].strip()) for line in listing.splitlines()
+               if (parts := line.split(",")) and len(parts) == 2 and
+               parts[0].strip() == str(os.getpid()))
+
+
 def _guard() -> None:
-    if not torch.cuda.is_available() or _free_mib() < MIN_FREE_MIB:
+    if not torch.cuda.is_available():
+        raise HTTPException(503, "GPU unavailable")
+    owned = _owned_mib()
+    if owned > MAX_PEAK_MIB or _free_mib() < max(2048, MIN_FREE_MIB - owned):
         raise HTTPException(503, "GPU reserve unavailable")
 
 
@@ -46,7 +60,7 @@ def _load() -> None:
     _model = AutoModelForImageTextToText.from_pretrained(
         path, local_files_only=True, trust_remote_code=False, torch_dtype=torch.bfloat16,
     ).to("cuda").eval()
-    if torch.cuda.max_memory_reserved() // (1024 * 1024) > MAX_PEAK_MIB:
+    if _owned_mib() > MAX_PEAK_MIB or _free_mib() < 2048:
         _model = None
         torch.cuda.empty_cache()
         raise HTTPException(503, "OCR GPU quota exceeded")
@@ -83,14 +97,14 @@ def ocr(request: Request, authorization: str = Header(default="")):
         encoded = _processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True,
             return_tensors="pt", images_kwargs={"size": {
-                "shortest_edge": _processor.image_processor.min_pixels,
+                "shortest_edge": _processor.image_processor.size.shortest_edge,
                 "longest_edge": 1280 * 28 * 28}},
         ).to(_model.device)
         torch.cuda.reset_peak_memory_stats()
         with torch.inference_mode():
             output = _model.generate(**encoded, max_new_tokens=1024, do_sample=False)
-        peak = torch.cuda.max_memory_reserved() // (1024 * 1024)
-        if peak > MAX_PEAK_MIB:
+        peak = _owned_mib()
+        if peak > MAX_PEAK_MIB or _free_mib() < 2048:
             raise HTTPException(503, "OCR GPU quota exceeded")
         text = _processor.decode(output[0][encoded["input_ids"].shape[-1]:-1],
                                  skip_special_tokens=True)

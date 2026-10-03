@@ -1,0 +1,703 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "id": "a01",
+      "image": "images/01.png",
+      "sha256": "59e591a0a2051b5e2502287502e315b7efe525e36adc4ea5c219740f0187a471",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Báo cáo kiểm tra hệ thống",
+      "tokens": []
+    },
+    {
+      "id": "a02",
+      "image": "images/02.png",
+      "sha256": "d0319f1e6c8bf619060f1ed61e28c426afbd8e112f2313cfb55d95cfa998dc30",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Máy chủ đã được cập nhật an toàn",
+      "tokens": []
+    },
+    {
+      "id": "a03",
+      "image": "images/03.png",
+      "sha256": "d423e82dfd463798d76e896a5506c8ada1c427e555bffa8dd69e0b9461d7b24a",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Kết nối mạng ổn định",
+      "tokens": []
+    },
+    {
+      "id": "a04",
+      "image": "images/04.png",
+      "sha256": "6f0a6246eb3d92ed9851ca7f4b617865722511aa0927b9dae4930e338195af1f",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Dữ liệu khách hàng được mã hóa",
+      "tokens": []
+    },
+    {
+      "id": "a05",
+      "image": "images/05.png",
+      "sha256": "8d70e6dc1843f11a143318866276baf0b47da84a915ddb934fd5150f42d32c2f",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Quản trị viên xác nhận kết quả",
+      "tokens": []
+    },
+    {
+      "id": "a06",
+      "image": "images/06.png",
+      "sha256": "b38e881d06b5d0545a1fa9520b4bbfff82b619ca13305a7a5338acea5f187336",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Tường lửa đã chặn truy cập",
+      "tokens": []
+    },
+    {
+      "id": "a07",
+      "image": "images/07.png",
+      "sha256": "6f1c8439d4842e93a080f631d42707517da6b20a125daad28a291a2ed3d6caaa",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Phiên đăng nhập cần xác minh",
+      "tokens": []
+    },
+    {
+      "id": "a08",
+      "image": "images/08.png",
+      "sha256": "4b527d229c7964c01e7bd9bb94800c742e581c44bd5df54f1c052d217da2be57",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Bản vá bảo mật đã triển khai",
+      "tokens": []
+    },
+    {
+      "id": "a09",
+      "image": "images/09.png",
+      "sha256": "f60e2e5d6e328f4a55246f2d13a8901dfaec5a8c57faceacb2c70e02ea302a42",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "Security review completed successfully",
+      "tokens": []
+    },
+    {
+      "id": "a10",
+      "image": "images/10.png",
+      "sha256": "f7b1411f307a42118e542e63fa2721ffb39440b39fe261ec1b6d7c8bf00c7b73",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "The server remains available today",
+      "tokens": []
+    },
+    {
+      "id": "a11",
+      "image": "images/11.png",
+      "sha256": "06e537805cd57422821b922c282d63fe97ac0b801cadb231295275a91559e607",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "All backups passed integrity checks",
+      "tokens": []
+    },
+    {
+      "id": "a12",
+      "image": "images/12.png",
+      "sha256": "9fed95347bfbe80313d5d0217f132897f0c4c566b5be6069f4b8df7bb2efac2a",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "Incident response follows the runbook",
+      "tokens": []
+    },
+    {
+      "id": "a13",
+      "image": "images/13.png",
+      "sha256": "8511e46cadc318bb1440d2b1a3f0d091349acb604c67cd5f1d23f40cb6d827c0",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1200 192.0.0.1/24\nCVE-2024-1201 192.0.0.2/24\nCVE-2024-1202 192.0.0.3/24\nCVE-2024-1203 192.0.0.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1200"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.0.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1201"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.0.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1202"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.0.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1203"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.0.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a14",
+      "image": "images/14.png",
+      "sha256": "aee057cb0d051fc57ec420add755c2f45ae5192f972eadd0e0b584044f32d924",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1204 192.0.1.1/24\nCVE-2024-1205 192.0.1.2/24\nCVE-2024-1206 192.0.1.3/24\nCVE-2024-1207 192.0.1.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1204"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.1.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1205"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.1.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1206"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.1.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1207"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.1.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a15",
+      "image": "images/15.png",
+      "sha256": "37367994c5a6ad907bb5c75862496b4843c34ccae4abe49c13a5e8781dd65389",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1208 192.0.2.1/24\nCVE-2024-1209 192.0.2.2/24\nCVE-2024-1210 192.0.2.3/24\nCVE-2024-1211 192.0.2.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1208"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.2.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1209"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.2.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1210"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.2.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1211"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.2.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a16",
+      "image": "images/16.png",
+      "sha256": "b3a2515cf2780a895930cb26dc74548bdef8ba1912534e306642befe19bb384c",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1212 192.0.3.1/24\nCVE-2024-1213 192.0.3.2/24\nCVE-2024-1214 192.0.3.3/24\nCVE-2024-1215 192.0.3.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1212"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.3.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1213"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.3.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1214"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.3.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1215"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.3.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a17",
+      "image": "images/17.png",
+      "sha256": "10369d9c8d8ef6d81caa24177778822cce1aae01831759ef2e8200eec9d12c6b",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1216 192.0.4.1/24\nCVE-2024-1217 192.0.4.2/24\nCVE-2024-1218 192.0.4.3/24\nCVE-2024-1219 192.0.4.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1216"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.4.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1217"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.4.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1218"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.4.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1219"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.4.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a18",
+      "image": "images/18.png",
+      "sha256": "a20e8e69362413872b61ae1d3b10db4b4e9466e411c01a3946235b617a44316d",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1220 192.0.5.1/24\nCVE-2024-1221 192.0.5.2/24\nCVE-2024-1222 192.0.5.3/24\nCVE-2024-1223 192.0.5.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1220"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.5.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1221"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.5.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1222"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.5.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1223"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.5.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a19",
+      "image": "images/19.png",
+      "sha256": "6fb9b6da4490d28edc6cc666aae70ef86592833831ecd236b84773665c4ab49c",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1224 192.0.6.1/24\nCVE-2024-1225 192.0.6.2/24\nCVE-2024-1226 192.0.6.3/24\nCVE-2024-1227 192.0.6.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1224"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.6.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1225"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.6.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1226"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.6.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1227"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.6.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a20",
+      "image": "images/20.png",
+      "sha256": "6b121dc39ece5e445c50853d602f5e0d59253ce4e4b0bf0d2a23f4b5c2f6d49b",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1228 192.0.7.1/24\nCVE-2024-1229 192.0.7.2/24\nCVE-2024-1230 192.0.7.3/24\nCVE-2024-1231 192.0.7.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1228"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.7.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1229"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.7.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1230"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.7.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1231"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.7.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a21",
+      "image": "images/21.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a22",
+      "image": "images/22.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a23",
+      "image": "images/23.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a24",
+      "image": "images/24.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a25",
+      "image": "images/25.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a26",
+      "image": "images/26.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a27",
+      "image": "images/27.png",
+      "sha256": "2a799c0ff9e42ac381d1d7de96b6dec80899f4f81c853354f7947134c356adf5",
+      "category": "low_contrast",
+      "language": "en",
+      "technical": false,
+      "text": "Low contrast document text remains intact",
+      "tokens": []
+    },
+    {
+      "id": "a28",
+      "image": "images/28.png",
+      "sha256": "a0fc2623987dbe729179ac68d1c8f4cdca781059d916a5af4736aa83baeebfe6",
+      "category": "low_contrast",
+      "language": "vi",
+      "technical": false,
+      "text": "Văn bản mờ vẫn cần giữ nguyên dấu",
+      "tokens": []
+    },
+    {
+      "id": "a29",
+      "image": "images/29.png",
+      "sha256": "2a799c0ff9e42ac381d1d7de96b6dec80899f4f81c853354f7947134c356adf5",
+      "category": "low_contrast",
+      "language": "en",
+      "technical": false,
+      "text": "Low contrast document text remains intact",
+      "tokens": []
+    },
+    {
+      "id": "a30",
+      "image": "images/30.png",
+      "sha256": "a0fc2623987dbe729179ac68d1c8f4cdca781059d916a5af4736aa83baeebfe6",
+      "category": "low_contrast",
+      "language": "vi",
+      "technical": false,
+      "text": "Văn bản mờ vẫn cần giữ nguyên dấu",
+      "tokens": []
+    }
+  ],
+  "negatives": [
+    {
+      "image": "images/blank.png",
+      "expected_code": "NO_TEXT_DETECTED"
+    }
+  ]
+}

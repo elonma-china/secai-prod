@@ -11,10 +11,13 @@ it does not modify their installation. `trust_remote_code=False` and offline
 environment variables prevent code/weight fetch at inference time.
 
 Before download, retain at least 20 GiB free under `/workspace`. Verify
-snapshot SHA and each downloaded file checksum. Load and each inference require
-at least 9216 MiB free GPU memory. This deliberately rejects requests if the
-incumbent models leave less headroom. The OCR process is limited to 7168 MiB
-peak reserved GPU memory. Start one uvicorn worker only. Keep the service token
+snapshot SHA and each downloaded file checksum. Before loading, require 9216 MiB
+free when OCR owns no GPU memory. After loading, require free memory at least
+`max(2048, 9216 - owned_OCR_MiB)` before each inference. This charges the
+already loaded OCR process once while reserving 2 GiB for incumbents. Query
+the OCR PID through `nvidia-smi`, including CUDA context and runtime memory;
+reject when owned usage exceeds 7168 MiB or global free falls below 2048 MiB.
+Start one uvicorn worker only. Keep the service token
 outside git and outside process arguments; use an environment file readable
 only by the service owner. Never print it in logs.
 
