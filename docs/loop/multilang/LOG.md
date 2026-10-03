@@ -48,3 +48,5 @@
 2026-10-04 update: core42f8d40 fixes T7-01..08 (130 targetedpass), independent round2 running; core1/5. Assessmentf31a86c review R-01..09 FAIL, fix1/5 active. FE d7c7eab realHTTP/fakeLLM smokePASS; API docs underway. Browser fallback Playwright explicitly permitted after T3 unavailable. No liveGPU/mainmerge/deploy.
 
 Browser realHTTP/fakeLLM vi→ar,vi→zh-Hans,ja→vi PASS on corebfe4e6b; screenshots inspected, repeat finalSHA. FE API docs788da975cf. Independent Vanguard round1 plan/tests started on isolated security branch core42f8d40; final integration/live pending.
+
+Core reviewround2FAIL4 (T7-R2-01..04) vs8prior; fixcycle2/5 active with changed prompt-aware/prose detection approach. No stagnationstop yet; original8reprosclosed,3criteria residual. Full feedback retained docs/reviews/multilang/core-round-2.md. Auxiliary3/3 exhausted byotherOCR; no ownloads.
