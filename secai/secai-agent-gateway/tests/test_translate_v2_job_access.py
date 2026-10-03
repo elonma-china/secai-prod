@@ -135,3 +135,24 @@ async def test_unknown_v2_path_has_safe_error_envelope(tmp_path, monkeypatch):
         assert method.status_code == 405
         assert method.json()["error"]["code"] == "INVALID_REQUEST"
         assert method.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.asyncio
+async def test_offline_worker_overdue_job_status_and_result(tmp_path, monkeypatch):
+    import time
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("TRANSLATE_V2_JOB_DEADLINE_SECONDS", "1")
+    app = create_app(FakeRunner())
+    store = app.state.translation_v2_store
+    job = store.admit("file", b"sensitive", ".txt", "en", "vi", "peer", None,
+                      now=time.time() - 2)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        status = await client.get(f"/ai/v2/translate/jobs/{job['job_id']}")
+        assert status.status_code == 200
+        assert (status.json()["status"], status.json()["error"]["code"]) == (
+            "failed", "PROCESSING_TIMEOUT")
+        result = await client.get(f"/ai/v2/translate/jobs/{job['job_id']}/result")
+        assert (result.status_code, result.json()["error"]["code"]) == (409, "JOB_FAILED")

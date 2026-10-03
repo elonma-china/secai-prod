@@ -108,6 +108,34 @@ def test_chunk_boundaries_keep_cjk_and_combining_graphemes():
 
 
 @pytest.mark.asyncio
+async def test_cjk_chunk_boundary_never_splits_protected_marker():
+    import re
+
+    from secai_gateway.translation.service import _chunks, translate_blocks
+    from secai_gateway.translation.technical_tokens import protect_literals
+
+    source = "中" * 2980 + "`CVE-2024-1234`" + "中" * 3000
+    protected = protect_literals(source)
+    marker = re.search(r"⟦T[0-9a-f]{24}:\d+⟧", protected.text).group()
+    chunks = _chunks(protected.text, maximum=3000)
+    assert len(chunks) >= 2
+    assert sum(chunk.count(marker) for chunk in chunks) == 1
+    assert all(marker in chunk or "⟦T" not in chunk for chunk in chunks)
+
+    class FragileModel(Context):
+        async def complete(self, profile, prompt):
+            chunk = source_from_prompt(prompt)
+            # A provider can drop a broken marker fragment; successful restore
+            # must not depend on reconstructing it across independent calls.
+            intact = re.search(r"⟦T[0-9a-f]{24}:\d+⟧", chunk)
+            return chunk if "⟦T" not in chunk or intact else chunk.replace("⟦T", ""), {}
+
+    block = DocumentBlock(id="b000001", kind="paragraph", order=0, text=source, metadata={})
+    translated = await translate_blocks((block,), "vi", "en", context=FragileModel())
+    assert translated[0].translated_text == source
+
+
+@pytest.mark.asyncio
 async def test_configured_small_provider_context_reduces_chunk_size():
     from secai_gateway.translation.service import translate_blocks
 
