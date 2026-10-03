@@ -73,7 +73,8 @@ def test_failed_rows_stay_in_denominator():
     assert direction["quality_passes"] == 1
     assert direction["quality_rate"] == 0.5
     assert direction["errors"] == 1
-    assert direction["quality_gate"] == "FAIL"
+    assert direction["rubric_threshold_gate"] == "FAIL"
+    assert direction["quality_gate"] == "BLOCKED"
 
 
 def test_shuffle_is_not_new_sample():
@@ -165,7 +166,8 @@ def test_one_off_target_in_thirty_fails_separate_gate():
     assert direction["rubric_threshold_gate"] == "PASS"
     assert direction["quality_gate"] == "BLOCKED"
     assert direction["off_target"] == 1
-    assert direction["off_target_gate"] == "FAIL"
+    assert direction["off_target_threshold_gate"] == "FAIL"
+    assert direction["off_target_gate"] == "BLOCKED"
 
 
 def test_thirty_repeats_of_one_group_cannot_pass_quality_quota():
