@@ -1,0 +1,18 @@
+# T7 independent core review — `bfe4e6b`
+
+**Spec/code verdict: FAIL. Quality and release verdict: BLOCKED.** The full report is saved at [core-report.md](/home/ict/secai-multilang-review-core-wt/secai/secai-agent-gateway/docs/test-results/multilang/core-report.md). Only that report was changed in the checkout. No source edits, network calls, live inference, commits, merge, or deployment occurred.
+
+| ID | Severity | Criterion | Reproduced finding | Suggested fix |
+|---|---|---|---|---|
+| T7-01 | **High** | CORE-04, SEC-05 | A SHA-pinned tokenizer with serialized truncation counted 100 words as 8. [config.py](/home/ict/secai-multilang-review-core-wt/secai/secai-agent-gateway/src/secai_gateway/multilang/config.py:56) then allowed [service.py](/home/ict/secai-multilang-review-core-wt/secai/secai-agent-gateway/src/secai_gateway/multilang/service.py:103) to call the fake model under an 8-token cap. | Disable or reject tokenizer truncation and prove the counter bounds actual served request tokens, including template overhead. |
+| T7-02 | **High** | CORE-03/08, SEC-02/04 | Generated U+202E passed validation; generated U+D800 caused `UnicodeEncodeError` while building the success JSON, outside the required error envelope. | Validate generated Unicode before response construction; retry once, then return `OUTPUT_VALIDATION_FAILED`. |
+| T7-03 | **Medium** | CORE-07 | Valid mixed Arabic technical prose containing “Apache Kubernetes” returned `SOURCE_LANGUAGE_MISMATCH` with zero model calls. Mixed script alone is insufficient evidence under the contract. | Return `SOURCE_LANGUAGE_UNCERTAIN` unless a stronger detector establishes a mismatch. |
+| T7-04 | **High** | CORE-08, SEC-01/06 | A fake output containing the service’s own system instructions, minus the placeholder example, passed as a successful translation. | Detect known internal instruction leakage and retain independent adversarial evaluation; the current keyword check cannot establish this guarantee. |
+| T7-05 | **Medium** | CORE-07 | A French sentence copied unchanged except for one doubled internal space passed French→Vietnamese validation with an uncertainty warning. | Normalize prose for clear-copy detection while keeping protected literals separate. |
+| T7-06 | **Medium** | CORE-03, SEC-04 | A mocked provider HTTP 200 containing JSON `[]` raised uncaught `AttributeError` instead of `MODEL_UNAVAILABLE`. | Validate provider response shape before indexing and map malformed data to 503. |
+| T7-07 | **Medium** | CORE-10, SEC-05 | A hash-matched but malformed `{}` tokenizer raised a library `Exception` that escaped the configured error mapping. | Catch tokenizer parse failure at that boundary and fail closed as `MODEL_UNAVAILABLE`. |
+| T7-08 | **Low** | CORE-03/04 | A returned tool call was rejected safely, but it bypassed the specified single output-validation retry; only one provider attempt occurred. | Apply the same one-retry policy to returned tool-call validation errors. |
+
+The isolated no-tool payload, fixed DuyTa model ID, default-off flags, exact v3 dispatcher, strict literal restoration, and untouched legacy source were confirmed by inspection. A seeded chunk round-trip probe found no mismatch in 127 accepted cases. Arbitrary proper-name detection is optional under the frozen criteria and is **not** a finding.
+
+The author’s final targeted run reports **114 passed** (21 new, 93 legacy). The earlier full run reported **923 passed, 19 failed, 1 skipped**, before the final three tests; its 19 failures matched the author’s baseline. I did not repeat those suites. A full run at the final SHA, file/OCR integration, loaded checkpoint revision, live 16-direction quality, FE smoke/screenshot, and release evidence remain **BLOCKED**.

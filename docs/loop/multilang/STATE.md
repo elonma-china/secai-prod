@@ -1,45 +1,49 @@
 # Multilang — STATE
 
-- Phase: EXECUTION/CRITERIA_READY + CPU_IMPLEMENTATION; user authorized implementation. Criteria + preflight + FE preparation active; live benchmark/merge/deploy NOT RUN.
-- Plan: `docs/plans/multilang-translate.md`.
-- Source: `docs/plans/multilang-source-requirements.txt` (exact user attachment).
-- Scope: zh/ja/ko/fr/de/es/ru/ar ↔ vi (16 new); en↔vi regression. Latest user clarification: deployed DuyTa is the runtime orchestrator and translator. Confirmed: maximum3 auxiliary models total (OCR/language-ID/evaluation), tried sequentially; DuyTa excluded from auxiliary count and remains unchanged.
-- Confirmed defaults: main, zh-Hans, Arabic MSA.
-- Base observed/fetched: ce9cd47ee1273018fec1c5cbab944a86d68d6ed5 (main=origin/main).
-- Protected import branch snapshot: feature/import-file-translate @4505c570167ebd0e8ddfba752308b1811f88383b.
-- Protected OCR branch snapshot: feature/image-ocr-translate @404f93a90958027fe0d2b386c45477b724adffc6.
-- Both merge-bases with main: ce9cd47. Agents remain active elsewhere; refresh refs + WIP ownership before every cycle.
-- Worktree created: `/home/ict/secai-multilang-wt`, branch `feature/multilang-translate`, base `ce9cd47ee1273018fec1c5cbab944a86d68d6ed5`. This is the authoritative planning workspace. Worker worktrees remain planned; adapter branch conditional Gate C only.
-- Existing file/OCR `docs/loop/STATE.md` and `LOG.md` are READ-ONLY for this task. This namespace prevents concurrent writes.
-- Canonical FE nested inside gateway is untracked; old sibling tracked deletion belongs to user. T5 snapshot only in dedicated FE worktree with explicit file manifest.
-- Baseline evidence: 63 targeted translation tests passed during prior read-only review, 17 deselected; not quality evaluation/full-suite success. Other-task baseline documents905pass19fail1skip; not rerun here.
-- Local installed Linch1.1.0 differs from pyproject>=1.2.1,<2; isolate environment before code/test acceptance.
-- Model local declaration: vllm / DuyTa/Cyber-F1-AWQ / configured context65536. Live revision/quant/engine/max output/LoRA capability unverified.
-- COMPUTE_PROVISIONING: EXISTING_RENTED_INSTANCE, confirmed by user. File/OCR state references Vast instance53846446 / A10080GB; revalidate at execution. DEV_ENDPOINT/reservation: TO_VERIFY. ADDITIONAL_RENTAL: NOT_AUTHORIZED. NATIVE_REVIEW: UNCONFIRMED. No live benchmark or Vast mutation by this task.
-- Criteria: astra A draft received at `docs/criteria/multilang-planning-proposal.md`; quality target approximately70% confirmed; operationalized as per-direction sample pass rate≥70%. Rubric freeze and regression/performance margins remain to finalize.
-- Review/test/adapter/vanguard/integration cycles: all0; quality A/B/C/D NOT RUN.
-- Decision: additive multilang namespace + new v3 JSON text API + ASGI composition, legacy/file/OCR untouched. Identity policy and detailed guards frozen at T1 before API CODE.
-- Next: execution T0/T1 precedes code/benchmark. Implementation authorized; CPU code/tests may proceed after contract freeze with flagsOFF while live assessment waits resource slot. Use existing rented compute after endpoint/workload preflight and shared scheduling; no new-rental budget prerequisite for baseline. Adapter quota/time reviewed separately at Gate C.
+Updated2026-10-04. Phase: CPU_IMPLEMENTED / INDEPENDENT_REVIEW. User authorized execution; this is not quality acceptance or release approval.
 
-| Task | Status | Fix/review | Vanguard returns |
+## Binding decisions
+- Runtime orchestrator and translator: deployed DuyTa only. No alternative translator/fallback/postediting model.
+- New16 vi↔zh-Hans/ja/ko/fr/de/es/ru/ar; old en↔vi unchanged. ArabicMSA, main base.
+- Quality sample pass rate≥70% EACH direction EACH round; off-target≤2%, protected entities100%; live evidence NOT RUN. en↔vi noninferiority/performance margins pending baseline.
+- Auxiliary models max3 TOTAL (OCR/LID/QE), sequential. Other OCR owner reports2used; this task loaded0. No restart/unload/change to their services.
+- Existing Vast rental confirmed. No additional rental authorized. OCR exclusive GPU slot still active; live inference/training BLOCKED until coordinated release. CPU work proceeds flagsOFF.
+- New v3 JSON-only text API, anonymous/stateless, separate namespace/composition; no file/OCR or legacy source edits. Frozen contract: docs/api/multilang-contract.md; criteria: docs/criteria/multilang-*.md.
+
+## Worktrees and revisions
+- Planning: /home/ict/secai-multilang-wt, feature/multilang-translate; plan docs/plans/multilang-translate.md; source attachment copied verbatim.
+- Base main snapshot: ce9cd47ee1273018fec1c5cbab944a86d68d6ed5.
+- Core: /home/ict/secai-multilang-core-wt, feature/multilang-core @bfe4e6b7a2eb3178434b3e08dbcdf58fe7410501.
+- FE: /home/ict/secai-multilang-fe-wt, feature/fe-devspace-multilang @a7832804f33efe6d32b2730e4f238e0719c9278c; canonical nested snapshot baseline8b41f62, no sibling deletion.
+- Assessment: /home/ict/secai-multilang-assessment-wt, feature/multilang-assessment; final checkpoint pending.
+- Integration: /home/ict/secai-multilang-integration-wt, integration/multilang-translate; created from base, not merged yet. Fresh Astra B will integrate reviewed commits only.
+- Protected import current observed: bfab8ebc96e25b23325fd72a1d3bf034e9aea315; OCR: 18b11ecf839b8e09d2971802c9e435ac7e92e23e. Their source/state/log read-only. Recheck before integration.
+- Pre-existing protected-branch cross-conflicts observed at365e9e0/99cd0a2: profiles.yaml and translation/settings.py. Not caused by our code; refresh current snapshots at integration.
+
+## Evidence and counters
+| Task | Current status | Fix cycles | Vanguard returns |
 |---|---|---:|---:|
-| Assessment | PLANNED | 0/5 | 0/3 |
-| Core/API | PLANNED | 0/5 | 0/3 |
-| FE | PLANNED | 0/5 | 0/3 |
-| Adapter | CONDITIONAL, NOT CREATED | 0/5 | 0/3 |
-| Integration/docs | PLANNED | 0/5 | 0/3 |
+| T0 preflight | CPUbaseline905pass19fail1skip0error; exact failureIDs in assessment baseline.json | 0/5 | 0/3 |
+| T1 criteria | CRITERIA_READY, six documents committedb94e5ea | 0/5 | 0/3 |
+| T2 assessment | CPUharness43pass; full948pass19samefail1skip; commitf31a86c; independentreviewactive; liveBLOCKED | 0/5 | 0/3 |
+| T3/T4 core | Independentround1FAIL8findings, fixcycle1active; prior114targetedpass | 1/5 | 0/3 |
+| T5 FE | 21test/build/audit0; code reviewed, FE-03 CDN finding fixed and re-reviewPASS | 1/5 | 0/3 |
+| T6 adapter | Conditional Gate C, not created or run | 0/5 | 0/3 |
+| T7 integration tests | NOT RUN on combined finaltree | 0/5 | 0/3 |
+| T8 Vanguard | NOT RUN, fresh independent agent required | 0/5 | 0/3 |
+| T9 AstraB integration | NOT RUN; no main merge | 0/5 | 0/3 |
+| T10 API/finaldocs | Pending finalimplementation/review | 0/5 | 0/3 |
 
-No language marked beta/stable/qualified; all eight new-language rollout flags must start OFF.
+FE browser: real T3 Chromium with fetch stubs, RTL/bdi/plaintext/exactcopy/CJK/Russian/mobile390/masterOFF pass; afterfontfix0CDNrequests. SnapshotAPI fails, no screenshot. Not real-backend or quality evidence. See docs/test-results/multilang/browser-mock.md.
 
-- HF reference saved at `docs/plans/multilang-hf-model-inventory.json`: DuyTa only; Qwen alternatives removed following user correction. Metadata only; weights not downloaded, live serving unverified.
-- HF latest Cyber-F1-AWQ identifies qwen3_5_moe/compressed-tensors, differs from local comment; must match actual served revision before testing.
-- GPU policy: one candidate at a time, shared reservation, capacity check, monitored run, own-process shutdown and VRAM release verification before next candidate. Never unload other agents’ models.
+Serving inventory: authenticated modelID confirms DuyTa/Cyber-F1-AWQ; sole cached snapshot7e7e6718ce268d2b00adc6e3ea43fcd33452f516 with qwen3_5_moe/compressed-tensors. Process has no --revision, so cache-backed inference is not attestation of loadedrevision. Matching config endpoints read from existing secai-docker settings in memory; no .env copied. Linch1.2.1 in isolatedenv; sharedvenv untouched.
 
-- Auxiliary model shortlist: TO_SELECT in T2 from HF metadata; trial count0/3. OCR remains owned by file/OCR agent; reuse existing contract/evidence, coordinate before any OCR trial. QE/judge offline only.
+## Current orchestration
+- Native new-thread limit reached; independent reviewers/warden launched as fresh Codex CLI sessions with specified Sol model and separate reviewcheckouts. No review waiver. Read-only bwrap first failed beforeinspection; retry uses existing unrestricted environment with strict read-only task instructions.
+- Core review and Warden checkpoint active; assessment author finishing; FE author idle afterfix.
+- Next: finish independent code reviews/fixes, Vanguard CPU/security tests, fresh Astra B integration with exact-SHA fullsuite and protectedbranch simulations; API docs. Keep all languageflagsOFF. Mainmerge requires later user confirmation per spec.
+- Pending release blockers: live resource slot, verified servingtokenizer/template/revision, licensed/reference corpus+independent scoring/holdout,18-direction/3round quality, margins/perf, security/integration gates and screenshot evidence.
 
-- Active workers: Astra criteria (planning worktree, docs-only); Sol preflight (assessment worktree); Sol FE (FE worktree, preparation before contract). Core worktree created, worker waits slot.
-- SharedGPU: other task STATE explicitly grants OCR exclusive benchmark reservation; no live inference/training/model loads authorized until reservation release. Read-only preflight observed ~7586MiB free, ~41%util; not a capacity guarantee.
+No quality percentage, production readiness, main merge, push or deployment has been claimed. No new language enabled in production.
 
-- Pre-existing import/OCR cross-merge conflict at365e9e0/99cd0a2 in profiles.yaml and translation/settings.py (merge-tree exit1); main vs each branch clean. Not caused by multilang. Refresh at integration; no protected branch modified.
-
-- CRITERIA_READY: six frozen API/criteria docs written and schema/link checks pass. Core/API Sol now active in core worktree, FE implementing, assessment baseline then harness. All rollout flags remainOFF; quality acceptance NOT RUN.
+2026-10-04 update: core42f8d40 fixes T7-01..08 (130 targetedpass), independent round2 running; core1/5. Assessmentf31a86c review R-01..09 FAIL, fix1/5 active. FE d7c7eab realHTTP/fakeLLM smokePASS; API docs underway. Browser fallback Playwright explicitly permitted after T3 unavailable. No liveGPU/mainmerge/deploy.
