@@ -135,7 +135,7 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
     ``system_blocks``) are both preserved as-is.
     """
     parts: list[str] = []
-    if profile_name != "translate":
+    if profile_name not in {"translate", "translate_v2", "ocr_correction"}:
         parts.append(_date_line())
     if grounding_context:
         parts.append(grounding_context)
