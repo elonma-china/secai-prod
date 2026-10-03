@@ -145,3 +145,27 @@ This is a CPU/mock checkpoint, not reviewer acceptance. The full suite on this
 SHA, loaded model/tokenizer attestation, integrated file/OCR tests, live direction
 quality and security release gates remain **NOT RUN/BLOCKED** here. No GPU or live
 model call was made.
+
+## Independent T7 round 3, fix cycle 3/5
+
+Independent review of `dbda8ec` closed the reproduced R2-01, R2-02 and R2-04
+cases and found one remaining CORE-07 failure: a short Arabic instruction before
+a long Russian error message was falsely rejected at the ≥90% contrary-script
+threshold. The code/test commit
+`e9a2fd0e7224daa147a738a429028f777b923b0e` **changes approach**: the
+percentage threshold is removed. Without validated LID, every accepted source
+gets `SOURCE_LANGUAGE_UNCERTAIN`; `SOURCE_LANGUAGE_MISMATCH` is reserved for
+prose with at least 16 alphabetic characters, all from one explicitly contrary
+Unicode script. A single Arabic word before a Russian error is mixed and allowed.
+
+`tests/multilang/test_review_round3.py` reproduced R3-01 before the change and
+now covers the exact long mixed message, a shorter mixed error, transliterated
+technical prose, and wholly Cyrillic prose declared Arabic. The isolated CPU
+test command used in prior cycles yielded **139 passed** (`46` multilang plus
+`93` legacy) in **9.64s**. `git diff --check` passed before the scoped commit.
+
+R3-01 is **fixed for the reported case in local tests**, pending independent
+review. This rule does not identify the actual language of a text; it only
+rejects a narrow wholly contrary-script case. The final full suite, loaded
+checkpoint/tokenizer attestation, integrated file/OCR tests, live 16-direction
+quality and security evaluation remain **NOT RUN/BLOCKED** in this worktree.
