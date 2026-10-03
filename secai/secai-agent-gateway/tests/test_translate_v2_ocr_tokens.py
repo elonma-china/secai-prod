@@ -1,6 +1,6 @@
 import pytest
 
-from secai_gateway.translation.technical_tokens import protect_literals, restore_literals
+from secai_gateway.translation.technical_tokens import literal_spans, protect_literals, restore_literals
 from secai_gateway.translation.types import TranslationError
 
 
@@ -43,3 +43,22 @@ def test_secret_never_reaches_model():
     protected = protect_literals(source)
     assert "sk_live_" not in protected.text
     assert restore_literals(protected.text, protected) == source
+
+
+@pytest.mark.parametrize("left,right", [("中", "中"), ("Ж", "Я"), ("ا", "ب")])
+def test_technical_tokens_adjacent_to_non_ascii_script(left, right):
+    source = f"{left}CVE-2024-1234{right} {left}CWE-79{right} {left}192.0.2.1{right}"
+    protected = protect_literals(source)
+    for literal in ("CVE-2024-1234", "CWE-79", "192.0.2.1"):
+        assert literal not in protected.text
+    assert restore_literals(protected.text, protected) == source
+    assert len(literal_spans(source)) == 3
+
+
+@pytest.mark.parametrize("source", [
+    "preCVE-2024-1234", "CVE-2024-1234suffix", "CVE-2024-1234_more",
+    "CVE-2024-1234.txt", "x192.0.2.1", "192.0.2.1suffix",
+    "xCWE-79", "CWE-79suffix",
+])
+def test_technical_tokens_inside_longer_ascii_identifiers_are_not_masked(source):
+    assert literal_spans(source) == ()

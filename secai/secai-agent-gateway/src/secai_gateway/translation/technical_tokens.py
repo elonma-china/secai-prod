@@ -26,13 +26,15 @@ _PLACEHOLDER_LIKE = re.compile(r"⟦[A-Za-z][A-Za-z0-9:]*⟧")
 _CREDENTIAL = re.compile(
     r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
     r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+)")
-_IP = re.compile(r"(?<![\w.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![\w./])")
+_IP = re.compile(r"(?<![A-Za-z0-9_.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![A-Za-z0-9_./])")
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     _PLACEHOLDER_LIKE,
     re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
     re.compile(r"-----BEGIN[^\n]*-----[\s\S]*?-----END[^\n]*-----"),
     re.compile(r"\b(?:https?|ftp|ssh|file)://[^\s<>\"')\]]+", re.I),
-    re.compile(r"\bCVE-\d{4}-\d{4,7}\b|\bCWE-\d{1,5}\b", re.I),
+    # ASCII identifier boundaries let CJK/Cyrillic/Arabic prose touch a token
+    # without admitting a substring of a longer ASCII filename or identifier.
+    re.compile(r"(?<![A-Za-z0-9_.-])(?:CVE-\d{4}-\d{4,7}|CWE-\d{1,5})(?![A-Za-z0-9_.-])", re.I),
     re.compile(r"(?<!\w)[A-Za-z]:\\[^\s\"']+|(?<![\w/])/(?:[\w.-]+/)+[\w.-]+"),
     re.compile(r"\b[0-9a-fA-F]{16,}\b"),
     re.compile(r"\b[A-Za-z][A-Za-z0-9_.+-]*[ /-]v?\d+(?:\.\d+){1,4}(?:[-+][\w.]+)?\b"),
