@@ -41,3 +41,9 @@ Verification after the feature and dependency update:
 Dependency remediation used the smallest compatible patched line verified locally: Vite `6.4.3` (and esbuild `0.25.12`), Vitest `4.1.11`, DOMPurify `3.4.16`. `@vitejs/plugin-react` remains `4.7.0`, whose Vite 6 peer range is compatible. Both dev and preview servers now default to loopback. The baseline audit table above records inherited findings; the current lockfile has 0 npm audit findings. This does not certify unrelated application behavior or backend security.
 
 Browser desktop/mobile screenshots and real-backend smoke are pending the integration environment and quality/resource gates. No live model inference was run for this FE report.
+
+## Review round 1: runtime font CDN
+
+Independent review of `0ea22cb` reported **FE-03 Medium FAIL**: inherited `index.html` still requested Google Fonts at runtime, despite the new panel's local fallback stack. The focused fix is commit `38c99f4` (`fix(fe): remove runtime font CDN links`), which removes the stylesheet and preconnect links. Existing CSS falls back to installed system fonts; no font asset or CDN was added.
+
+Verification at `38c99f4`: a source check for `fonts.googleapis.com`, `fonts.gstatic.com` and external CSS imports returned no matches; an HTML parser found zero external `link`/`script` URLs in both source and built `index.html`, and the built CSS contains neither font CDN host. `npm run build` passed (existing bundle-size warning); `npm test` passed 21/21; `git diff --check` passed. This checks the shipped resource references. A browser network trace and new visual screenshot were not available in this fix round. The root browser mock report records functional RTL, copy, CJK/Russian and 390px layout assertions but no saved images; it is not live-quality evidence. FE-03 requires independent re-review after this fix.
