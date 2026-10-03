@@ -35,3 +35,6 @@
 - User authorized code execution. Created independent assessment/core/FE worktrees from main ce9cd47; criteria/docs in planning worktree.
 - Ruling: CPU implementation/tests flagsOFF proceed after criteria while live quality gates remain release blockers; no staged quality claims.
 - Other task now expands file/OCR multilingual independently; all its source remains protected. OCR holds exclusive GPU benchmark slot; ours read-only metadata only.
+
+- Astra A completed six frozen contract/criteria documents, CRITERIA_READY. Root relayed to Sol core/FE/assessment.
+- Baseline first bounded run:903pass19fail1skip2redis-setup errors; redis optional dependency being installed in isolated venv for matching rerun. No inherited failure hidden.

@@ -161,3 +161,17 @@ New code exclusively `src/secai_gateway/multilang/`, `api/multilang/`, `multilan
 ## Existing cross-branch conflicts before multilang code
 
 `git merge-tree --write-tree feature/import-file-translate feature/image-ocr-translate` returned1 at import365e9e0/OCR99cd0a2. Conflicts: `prompts/profiles.yaml` (content), `translation/settings.py` (add/add). These predate this feature; no protected branch modified. Each protected branch can still be tested independently with multilang; full combined runtime evidence requires owner-resolved snapshots or a reviewed disposable-only reconciliation, never silent resolution on their branches.
+
+## Uncommitted protected source inventory
+
+import: 0 uncommitted source/test/deploy paths at this checkpoint.
+
+```text
+(none)
+```
+
+OCR: 1 uncommitted source/test/deploy paths at this checkpoint.
+
+```text
+ M secai/secai-agent-gateway/deploy/ocr/server.py
+```

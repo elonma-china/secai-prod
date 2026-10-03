@@ -1,6 +1,6 @@
 # Multilang — STATE
 
-- Phase: EXECUTION/T0-T1; user authorized implementation. Criteria + preflight + FE preparation active; live benchmark/merge/deploy NOT RUN.
+- Phase: EXECUTION/CRITERIA_READY + CPU_IMPLEMENTATION; user authorized implementation. Criteria + preflight + FE preparation active; live benchmark/merge/deploy NOT RUN.
 - Plan: `docs/plans/multilang-translate.md`.
 - Source: `docs/plans/multilang-source-requirements.txt` (exact user attachment).
 - Scope: zh/ja/ko/fr/de/es/ru/ar ↔ vi (16 new); en↔vi regression. Latest user clarification: deployed DuyTa is the runtime orchestrator and translator. Confirmed: maximum3 auxiliary models total (OCR/language-ID/evaluation), tried sequentially; DuyTa excluded from auxiliary count and remains unchanged.
@@ -41,3 +41,5 @@ No language marked beta/stable/qualified; all eight new-language rollout flags m
 - SharedGPU: other task STATE explicitly grants OCR exclusive benchmark reservation; no live inference/training/model loads authorized until reservation release. Read-only preflight observed ~7586MiB free, ~41%util; not a capacity guarantee.
 
 - Pre-existing import/OCR cross-merge conflict at365e9e0/99cd0a2 in profiles.yaml and translation/settings.py (merge-tree exit1); main vs each branch clean. Not caused by multilang. Refresh at integration; no protected branch modified.
+
+- CRITERIA_READY: six frozen API/criteria docs written and schema/link checks pass. Core/API Sol now active in core worktree, FE implementing, assessment baseline then harness. All rollout flags remainOFF; quality acceptance NOT RUN.
