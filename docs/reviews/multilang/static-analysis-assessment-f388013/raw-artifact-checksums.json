@@ -1,0 +1,14 @@
+{
+  "raw/all-apiiro-malicious-code-ruleset.json": "532b5dde0d1f4f4036458b68e6b6f997c2b9bf909a0db8ceb12ef298bcc30edb",
+  "raw/all-apiiro-malicious-code-ruleset.sarif": "4982bfb45a636c6cc1c962c3a34870bc00680cd9a68118a846fa7f78f647ce60",
+  "raw/all-elttam-semgrep-rules.json": "8b73dba9200531d79f330c152df082df6c2a62d17fc9d016d5ab8f58d34da894",
+  "raw/all-elttam-semgrep-rules.sarif": "3703f14b48bad963e7ca59c6da38b2efd155b24ea910fab926190854482ea695",
+  "raw/all-secrets.json": "6b0c07c14802ff5a32e35ea292290cfcd5a54a2d9306b333c4cba576d327b21f",
+  "raw/all-secrets.sarif": "562c6638fcc521af430ca8e4d3266e923a394a012d0c8e9ccdb558a2c5f0f1c7",
+  "raw/all-security-audit.json": "5c5ca78bb241402b334de4155ee5a7222d8b44db39a5c425bfd1bafb4026485e",
+  "raw/all-security-audit.sarif": "3e4f684ed3ae66f8b89734fc440b62d3d82615483937c712011050b5c858d60c",
+  "raw/all-trailofbits-semgrep-rules.json": "ab2352f85acbfb47300b6f1b3a89c17d8ce51842b0e15cbcfa727aef4bcbc378",
+  "raw/all-trailofbits-semgrep-rules.sarif": "6e0165ddabcca591dd7fc7791e63da1ce62790c2ec3b67feadc393d7de1e7be9",
+  "raw/python-python.json": "734fa9d0b19fbaef47ae8809c0f09e7a75071e497ebbc04e0c8a0fb3835780bb",
+  "raw/python-python.sarif": "5d327a91df03dd89b817b253a56f294b1185b8856d2b82185d5e8473ac24d372"
+}
