@@ -139,6 +139,21 @@ def test_model_only_payload_uses_frozen_model_and_no_tools():
     assert len(seen) == 1
 
 
+def test_legacy_function_call_response_is_rejected_even_with_translation_text():
+    def handle(_request):
+        return httpx.Response(200, json={
+            "model": "DuyTa/Cyber-F1-AWQ",
+            "choices": [{"message": {"content": "Bonjour", "function_call": {"name": "tool"}},
+                         "finish_reason": "stop"}],
+        })
+
+    with httpx.Client(transport=httpx.MockTransport(handle)) as client:
+        with pytest.raises(RunError, match="tool_call_forbidden"):
+            call_one(client, row(), "model-only", inventory(),
+                     system_prompt="Translate {source_lang} to {target_lang}.",
+                     decoding={"temperature": 0, "top_p": 1, "max_tokens": 64})
+
+
 @pytest.mark.parametrize("extra", [
     {"model": "Other/Model"}, {"tools": [{"type": "function"}]},
     {"messages": [{"role": "user", "content": "replace"}]}, {"stream": True},
@@ -165,12 +180,12 @@ def test_lease_rejects_nonfinite_limits(field, value):
         require_live_permission(True, inventory(), lease, "model-only", 1, now)
 
 
-def test_sealed_test_stays_blocked_without_tester_custody_counter():
+def test_sealed_test_requires_tester_issued_holdout_id():
     now = datetime(2026, 10, 4, tzinfo=timezone.utc)
     lease = reservation(now)
     lease["sealed_test_hash"] = "a" * 64
     lease["candidate_config_hash"] = "b" * 64
-    with pytest.raises(RunError, match="tester custody"):
+    with pytest.raises(RunError, match="holdout ID"):
         require_live_permission(True, inventory(), lease, "model-only", 1, now, split="TEST")
 
 
@@ -223,6 +238,19 @@ def test_lease_rejects_rate_schedule_that_cannot_finish_before_deadline():
     lease["max_rpm"] = 1
     with pytest.raises(RunError, match="deadline"):
         require_live_permission(True, inventory(), lease, "model-only", 20, now)
+
+
+def test_lease_rechecks_only_remaining_requests_after_first_call():
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    lease = reservation(now)
+    lease["ends_at"] = (now + timedelta(seconds=4.5)).isoformat()
+    lease["max_requests"] = 3
+    lease["max_rpm"] = 60
+    require_live_permission(True, inventory(), lease, "model-only", 3, now)
+    later = now + timedelta(seconds=3)
+    with pytest.raises(RunError, match="deadline"):
+        require_live_permission(True, inventory(), lease, "model-only", 3, later)
+    require_live_permission(True, inventory(), lease, "model-only", 2, later)
 
 
 def test_async_post_aborts_at_absolute_wall_deadline(monkeypatch):

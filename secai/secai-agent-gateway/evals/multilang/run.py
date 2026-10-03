@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import os
+import stat
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from urllib.parse import urlparse
 import httpx
 
 from .manifest import validate_manifest
+from .evidence import claim_signed_run, digest, verify_alignment, verify_envelope
 
 
 MODES = frozenset({"model-only", "legacy-api", "multilang-api"})
@@ -123,11 +125,10 @@ def require_live_permission(
         raise RunError("worst-case cost exceeds reservation max_cost_usd")
     if split == "TEST" and (
         not reservation.get("sealed_test_hash") or
-        not reservation.get("candidate_config_hash")
+        not reservation.get("candidate_config_hash") or
+        not reservation.get("holdout_id")
     ):
-        raise RunError("sealed TEST and candidate config hashes are required")
-    if split == "TEST":
-        raise RunError("TEST is blocked until a tester custody counter and holdout retirement record are integrated")
+        raise RunError("sealed TEST, candidate config and holdout ID are required")
 
 
 def remaining_request_timeout(reservation: dict[str, Any], now: datetime) -> float:
@@ -223,7 +224,7 @@ def _parse_response(response: httpx.Response, mode: str) -> dict[str, Any]:
             if body.get("model") != MODEL_ID:
                 raise RunError("response model identity mismatch")
             choice = body["choices"][0]
-            if choice.get("message", {}).get("tool_calls"):
+            if choice.get("message", {}).get("tool_calls") or choice.get("message", {}).get("function_call"):
                 raise RunError("tool_call_forbidden")
             if choice.get("finish_reason") != "stop":
                 raise RunError("truncated_completion")
@@ -294,6 +295,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--inventory", type=Path)
     parser.add_argument("--reservation", type=Path)
+    parser.add_argument("--alignment-attestation", type=Path)
     parser.add_argument("--prompt", type=Path)
     parser.add_argument("--decoding", type=Path)
     parser.add_argument("--live", action="store_true")
@@ -320,8 +322,14 @@ def main(argv: list[str] | None = None) -> int:
         raise RunError("frozen inventory file is required for --live")
     if parsed.reservation is None:
         raise RunError("shared GPU reservation file is required for --live")
+    if parsed.alignment_attestation is None:
+        raise RunError("tester-signed alignment attestation is required for --live")
     inventory = _strict_json(parsed.inventory)
-    lease = _strict_json(parsed.reservation)
+    alignment_envelope = _strict_json(parsed.alignment_attestation)
+    alignment_digest = verify_alignment(manifest, alignment_envelope)
+    lease_envelope = _strict_json(parsed.reservation)
+    lease = verify_envelope(lease_envelope, "run-lease")
+    lease_digest = digest(lease_envelope)
     now = datetime.now(timezone.utc)
     require_live_permission(True, inventory, lease, parsed.mode, len(schedule), now, split=parsed.split)
     if parsed.mode == "model-only" and inventory.get("endpoint") != "http://192.165.134.28:10739/v1":
@@ -330,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
         raise RunError("gateway model configuration lacks independent attestation")
     if any(row.get("data_classification") not in {"public", "anonymized"} for row in schedule):
         raise RunError("live corpus requires public/anonymized data_classification")
-    if parsed.output.exists():
+    if parsed.output.exists() or parsed.output.is_symlink():
         raise RunError("result output already exists; never overwrite a run")
     if parsed.mode == "model-only":
         if not parsed.prompt or not parsed.decoding:
@@ -352,15 +360,27 @@ def main(argv: list[str] | None = None) -> int:
         lease.get("candidate_config_hash") != config_hash
     ):
         raise RunError("sealed TEST or candidate config hash differs from frozen lease")
+    output_digest = hashlib.sha256(str(parsed.output.resolve()).encode()).hexdigest()
+    if (lease.get("data_hash") != summary.data_hash or
+            lease.get("config_hash") != config_hash or
+            lease.get("inventory_sha256") != digest(inventory) or
+            lease.get("alignment_map_sha256") != alignment_digest or
+            lease.get("output_path_sha256") != output_digest):
+        raise RunError("signed lease does not bind exact corpus, config, inventory, alignment and output path")
     worst_case = lease.get("worst_case_cost_usd_per_request")
     if not _finite_number(worst_case, lower=0.000000001, upper=1000) or len(schedule) * worst_case > lease["max_cost_usd"]:
         raise RunError("worst-case cost exceeds reservation max_cost_usd")
     lock_path = parsed.reservation.with_suffix(parsed.reservation.suffix + ".lock")
-    with lock_path.open("a+") as lock:
+    lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(lock_fd, "r+") as lock:
+        lock_stat = os.fstat(lock.fileno())
+        if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_mode & 0o022:
+            raise RunError("assessment lock file must be a protected regular file")
         try:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RunError("shared assessment lock is held") from exc
+        claim_signed_run(lease, lease_envelope)
         headers = {}
         token = os.environ.get("MULTILANG_ASSESSMENT_API_KEY")
         if token:
@@ -372,19 +392,26 @@ def main(argv: list[str] | None = None) -> int:
             ))
         next_request_at = time.monotonic()
         with parsed.output.open("x", encoding="utf-8") as output:
-            for sample in schedule:
-                current_lease = _strict_json(parsed.reservation)
+            for index, sample in enumerate(schedule):
+                remaining_requests = len(schedule) - index
+                current_envelope = _strict_json(parsed.reservation)
+                if digest(current_envelope) != lease_digest:
+                    raise RunError("signed reservation artifact changed during run")
+                current_lease = verify_envelope(current_envelope, "run-lease")
                 require_live_permission(
-                    True, inventory, current_lease, parsed.mode, len(schedule),
+                    True, inventory, current_lease, parsed.mode, remaining_requests,
                     datetime.now(timezone.utc), split=parsed.split,
                 )
                 wait = next_request_at - time.monotonic()
                 if wait > 0:
                     time.sleep(wait)
                 # A lease can expire or be revoked while rate limiting sleeps.
-                current_lease = _strict_json(parsed.reservation)
+                current_envelope = _strict_json(parsed.reservation)
+                if digest(current_envelope) != lease_digest:
+                    raise RunError("signed reservation artifact changed during run")
+                current_lease = verify_envelope(current_envelope, "run-lease")
                 require_live_permission(
-                    True, inventory, current_lease, parsed.mode, len(schedule),
+                    True, inventory, current_lease, parsed.mode, remaining_requests,
                     datetime.now(timezone.utc), split=parsed.split,
                 )
                 started = time.monotonic()

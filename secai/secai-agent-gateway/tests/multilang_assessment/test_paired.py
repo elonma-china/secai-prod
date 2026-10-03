@@ -55,7 +55,7 @@ def test_paired_quality_report_joins_same_en_vi_sources_but_blocks_margin():
                                    phase="DEV", rounds=1)
     assert set(report["directions"]) == {"vi>en", "en>vi"}
     assert report["directions"]["vi>en"]["delta"] == 0
-    assert report["directions"]["vi>en"]["noninferiority_gate"] == "PENDING_BASELINE_MARGIN"
+    assert report["directions"]["vi>en"]["noninferiority_gate"] == "BLOCKED_MISSING_SIGNED_EVIDENCE"
     assert report["release_gate"] == "BLOCKED"
 
 

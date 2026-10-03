@@ -15,6 +15,7 @@ from typing import Any, Iterable
 
 from .manifest import DIRECTIONS, ManifestError, canonical_hash, normalized_source, validate_manifest
 from .metrics import diagnostic_metrics
+from .evidence import verify_alignment, verify_margin_policy, verify_reviews
 
 
 class ScoreError(ValueError):
@@ -184,16 +185,24 @@ def score_results(
     phase: str,
     rounds: int = 3,
     min_samples_per_direction: int = 30,
+    alignment_attestation: dict[str, Any] | None = None,
+    review_attestation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(rounds, int) or rounds < 1:
         raise ScoreError("rounds must be a positive integer")
     if mode not in {"model-only", "legacy-api", "multilang-api"} or phase not in {"DEV", "TEST"}:
         raise ScoreError("mode and phase must be explicit supported values")
     samples = list(manifest)
+    result_records = list(results)
+    review_records = list(annotations)
     try:
         inventory = validate_manifest(samples, require_directions=False)
     except ManifestError as exc:
         raise ScoreError(str(exc)) from exc
+    alignment_digest = verify_alignment(samples, alignment_attestation) if alignment_attestation is not None else None
+    review_digest = (verify_reviews(samples, result_records, review_records, review_attestation)
+                     if review_attestation is not None else None)
+    evidence_verified = alignment_digest is not None and review_digest is not None
     samples = [
         sample for sample in samples if sample["split"] == phase and
         (mode == "model-only" or
@@ -206,7 +215,7 @@ def score_results(
     result_map = {}
     modes = set()
     hashes = {"model_id": set(), "model_revision": set(), "prompt_hash": set(), "config_hash": set(), "data_hash": set()}
-    for result in results:
+    for result in result_records:
         if not isinstance(result, dict):
             raise ScoreError("result must be an object")
         sample_id, turn = result.get("sample_id"), result.get("round")
@@ -231,7 +240,7 @@ def score_results(
     if len(modes) > 1 or any(len(values) > 1 for values in hashes.values()):
         raise ScoreError("mode/model/prompt/config/data hash changed within one scored run")
     annotation_map = {}
-    for annotation in annotations:
+    for annotation in review_records:
         if not isinstance(annotation, dict):
             raise ScoreError("annotation must be an object")
         sample_id, turn = annotation.get("sample_id"), annotation.get("round")
@@ -344,6 +353,8 @@ def score_results(
             complete = missing == 0 and unreviewed == 0 and unadjudicated == 0
             enough = scheduled >= min_samples_per_direction and len(group_passes) >= min_samples_per_direction
             rubric_threshold_gate = _gate(complete=complete, enough=enough, threshold_met=passed / scheduled >= 0.70)
+            off_target_threshold_gate = _gate(complete=complete and errors == 0, enough=enough,
+                                              threshold_met=off_target / scheduled <= 0.02)
             span_seconds = (
                 (max(completions) - min(starts)).total_seconds()
                 if len(starts) == scheduled and len(completions) == scheduled else None
@@ -371,14 +382,15 @@ def score_results(
                 "stale_reviews": stale_reviews,
                 "unadjudicated": unadjudicated,
                 "rubric_threshold_gate": rubric_threshold_gate,
-                "quality_gate": "BLOCKED" if rubric_threshold_gate == "PASS" else rubric_threshold_gate,
+                "quality_gate": rubric_threshold_gate if evidence_verified else "BLOCKED",
                 "off_target": off_target,
                 "off_target_rate": off_target / scheduled,
                 "off_target_wilson95_unique": (
                     wilson95(sum(any(values) for values in off_target_groups.values()), len(off_target_groups))
                     if complete and errors == 0 and len(off_target_groups) == len(group_passes) else None
                 ),
-                "off_target_gate": _gate(complete=complete and errors == 0, enough=enough, threshold_met=off_target / scheduled <= 0.02),
+                "off_target_threshold_gate": off_target_threshold_gate,
+                "off_target_gate": off_target_threshold_gate if evidence_verified else "BLOCKED",
                 "entity_exact_occurrences": entity_ok,
                 "entity_total_occurrences": entity_total,
                 "entity_unverifiable_samples": entity_unverifiable,
@@ -417,7 +429,10 @@ def score_results(
         "prompt_hash": next(iter(hashes["prompt_hash"])) if hashes["prompt_hash"] else None,
         "config_hash": next(iter(hashes["config_hash"])) if hashes["config_hash"] else None,
         "directions": directions,
-        "review_provenance_status": "UNVERIFIED_DECLARATIONS",
+        "alignment_status": "VERIFIED" if alignment_digest else "UNVERIFIED",
+        "alignment_attestation_sha256": alignment_digest,
+        "review_provenance_status": "VERIFIED_TESTER_ATTESTATION" if review_digest else "UNVERIFIED_DECLARATIONS",
+        "review_attestation_sha256": review_digest,
         "release_gate": "BLOCKED",
         "release_note": "Requires all 18 directions, independent rubric review, sealed TEST and AS-10 baseline margin.",
     }
@@ -428,6 +443,10 @@ def paired_quality_report(
     baseline_results: Iterable[dict[str, Any]], candidate_results: Iterable[dict[str, Any]],
     baseline_annotations: Iterable[dict[str, Any]], candidate_annotations: Iterable[dict[str, Any]],
     *, phase: str, rounds: int = 3,
+    alignment_attestation: dict[str, Any] | None = None,
+    baseline_review_attestation: dict[str, Any] | None = None,
+    candidate_review_attestation: dict[str, Any] | None = None,
+    margin_attestation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     samples = list(manifest)
     baseline = list(baseline_results)
@@ -435,8 +454,17 @@ def paired_quality_report(
     before_reviews = list(baseline_annotations)
     after_reviews = list(candidate_annotations)
     # Reuse run integrity checks before forming pairs; declarative review still cannot certify release.
-    score_results(samples, baseline, before_reviews, mode="legacy-api", phase=phase, rounds=rounds)
-    score_results(samples, candidate, after_reviews, mode="model-only", phase=phase, rounds=rounds)
+    score_results(samples, baseline, before_reviews, mode="legacy-api", phase=phase, rounds=rounds,
+                  alignment_attestation=alignment_attestation,
+                  review_attestation=baseline_review_attestation)
+    score_results(samples, candidate, after_reviews, mode="model-only", phase=phase, rounds=rounds,
+                  alignment_attestation=alignment_attestation,
+                  review_attestation=candidate_review_attestation)
+    margin = policy_digest = None
+    if margin_attestation is not None:
+        margin, policy_digest = verify_margin_policy(samples, baseline, candidate, margin_attestation)
+    evidence_verified = (alignment_attestation is not None and baseline_review_attestation is not None and
+                         candidate_review_attestation is not None and margin is not None)
     before = {(item["sample_id"], item["round"]): item for item in baseline}
     after = {(item["sample_id"], item["round"]): item for item in candidate}
     before_review = {(item["sample_id"], item["round"]): item for item in before_reviews}
@@ -473,15 +501,29 @@ def paired_quality_report(
                 candidate_values.append(outcome(key, after, after_review))
                 groups.append(sample["source_group"])
         directions[direction] = paired_bootstrap_delta(baseline_values, candidate_values, groups)
+        if evidence_verified and directions[direction]["unique_groups"] >= 30 and rounds >= 3:
+            # Bonferroni across two one-sided direction tests: alpha=0.025 each.
+            lower = directions[direction]["ci95"][0]
+            directions[direction]["noninferiority_gate"] = "PASS" if lower >= -margin else "FAIL"
+            directions[direction]["frozen_margin"] = margin
+        else:
+            directions[direction]["noninferiority_gate"] = (
+                "BLOCKED_INSUFFICIENT_SAMPLE" if evidence_verified else "BLOCKED_MISSING_SIGNED_EVIDENCE"
+            )
         directions[direction]["baseline_quality_rate"] = sum(baseline_values) / len(baseline_values)
         directions[direction]["candidate_quality_rate"] = sum(candidate_values) / len(candidate_values)
         directions[direction]["paired_requests"] = len(groups)
     if set(directions) != {"vi>en", "en>vi"}:
         raise ScoreError("paired report requires both en/vi control directions")
+    pair_gates = [item["noninferiority_gate"] for item in directions.values()]
+    combined_gate = ("BLOCKED" if not evidence_verified or any(gate.startswith("BLOCKED") for gate in pair_gates)
+                     else ("PASS" if all(gate == "PASS" for gate in pair_gates) else "FAIL"))
     return {"phase": phase, "data_hash": canonical_hash(samples), "directions": directions,
-            "review_provenance_status": "UNVERIFIED_DECLARATIONS",
+            "margin_attestation_sha256": policy_digest,
+            "review_provenance_status": "VERIFIED_TESTER_ATTESTATION" if evidence_verified else "UNVERIFIED_DECLARATIONS",
+            "noninferiority_gate": combined_gate,
             "release_gate": "BLOCKED",
-            "reason": "Independent review provenance and pre-frozen baseline margin are absent"}
+            "reason": "Overall release still requires every direction, sealed TEST, security and integration evidence"}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -491,6 +533,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--annotations", type=Path, required=True)
     parser.add_argument("--baseline-results", type=Path)
     parser.add_argument("--baseline-annotations", type=Path)
+    parser.add_argument("--alignment-attestation", type=Path)
+    parser.add_argument("--review-attestation", type=Path)
+    parser.add_argument("--baseline-review-attestation", type=Path)
+    parser.add_argument("--margin-attestation", type=Path)
     parser.add_argument("--mode", choices=("model-only", "legacy-api", "multilang-api"), required=True)
     parser.add_argument("--phase", choices=("DEV", "TEST"), required=True)
     parser.add_argument("--rounds", type=int, default=3)
@@ -502,20 +548,32 @@ def main(argv: list[str] | None = None) -> int:
     manifest = load_jsonl(parsed.manifest)
     results = load_jsonl(parsed.results)
     annotations = load_jsonl(parsed.annotations)
+    alignment_attestation = json.loads(parsed.alignment_attestation.read_text()) if parsed.alignment_attestation else None
+    review_attestation = json.loads(parsed.review_attestation.read_text()) if parsed.review_attestation else None
     report = score_results(
         manifest, results, annotations, mode=parsed.mode, phase=parsed.phase,
         rounds=parsed.rounds,
         min_samples_per_direction=parsed.min_samples_per_direction,
+        alignment_attestation=alignment_attestation,
+        review_attestation=review_attestation,
     )
     if bool(parsed.baseline_results) != bool(parsed.baseline_annotations):
         raise ScoreError("both paired baseline result and annotation files are required")
     if parsed.baseline_results:
         if parsed.mode != "model-only":
             raise ScoreError("paired en/vi comparison requires model-only candidate results")
+        baseline_review_attestation = (json.loads(parsed.baseline_review_attestation.read_text())
+                                       if parsed.baseline_review_attestation else None)
+        margin_attestation = (json.loads(parsed.margin_attestation.read_text())
+                              if parsed.margin_attestation else None)
         report["en_vi_paired"] = paired_quality_report(
             manifest, load_jsonl(parsed.baseline_results), results,
             load_jsonl(parsed.baseline_annotations), annotations,
             phase=parsed.phase, rounds=parsed.rounds,
+            alignment_attestation=alignment_attestation,
+            baseline_review_attestation=baseline_review_attestation,
+            candidate_review_attestation=review_attestation,
+            margin_attestation=margin_attestation,
         )
     with parsed.output.open("x", encoding="utf-8") as output:
         json.dump(report, output, ensure_ascii=False, indent=2)
