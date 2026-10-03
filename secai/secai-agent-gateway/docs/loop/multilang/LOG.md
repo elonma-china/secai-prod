@@ -38,3 +38,13 @@
 
 - Astra A completed six frozen contract/criteria documents, CRITERIA_READY. Root relayed to Sol core/FE/assessment.
 - Baseline first bounded run:903pass19fail1skip2redis-setup errors; redis optional dependency being installed in isolated venv for matching rerun. No inherited failure hidden.
+
+- T0 matching baseline complete:905pass19fail1skip, no setup errors; evidence sanitized, same19 inherited failures.
+- FE mock21tests/build passed before dependency remediation; no browser/live quality claim. Core and harness implementation ongoing.
+
+- FE commits8b41f62(snapshot)+0ea22cb(feature):21tests/build/audit0 reported; T3 real-browser mock DOM checks pass ArabicRTL/Latinbdi/plaintext/exactcopy/CJK/Russian/mobile390px/masterOFF. Native screenshot API fails; screenshot evidence pending.
+- Native fresh-review spawn hit threadlimit. Started fresh independent Sol CLI reviewer in detached FE reviewworktree. First sandbox runner failed bwrap loopback before code inspection; retried with environment-matching unrestricted command sandbox, strict read-only task instructions. No review gate waived.
+
+2026-10-04 update: core42f8d40 fixes T7-01..08 (130 targetedpass), independent round2 running; core1/5. Assessmentf31a86c review R-01..09 FAIL, fix1/5 active. FE d7c7eab realHTTP/fakeLLM smokePASS; API docs underway. Browser fallback Playwright explicitly permitted after T3 unavailable. No liveGPU/mainmerge/deploy.
+
+Browser realHTTP/fakeLLM vi→ar,vi→zh-Hans,ja→vi PASS on corebfe4e6b; screenshots inspected, repeat finalSHA. FE API docs788da975cf. Independent Vanguard round1 plan/tests started on isolated security branch core42f8d40; final integration/live pending.
