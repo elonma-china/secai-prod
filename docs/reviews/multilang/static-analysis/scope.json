@@ -1,0 +1,61 @@
+{
+  "sha": "43e5f2233256a74b091c41b3f14b325f44161a6a",
+  "files": [
+    {
+      "path": "secai/secai-agent-gateway/secai-fe-devspace/src/api/multilang.ts",
+      "sha256": "b0aac6e985cb5913528b69bf5f236f01ff3c74b14edd559eeaafa0d0ce06b895"
+    },
+    {
+      "path": "secai/secai-agent-gateway/secai-fe-devspace/src/screens/MultilangTranslatePanel.tsx",
+      "sha256": "c554a093ba54de6a67b741940a1cc8e9c7a9a0ef4b8f0cbf798df6836e88f231"
+    },
+    {
+      "path": "secai/secai-agent-gateway/secai-fe-devspace/src/screens/TranslateScreen.tsx",
+      "sha256": "9a87f8dc5c2b4a4c72fe3daf7cfee744d65d168139c1d5ee3b386f4f7f35627d"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/api/multilang/__init__.py",
+      "sha256": "97fee0b1caafd460f403932b2ab020d33212f853c13f8fffa471d486eb3edff0"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/api/multilang/routes.py",
+      "sha256": "763b4bf8c74241e52f56a70cf3c814221d27cde56151ef45934fcb8492bc44ae"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/__init__.py",
+      "sha256": "86268a4431eceae812b03c9c0fdbae0e24deeaf00731c7613fcb1282bda2b15e"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/chunks.py",
+      "sha256": "ab3394387bd965391c104bb8931d2d01eb1d1357407eba824b7f0396f91a15fb"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/config.py",
+      "sha256": "490b7b3ad97e5847f862af29968d88b76395da45441af346735a719672fc0211"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/errors.py",
+      "sha256": "9fefaa7c4f170dcbca15ab3a52e0f55f65299af9d8e9ba95260f90e83a0cb3f8"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/literals.py",
+      "sha256": "0404ae6ff6b9e94f29c2656d8ce6728777e0f1b8a2ab317cd468ee3f9d0031e1"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/provider.py",
+      "sha256": "8528ead7d2881bb4c8b831c495b863f3cfb5d19ec61c247f94c603675c4ba298"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/registry.py",
+      "sha256": "d16e415aa883d35348aad962aa92434a665b9fb07a23c984ed319c25a0169953"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang/service.py",
+      "sha256": "6e6b24fba7aa128f0101dd530e583156d94aff2b63d631b303093244a9dd9962"
+    },
+    {
+      "path": "secai/secai-agent-gateway/src/secai_gateway/multilang_app.py",
+      "sha256": "1dea20cfc22587e9c2d94942a029ac48d08cc234bd102e5257cec5ace76890cd"
+    }
+  ]
+}
