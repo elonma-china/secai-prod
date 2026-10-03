@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.responses import Response
 
 
 def route_limit(path: str) -> int:
@@ -59,7 +60,7 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
         if request.url.path.startswith("/ai/v2/translate/"):
             origin = request.headers.get("origin", "")
             if request.method == "OPTIONS" and origin in state.settings.cors_origins:
-                return JSONResponse(None, status_code=204, headers={
+                return Response(status_code=204, headers={
                     "Access-Control-Allow-Origin": origin,
                     "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
                     "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key",

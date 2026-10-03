@@ -29,7 +29,7 @@ async def test_worker_publishes_file_result_without_session_id(tmp_path):
     row = store.get(admitted["job_id"])
     assert row["status"] == "succeeded"
     assert "Xin chào CVE-2024-12345" in row["result_json"]
-    assert runner.calls == [("translate", None)]
+    assert runner.calls == [("translate_v2", None)]
 
 
 @pytest.mark.asyncio
@@ -60,3 +60,18 @@ async def test_running_cancel_aborts_llm_and_becomes_terminal(tmp_path):
     await asyncio.wait_for(work, 3)
     assert runner.cancelled
     assert store.get(job["job_id"])["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_auto_non_vi_cross_pair_fails_after_admission(tmp_path):
+    from secai_gateway.translation.worker import Worker
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"The system found a critical vulnerability.",
+                      ".txt", "auto", "fr", "127.0.0.1", None)
+    assert await Worker(store, settings, EchoRunner()).run_once()
+    row = store.get(job["job_id"])
+    assert row["status"] == "failed"
+    assert row["error_code"] == "UNSUPPORTED_LANGUAGE_PAIR"

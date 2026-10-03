@@ -38,6 +38,9 @@ class JobStore:
             CREATE TABLE IF NOT EXISTS keys (
               kind TEXT NOT NULL, key_hash TEXT NOT NULL, fingerprint TEXT NOT NULL,
               job_id TEXT NOT NULL, PRIMARY KEY(kind,key_hash));
+            CREATE TABLE IF NOT EXISTS tombstones (
+              id TEXT PRIMARY KEY, status TEXT NOT NULL,
+              expires REAL NOT NULL, tombstone_until REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS rates (
               ip TEXT NOT NULL, bucket TEXT NOT NULL, window INTEGER NOT NULL,
               count INTEGER NOT NULL, PRIMARY KEY(ip,bucket,window));
@@ -65,10 +68,13 @@ class JobStore:
         return value
 
     def _lookup(self, db: sqlite3.Connection, job_id: str, now: float) -> sqlite3.Row:
-        if len(job_id) != 32 or any(c not in "0123456789abcdef" for c in job_id):
-            raise TranslationError("JOB_NOT_FOUND", "Job was not found.")
+        well_formed = len(job_id) == 32 and all(c in "0123456789abcdef" for c in job_id)
         row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
-        if row is None:
+        if row is None or not well_formed:
+            tombstone = db.execute("SELECT tombstone_until FROM tombstones WHERE id=?",
+                                   (job_id,)).fetchone()
+            if tombstone and now < tombstone["tombstone_until"] and well_formed:
+                raise TranslationError("JOB_EXPIRED", "Job has expired.")
             raise TranslationError("JOB_NOT_FOUND", "Job was not found.")
         if row["expires"] is not None and now >= row["expires"]:
             if now < row["tombstone_until"]:
@@ -111,6 +117,9 @@ class JobStore:
                 if found:
                     previous = db.execute("SELECT expires,tombstone_until FROM jobs WHERE id=?",
                                           (found["job_id"],)).fetchone()
+                    if previous is None:
+                        previous = db.execute("SELECT expires,tombstone_until FROM tombstones WHERE id=?",
+                                              (found["job_id"],)).fetchone()
                     if previous and previous["tombstone_until"] is not None and now >= previous["tombstone_until"]:
                         db.execute("DELETE FROM keys WHERE kind=? AND key_hash=?", (kind, key_hash))
                     else:
@@ -179,8 +188,8 @@ class JobStore:
         now = time.time() if now is None else now
         with self._tx() as db:
             changed = db.execute("UPDATE jobs SET lease_until=?,updated=? WHERE id=? AND "
-                                 "generation=? AND status='running'", 
-                                 (now + self.settings.lease_seconds, now, job_id, generation))
+                                 "generation=? AND status='running' AND lease_until>? AND deadline>?",
+                                 (now + self.settings.lease_seconds, now, job_id, generation, now, now))
             return changed.rowcount == 1
 
     def progress(self, job_id: str, generation: int, stage: str, completed: int,
@@ -189,8 +198,8 @@ class JobStore:
         with self._tx() as db:
             changed = db.execute("UPDATE jobs SET stage=?,completed=max(completed,?),"
                                  "total=coalesce(total,?),updated=? WHERE id=? AND generation=? "
-                                 "AND status='running' AND deadline>?",
-                                 (stage, completed, total, now, job_id, generation, now))
+                                 "AND status='running' AND lease_until>? AND deadline>?",
+                                 (stage, completed, total, now, job_id, generation, now, now))
             return changed.rowcount == 1
 
     def _terminal(self, db: sqlite3.Connection, job_id: str, status: str, now: float,
@@ -206,11 +215,14 @@ class JobStore:
                error_code: str | None = None, now: float | None = None) -> bool:
         now = time.time() if now is None else now
         with self._tx() as db:
-            row = db.execute("SELECT status,generation FROM jobs WHERE id=?", (job_id,)).fetchone()
+            row = db.execute("SELECT status,generation,lease_until,deadline FROM jobs WHERE id=?",
+                             (job_id,)).fetchone()
             if row is not None and row["status"] == "cancelling" and row["generation"] == generation:
                 self._terminal(db, job_id, "cancelled", now)
                 return False
             if row is None or row["status"] != "running" or row["generation"] != generation:
+                return False
+            if row["lease_until"] <= now or row["deadline"] <= now:
                 return False
             self._terminal(db, job_id, "failed" if error_code else "succeeded", now, error_code, result)
             return True
@@ -237,12 +249,15 @@ class JobStore:
             for row in rows:
                 Path(row["input_path"]).unlink(missing_ok=True)
                 db.execute("UPDATE jobs SET input_path=NULL,input_bytes=0 WHERE id=?", (row["id"],))
-            expired = db.execute("SELECT id FROM jobs WHERE expires IS NOT NULL AND expires<=?",
+            expired = db.execute("SELECT id,status,expires,tombstone_until,input_path FROM jobs "
+                                 "WHERE expires IS NOT NULL AND expires<=?",
                                  (now,)).fetchall()
             for row in expired:
-                db.execute("UPDATE jobs SET result_json=NULL,warnings_json='[]',input_path=NULL,"
-                           "input_bytes=0,source_lang='',target_lang='',error_code=NULL "
-                           "WHERE id=?", (row["id"],))
+                if row["input_path"]:
+                    Path(row["input_path"]).unlink(missing_ok=True)
+                db.execute("INSERT OR REPLACE INTO tombstones VALUES (?,?,?,?)",
+                           (row["id"], row["status"], row["expires"], row["tombstone_until"]))
+                db.execute("DELETE FROM jobs WHERE id=?", (row["id"],))
             db.execute("DELETE FROM keys WHERE job_id IN "
-                       "(SELECT id FROM jobs WHERE tombstone_until<=?)", (now,))
-            db.execute("DELETE FROM jobs WHERE tombstone_until<=?", (now,))
+                       "(SELECT id FROM tombstones WHERE tombstone_until<=?)", (now,))
+            db.execute("DELETE FROM tombstones WHERE tombstone_until<=?", (now,))

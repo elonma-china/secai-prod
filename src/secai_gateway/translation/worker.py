@@ -34,9 +34,9 @@ class WorkerContext(ProcessingContext):
             raise asyncio.CancelledError
 
     async def complete(self, profile: str, prompt: str) -> tuple[str, dict[str, Any]]:
-        if profile not in {"translate", "ocr_correction"}:
+        if profile not in {"translate_v2", "ocr_correction"}:
             raise TranslationError("INTERNAL_ERROR", "Unsupported transformation profile.")
-        await self.checkpoint("translating" if profile == "translate" else "correcting")
+        await self.checkpoint("translating" if profile == "translate_v2" else "correcting")
         remaining = max(0.01, self.row["deadline"] - time.time())
         async with self.llm_gate:
             for attempt in range(self.settings.llm_max_retries + 1):

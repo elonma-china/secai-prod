@@ -20,6 +20,8 @@ dependencies = [
   "python-multipart>=0.0.20",
   "python-docx>=1.2,<2",
   "olefile>=0.47,<1",
+  "lingua-language-detector==2.0.2",
+  "regex>=2024.11,<2027",
   "pyyaml>=6",
   "fastembed>=0.4",
   # Runtime for the input-sanitization classifier head (matmul + softmax/sigmoid). Already
