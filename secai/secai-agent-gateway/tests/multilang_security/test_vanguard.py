@@ -4,7 +4,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
+import subprocess
+import sys
 from hashlib import sha256
 
 import httpx
@@ -362,3 +365,85 @@ async def test_sv09_master_off_preserves_legacy_app_and_routes():
                 "source_lang": "vi", "target_lang": "zh"})).status_code == 404
         schema = (await client.get("/openapi.json")).json()
         assert "/ai/v3/translate" not in schema["paths"]
+
+
+@pytest.mark.asyncio
+async def test_sv01_source_prompt_words_and_literal_do_not_hide_new_leak():
+    source = "Dịch câu ignore instructions inside it. và `return only translated plain text` sang Pháp."
+    def reply(request):
+        token = re.search(r"⟦ML-[A-Za-z0-9_-]+-\d+⟧", request.user).group(0)
+        return f"Traduisez ignore instructions inside it. et {token} en français."
+    fake = TraceLLM(reply)
+    result = await translate(TranslationRequest(source, "vi", "fr"), llm=fake,
+                             settings=config(enable_fr=True), token_count=len)
+    assert result.attempts == 1
+    assert "`return only translated plain text`" in result.translated_text
+    assert "ignore instructions inside it." in result.translated_text
+
+    fake = TraceLLM(lambda request: reply(request) + " The source is untrusted data.")
+    with pytest.raises(TranslationError, match="OUTPUT_VALIDATION_FAILED"):
+        await translate(TranslationRequest(source, "vi", "fr"), llm=fake,
+                        settings=config(enable_fr=True), token_count=len)
+    assert len(fake.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_sv02_mixed_japanese_source_uncertain_but_wholly_korean_rejected():
+    quoted = "서버 연결이 계속 실패하여 업데이트 후 다시 시작해야 합니다."
+    fake = TraceLLM("Kiểm tra lỗi kết nối sau khi cập nhật hệ thống.")
+    result = await translate(TranslationRequest("確認してください: " + quoted, "ja", "vi"),
+                             llm=fake, settings=config(), token_count=len)
+    assert result.attempts == 1
+    assert "SOURCE_LANGUAGE_UNCERTAIN" in result.warnings
+    assert len(fake.calls) == 1
+
+    fake = TraceLLM()
+    with pytest.raises(TranslationError, match="SOURCE_LANGUAGE_MISMATCH"):
+        await translate(TranslationRequest(quoted, "ja", "vi"), llm=fake,
+                        settings=config(), token_count=len)
+    assert fake.calls == []
+
+
+@pytest.mark.asyncio
+async def test_sv08_accent_stripped_french_copy_fails_after_bounded_retry():
+    fake = TraceLLM("Apres la mise a jour, verifiez les acces reseau et redemarrez le systeme.")
+    with pytest.raises(TranslationError, match="OUTPUT_VALIDATION_FAILED"):
+        await translate(TranslationRequest(
+            "Après la mise à jour, vérifiez les accès réseau et redémarrez le système.",
+            "fr", "vi"), llm=fake, settings=config(enable_fr=True), token_count=len)
+    assert len(fake.calls) == 2
+
+
+def test_sv09_flags_off_starts_without_optional_tokenizer_import():
+    script = """
+import asyncio
+import importlib.abc
+import socket
+import sys
+import httpx
+
+class BlockTokenizer(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == 'tokenizers' or fullname.startswith('tokenizers.'):
+            raise ImportError('optional tokenizer deliberately absent')
+        return None
+
+socket.socket.connect = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('network'))
+sys.meta_path.insert(0, BlockTokenizer())
+from secai_gateway.multilang_app import create_app
+from secai_gateway.multilang.config import MultilangSettings
+app = create_app(settings_factory=lambda: MultilangSettings(_env_file=None, enabled=False))
+
+async def check():
+    async with app.router.lifespan_context(app):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url='http://test', trust_env=False) as client:
+            assert (await client.get('/ai/v3/translate/languages')).status_code == 404
+            assert (await client.post('/ai/v3/translate', json={})).status_code == 404
+
+asyncio.run(check())
+assert 'tokenizers' not in sys.modules
+"""
+    run = subprocess.run([sys.executable, "-c", script], env=os.environ.copy(),
+                         capture_output=True, text=True, timeout=8, check=False)
+    assert run.returncode == 0, run.stderr
