@@ -75,7 +75,12 @@ def detect_source_language(blocks: tuple[DocumentBlock, ...]) -> TargetLang | No
 
 def _chunks(text: str, maximum: int = 3000) -> tuple[str, ...]:
     """Split at word boundaries without cutting a technical placeholder."""
-    pieces = re.findall(r"⟦T[0-9a-f]{24}:\d+⟧|\s+|[^\s]+", text)
+    pieces: list[str] = []
+    for segment in re.split("(" + _PLACEHOLDER.pattern + ")", text):
+        if _PLACEHOLDER.fullmatch(segment):
+            pieces.append(segment)
+        else:
+            pieces.extend(re.findall(r"\s+|[^\s]+", segment))
     out: list[str] = []
     current = ""
     for piece in pieces:

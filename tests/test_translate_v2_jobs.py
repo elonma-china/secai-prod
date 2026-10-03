@@ -110,3 +110,50 @@ def test_private_storage_permissions(tmp_path):
     assert store.db_path.stat().st_mode & 0o077 == 0
     job = store.admit("file", b"private", ".txt", "en", "vi", "peer", None)
     assert Path(job["input_path"]).stat().st_mode & 0o077 == 0
+
+
+def test_offline_worker_queued_deadline_releases_quota_and_expires_artifact(tmp_path):
+    from secai_gateway.translation.jobs import JobStore
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   job_deadline_seconds=1, max_active_per_ip=1,
+                                   artifact_cleanup_seconds=1, result_ttl_seconds=10,
+                                   tombstone_ttl_seconds=10, _env_file=None)
+    store = JobStore(settings)
+    first = store.admit("file", b"sensitive input", ".txt", "en", "vi", "peer", None, now=100)
+    path = Path(first["input_path"])
+    assert path.exists()
+
+    # No worker ever calls claim(). The read path still reaches terminal state.
+    failed = store.get(first["job_id"], now=102)
+    assert (failed["status"], failed["stage"], failed["error_code"]) == (
+        "failed", "done", "PROCESSING_TIMEOUT")
+    assert failed["expires"] == 112
+    second = store.admit("file", b"next", ".txt", "en", "vi", "peer", None, now=102)
+    assert second["status"] == "queued"
+
+    store.reap(now=104)
+    assert not path.exists()
+    with pytest.raises(TranslationError) as exc:
+        store.get(first["job_id"], now=112)
+    assert exc.value.code == "JOB_EXPIRED"
+    store.reap(now=112)
+    assert not path.exists()
+
+
+def test_stalled_running_job_deadline_fences_worker_and_releases_ip(tmp_path):
+    from secai_gateway.translation.jobs import JobStore
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   job_deadline_seconds=2, max_active_per_ip=1,
+                                   _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"stalled", ".txt", "en", "vi", "peer", None, now=100)
+    claim = store.claim(now=100)
+    failed = store.get(job["job_id"], now=103)
+    assert (failed["status"], failed["error_code"]) == ("failed", "PROCESSING_TIMEOUT")
+    assert store.finish(job["job_id"], claim["generation"], result={"leak": "stale"}, now=103) is False
+    assert store.admit("file", b"next", ".txt", "en", "vi", "peer", None,
+                       now=103)["status"] == "queued"

@@ -72,7 +72,20 @@ class JobStore:
         value["job_id"] = value["id"]
         return value
 
+    def _expire_overdue_jobs(self, db: sqlite3.Connection, now: float) -> None:
+        # Reads and admissions run this even when no worker is alive. The job's
+        # deadline includes its queue wait, and terminalization releases IP quota.
+        overdue = db.execute("SELECT id,status FROM jobs WHERE status IN "
+                             "('queued','running','cancelling') AND deadline<=?",
+                             (now,)).fetchall()
+        for row in overdue:
+            if row["status"] == "cancelling":
+                self._terminal(db, row["id"], "cancelled", now)
+            else:
+                self._terminal(db, row["id"], "failed", now, "PROCESSING_TIMEOUT")
+
     def _lookup(self, db: sqlite3.Connection, job_id: str, now: float) -> sqlite3.Row:
+        self._expire_overdue_jobs(db, now)
         well_formed = len(job_id) == 32 and all(c in "0123456789abcdef" for c in job_id)
         row = db.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         if row is None or not well_formed:
@@ -117,6 +130,7 @@ class JobStore:
         key_hash = hashlib.sha256(key.encode()).hexdigest() if key else None
         created_paths: list[Path] = []
         with self._tx(created_paths) as db:
+            self._expire_overdue_jobs(db, now)
             if key_hash:
                 found = db.execute("SELECT fingerprint,job_id FROM keys WHERE kind=? AND key_hash=?",
                                    (kind, key_hash)).fetchone()
@@ -173,6 +187,7 @@ class JobStore:
     def claim(self, *, now: float | None = None) -> dict[str, Any] | None:
         now = time.time() if now is None else now
         with self._tx() as db:
+            self._expire_overdue_jobs(db, now)
             db.execute("UPDATE jobs SET status='cancelled',stage='done',updated=?,expires=?,"
                        "tombstone_until=?,ip=NULL WHERE status='cancelling' AND lease_until<?",
                        (now, now + self.settings.result_ttl_seconds,
@@ -254,6 +269,7 @@ class JobStore:
     def reap(self, *, now: float | None = None) -> None:
         now = time.time() if now is None else now
         with self._tx() as db:
+            self._expire_overdue_jobs(db, now)
             rows = db.execute("SELECT id,input_path FROM jobs WHERE status IN "
                               "('succeeded','failed','cancelled') AND "
                               "updated+?<=? AND input_path IS NOT NULL",
