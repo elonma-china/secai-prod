@@ -102,7 +102,9 @@ def _strong_source_mismatch(text: str, source: str) -> bool:
         "zh-Hans": {"ARABIC", "CYRILLIC", "HANGUL"},
         "ja": {"ARABIC", "CYRILLIC", "HANGUL"},
     }[source]
-    return any(scripts.count(script) / len(scripts) >= .9 for script in contrary)
+    # Without a validated LID model, even a tiny declared-script preface may be
+    # intentional context for a long quoted error. Only wholly contrary prose is certain.
+    return len(set(scripts)) == 1 and scripts[0] in contrary
 
 
 def _output_check(source: str, masked_source: str, output: str, masked_output: str,
@@ -166,14 +168,10 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     for chunk, _, _ in chunks:
         if token_count(system) + token_count(chunk) + settings.max_output_tokens + settings.chat_template_overhead_tokens > settings.context_tokens:
             raise TranslationError("TOKEN_LIMIT_EXCEEDED")
-    source_evidence = _script_evidence(prose, source)
     if _strong_source_mismatch(prose, source):
         raise TranslationError("SOURCE_LANGUAGE_MISMATCH")
-    if source_evidence == "no":
-        source_evidence = "unknown"  # Latin transliteration alone is not confident LID.
-    warnings: list[str] = []
-    if source_evidence == "unknown":
-        warnings.append("SOURCE_LANGUAGE_UNCERTAIN")
+    # Script presence cannot prove vi/fr/de/es, zh-Hans/MSA, or Cyrillic language.
+    warnings: list[str] = ["SOURCE_LANGUAGE_UNCERTAIN"]
     outputs: list[str] = []
     attempts = 0
     for chunk, separator, tokens in chunks:
