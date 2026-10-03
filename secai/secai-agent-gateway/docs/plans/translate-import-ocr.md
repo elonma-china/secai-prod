@@ -2,7 +2,7 @@
 
 > **For agentic workers:** dùng `superpowers:subagent-driven-development` cho điều phối và `superpowers:executing-plans` trong từng worker. Thực hiện theo checkbox, không bỏ cổng kiểm tra. Người dùng đã cho phép triển khai sau rà plan; chỉ bắt đầu code sau Bước 0 và CRITERIA PASS. Lượt rà hiện tại kết thúc bằng báo cáo, không khởi chạy code trong lúc rà.
 
-**Goal:** thêm dịch toàn bộ TXT/DOCX/DOC và dịch ảnh qua OCR tự host ≤4B tham số; giữ nguyên API cũ; bàn giao API cho FE cùng bằng chứng kiểm thử BE. FE implementation ngoài phạm vi theo cập nhật mới nhất.
+**Goal:** thêm dịch toàn bộ TXT/DOCX/DOC và dịch ảnh qua OCR tự host ≤4B tham số, hỗ trợ vi↔en/zh/ja/ko/fr/de/es/ru/ar; giữ nguyên API cũ; bàn giao API cho FE cùng bằng chứng kiểm thử BE. FE implementation ngoài phạm vi theo cập nhật mới nhất.
 
 **Architecture:** API mới `/ai/v2/translate/...`, dùng job có trạng thái bền vững và worker giới hạn tài nguyên. Tách extraction, OCR và translation khỏi router cũ; chỉ tái sử dụng helper thuần và runner hiện có. OCR chạy service riêng trên VPS/instance Vast đang kết nối, gateway gọi qua kênh được bảo vệ; không cài stack GPU vào môi trường gateway hoặc host OCR trên GPU local.
 
@@ -22,6 +22,16 @@ Người dùng chốt **chỉ triển khai BE**, thiết kế API theo conventio
 - Vanguard vẫn kiểm upload, OCR, injection, resource, data và logic. Kiểm JWT/SSO/role/tenant ghi OUT OF SCOPE theo quyết định này; quyền truy cập bằng job ID ghi rõ trong report, không đánh dấu phân quyền người dùng là PASS. Test ID khó đoán, không lộ ID, không có list API và expiry vẫn bắt buộc. Nếu môi trường production không có lớp bảo vệ đáng tin, phải nêu rõ rủi ro tồn dư, không tuyên bố production-secure.
 - Tài liệu bàn giao vẫn phục vụ FE, có curl/job lifecycle/limits/errors thực tế. Không ghi 401/403 hoặc token flow nếu BE thực tế không triển khai chúng.
 - Vẫn có review độc lập, 30 mẫu ×3 lượt cho mỗi feature BE, vanguard, astra B integration. Không merge main/deploy production tự động. Lượt rà hiện tại chỉ sửa tài liệu; execution đã được người dùng cho phép, không cần hỏi lại cùng phạm vi.
+
+### User scope update — đa ngôn ngữ, cả import và OCR
+
+- Codes chính xác: vi/en/zh/ja/ko/fr/de/es/ru/ar; source thêm auto, target không auto. Bắt buộc 18 hướng vi↔9 ngôn ngữ còn lại; giữ same-language identity. Không mở yêu cầu all-pairs: source/target explicit non-vi khác nhau trả 400 UNSUPPORTED_LANGUAGE_PAIR; unknown code 400 INVALID_LANGUAGE. zh nhận nguồn giản/phồn thể, đầu ra mặc định giản thể.
+- Auto giữ source_lang=auto trong response; worker resolve một ngôn ngữ chính từ prose sau extraction/correction, loại protected literals khỏi detection. Dùng adapter pinned (có thể incumbent LLM profile translate_v2, enum validation, deterministic decode), không bắt buộc hosted classifier/model mới. Explicit source bypass detection. Mixed/ambiguous/unknown không đoán: failed LANGUAGE_DETECTION_FAILED; detected pair ngoài matrix: failed UNSUPPORTED_LANGUAGE_PAIR (semantic422 sau202, statusGET200). Literal-only auto identity. Ghi evidence cơ chế detection, không claim perfect confidence.
+- Sol-1 tạo prompt/profile mới translate_v2 tools=[], base=false, max_turns=2 và adapter/sanitization đa ngôn ngữ; không sửa profile/prompt/API translate cũ. Sol-2 sở hữu ocr_correction; hai entry profiles.yaml thêm bằng commit phối hợp qua root, không overwrite. Runner date skip chỉ bổ sung hai profile mới. Correction giữ ngôn ngữ nguồn.
+- Giữ corpus30 cũ, thêm multilingual supplements: import32 case (2/hướng mới) =>62 case×3=186 jobs; OCR32 ảnh (4/ngôn ngữ mới) =>62 ảnh, thêm32 jobs VI→ngôn ngữ mới =>94 jobs/lượt, 282/3lượt, chưa tính negative. Không coi lặp ảnh/đổi target là ảnh độc lập; không bỏ mẫu khó hay rewrite evidence cũ. Chi phí live inference và người đánh giá ngôn ngữ tăng, phải ghi rõ/pacing theo quota.
+- OCR raw/corrected micro và macro >=65% từng ngôn ngữ/từng lượt; giữ technical F1 và 100% preservation. Dịch mỗi hướng có rubric riêng về ý nghĩa, phủ proposition, phủ định, số, thuật ngữ, ngôn ngữ đích và token; người có năng lực ngôn ngữ/reference song ngữ công khai phù hợp phải chứng minh adequacy. OCR CER không chứng minh bản dịch đúng; 2 import case/hướng và4 OCR ảnh/ngôn ngữ chỉ là evidence tối thiểu trên corpus nhỏ, không chứng nhận rộng.
+- CJK chunk theo token/grapheme, không giả định có khoảng trắng; Arabic logical Unicode/RTL với IP/URL/CVE/code LTR không đảo chuỗi; giữ combining marks/Cyrillic/diacritics và literal. API chỉ JSON, không cam kết layout FE.
+- Shortlist HF trước model2/3 phải ghi evidence riêng đủ10 ngôn ngữ và OCR kỹ thuật, explicit support so với unknown; popularity không thay benchmark. Cap3 checkpoint giữ nguyên, Paddle đã tính1; evidence Paddle cũ không tự chứng minh các ngôn ngữ mới. Không model nào đạt tất cả language gates trong cap thì dừng/báo.
 
 ## 1. Ràng buộc toàn cục
 
@@ -93,14 +103,14 @@ Các đường dẫn module Python dưới đây tương đối với `src/secai
 
 | Owner | Thêm mới | File dùng chung có thể sửa tối thiểu |
 |---|---|---|
-| sol-1 | `api/translate_v2/{router,schemas}.py`, `translation/{settings,types,service,documents,jobs,worker}.py`, init modules, tests tương ứng | `app.py` để gắn router mới; `api/middleware.py` chỉ routing middleware v2 và redaction log v2; cấu hình access log bổ sung có scope v2; `pyproject.toml`, `uv.lock` cho dependency upload/extraction có pin; `.env.example` nếu có, nếu không tạo config mẫu mới |
+| sol-1 | `api/translate_v2/{router,schemas}.py`, `translation/{settings,types,service,documents,jobs,worker}.py`, init modules, tests tương ứng | `app.py` để gắn router mới; `prompts/translate_v2.md` và entry `translate_v2` trong `prompts/profiles.yaml` do sol-1 sở hữu, không overwrite entry ocr_correction của sol-2; `api/middleware.py` chỉ routing middleware v2 và redaction log v2; cấu hình access log bổ sung có scope v2; `pyproject.toml`, `uv.lock` cho dependency upload/extraction có pin; `.env.example` nếu có, nếu không tạo config mẫu mới |
 | sol-2 | `translation/{ocr_client,ocr_preprocess,ocr_correction,technical_tokens}.py`, `prompts/ocr_correction.md` riêng, `deploy/ocr/`, `evals/translation_ocr/`, test OCR | Sở hữu entry profile mới `ocr_correction` trong `prompts/profiles.yaml` (tools rỗng, base false); không đổi entry cũ. Không sửa shared files do sol-1 sở hữu; gửi nhu cầu qua điều phối. OCR runtime/dependency/container nằm riêng |
 | astra A | `docs/criteria/{import-file-translate,image-ocr-translate}.md`, `docs/api/translate-v2-contract.md` | Chốt schema và interfaces trước CODE, không code sản phẩm |
 | reviewer/tester/vanguard | `docs/reviews/`, `docs/test-results/`, `docs/security-tests/`, test harness riêng | Không sửa feature code; phát hiện test thiếu thì trả feedback, không tự sửa để PASS |
 | điều phối/warden | `docs/loop/STATE.md`, `docs/loop/LOG.md`, checkpoint notes | Điều phối là người ghi chính STATE/LOG; warden gửi đề xuất để tránh ghi đè đồng thời |
 | sol-docs | `docs/api/translate-import-ocr.md` | Chỉ tài liệu và bằng chứng curl staging |
 
-Không chủ động sửa `api/routes.py`, `api/schemas.py`, helper dịch cũ, profile dịch cũ hay global Settings. Chỉ thêm profile OCR correction vào registry hiện có nếu cần dùng runner; không sửa defaults của profile cũ. Config v2 ưu tiên class mới; sửa file cũ ngoài bảng cần astra xét và ghi lý do. Nếu bắt buộc thay hành vi API cũ, dừng xin quyết định người dùng.
+Không chủ động sửa `api/routes.py`, `api/schemas.py`, helper dịch cũ, profile dịch cũ hay global Settings. Chỉ thêm hai entry mới translate_v2 (sol-1) và ocr_correction (sol-2) vào registry hiện có; không sửa defaults của profile cũ. Config v2 ưu tiên class mới; sửa file cũ ngoài bảng cần astra xét và ghi lý do. Nếu bắt buộc thay hành vi API cũ, dừng xin quyết định người dùng.
 
 ## 4. Thiết kế và hợp đồng API đề xuất để astra A đóng băng
 
@@ -118,7 +128,7 @@ Không dùng `BackgroundTasks`/`create_task` trong web process làm cơ chế b�
 
 | Method + URL | Hành vi |
 |---|---|
-| `POST /ai/v2/translate/files` | Multipart: `file`, `source_lang` optional/auto/en/vi, `target_lang` bắt buộc en/vi; trả 202 job. Chỉ TXT/DOCX/DOC. |
+| `POST /ai/v2/translate/files` | Multipart: `file`, `source_lang` optional auto hoặc code hỗ trợ, `target_lang` bắt buộc code hỗ trợ theo matrix đa ngôn ngữ; trả 202 job. Chỉ TXT/DOCX/DOC. |
 | `POST /ai/v2/translate/images` | Multipart tương tự; giai đoạn đầu PNG/JPEG; trả 202 job OCR→correction→translation. PDF/SVG/GIF/TIFF không hỗ trợ. |
 | `GET /ai/v2/translate/jobs/{job_id}` | Trạng thái, stage, số block đã xử lý/tổng, warnings và lỗi an toàn. |
 | `GET /ai/v2/translate/jobs/{job_id}/result` | JSON chứa bản dịch toàn bộ và ordered blocks; OCR kèm raw/corrected text và cảnh báo. Truy cập bằng job ID; không có kiểm tra danh tính người dùng. |
@@ -175,7 +185,7 @@ Các giá trị là design budget, không phải hiệu năng đã đo. Astra A 
 - Output là text/ordered blocks, không cam kết dựng lại pagination, hình ảnh, font hoặc file Word giữ layout. Bảng giữ hàng/cột qua block metadata; mapping nguồn→đích truy vết được. Không silently bỏ part chưa hỗ trợ: warning hoặc lỗi theo criteria.
 - DOC: thử antiword trên mẫu có bảng/header/footer/footnote; nếu không đáp ứng đủ cấu trúc thì dùng LibreOffice headless → DOCX trong sandbox không mạng, user profile tạm, macro disabled, timeout/memory/process limit. Không chọn công cụ chỉ vì nhỏ nếu làm mất nội dung. Reject macro/OLE/active external content theo policy trước converter; fixture chứng minh không có outbound fetch.
 - Lưu file bằng random internal ID; tên upload chỉ là metadata đã giới hạn/escape. Không nối filename vào path/shell; không `shell=True`.
-- Translation service mới dùng `CompletionRunner.complete("translate", prompt, None)` cùng helper thuần đã kiểm tra, không loopback gọi API cũ. Kiểm tra token theo occurrence trước/sau (không chỉ set), chống placeholder có sẵn trong input và masking lồng nhau. Mã dài vượt budget giữ nguyên thành block literal, chỉ dịch prose xung quanh; không cắt token và không gửi chunk quá model budget. Retry giới hạn rồi fail nếu integrity sai, không append dữ liệu bị mất vào sai chỗ.
+- Translation service mới dùng `CompletionRunner.complete("translate_v2", prompt, None)` cùng helper thuần đã kiểm tra, không loopback gọi API cũ. Kiểm tra token theo occurrence trước/sau (không chỉ set), chống placeholder có sẵn trong input và masking lồng nhau. Mã dài vượt budget giữ nguyên thành block literal, chỉ dịch prose xung quanh; không cắt token và không gửi chunk quá model budget. Retry giới hạn rồi fail nếu integrity sai, không append dữ liệu bị mất vào sai chỗ.
 
 ### 4.5. OCR và correction
 
@@ -263,7 +273,7 @@ Khảo sát web sơ bộ ngày 2026-10-03 đã thấy các nguồn dưới đây
 | [Surya](https://github.com/datalab-to/surya), [Marker](https://github.com/datalab-to/marker), [Chandra](https://github.com/datalab-to/chandra) | Tách toolkit/pipeline khỏi model. README Surya/Marker nêu điều kiện riêng cho weights; không coi code license là giấy phép weights hoặc tự cho rằng dùng thương mại miễn phí. |
 
 - [ ] Lập bảng revision, params tổng, code license, weights license, quyền sử dụng SecAI, runtime/CUDA, remote-code audit, disk estimate; model >4B hoặc license không đáp ứng bị loại trước benchmark, ghi lý do.
-- [ ] Trước load model 2/3, trình điều phối shortlist từ Hugging Face model card/API chính thức kèm ngày truy xuất: phù hợp OCR và nội dung Việt/Anh/kỹ thuật; tách claim hỗ trợ VI/EN rõ ràng khỏi multilingual chưa chắc; release/lastModified, downloads/likes, hoạt động discussion/maintainer gần đây (thiếu ghi unknown). Ưu tiên ứng viên gần đây khả thi trong <=4B/license/VRAM, không đặt ngưỡng phổ biến tùy ý. Quan tâm cộng đồng không thay benchmark/quality gates; tên model đề xuất chưa phải lựa chọn cuối.
+- [ ] Trước load model 2/3, trình điều phối shortlist từ Hugging Face model card/API chính thức kèm ngày truy xuất: phù hợp OCR/kỹ thuật với từng ngôn ngữ vi/en/zh/ja/ko/fr/de/es/ru/ar; tách claim hỗ trợ từng ngôn ngữ rõ ràng khỏi multilingual chưa chắc; release/lastModified, downloads/likes, hoạt động discussion/maintainer gần đây (thiếu ghi unknown). Ưu tiên ứng viên gần đây khả thi trong <=4B/license/VRAM, không đặt ngưỡng phổ biến tùy ý. Quan tâm cộng đồng không thay benchmark/quality gates; tên model đề xuất chưa phải lựa chọn cuối.
 - [ ] **User override — tối đa 3 model/checkpoint OCR chạy inference**, thay yêu cầu so sánh ít nhất 3 trước đây. Paddle đã inference tính model 1, chỉ còn tối đa 2 checkpoint khác. Đổi checkpoint tính model riêng; preprocessing/prompt/quantization của cùng checkpoint không tính thêm; chỉ nghiên cứu metadata không dùng slot. Chọn model đầu tiên đạt toàn bộ quality gates đã freeze, không phải dùng hết 3 slot nếu đã đủ. Ghi ledger checkpoint/config/kết quả; chạy tuần tự một model trên GPU. Hết 3 mà chưa model nào đạt thì dừng/báo, không chạy model 4. Giữ nguyên 3 lượt acceptance, >=65%, <=4B, VRAM/token gates và giới hạn vòng remediation; thay config không được dùng để bỏ các gate đó.
 - [ ] Tải weights ở bước chuẩn bị có mạng được phép, kiểm checksum/revision rồi inference offline; không để model tự fetch code/trọng số runtime.
 - [ ] Bộ calibration tách khỏi acceptance; không tuning trên ground truth acceptance. Giữ manifest/checksum và ground truth Unicode do người đánh giá kiểm tra, không để LLM tự chấm chính nó.
@@ -294,11 +304,11 @@ Mỗi branch có reviewer sol mới, `fork_turns=none`, worktree riêng checkout
 - [ ] Feedback bắt buộc `ID | tiêu chí hoặc test case | bằng chứng | mức độ | gợi ý sửa`; gửi điều phối, điều phối chuyển nguyên văn cho coder.
 - [ ] Sau fix, reviewer độc lập đọc commit mới và chạy lại affected+regression; lưu `docs/reviews/<task>-round-N.md`. Commit review report riêng; nếu không đổi code, checkpoint ghi lại cùng code hash, không tạo commit rỗng giả tiến độ.
 
-### 8.2. Acceptance: ít nhất 30 mẫu ×3 lượt mỗi feature
+### 8.2. Acceptance: corpus gốc30 + multilingual supplements ×3 lượt mỗi feature
 
 Tester sol riêng, test worktree riêng; chỉ bắt đầu sau branch review PASS. Dùng dữ liệu tổng hợp công khai/được phép, không production.
 
-| Bộ | Phân bổ tối thiểu 30 mẫu |
+| Bộ | Phân bổ corpus gốc30 được giữ nguyên; supplements theo scope update |
 |---|---|
 | Import | 8 TXT: UTF-8/BOM/UTF-16 LE/BE/CP1258/mixed newline/technical/long; 8 DOCX: mixed paragraphs/tables/header/footer/footnote/sections/Unicode/long; 6 DOC: VI/EN/tables/header-footer/footnote/long; 8 invalid: empty/corrupt/mismatch/PDF/oversize/binary-as-txt/unsafe archive/unsupported format |
 | OCR | 30 ảnh có chữ: 8 VI in rõ, 4 EN in rõ, 8 screenshot CVE/IP/URL/code, 6 điện thoại nghiêng/phối cảnh, 4 blur/low-contrast/rotation; bảo đảm giao nhau giữa tiếng Việt có dấu và token kỹ thuật |
@@ -388,7 +398,7 @@ Checklist bàn giao cuối:
 - [ ] Criteria từng task + frozen API contract + requirement/test matrix.
 - [ ] Baseline/post-change test counts/pass/fail/skip và OpenAPI/legacy behavior comparison.
 - [ ] OCR model/license/revision/checksum selection, ledger tối đa 3 model/checkpoint (Paddle tính 1), 3 lượt acceptance của model được chọn, metrics/latency/VRAM không điền số giả.
-- [ ] Import/OCR 30 mẫu ×3 lượt, token metrics và BE API smoke thật; FE smoke ngoài phạm vi.
+- [ ] Import62 case×3 và OCR62 ảnh/94jobs×3 tối thiểu, per-language/direction metrics và token metrics và BE API smoke thật; FE smoke ngoài phạm vi.
 - [ ] Số vòng fix/review/test/vanguard từng task; finding list/status/risk acceptance Medium nếu có.
 - [ ] Vanguard integrated gate, API handoff docs, STATE/LOG và resume instructions.
 - [ ] READY_FOR_USER_MERGE; chờ xác nhận riêng trước merge main.
