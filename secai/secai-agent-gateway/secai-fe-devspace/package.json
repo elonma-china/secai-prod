@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
-    "dompurify": "^3.1.6",
+    "dompurify": "3.4.16",
     "highlight.js": "^11.10.0",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
@@ -19,11 +20,15 @@
     "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.7.4",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^26.1.0",
     "typescript": "^5.5.4",
-    "vite": "^5.4.0"
+    "vite": "6.4.3",
+    "vitest": "4.1.11"
   }
 }

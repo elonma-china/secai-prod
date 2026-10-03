@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeftRight, Copy, Languages, ShieldCheck, ShieldX } from "lucide-react";
 import { ApiError, translateStream } from "../api";
+import { getMultilangCapabilities, MultilangApiError } from "../api/multilang";
+import type { MultilangCapabilities } from "../api/multilang";
 import Markdown from "../components/Markdown";
+import MultilangTranslatePanel from "./MultilangTranslatePanel";
 
 /** "Dịch văn bản" — gateway contract (see `api/messages.py::translate_langs`): the single
  * `language` field IS THE TARGET language ("dịch sang <language>"), not the source — the
@@ -28,6 +31,26 @@ export default function TranslateScreen({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<MultilangCapabilities | null>(null);
+  const [capabilityState, setCapabilityState] = useState<"loading" | "ready" | "off" | "error">("loading");
+  const [capabilityReload, setCapabilityReload] = useState(0);
+  const [mode, setMode] = useState<"legacy" | "multilang">("legacy");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setCapabilityState("loading");
+    getMultilangCapabilities(controller.signal).then((value) => {
+      if (controller.signal.aborted) return;
+      setCapabilities(value);
+      setCapabilityState("ready");
+    }).catch((failure: unknown) => {
+      if (controller.signal.aborted) return;
+      setCapabilities(null);
+      setCapabilityState(failure instanceof MultilangApiError && failure.status === 404 ? "off" : "error");
+      setMode("legacy");
+    });
+    return () => controller.abort();
+  }, [capabilityReload]);
 
   async function submit() {
     const value = text.trim();
@@ -84,9 +107,17 @@ export default function TranslateScreen({ userId }: { userId: string }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={{ padding: "16px 26px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
         <h3 style={{ fontSize: 21 }}>Dịch thuật bảo mật</h3>
+        {capabilityState === "ready" && capabilities && (
+          <div className="multilang-mode-switch" role="group" aria-label="Chế độ dịch">
+            <button className={"iasbtn ghost" + (mode === "legacy" ? " active" : "")} type="button" aria-pressed={mode === "legacy"} onClick={() => setMode("legacy")}>Dịch Việt–Anh</button>
+            <button className={"iasbtn ghost" + (mode === "multilang" ? " active" : "")} type="button" aria-pressed={mode === "multilang"} onClick={() => setMode("multilang")}>Mở dịch đa ngôn ngữ</button>
+          </div>
+        )}
+        {capabilityState === "off" && <div className="multilang-mode-note">Dịch đa ngôn ngữ chưa được bật trên máy chủ.</div>}
+        {capabilityState === "error" && <div className="multilang-mode-note" role="alert">Không tải được danh sách ngôn ngữ. <button className="iasbtn ghost" type="button" onClick={() => setCapabilityReload((n) => n + 1)}>Thử lại</button></div>}
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "24px 26px" }}>
+      {mode === "multilang" && capabilities ? <div style={{ flex: 1, overflow: "auto" }}><MultilangTranslatePanel capabilities={capabilities} /></div> : <div style={{ flex: 1, overflow: "auto", padding: "24px 26px" }}>
         {blocked && (
           <div className="banner-row" style={{ marginBottom: 16 }}>
             <div className="banner-422">
@@ -245,7 +276,7 @@ export default function TranslateScreen({ userId }: { userId: string }) {
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
