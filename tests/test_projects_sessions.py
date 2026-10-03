@@ -801,8 +801,8 @@ async def test_uc27_repeated_list_calls_and_rate_limit_table(tmp_path) -> None:
 
     assert route_limit("/sessions") == 120
     assert route_limit("/projects/p1/sessions") == 120
-    assert route_limit("/sessions/sess:abc/chat/stream") == 90
-    assert route_limit("/ai/chat") == 90
+    assert route_limit("/sessions/sess:abc/chat/stream") == 150
+    assert route_limit("/ai/chat") == 150
     assert route_limit("/ai/translate") == 10
 
 
@@ -886,3 +886,46 @@ async def test_uc30_stream_stamps_before_first_token_not_only_on_completion(tmp_
         got2 = (await client.get(f"/sessions/{sid2}", params={"user_id": "alice"})).json()
         assert not got2["meta"].get("title")
         assert not got2["meta"].get("last_activity")
+
+
+# ── UC-31 — GET /sessions/{sid}/messages hides linch's retry-tail + rejected drafts
+# (2026-09-26 persistence-leak fix, full HTTP round-trip through the real InMemorySessionStore) ─
+
+async def test_uc31_get_messages_filters_retry_tail_and_rejected_draft_end_to_end(tmp_path) -> None:
+    from linch.skills.system_reminder import wrap_in_system_reminder
+    from linch.types import Message, TextBlock
+
+    runner = ProjectFakeRunner(tmp_path)
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "alice"})).json()["session_id"]
+
+        # Simulate exactly what linch persists for one chat turn that triggered ONE
+        # RequireChatGroundingHook force_continue round-trip before landing on a grounded
+        # final answer: [real question] [rejected draft] [retry-tail feedback] [final answer].
+        await runner.session_store.append_messages(sid, [
+            Message(role="user", content=[TextBlock(text="OWASP Top 10 2025 gồm gì?")]),
+            Message(role="assistant", content=[TextBlock(text="(draft trả lời từ trí nhớ, chưa tra web)")]),
+            Message(role="user", content=[TextBlock(
+                text=wrap_in_system_reminder(
+                    "Route=taxonomy: call web_fetch on the current canonical page ..."))]),
+            Message(role="assistant", content=[TextBlock(text="Theo OWASP Top 10 2025: A01 ... A10 ...")]),
+        ])
+
+        resp = await client.get(f"/sessions/{sid}/messages", params={"user_id": "alice"})
+        assert resp.status_code == 200
+        messages = resp.json()["messages"]
+
+        # Only the real question and the FINAL (accepted) answer survive — no stray
+        # "<system-reminder>" bubble, no rejected draft.
+        assert len(messages) == 2
+        assert messages[0]["message"]["role"] == "user"
+        assert messages[0]["message"]["content"][0]["text"] == "OWASP Top 10 2025 gồm gì?"
+        assert messages[1]["message"]["role"] == "assistant"
+        assert messages[1]["message"]["content"][0]["text"] == "Theo OWASP Top 10 2025: A01 ... A10 ..."
+        joined = " ".join(
+            block.get("text", "") for m in messages for block in m["message"]["content"]
+        )
+        assert "<system-reminder>" not in joined
+        assert "draft trả lời từ trí nhớ" not in joined
+        # seq numbers are the ORIGINAL store seqs (rows are dropped, not renumbered).
+        assert [m["seq"] for m in messages] == [1, 4]

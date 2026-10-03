@@ -85,6 +85,37 @@ async def cve_exists_in_kb(cve_id: str) -> bool:
     return bool(row and row[0])
 
 
+async def cve_cwe_refs(cve_id: str) -> list[str]:
+    """H1 (2026-09-22, exploit metadata grounding hygiene): the CWE ids a CVE record is
+    linked to via `(CVE)-[:HAS_WEAKNESS]->(CWE)` — the same CVE-record KB lookup
+    `cve_exists_in_kb` above already does (same client/auth/endpoint), extended one hop to
+    the CVE's weakness edges so `/ai/exploit`'s `metadata.cwe_refs` can be populated from a
+    real CVE record instead of staying an always-empty key. Never raises: any transport/
+    query error, or the CVE simply not existing/having no HAS_WEAKNESS edge, all fail-closed
+    to `[]` — same "absence is not an error" contract `cve_exists_in_kb` uses for `False`."""
+    cve_id = (cve_id or "").strip().upper()
+    if not cve_id:
+        return []
+    body = {"statements": [{
+        "statement": "MATCH (c:CVE {id: $id})-[:HAS_WEAKNESS]->(w:CWE) RETURN DISTINCT w.id AS id",
+        "parameters": {"id": cve_id},
+    }]}
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "Authorization": _auth_header()}
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(f"{_neo4j_http_url()}/db/{NEO4J_DATABASE}/tx/commit",
+                                      json=body, headers=headers, timeout=15)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            return []
+    if data.get("errors"):
+        return []
+    results = data.get("results") or []
+    rows = (results[0].get("data") if results else None) or []
+    return sorted({str(r["row"][0]).upper() for r in rows if r.get("row") and r["row"][0]})
+
+
 async def _neo4j_search(query: str, ctx: ToolContext, depth: int = 3) -> ToolResult:
     depth = max(1, min(depth or 3, 5))
     mode = "count" if COUNT_RE.search(query or "") else "list"

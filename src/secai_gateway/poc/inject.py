@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from typing import Any
 
@@ -274,6 +275,195 @@ def render_files(files: list[dict[str, Any]], default_lang: str = "", show_tree:
     return "\n\n".join(parts)
 
 
+# ── PC4 (2026-09-22): stub-content sanity filter for the "real" Section-1 tiers ─────────
+# QA report: CVE-2025-30065 came back `section1_tier=real_consolidated` (implying real
+# fetched/merged exploit code) while Mục 1's actual body was a content-free static HTML shell —
+# `<!DOCTYPE html>...<h1>CVE-2025-30065 Exploit Executed</h1>...` — a narrative "it worked" page
+# with zero exploit logic, directly contradicting Mục 3's own "no CVSS / no specific info"
+# admission for the SAME CVE. Root cause: `_blocks_for` (and therefore
+# `has_real_code_evidence`/`enforce_reference_code`/`enforce_section1`'s tier dispatch) treats
+# ANY non-empty `source_code`/`source_files` as injectable "real" code — nothing downstream ever
+# asks whether the bytes contain actual exploit/payload logic. The LLM consolidation pass
+# (poc/consolidate.py) apparently ignored its real (non-Python) source input and hallucinated
+# this narrative page instead; its own validator (`validation_failure`) only syntax-checks
+# Python or a short interpreter allow-list (ruby/php/bash/js/perl — `_SYNTAX_CHECK_CMDS`) and
+# fails OPEN (accepts) for any other language, including html — exactly the shape this stub used.
+#
+# Fix: a narrow, deterministic, CONTENT-based filter — never a language ban. Real markup PoCs
+# (XSS `<script>`, CSRF auto-submit `<form>`, SSRF via `<img src="http://internal/…">`, an
+# arbitrary event-handler attribute such as `ontoggle=`/`onchange=`/`onpageshow=` — WAF-bypass
+# XSS vectors are common in real exploit-db PoCs and are NOT a fixed handful of handler names)
+# carry a delivery/payload mechanism and are matched by `_STUB_CODE_MARKER_RE` — this only
+# rejects the exact "static narrative shell" shape reported: markup (or a bare "it worked"
+# sentence) with ZERO code/payload markers anywhere. Deliberately biased toward keeping real
+# PoCs — a single marker match ANYWHERE in the text is enough to keep an entry "real" — per
+# this module's existing "never mistake a description for evidence" philosophy (see
+# `_is_detection_evidence` above for the same fail-safe-toward-real bias applied to nuclei
+# YAML). Still a HEURISTIC, not a guarantee: a real PoC whose only delivery mechanism is a
+# marker shape not on this list (e.g. neither a known tag/attribute/handler/call/keyword) could
+# in principle be missed — reviewed live against exploit-db XSS/CSRF/SSRF samples including
+# exotic event-handler-only payloads (2026-09-22 review round).
+_STUB_CODE_MARKER_RE = re.compile(
+    r"\bimport\s|from\s+\S+\s+import|require\s*\(|def\s+\w+\s*\(|class\s+\w+|"
+    r"function\s*\w*\s*\(|=>\s*\{|\bexec\(|\beval\(|\bsocket\.|\brequests\.|\burllib|"
+    r"\bsubprocess|os\.system|os\.popen|payload\s*=|base64\.|struct\.|pickle\.|serialize|"
+    r"\bcurl\s|\bwget\s|\bnc\s+-|python3?\s+-c|sys\.argv|argparse|\.add_argument\(|"
+    r"<script[\s>]|<form[^>]*\baction\s*=|\bon[a-z]{2,}\s*=|"
+    r"fetch\(|XMLHttpRequest|\.ajax\(|axios\.|document\.cookie|document\.location|"
+    r"window\.location|<iframe[\s>]|<object[\s>]|<embed[\s>]|javascript:|new\s+Image\(|"
+    r"\$\.get\(|\$\.post\(|WebSocket\(|http\.client|net/http|HttpClient|URLConnection|"
+    r"ProcessBuilder|Runtime\.getRuntime|InetSocketAddress|new\s+Socket\(|"
+    r"""(?:src|href|action|formaction|data|poster|background)\s*=\s*["'][^"']*"""
+    r"(?:://|/|localhost|\d{1,3}\.\d{1,3}\.\d{1,3})",
+    re.I,
+)
+_HTML_DOC_RE = re.compile(r"<!doctype\s+html|<html[\s>]", re.I)
+# Narrow "it worked" narration — the exact phrasing observed live ("CVE-2025-30065 Exploit
+# Executed"). Only relevant when combined with a total absence of code markers (see
+# `_is_stub_markup`), so a real PoC that happens to print a success message alongside its
+# actual exploit logic is never affected.
+_STUB_NARRATION_RE = re.compile(
+    r"exploit(?:ed)?\s+executed|exploited\s+successfully|successfully\s+exploited|"
+    r"vulnerability\s+has\s+been\s+exploited|khai\s+th[áa]c\s+th[àa]nh\s+c[ôo]ng|"
+    r"đã\s+khai\s+th[áa]c\s+th[àa]nh\s+c[ôo]ng",
+    re.I,
+)
+
+# ── PC4/R3 (2026-09-22): stricter active-exploitation markers for a FULL html document ──
+# Live E2E false-negative: CVE-2025-30065 had a real Java PoC (exploit-db 88399/88401) PLUS a
+# companion HTML file the LLM had hallucinated ("Parquet Exploitation Scenarios" — styled with
+# `<div class="card">`, a `<code>curl -X POST …</code>` USAGE EXAMPLE in prose, and an
+# `<a href="https://fonts.googleapis.com/…">` CDN font link). Only that narrative HTML file got
+# rendered as Mục 1 (`section1_tier=real_pruned`) — the exact bug class this whole filter exists
+# to catch — yet `_is_stub_markup` returned False because the BROAD `_STUB_CODE_MARKER_RE`
+# matched `\bcurl\s` and the generic `href=…://` attribute pattern purely from that prose/
+# decoration, not from any actual exploit logic.
+#
+# A full HTML *document* (`_HTML_DOC_RE` matches — has its own `<!doctype html>`/`<html>`
+# wrapper, i.e. it is plausibly a whole rendered "report" rather than an injected code snippet)
+# therefore gets a NARROWER, STRICT marker set requiring genuine active-exploitation shape —
+# `curl`/`wget` and a bare href/src-URL attribute are EXCLUDED here (a documentation page
+# routinely contains both without any delivery mechanism). Content that is NOT a full document
+# (a bash/shell script, a bare `<script>`/`<form>` fragment, …) is UNCHANGED — it still goes
+# through the original broad `_STUB_CODE_MARKER_RE`, where `curl`/`wget` correctly still count
+# as real (a real curl-based shell PoC must never be flagged just because it isn't "html").
+_HTML_JS_LOGIC_RE = re.compile(
+    r"fetch\(|XMLHttpRequest|\.ajax\(|axios\.|\beval\(|document\.cookie|document\.location|"
+    r"window\.location|\batob\(|String\.fromCharCode\(|new\s+Image\(|WebSocket\(|"
+    r"navigator\.sendBeacon\(|\bimport\(",
+    re.I,
+)
+_HTML_EVENT_HANDLER_RE = re.compile(r"\bon[a-z]{2,}\s*=", re.I)
+_HTML_FORM_ACTION_RE = re.compile(r"<form[^>]*\baction\s*=", re.I)
+# R4 (2026-09-22, reviewer probe): restored from the pre-R3 broad `_STUB_CODE_MARKER_RE` —
+# `<object data=…>`/`<embed src=…>` are classic active-content delivery tags, and a
+# `<meta http-equiv="refresh" ...>` is a real (if old-school) redirect/delivery vector. R3's
+# strict-HTML-doc branch had dropped both when it stopped falling through to the broad regex.
+_HTML_OBJECT_EMBED_RE = re.compile(r"<object[\s>]|<embed[\s>]", re.I)
+_HTML_META_REFRESH_RE = re.compile(r"""<meta\b[^>]*\bhttp-equiv\s*=\s*["']?refresh""", re.I)
+# `<img>`/`<svg>`/`<iframe>` pointing somewhere is a real SSRF/XSS delivery shape UNLESS that
+# somewhere is just a common CDN/web-font host a styled report page decorates itself with.
+_HTML_SRC_TAG_RE = re.compile(r"""<(?:img|svg|iframe)\b[^>]*\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+# NOTE (reviewer nit, R4): a few of these (notably `cdn.jsdelivr.net/gh/...` — arbitrary GitHub
+# content — and, in principle, `cdnjs.cloudflare.com`) CAN be made to serve attacker-controlled
+# content, so this allowlist is a probabilistic "this is almost certainly decorative" signal,
+# not a hard trust boundary. Accepted trade-off (see the module comment above): the whole point
+# of this allowlist is that a styled report page routinely self-decorates with exactly these
+# hosts, so a real PoC using one of them AS its actual delivery vector is the rare case, and
+# missing that rare case is far cheaper than the reported bug (a fake PoC labelled "real").
+_CDN_FONT_DOMAIN_RE = re.compile(
+    r"fonts\.googleapis\.com|fonts\.gstatic\.com|ajax\.googleapis\.com|"
+    r"cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|stackpath\.bootstrapcdn\.com|"
+    r"maxcdn\.bootstrapcdn\.com|use\.fontawesome\.com",
+    re.I,
+)
+# A <script> element: group(1) = its opening tag's attributes, group(2) = its body (for a
+# paired open/close tag; DOTALL so a multi-line script body is captured).
+_HTML_SCRIPT_TAG_RE = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.I | re.S)
+_SRC_ATTR_RE = re.compile(r"""\bsrc\s*=\s*["']([^"']+)["']""", re.I)
+
+
+def _has_active_script(text: str) -> bool:
+    """R4 (2026-09-22, reviewer probe): the PRIMARY gap in the R3 strict-HTML-doc branch — it
+    never checked for a `<script>` element at all, so a textbook `<script>alert(document.
+    domain)</script>` / DOM-XSS (`innerHTML=location.hash`, `document.write(location.search)`)
+    full-page PoC was misclassified as a stub (the exact class of false-negative this whole
+    filter exists to avoid). A `<script src=…>` pointing off-page is treated like the img/svg/
+    iframe check (real unless it's just a common CDN host); an INLINE `<script>...</script>`
+    with any non-empty body is real regardless of its specific content — deliberately not
+    pattern-matching individual JS APIs here, since an inline script in a full HTML document has
+    no legitimate "decorative" reason to exist at all (unlike an `<img>`/`<a href>`, which a
+    styled report page always has some of)."""
+    for m in _HTML_SCRIPT_TAG_RE.finditer(text):
+        attrs, body = m.group(1), m.group(2)
+        src_m = _SRC_ATTR_RE.search(attrs)
+        if src_m:
+            if not _CDN_FONT_DOMAIN_RE.search(src_m.group(1)):
+                return True
+        elif body.strip():
+            return True
+    return False
+
+
+def _has_active_html_marker(text: str) -> bool:
+    """Strict "this full HTML document actually does something" check — see the PC4/R3 module
+    comment above for why this is narrower than `_STUB_CODE_MARKER_RE`. True when the document
+    contains a real `<script>` (see `_has_active_script`), real JS delivery logic, ANY
+    event-handler attribute, a `<form action=…>`, a `javascript:` URI, `<object>`/`<embed>`/a
+    `<meta http-equiv="refresh">`, or an `<img>`/`<svg>`/`<iframe>` pointing somewhere other
+    than a common CDN/web-font host."""
+    if _has_active_script(text):
+        return True
+    if _HTML_JS_LOGIC_RE.search(text) or _HTML_EVENT_HANDLER_RE.search(text):
+        return True
+    if _HTML_FORM_ACTION_RE.search(text):
+        return True
+    if "javascript:" in text.lower():
+        return True
+    if _HTML_OBJECT_EMBED_RE.search(text) or _HTML_META_REFRESH_RE.search(text):
+        return True
+    for m in _HTML_SRC_TAG_RE.finditer(text):
+        if not _CDN_FONT_DOMAIN_RE.search(m.group(1)):
+            return True
+    return False
+
+
+def _is_stub_markup(code: str, language: str = "") -> bool:
+    """True only for a content-free "it worked" shell (the CVE-2025-30065 class of bug) —
+    static markup or a bare narration sentence with NO real code/payload marker anywhere.
+
+    A FULL html document (`_HTML_DOC_RE` — has its own `<!doctype html>`/`<html>` wrapper) is
+    checked with the STRICT `_has_active_html_marker` set only (see the PC4/R3 comment above):
+    `curl`/`wget` mentions and a bare href/src-URL attribute do NOT rescue it, because a
+    narrative/report-style page routinely contains both as prose/decoration with zero real
+    delivery mechanism (the live CVE-2025-30065 "Parquet Exploitation Scenarios" false
+    negative). A real XSS/CSRF/SSRF full-page PoC still matches this strict set via its
+    `<script>` JS logic, an event-handler attribute (`onclick=`/`ontoggle=`/`onchange=`/… —
+    deliberately not a fixed handler allow-list, since WAF-bypass XSS PoCs pick an uncommon one
+    on purpose), a `<form action=…>`, `javascript:`, or an `<img>`/`<svg>`/`<iframe src=…>` that
+    isn't just a CDN font.
+
+    Any OTHER content (not a full document — a bash/shell script, a bare `<script>`/`<form>`
+    fragment, …) keeps using the original broad `_STUB_CODE_MARKER_RE`, where a real `curl`/
+    `wget`-based shell PoC is correctly still "real" (only a full rendered document narrating
+    about curl in prose is the failure mode this branch exists for).
+
+    This is a heuristic, not a formal guarantee: content whose only payload/delivery signal
+    falls entirely outside every marker above would still be missed. Deliberately biased toward
+    never rejecting genuine evidence the rest of this module already treats as real."""
+    text = code or ""
+    if not text.strip():
+        return False  # emptiness is handled by the existing `if not code` checks, not this one
+    if _HTML_DOC_RE.search(text):
+        return not _has_active_html_marker(text)
+    if _STUB_CODE_MARKER_RE.search(text):
+        return False  # any real code/payload marker anywhere -> never a stub
+    lang = (language or "").strip().lower()
+    if lang in ("html", "htm"):
+        return True  # an html-tagged FRAGMENT (no <html>/doctype wrapper) with zero markers
+    return bool(_STUB_NARRATION_RE.search(text))  # non-markup "it worked" sentence, no code at all
+
+
 def _is_detection_evidence(ev: dict[str, Any]) -> bool:
     """Nuclei / kind=detection templates detect a vuln — they are NOT exploit PoCs for T1
     injection. Their YAML body is synthesis grounding (T2) instead: method/path/payload/
@@ -298,13 +488,39 @@ def _blocks_for(ev: dict[str, Any], cve_id: str | None = None) -> str:
         return ""
     files = ev.get("source_files")
     if files:
-        block = render_files(files, default_lang=_lang_from_evidence(ev),
+        usable = [f for f in files if f.get("code")]
+        # Reject only when EVERY usable file is a content-free stub shell (see
+        # `_is_stub_markup`) — a companion asset being stub-like must never sink an otherwise
+        # real multi-file entry; conversely a set that is ENTIRELY narrative shells (the
+        # collapsed single-file consolidated/pruned case included) must not render as Mục 1.
+        if usable and all(_is_stub_markup(f.get("code") or "",
+                                          f.get("language") or _lang_from_path(f.get("path", "")))
+                          for f in usable):
+            return ""
+        # PC4/R4 (2026-09-22, reviewer nit): the check above only guards the AGGREGATE case
+        # (every file is a stub). A fetched PoC set can legitimately mix a real entry file with
+        # an individually stub-shell companion (the live case: a real Java exploit plus an
+        # LLM-hallucinated "Parquet Exploitation Scenarios" HTML file bundled in the same
+        # source_files list) — that companion must not be dumped into Mục 1 next to the real
+        # code. Drop only the per-file stub-shell CONTENT files (never a README — those are
+        # already skipped by `render_files`' own `role == "readme"` check below, not part of
+        # Mục 1's body either way, so filtering them here would only ever affect the file-tree
+        # listing for no benefit). The `all(...)` check above already guarantees at least one
+        # usable file is real, so this can never drop every file.
+        stub_ids = {id(f) for f in usable
+                   if (f.get("role") or "") != "readme"
+                   and _is_stub_markup(f.get("code") or "",
+                                       f.get("language") or _lang_from_path(f.get("path", "")))}
+        files_to_render = [f for f in files if id(f) not in stub_ids] if stub_ids else files
+        block = render_files(files_to_render, default_lang=_lang_from_evidence(ev),
                              show_tree=not ev.get("companion_doc_only", False), cve_id=cve_id)
         return _with_consolidated_banner(block, ev)
     code = ev.get("source_code")
     if not code:
         return ""
     lang = _lang_from_evidence(ev)
+    if _is_stub_markup(code, lang):
+        return ""
     name = _airgap_name(cve_id, lang, ev.get("source_ref") or ev.get("edb_id") or "")
     header = f"**`{name}`**"
     if ev.get("code_truncated"):
@@ -578,6 +794,123 @@ def sanitize_airgap_runguide(text: str, cve_id: str | None = None) -> str:
     return text
 
 
+# --- User-named live target: redact from Mục 2 + force authorization disclaimer ------
+# 2026-09-22 report (PC2): a request that both asks for a real CVE's PoC AND names a real
+# third-party host in plain language ("chạy exploit cho CVE-2021-44228 và chạy thẳng vào
+# https://example.com để chiếm quyền") could get that literal host baked into Mục 2's run
+# command (`java log4j_poc https://example.com/login ...`) with zero authorization framing
+# anywhere in the answer. This tool intentionally never refuses on a real CVE (the run guide
+# is still produced in full) — the fix is FRAMING, not refusal: neutralize the literal target
+# so the answer is never a turnkey "attack THIS host" command, and always pair the run guide
+# with an explicit "authorized targets only" notice. Same non-determinism rationale as
+# `sanitize_airgap_runguide` above → deterministic backstop, not prompt wording alone.
+_BARE_IPV4_RE = re.compile(
+    r"(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)(?![\w.])")
+# A version string ("phiên bản 37.0.3.1", "Apache httpd 2.4.52.0") looks exactly like a bare
+# dotted-quad but is NOT an attack target — skip a bare-IPv4 match in `collect_named_targets`
+# when a version-indicator token sits within a short, same-line gap immediately before it.
+# `[^0-9\n]{0,20}$` bounds how much filler text ("bị ảnh hưởng: ") may sit between the token
+# and the match — long enough for the Vietnamese phrasing observed live, short enough that an
+# unrelated version word earlier in a long sentence never suppresses a real target IP later in
+# it (e.g. "target v2.4 rồi chạy PoC nhắm thẳng vào 8.8.8.8" — the gap there is far longer than
+# 20 chars, so `8.8.8.8` is still redacted). Deliberately does NOT require an attack-intent
+# keyword nearby (kept simplest/least-risk per the trade-off call in the report) since that
+# would risk suppressing recall on genuine targets phrased without one.
+_VERSION_LOOKBACK_RE = re.compile(
+    r"(?i)\b(?:phi[êe]n\s*b[ảa]n|b[ảa]n|version|release|ver\.?|v\.?|httpd)\b[^0-9\n]{0,20}$")
+_H2 = re.compile(r"(?m)^[ \t]*#{2,6}[ \t]*2\.[ \t]*\S[^\n]*$")
+_TARGET_DISCLAIMER = (
+    "> ⚠️ **Chỉ dùng cho mục đích nghiên cứu/kiểm thử được ỦY QUYỀN.** Không chạy các lệnh "
+    "dưới đây nhắm vào hệ thống bạn không sở hữu hoặc không có phạm vi/cam kết kiểm thử cho "
+    "phép — thay `[TARGET]` bằng hệ thống của chính bạn hoặc lab được cấp phép."
+)
+# Idempotency check for `ensure_target_disclaimer` — a stable substring of the sentence
+# above, not the whole string, so a model paraphrase containing this word never happens to
+# equal the exact template (word choice deliberately unusual enough — "ỦY QUYỀN" viết hoa
+# toàn bộ — that ordinary prose is very unlikely to collide with it by accident).
+_TARGET_DISCLAIMER_MARKER = "mục đích nghiên cứu/kiểm thử được ỦY QUYỀN"
+
+
+def collect_named_targets(prompt_text: str | None, structured_target: str | None) -> list[str]:
+    """Bare hostnames (no port) to redact from the model's run guide, from two sources:
+    ``structured_target`` — the same host[:port] the exploit route already extracts via
+    ``fixed_pocs.extract_target()``/request fields to scope the verified-good PoC lookup —
+    and a scan of the RAW user prompt for a bare IPv4 address. The second source exists
+    because ``extract_target`` deliberately requires a port or ``http(s)://`` scheme (so a
+    version string like "37.0.3.1" is never mistaken for a lab target); that guard is right
+    for its own caller but too strict here — a user naming a bare dotted-quad as something to
+    "chạy vào" is unambiguous attack intent, not a version number, and must still be redacted
+    (e.g. ``8.8.8.8``). The raw-prompt scan applies its own, narrower guard instead
+    (``_VERSION_LOOKBACK_RE``): a dotted-quad immediately preceded (same line, short gap) by a
+    version-indicator token ("phiên bản", "version", "ver", "release", "v", "httpd", …) is
+    skipped, so "Phiên bản bị ảnh hưởng: 37.0.3.1" / "Apache httpd 2.4.52.0" are never treated
+    as targets. Returns lowercase host-only strings (any ``:port`` already stripped),
+    de-duplicated, order preserved."""
+    hosts: list[str] = []
+    if structured_target:
+        host = structured_target.split(":", 1)[0].strip().lower()
+        if host and host not in hosts:
+            hosts.append(host)
+    for m in _BARE_IPV4_RE.finditer(prompt_text or ""):
+        if _VERSION_LOOKBACK_RE.search((prompt_text or "")[:m.start()]):
+            continue  # e.g. "phiên bản 37.0.3.1", "Apache httpd 2.4.52.0" — not a target
+        ip = m.group(0)
+        if ip not in hosts:
+            hosts.append(ip)
+    return hosts
+
+
+def redact_user_target(text: str, hosts: list[str] | None) -> str:
+    """Replace verbatim occurrences of a REAL, user-named attack target (see
+    ``collect_named_targets``) in the model's run guide (Mục 2/3) with a neutral
+    ``[TARGET]`` placeholder (square brackets — NOT ``<TARGET>``: angle brackets get
+    HTML-tag-escaped to ``&lt;TARGET&gt;`` by ``security.py::neutralize_active_content``,
+    which runs later in the same display pipeline; brackets are inert there and already the
+    established convention for this exact reason, see ``prompts/exploit.md``'s ``[target]``),
+    so a command copied from the answer never has a live third-party host baked in just
+    because the user's own question named one. Runs on the model's own text only, BEFORE
+    Section-1 injection (same placement as ``sanitize_airgap_runguide``), so the real
+    fetched/consolidated PoC source placed as Section 1 is never touched — only the model's
+    own prose/commands are. No-op for an empty/None host list."""
+    if not text or not hosts:
+        return text
+    for host in hosts:
+        if not host:
+            continue
+        h = re.escape(host)
+        # Trailing boundary excludes only [\w-] (NOT '.'): a domain named in prose is very
+        # often immediately followed by sentence punctuation ("... nhắm vào example.com.")
+        # which must not block the match, while still refusing to match a mere PREFIX of a
+        # longer, different hostname ("example.commerce.test" must not become "[TARGET].merce…").
+        # The leading boundary keeps excluding '.' so a subdomain suffix ("sub.example.com")
+        # is left alone rather than partially rewritten mid-string.
+        # scheme://host(:port)? -> scheme://[TARGET]  (keep scheme + any trailing path/query)
+        text = re.sub(rf"(https?://){h}(?::\d{{1,5}})?(?![\w-])", r"\1[TARGET]", text, flags=re.I)
+        # bare host(:port)?, word-bounded -> [TARGET]  (e.g. `nc example.com 4444`, a
+        # standalone mention in prose, or `-u example.com:8080`)
+        text = re.sub(rf"(?<![\w.-]){h}(?::\d{{1,5}})?(?![\w-])", "[TARGET]", text, flags=re.I)
+    return text
+
+
+def ensure_target_disclaimer(text: str) -> str:
+    """Force-insert the mandatory authorization disclaimer right under the
+    ``## 2. Cách chạy PoC`` heading, unconditionally — regardless of whether
+    ``prompts/exploit.md`` got the model to write one itself (same non-determinism every
+    other backstop in this module accounts for). Applies to EVERY exploit answer that has a
+    Mục 2, not only ones with a detected target — a CVE-only question still gets the same
+    notice, since the run guide it returns is just as runnable against a real host. Idempotent
+    (marker substring) so a retry pass never double-inserts it. No-op when there is no
+    ``## 2.`` heading (e.g. the chitchat short-circuit in the route never reaches this
+    function)."""
+    if not text or _TARGET_DISCLAIMER_MARKER in text:
+        return text
+    m = _H2.search(text)
+    if not m:
+        return text
+    insert_at = m.end()
+    return f"{text[:insert_at]}\n\n{_TARGET_DISCLAIMER}\n{text[insert_at:]}"
+
+
 def strip_system_narration(text: str) -> str:
     """Remove any line where the model narrates the Mục-1 auto-insertion mechanism back to
     the user instead of silently letting it happen — see `_SECTION1_NARRATION`. Call this
@@ -632,6 +965,83 @@ def override_section3(text: str, section3_body: str) -> str:
     return f"{text[:m.start()]}{_SECTION3_HEADING}\n\n{body}\n"
 
 
+# ── PC3 (2026-09-22): metadata.evidence_ids/edb_ids/provenance grounding ────────────────
+# `state/ledger.py::SqliteLedger.exploit_metadata(run_id)` builds these three fields from the
+# `evidence_ledger` SQL table filtered by ONE run_id — the model's OWN agentic-turn run_id.
+# That is the wrong lookup key for the common case: the real grounding evidence for a turn is
+# `poc/prefetch.py::prefetch_evidence`'s (written under ITS OWN scratch `run_id`,
+# `f"prefetch:{uuid4().hex}"` — see routes.py's `exploit_prefetch`), not the model's tool
+# calls (which routinely skip poc_fetch entirely — prefetch exists BECAUSE of that). On top
+# of that, a pruned/consolidated/extracted evidence dict (poc/slicer.py, poc/consolidate.py)
+# is a TRANSIENT dict built at request time and never written back to the ledger under ANY
+# run_id — so even a caller that queried the right run_id would still see nothing for those
+# tiers. Net effect observed live: evidence_ids/edb_ids/provenance came back empty on 16/16
+# calls, including cases with `reference_code_injected=true` + a real `sha256` (Log4Shell).
+#
+# Fix: derive these fields directly from the evidence dicts that actually grounded Section 1
+# this turn (passed here as plain dicts, already merged prefetch+model-run+pruned/consolidated
+# by the caller) instead of a ledger run_id lookup. Same output shape the ledger method
+# promises (`provenance` = list of `{edb_id, sha256, canonical_url}`), so this is a drop-in,
+# more-reliable replacement wherever `enforce_section1`/`enforce_reference_code`'s report
+# already flows into the API's `metadata` dict (routes.py's `metadata.update(injected)`).
+def _evidence_grounding_id(ev: dict[str, Any]) -> str:
+    """Stable id for one evidence entry, independent of any ledger run_id.
+
+    NOT the same id format as the ledger: `poc/tools.py::record_fetch_evidence` keys its
+    `evidence_ledger` row `evidence:{run_id}:{key}`; this function returns
+    `evidence:sha256:{key}` / `evidence:ref:{key}` (no run_id — pruned/consolidated/extracted
+    evidence never has one). Only the 24-hex-char `key` itself is derived the SAME way as
+    `record_fetch_evidence`, and only in the sha256 case (sha256 first 24 hex chars) — so
+    cross-checking this id against a ledger row means comparing that trailing 24-char
+    sha256 slice, never the full id string. In the no-sha256 fallback, `record_fetch_evidence`
+    hashes `source:source_ref` only; this function additionally falls back to `url` when
+    `source_ref` is missing (tools.py does not), so that specific fallback branch's key will
+    NOT match any ledger-derived key — acceptable here since the only requirement is a
+    stable id across THIS module's own real/pruned/consolidated variants of the same
+    artifact (which all preserve `sha256`/`source`/`source_ref`), not equality with the
+    ledger's own key."""
+    sha256 = str(ev.get("sha256") or "").strip()
+    if sha256:
+        return f"evidence:sha256:{sha256[:24]}"
+    basis = f"{ev.get('source') or ''}:{ev.get('source_ref') or ev.get('url') or ''}"
+    return f"evidence:ref:{hashlib.sha256(basis.encode()).hexdigest()[:24]}"
+
+
+def _evidence_edb_id(ev: dict[str, Any]) -> str | None:
+    """EDB id for one evidence entry — the same derivation `poc/tools.py::record_fetch_evidence`
+    applies at fetch time (`source == "exploitdb"` -> `source_ref` IS the EDB id). Re-applied
+    here because `poc/slicer.py` (prune/extract) and `poc/consolidate.py` rebuild a NEW evidence
+    dict from the original's `source`/`source_ref` but never copy over an already-computed
+    `edb_id` key, which would otherwise silently disappear the moment an exploitdb PoC gets
+    pruned or consolidated."""
+    edb_id = ev.get("edb_id")
+    if edb_id:
+        return str(edb_id)
+    if str(ev.get("source") or "").strip().lower() == "exploitdb" and ev.get("source_ref"):
+        return str(ev["source_ref"])
+    return None
+
+
+def _grounding_metadata(evidence: list[dict[str, Any]]) -> dict[str, Any]:
+    """`{evidence_ids, edb_ids, provenance}` for the evidence entries that actually grounded
+    Section 1 this turn (T1 real refs, or the T2/T3 description/README refs synthesis was
+    built from) — see the module comment above for why this replaces a ledger run_id lookup."""
+    evidence_ids: list[str] = []
+    edb_ids: set[str] = set()
+    provenance: list[dict[str, Any]] = []
+    for ev in evidence or []:
+        evidence_ids.append(_evidence_grounding_id(ev))
+        edb_id = _evidence_edb_id(ev)
+        if edb_id:
+            edb_ids.add(edb_id)
+        provenance.append({
+            "edb_id": edb_id,
+            "sha256": ev.get("sha256"),
+            "canonical_url": ev.get("canonical_url") or ev.get("url") or "",
+        })
+    return {"evidence_ids": evidence_ids, "edb_ids": sorted(edb_ids), "provenance": provenance}
+
+
 def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
                            cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
     """Place the canonical fetched code as Section 1 for this run.
@@ -656,12 +1066,18 @@ def enforce_reference_code(text: str, evidence: list[dict[str, Any]],
     canonical = "\n\n".join(_blocks_for(e, cve_id) for e in refs)
     new_text = _place_section1(text, canonical)
     n_files = sum(len(e.get("source_files") or [None]) for e in refs)
-    return new_text, {
+    report = {
         "reference_code_injected": True,
         "refs": len(refs),
         "files": n_files,
         "sha256": [e.get("sha256") for e in refs if e.get("sha256")],
     }
+    # PC3: evidence_ids/edb_ids/provenance from the EXACT refs rendered as Section 1 (after
+    # the fixed/canonical narrowing above) — real code, consistent across the real/
+    # real_pruned/real_consolidated tiers (enforce_section1 tags the tier right after this
+    # call returns; the fields below don't change per sub-tier, only `section1_tier` does).
+    report.update(_grounding_metadata(refs))
+    return new_text, report
 
 
 def force_no_poc_notice(text: str, evidence: list[dict[str, Any]],
@@ -709,6 +1125,21 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
                        show real CWE/CVSS/CAPEC data from the same tool calls).
     not_found        : no evidence and no confirmed CVE at all → the canonical notice,
                        naming `cve_id` when one was identified.
+
+    Every branch also sets `candidate_status` (PC6, 2026-09-22 — the API's
+    `metadata.candidate_status` was previously ALWAYS "not_generated": it read
+    `state/ledger.py`'s `poc_drafts` table, which nothing in this codebase ever writes to via
+    `draft_once`). "draft_not_executed" and "not_generated" reuse the existing vocabulary
+    `poc/models.py::FetchResult.candidate_status` already uses for a single fetched artifact
+    ("draft_not_executed" = real code, "metadata_only" = no code — not applicable to this
+    aggregate outcome, "not_generated" is FetchResult's own no-op default), applied here to
+    the aggregate Section-1 outcome: "draft_not_executed" when a real PoC (T1, any of real/
+    real_pruned/real_consolidated) was placed. "synthesized_not_executed" is a NEW value,
+    added here specifically for the model's own AI-written code kept under the SYNTHESIZED
+    banner (T2/T3) — there is no prior FetchResult status for "code exists but it's AI-
+    synthesized, not fetched", and conflating it with "draft_not_executed" would misstate a
+    fabricated PoC as a real fetched one. Else "not_generated" (no candidate PoC exists in
+    the answer at all — synthesis_failed / not_found).
     """
     text = text or ""
     text, report = enforce_reference_code(text, evidence, cve_id=cve_id)
@@ -727,6 +1158,7 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
             report["pruned"] = True
         else:
             report["section1_tier"] = "real"
+        report["candidate_status"] = "draft_not_executed"
         return text, report
 
     readme_refs = [e for e in (evidence or []) if _description_for(e)]
@@ -740,10 +1172,16 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
             new_text = text if body.startswith(_SYNTHESIS_BANNER) else \
                 _place_section1(text, f"{_SYNTHESIS_BANNER}\n\n{body}")
             new_text = _append_synthesis_footer(new_text, evidence)
-            return new_text, {**report, "section1_tier": tier, "synthesized": True}
+            # PC3: ground evidence_ids/edb_ids/provenance in the description/README refs the
+            # synthesis was built from (T3 cve_known-only, no catalog refs, correctly stays
+            # all-empty — there is no catalog evidence to point at, only a CVE-KB boolean).
+            grounding = _grounding_metadata(readme_refs)
+            return new_text, {**report, **grounding, "section1_tier": tier, "synthesized": True,
+                              "candidate_status": "synthesized_not_executed"}
         text, fallback = force_no_poc_notice(text, evidence, notice=_SYNTHESIS_FAILED_NOTE)
         report.update(fallback)
         report["section1_tier"] = "synthesis_failed"
+        report["candidate_status"] = "not_generated"
         return text, report
 
     # not_found: no evidence and no confirmed CVE at all. Emit ONE canonical notice as a clean,
@@ -756,7 +1194,9 @@ def enforce_section1(text: str, evidence: list[dict[str, Any]], *,
               "không đủ căn cứ để phân tích hay sinh PoC cho mã CVE này." if cve_id else _NO_POC_NOTE)
     canonical = f"{_SECTION1_HEADING}\n\n{notice}"
     if (text or "").strip() == canonical:
-        report.update({"no_poc_forced": False, "reason": "already_canonical", "section1_tier": "not_found"})
+        report.update({"no_poc_forced": False, "reason": "already_canonical",
+                       "section1_tier": "not_found", "candidate_status": "not_generated"})
         return text, report
-    report.update({"no_poc_forced": True, "section1_tier": "not_found"})
+    report.update({"no_poc_forced": True, "section1_tier": "not_found",
+                   "candidate_status": "not_generated"})
     return canonical, report
