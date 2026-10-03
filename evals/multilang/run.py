@@ -25,6 +25,9 @@ MODES = frozenset({"model-only", "legacy-api", "multilang-api"})
 MODEL_ID = "DuyTa/Cyber-F1-AWQ"
 INSTANCE_ID = 53846446
 DECODING_FIELDS = frozenset({"temperature", "top_p", "max_tokens", "seed"})
+TOOL_RESPONSE_MARKERS = (
+    "tool_calls", "function_call", "tool_call_id", "tool_choice", "tools", "functions",
+)
 
 
 class RunError(ValueError):
@@ -281,9 +284,9 @@ def _parse_response(response: httpx.Response, mode: str) -> dict[str, Any]:
             if (not isinstance(message, dict) or message.get("role") != "assistant" or
                     choice.get("delta") is not None):
                 raise RunError("assistant_response_envelope_invalid")
-            if any(message.get(field) is not None for field in ("tool_calls", "function_call", "tool_call_id")) or any(
-                choice.get(field) is not None for field in ("tool_calls", "function_call")
-            ):
+            # These protocol markers are forbidden at every response envelope level.
+            if any(scope.get(field) is not None for scope in (body, choice, message)
+                   for field in TOOL_RESPONSE_MARKERS):
                 raise RunError("tool_call_forbidden")
             if choice.get("finish_reason") != "stop":
                 raise RunError("truncated_completion")
