@@ -30,3 +30,11 @@ returns `{"model":"...","blocks":[{"text":"...","bbox":null,"confidence":null}]}
 `GET /health` reports the pinned revision and readiness without returning data.
 The model produces a page text string; bounding boxes and confidence are null
 because they are not available from this inference path.
+
+To reproduce the service, copy `server.py` and `start.sh` to a directory on the
+existing Vast instance, create a mode-0600 token file outside git, and invoke
+`OCR_SERVICE_TOKEN_FILE=/path/to/token sh start.sh`. The script checks disk,
+creates an isolated venv that reads but never modifies installed system packages,
+downloads the pinned snapshot with `chat_template.jinja`, verifies the model
+weight SHA-256, then starts one loopback worker in offline mode. Keep the process
+under an operator-managed supervisor and record only its own PID for shutdown.
