@@ -22,6 +22,8 @@ class JobStore:
         self.artifact_dir = Path(settings.artifact_dir)
         self.db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.db_path.parent.chmod(0o700)
+        self.artifact_dir.chmod(0o700)
         with self._tx() as db:
             db.executescript("""
             CREATE TABLE IF NOT EXISTS jobs (
@@ -45,9 +47,10 @@ class JobStore:
               ip TEXT NOT NULL, bucket TEXT NOT NULL, window INTEGER NOT NULL,
               count INTEGER NOT NULL, PRIMARY KEY(ip,bucket,window));
             """)
+        self.db_path.chmod(0o600)
 
     @contextmanager
-    def _tx(self) -> Iterator[sqlite3.Connection]:
+    def _tx(self, rollback_paths: list[Path] | None = None) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self.db_path, timeout=30)
         db.row_factory = sqlite3.Row
         try:
@@ -57,6 +60,8 @@ class JobStore:
             db.commit()
         except BaseException:
             db.rollback()
+            for path in rollback_paths or ():
+                path.unlink(missing_ok=True)
             raise
         finally:
             db.close()
@@ -110,7 +115,8 @@ class JobStore:
         fingerprint = hashlib.sha256(payload + b"\0" + source_lang.encode() + b"\0"
                                      + target_lang.encode() + b"\0" + extension.lower().encode()).hexdigest()
         key_hash = hashlib.sha256(key.encode()).hexdigest() if key else None
-        with self._tx() as db:
+        created_paths: list[Path] = []
+        with self._tx(created_paths) as db:
             if key_hash:
                 found = db.execute("SELECT fingerprint,job_id FROM keys WHERE kind=? AND key_hash=?",
                                    (kind, key_hash)).fetchone()
@@ -140,11 +146,17 @@ class JobStore:
             job_id = secrets.token_hex(16)
             path = self.artifact_dir / job_id
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            created_paths.append(path)
             try:
                 with os.fdopen(fd, "wb") as file:
                     file.write(payload)
                     file.flush()
                     os.fsync(file.fileno())
+                directory_fd = os.open(self.artifact_dir, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
                 db.execute("INSERT INTO jobs(id,kind,extension,status,stage,source_lang,target_lang,ip,"
                            "input_path,input_bytes,created,updated,deadline) VALUES "
                            "(?,?,?,'queued','queued',?,?,?,?,?,?,?,?)",

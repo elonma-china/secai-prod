@@ -12,7 +12,9 @@ class EchoRunner:
 
     async def complete(self, profile, prompt, session_id=None):
         self.calls.append((profile, session_id))
-        return prompt.rsplit("<source>\n", 1)[1].split("\n</source>", 1)[0].replace("Hello", "Xin chào"), {}
+        source = prompt.rsplit("<source>\n", 1)[1].split("\n</source>", 1)[0]
+        source = source.split("\n", 1)[1].rsplit("\n</untrusted_retrieved_content>", 1)[0]
+        return source.replace("Hello", "Xin chào"), {}
 
 
 @pytest.mark.asyncio

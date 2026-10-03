@@ -113,3 +113,25 @@ async def test_v2_cors_preflight_is_scoped(tmp_path, monkeypatch):
         assert response.headers["access-control-allow-headers"] == "Content-Type, Idempotency-Key"
         assert response.headers["cache-control"] == "no-store"
         assert response.content == b""
+        rejected = await client.options("/ai/v2/translate/files", headers={
+            "Origin": "https://untrusted.test", "Access-Control-Request-Method": "POST"})
+        assert rejected.status_code == 400
+        assert rejected.json()["error"]["code"] == "INVALID_REQUEST"
+        assert rejected.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.asyncio
+async def test_unknown_v2_path_has_safe_error_envelope(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(FakeRunner())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.get("/ai/v2/translate/unknown")
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "JOB_NOT_FOUND"
+        assert response.headers["cache-control"] == "no-store"
+        method = await client.patch("/ai/v2/translate/jobs/" + "a" * 32)
+        assert method.status_code == 405
+        assert method.json()["error"]["code"] == "INVALID_REQUEST"
+        assert method.headers["cache-control"] == "no-store"

@@ -131,8 +131,15 @@ def _xml(data: bytes) -> ET.Element:
 
 
 def _paragraph_text(element: ET.Element) -> str:
-    return "".join(node.text or "" for node in element.iter()
-                   if node.tag == _W + "t")
+    pieces: list[str] = []
+    for node in element.iter():
+        if node.tag == _W + "t":
+            pieces.append(node.text or "")
+        elif node.tag in {_W + "br", _W + "cr"}:
+            pieces.append("\n")
+        elif node.tag == _W + "tab":
+            pieces.append("\t")
+    return "".join(pieces)
 
 
 def _children_text(element: ET.Element) -> str:

@@ -9,6 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from ..config import get_settings
 from .documents import extract_docx, extract_txt
 from .jobs import JobStore
 from .service import translate_blocks
@@ -24,6 +25,10 @@ class WorkerContext(ProcessingContext):
         self.runner = runner
         self.row = row
         self.llm_gate = llm_gate
+        provider_settings = get_settings()
+        self.model_context_tokens = (provider_settings.deepseek_context_window
+                                     if provider_settings.llm_provider.lower() == "deepseek"
+                                     else provider_settings.qwen_context_window)
 
     async def checkpoint(self, stage: str, completed: int = 0, total: int | None = None) -> None:
         if time.time() >= self.row["deadline"]:

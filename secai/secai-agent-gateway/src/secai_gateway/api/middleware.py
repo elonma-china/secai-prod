@@ -1,6 +1,7 @@
 """CORS + fixed-window rate limiting."""
 from __future__ import annotations
 
+import secrets
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -59,14 +60,31 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
     async def rate_limit(request: Request, call_next):
         if request.url.path.startswith("/ai/v2/translate/"):
             origin = request.headers.get("origin", "")
-            if request.method == "OPTIONS" and origin in state.settings.cors_origins:
-                return Response(status_code=204, headers={
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-                    "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key",
-                    "Cache-Control": "no-store",
-                })
+            if request.method == "OPTIONS":
+                method = request.headers.get("access-control-request-method", "")
+                headers = {item.strip().lower() for item in
+                           request.headers.get("access-control-request-headers", "").split(",") if item.strip()}
+                if (origin in state.settings.cors_origins and method in {"GET", "POST", "DELETE"}
+                        and headers <= {"content-type", "idempotency-key"}):
+                    return Response(status_code=204, headers={
+                        "Access-Control-Allow-Origin": origin,
+                        "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+                        "Access-Control-Allow-Headers": "Content-Type, Idempotency-Key",
+                        "Cache-Control": "no-store", "Vary": "Origin",
+                    })
+                return JSONResponse({"error": {"code": "INVALID_REQUEST",
+                                               "message": "CORS preflight is invalid.",
+                                               "request_id": secrets.token_hex(12)}},
+                                    status_code=400, headers={"Cache-Control": "no-store"})
             response = await call_next(request)
+            if response.status_code in {404, 405}:
+                # Starlette's unmatched-route response uses {"detail": ...}; the
+                # anonymous v2 surface always returns the same safe error shape.
+                missing = response.status_code == 404
+                response = JSONResponse({"error": {"code": "JOB_NOT_FOUND" if missing else "INVALID_REQUEST",
+                                                   "message": "Job was not found." if missing else "Invalid request.",
+                                                   "request_id": secrets.token_hex(12)}},
+                                        status_code=response.status_code)
             response.headers["Cache-Control"] = "no-store"
             return response
         if request.url.path == "/health":
