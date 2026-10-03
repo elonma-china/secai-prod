@@ -1,22 +1,28 @@
-# Multilang final report — intermediate CPU runtime checkpoint
+# Multilang final report — corrected dependency CPU checkpoint
 
-2026-10-04. **BLOCKED release; runtime integration checkpoint complete, assessment integration incomplete.** This report intentionally does not mark the whole feature complete.
+2026-10-04. **CPU runtime checkpoint complete; assessment integration incomplete; release BLOCKED. Full suite not green.** This supersedes the prior report's dependency mismatch, pending browser, unmerged security, scanner NOT RUN and stale API provenance statuses.
 
-Tested code SHA **`43e5f2233256a74b091c41b3f14b325f44161a6a`**, tree `002bb5b3def8b36efe5c331142fed957b6df7de7`. Report/evidence commit is a documentation-only descendant, recorded by exact SHA in root scratch checkpoint after committing. Do not substitute report commit for tested runtime SHA. Authorized parents: planningef1c990, coref6b7834 (round4 PASS), FE788da975 (round2 PASS/API docs), security4883e87 only. Refreshed main remainsce9cd47. Full provenance, hashes, commands, every retained baseline ID and exact19failure IDs: [integration-report.md](integration-report.md), [integration-evidence.json](integration-evidence.json).
+Runtime/tests actually executed: **`929b19997116a2d7b193ebc44912ef1fdcaf0feb`**, tree `1bb7b6fdb9be3c25ab3d8d80e375a562ba34a5fc`. Product source remains identical to browser-executed43e5f22. Report SHA is a documentation-only descendant, recorded after commit in root scratch integration-correctdeps-checkpoint.md; it is not a newly executed test/browser SHA. Authorized security11ec898 and planning2c22262 merged cleanly; coref6b7834 and FE788da975 unchanged; assessment bf06bc4 and the owner’s later 8e53a00 **not merged**.
 
-| CPU evidence | Result |
+| Evidence | Result |
 |---|---|
-| Exact runtime full suite | **984 cases:964pass,19fail,1skip,0error**; all925baseline IDs/outcomes retained; zero new failure IDs; **suite not green** |
-| Disposable main+runtime+import+OCR | **1091 cases:1071pass,same19fail,1skip,0error**; all1014import and966OCR checkpoint IDs/outcomes retained |
-| Composition/lifespan/standalone worker | **7/7** guarded private probes; v2/v3 flagsOFF/ON, GET/disabled POST, client startup/shutdown, actual worker handoff, optional tokenizer absent |
-| Legacy comparison | 69paths/15schemas and both en↔vi JSON/SSE equal to base with wrapperOFF/ON and composedv2 |
-| Frontend | Offline npmci;253 installed versions match lock;21tests/buildPASS; existing bundle warning |
-| Dependency/security evidence | Prior same-lock FE audit0 reused (2026-10-03); no fresh advisory/CodeQL/Semgrep scan. Vanguard finalcore23selectedPASS report11ec898 read only, not merged |
-| Final candidate real HTTP/browser | Root owns replay; exact candidate supplied promptly; pending root evidence, no integrator staging restart |
+| Fresh base, prepared67-package environment | **925:905pass/19fail/1skip/0error** |
+| Exact runtime929b199, same environment | **988:968pass/19fail/1skip/0error**, including17securityPASS |
+| Disposable combined0097da3, same environment | **1095:1075pass/19fail/1skip/0error** |
+| Complete ID/outcome comparisons | All925baseline,1014import,966OCR retained unchanged; zero new failures; prior984runtime/1091combined retained |
+| Composed lifecycle/worker probes | **7/7PASS** with socket guards |
+| Legacy fingerprints | 69paths/15schemas, en↔viJSON/SSE+invalid inputs identical base/runtimeOFF/ON/combinedOFF/ON |
+| Correct dependency gap | **Closed**: olefile0.47, all17requirements and7metricpins satisfied;67packages=57unchanged+10extras; uv pip checkPASS |
+| FE | Prior21tests/buildPASS reused by complete source/lock identity; no rebuild; audit remains prior same-lock author evidence |
+| Root actualHTTP/browser | Passed at43e5f22 with fakeLLM; applies by verified source identity, no new-SHA execution claimed |
+| Semgrep | Runtime14files/9units,7complete+2partial,0findings; assessmentbf06bc4 separate7files/6units,4complete+2partial,0findings. Compilation errors remain; not blanket securityPASS. CodeQLNOTRUN |
+| API provenance | LowINT-RC-01 closed: opening core42f8d40→f6b7834 |
 
-Disposable simulation SHA `eb984d4d1d689b1eabc7e4be9bb5b62671e9196c` contains temporary union of **inherited conflicts** in profiles.yaml (retain OCR correction profile) and translation/settings.py (retain import converter_image). It is not accepted product code, not merged into feature or protected branches, and **file+OCR is not a clean merge**. Both known file High findings still reproduce: terminal input/quota retention without worker, and Unicode-adjacent URL mutation. That task remains STOPPED/BLOCKED, not fixed or reopened. Supplemented installed olefile0.46 is below protected requirement>=0.47; combined dependency acceptance is blocked. Assessment baseline packages otherwise unchanged.
+All full runs used `/tmp/secai-multilang-final-env/bin/python`, Python3.12.3, same600s overall/10s per-test command and private/offline paths, explicit correct snapshot PYTHONPATH and asserted import identity; no supplemental old package paths, timeout changes or deselection. Exact commands, every outcome, inherited19failure/1skip IDs, source/config/dependency hashes and before/after owner state: [integration-report.md](integration-report.md), [integration-evidence.json](integration-evidence.json). The fresh environment's baseline was measured, not assumed.
 
-API guide matches inspected wire behavior but its opening core42f8d40 provenance is stale (Low; root/FE follow-up). Protected legacy source and old FE sibling unchanged. No mainmerge, push, deployment, language enablement, new model/checkpoint or sharedenvironment/.env mutation.
+Combined SHA **`0097da34f5043a07812e5cf09385140312cc2eec`**, tree `bdf7efb04b8e938e3716c0e4c6555275010d635e`, incorporates current runtime plus committedimportbfab8eb/OCRff311c1 through previous disposableeb984d4. Source identical to previous simulation; inherited profiles.yaml/settings.py minimal unions retained, exact hunks recorded. **Not a clean file/OCR merge or product acceptance.** Both fileHigh defects still reproduce; ownerSTOP remains, HEADs/WIP unchanged. No file/OCR fixes.
+
+Root [browser report](browser-http.md) covers actualHTTP/fakeLLM threepairs, legacyJSON/SSE, RTL/literal display, copyAPIstub and mobile width; live model quality/real tokenizer/OSclipboard remain untested, existing headerclip and health/projects warnings retained. Full23case finalcore security report merged; current17Vanguard cases pass, release security remains blocked. Partial Semgrep reports supersede oldNOTRUN wording without erasing failed-rule coverage. No product source changes, new model checkpoints, service or GPU calls, main merge, push or deployment.
 
 ## Eighteen-direction quality matrix
 
@@ -45,10 +51,8 @@ All cells are live-quality status, not unit-test percentages. Required rubric≥
 
 ## Remaining gates and handoff
 
-- Assessment round2 has six remaining findings, fix2 ongoing. Do not merge until independent acceptance and exactSHA authorization. Then rerun full final integratedsuite and affected composition/browser checks.
-- Security finalcore report11ec898 records23selectedpasses at securitymerge4cb54d9; separately authorize any merge of that test/report delta. CPU replay does not clear release security, production trace/privacy, ingresswide quota, scanners, or actual serving identity.
-- Root finalHTTP/browser smoke must reference runtime43e5f223 (or later newly tested codeSHA). Prior-SHA browser evidence remains historical, even though only the script branch changed afterward.
-- Corpus licensing/reference independence, serving revision/tokenizer/template, qualified scoring and sealedTEST custody,18direction×3roundquality, en↔vi noninferiority/perf/cost margins and release decision remain blocked. GateC not entered. Both directions remainOFF for every new language.
-- Counters: core3/5,FE1/5,assessment2/5ongoing,integration0/5productfixes,Vanguardreturns0/3. Auxiliarycheckpoint allowance shared3/3 exhausted, ours0; DuyTaonly. Other file taskSTOPPED after2rounds with2High unchanged.
+Assessment round 3 failed with five findings at bf06bc4. Read-only closeout observed fix cycle 3 committed at `8e53a00a8adf710dd630196de8341a2585e5d97a`; it remains outside this integration pending independent acceptance and authorization. Root continues independent review; only later explicit authorization of an accepted exactSHA permits its merge, followed by a **separate final integrated full suite** and affected evidence replay. No assessment test count or acceptance is claimed here.
 
-**Future main merge requires user confirmation after remaining gates. Production deployment/enablement is a separate decision.** Nothing here grants either approval.
+Live quality/corpus/reference licensing, qualified independent scoring and sealedTEST custody, serving revision/tokenizer/template/context,18direction×3roundquality, en↔vi noninferiority and performance/cost margins, production trace/egress and cluster-wide limits remain BLOCKED. GateC not entered. Every new language staysOFF; DuyTaonly. Counters core3/5,FE1/5,assessment3/5,integration0/5productfixes,Vanguardreturns0/3; sharedauxiliary3/3 exhausted,ours0. Otherfile taskSTOPPED with2High.
+
+Future main merge requires user confirmation after the remaining gates; deployment and enablement are separate decisions.
