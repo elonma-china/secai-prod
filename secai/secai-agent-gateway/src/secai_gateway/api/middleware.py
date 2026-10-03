@@ -15,13 +15,17 @@ def route_limit(path: str) -> int:
         # Raised 2026-08-27 from the shared default of 15: the contracted chatflow perf targets
         # (R-PERF-CCU ~30 concurrent threads, R-PERF-RPS ~0.6 RPS = 36 req/min) structurally exceed
         # 15 req/60s regardless of concurrency — no client-side tuning can satisfy both a 15/60s cap
-        # and a 36/min target from one source IP. 90/60s gives ~2.5x headroom over the RPS target
-        # while still bounding abuse; other routes are untouched. See KPI-VA-GEN-TEST/KET-QUA/ for
-        # the benchmark that surfaced this.
+        # and a 36/min target from one source IP. See KPI-VA-GEN-TEST/KET-QUA/ for the benchmark
+        # that surfaced this.
+        # Raised again 2026-09-20 (90->150) to give headroom for a real 30-CCU load-test benchmark
+        # from a single source IP (30 concurrent x 3 requests/user = 90 requests landing inside one
+        # 60s rolling window, see state/ratelimit.py's FixedWindowRateLimiter) — 90 was borderline
+        # for that exact scenario. 150 gives comfortable margin above a single 30-CCU test's 90
+        # requests while still bounding a real single-IP abuser (permanent change, not test-only).
         # /sessions/{sid}/chat (added by feat/session) is the session-scoped sibling of /ai/chat
         # and carries the same chatflow load — without this match it silently fell through to the
         # 15 req/60s default below, re-introducing the exact cap this fix was raised to remove.
-        return 90
+        return 150
     if path in {"/projects", "/sessions"} or path.startswith("/projects/") or path.startswith("/sessions/"):
         # Project/Session CRUD (api/projects.py) is plain local-SQLite/session-store CRUD —
         # far lighter than an LLM call — but it backs the FE's session rail (list on every
@@ -29,7 +33,7 @@ def route_limit(path: str) -> int:
         # share ONE proxy IP (buckets are keyed by (client_ip, path)). The shared 15/60s
         # default throttles that legitimate multi-user traffic almost immediately, so this
         # whole surface gets the same kind of headroom as the chat routes. This check runs
-        # AFTER the chat-route check above so /sessions/{sid}/chat[/stream] still gets 90,
+        # AFTER the chat-route check above so /sessions/{sid}/chat[/stream] still gets 150,
         # not 120.
         return 120
     if path == "/ai/exploit" or path == "/ai/exploit/run":

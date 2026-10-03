@@ -22,11 +22,13 @@ from fastapi.staticfiles import StaticFiles
 from linch.events import ResultEvent, SystemEvent
 
 from ..agent import registry_for
-from ..agent.hooks import CHAT_PRE_FETCH_MARKER
+from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding
 from ..poc import (
     canonical_block,
     cli_surface,
+    collect_named_targets,
     consolidate_poc,
+    ensure_target_disclaimer,
     enforce_section1,
     extract_cve_id,
     has_real_code_evidence,
@@ -35,6 +37,7 @@ from ..poc import (
     override_section3,
     prefetch_evidence,
     prune_evidence,
+    redact_user_target,
     sanitize_airgap_runguide,
     slice_entry,
     strip_system_narration,
@@ -247,6 +250,15 @@ _PREFETCH_APPENDIX_BUDGET = 3000
 # whole point is to ground the synthesized PoC in it. Kept well under the consolidated PoC's
 # 40k so it doesn't drown the prompt, but comfortably above the 3k used for catalog prose.
 _WEB_HINTS_APPENDIX_BUDGET = 12000
+# H3 (2026-09-22): SSE `tool_result` frames used to carry up to 4000 raw KB chars, but
+# ToolTimeline.tsx (FE) only ever renders `summary` — falling back to `result.slice(0, 140)`
+# only when `summary` is absent. Once every `tool_result` frame always sets a clean
+# `summary` (see `_grounding_sse_frames` + `event_to_sse`'s ToolCallEndEvent branch), the
+# raw `result` is only ever needed for that 140-char fallback preview — kept slightly above
+# it (not dropped: ToolTimeline's `result === undefined` check is how it knows a tool_call
+# is still pending, so the key itself must still land in the merged row) so the wire no
+# longer duplicates several KB of raw KB/tool payload the FE never reads.
+_SSE_RESULT_PREVIEW_CHARS = 200
 
 
 def _health_status(qwen_ok: bool, sanitize_stats: dict[str, float]) -> str:
@@ -666,6 +678,18 @@ async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
+    def _chat_tool_registry() -> list[str]:
+        """Bug #13/CQ4: the ``tool_registry`` VALUE only — key stays, shape stays list[str].
+        Internal retrieval-tool names (qdrant_search/neo4j_search/poc_search/fetch_reference/
+        web_fetch) are gateway-internal detail; hidden (empty list) from the public chat
+        metadata by default, restored in full only when ``expose_internal_tool_metadata`` is
+        explicitly turned on for debugging. Scoped to the "chat" profile only (the profile the
+        bug report is about) — other profiles' tool_registry (translate/report/exploit_research)
+        are untouched."""
+        if getattr(state.settings, "expose_internal_tool_metadata", False):
+            return sorted(registry_for("chat"))
+        return []
+
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
                        session_id: str | None = None) -> tuple[str, dict[str, Any]]:
         grounding_context: str | None = None
@@ -679,7 +703,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 gated = await _chat_gate(prompt)
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
-                prompt, grounding = await _ground_chat_prompt(prompt)
+                prompt, grounding = await _ground_chat_prompt(prompt, session_id)
                 grounding_context = _grounding_context_text(grounding)
         try:
             # grounding_context is delivered to the model via LinchRunner's ephemeral
@@ -703,16 +727,40 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # Mirrors the streaming path (see stream()), which already surfaces failures
             # as an SSE error event instead of tearing down the response.
             raise HTTPException(status_code=503, detail=f"AI service unavailable: {exc}") from exc
+        if profile == "chat":
+            # Bug #13/CQ4: state.runner.complete() (agent/runner.py) builds tool_registry from
+            # the full profile.tool_names for every profile — gate it back down to the public
+            # default here too. This is the path a PLAIN GREETING takes (no gate short-circuit
+            # fires), so without this the fix in _chat_gate()'s 3 refusal branches below would
+            # only cover refusals, not the common case the bug report calls out.
+            metadata = {**metadata, "tool_registry": _chat_tool_registry()}
         # pre-fetch grounding (xem _ground_chat_prompt) không qua tool-call của model nên
         # không có mặt trong tool_registry/tool-log thông thường — lộ ra đây để client JSON
         # thường (không SSE) cũng biết nguồn đã dùng, tương ứng tool_call/tool_result giả
         # lập bên stream().
+        #
+        # H2 (2026-09-22): this used to spread the WHOLE `grounding` dict in — including
+        # `result`, the raw KB dump (up to several KB of chunk text) that fed the model's
+        # ephemeral context. No FE consumer reads `metadata.sources` (grepped: 0 hits in
+        # secai-fe-devspace) so nothing renders it, but a plain JSON API client legitimately
+        # inspecting "what did this answer cite" got the entire internal KB payload dumped
+        # back at it instead of a citation. Redact to citation-only fields — same query/
+        # summary the synthetic SSE tool_call/tool_result pair (_grounding_sse_frames) shows
+        # a streaming client, just without the raw `result` body.
         if prompt_override is None and grounding:
-            metadata = {**metadata, "sources": [{"name": "qdrant_search", **grounding}]}
+            metadata = {**metadata, "sources": [{
+                "name": "qdrant_search",
+                "query": grounding.get("query"),
+                "summary": grounding.get("summary"),
+            }]}
         return sanitize_output_language(text), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
-        return {"run_id": run_id, "profile": profile, "tool_registry": sorted(registry_for(profile))}
+        # Bug #13/CQ4: only "chat" is gated (public tool_registry default → []); other
+        # profiles (translate/report/exploit_research) are out of the bug's scope and keep
+        # their existing full list.
+        tool_registry = _chat_tool_registry() if profile == "chat" else sorted(registry_for(profile))
+        return {"run_id": run_id, "profile": profile, "tool_registry": tool_registry}
 
     def stream(profile: str, prompt: str, session_id: str | None, build_final,
               pre_frames: list[bytes] | None = None,
@@ -772,14 +820,54 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
-    async def _ground_chat_prompt(prompt: str) -> tuple[str, dict[str, Any] | None]:
+    async def _resolve_followup_entity_id(session_id: str | None) -> str | None:
+        """🅱2 lớp 1 (entity-follow-up): khi câu hỏi HIỆN TẠI không nêu ID tường minh
+        nhưng là một câu hỏi kiểu "có CVE nào?" / "còn CVE nào khác không?" / "CWE
+        nào?" (route ``id_lookup``, xem ``classify_chat_grounding``), thực thể cần tra
+        thường nằm ở LƯỢT HỎI TRƯỚC của cùng phiên, không phải ở câu hiện tại.
+
+        Chỉ quét các message role=``user`` ĐÃ PERSIST trong session store (linch
+        ``load_messages``), từ MỚI NHẤT về CŨ NHẤT, trả về entity-id đầu tiên khớp
+        ``ENTITY_ID_RES`` (CVE/CWE/CAPEC/ATT&CK). Cố tình KHÔNG qt message role=
+        ``assistant``: câu trả lời trước có thể trích dẫn nhiều CVE ví dụ không liên
+        quan trực tiếp đến chủ đề người dùng đang hỏi (vd trả lời "CWE-89 là gì?" có
+        thể nêu vài CVE minh hoạ) — quét cả hai vai sẽ dễ resolve nhầm sang một entity
+        không phải chủ đề hội thoại. Chủ đề hội thoại luôn do NGƯỜI DÙNG đặt ra.
+
+        Fail-open: không có session_id / session rỗng / lỗi store → None (giữ nguyên
+        hành vi cũ — không pre-fetch, hook vẫn ép model tự tra như trước)."""
+        if not session_id:
+            return None
+        try:
+            rows = await state.runner.session_store.load_messages(session_id)
+        except Exception:
+            logger.exception("follow-up entity resolve: load_messages lỗi cho sid=%s", session_id)
+            return None
+        for row in reversed(rows):
+            message = getattr(row, "message", None)
+            if message is None or getattr(message, "role", None) != "user":
+                continue
+            for block in message.content or []:
+                text = getattr(block, "text", None)
+                if not text:
+                    continue
+                for regex in ENTITY_ID_RES.values():
+                    match = regex.search(text)
+                    if match:
+                        return match.group(0).upper()
+        return None
+
+    async def _ground_chat_prompt(prompt: str, session_id: str | None = None,
+                                  ) -> tuple[str, dict[str, Any] | None]:
         """Chủ động tra KB (qdrant_search) TRƯỚC khi đưa prompt vào agent, nếu câu hỏi
         nêu CVE/CWE/CAPEC/ATT&CK-id tường minh — KHÔNG phụ thuộc việc model tự quyết định
         gọi tool hay không.
 
         Lý do: cơ chế ép grounding có sẵn (``RequireChatGroundingHook.on_before_final_answer``,
-        agent/hooks.py) đang INERT trong production vì linch không dispatch hook đó (xem
-        agent/hooks.py:616-624). Đo thật 2026-09-19 (KPI-VA-GEN-TEST, 1000 câu độc lập):
+        agent/hooks.py) CÓ được linch dispatch (correction 2026-09-26 — claim "INERT" trước đây
+        là chẩn đoán sai, xem agent/hooks.py::chat_final_text docstring) nhưng KHÔNG đủ: nó chỉ
+        ép model gọi tool trong một số lần retry giới hạn rồi bỏ cuộc nếu model vẫn không gọi —
+        không đảm bảo context tồn tại. Đo thật 2026-09-19 (KPI-VA-GEN-TEST, 1000 câu độc lập):
         46.9% câu trả lời có ``tools: []`` — model không tra KB — và với câu có CVE-id cụ
         thể, model thường bịa nhầm sang 1 CVE nổi tiếng khác có id gần giống (vd
         CVE-2021-37630 bị trả lời như thể là CVE-2021-44228/Log4Shell). Faithfulness đo
@@ -806,9 +894,28 @@ def register_routes(app: FastAPI, state: Any) -> None:
         tool_call/tool_result SSE event nào phát ra cho UI (ToolTimeline.tsx) render trích
         dẫn, dù model vẫn dùng đúng context. Gọi nơi này (chat_stream/session_chat_stream)
         tự dựng cặp tool_call/tool_result giả lập từ ``grounding`` để khôi phục tín hiệu
-        nguồn cho FE."""
+        nguồn cho FE.
+
+        🅱2 lớp 1 (2026-09-26, entity-follow-up): khi câu hỏi HIỆN TẠI không nêu ID
+        tường minh, KHÔNG còn bỏ cuộc ngay — nếu câu thuộc route ``id_lookup``
+        (``classify_chat_grounding``: "CVE nào?", "còn CVE nào khác không?", "CWE
+        nào?", … mà không kèm ID) thì thử resolve entity từ LƯỢT HỎI TRƯỚC của cùng
+        phiên (``_resolve_followup_entity_id``) rồi tra KB bằng entity đó + câu hỏi
+        hiện tại. Trước fix này route ``id_lookup`` không có ID luôn rơi vào nhánh
+        early-return này → không pre-fetch → hook ép model tự gọi tool → Cyber-F1 (mô
+        hình nhỏ) thường không gọi/gọi sai → hết ``max_retries`` → mutate xin lỗi đè
+        lên draft đã stream ("giật" — xem ``RequireChatGroundingHook`` + FE
+        ToolTimeline). Route ``taxonomy``/``concept`` không đổi (vẫn early-return
+        None) — lớp 1 CHỈ mở rộng cho id_lookup, KHÔNG đụng semantics `missing_web`."""
+        query = prompt
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
-            return prompt, None
+            plan = classify_chat_grounding(prompt)
+            if plan.route != "id_lookup":
+                return prompt, None
+            entity_id = await _resolve_followup_entity_id(session_id)
+            if not entity_id:
+                return prompt, None
+            query = f"{entity_id} {prompt}".strip()
         try:
             # top_k=10 (không phải 5): khi có cve_id pin, _qdrant_search dùng "EXACT-CVE FAST
             # PATH" (retrieval/qdrant.py) — scroll max(top_k,8) dòng theo THỨ TỰ LƯU TRỮ
@@ -817,7 +924,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # một cách ngẫu nhiên — đo thật 2026-09-20: câu hỏi KEV-status trả lời sai vì thiếu
             # đúng chunk. top_k=10 đủ dư cho số chunk/CVE thực tế mà vẫn không làm loãng context.
             _t0 = time.monotonic()
-            result = await _qdrant_search(query=prompt, ctx=None, top_k=10)
+            result = await _qdrant_search(query=query, ctx=None, top_k=10)
             grounding_ms = int(round((time.monotonic() - _t0) * 1000))
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
@@ -826,7 +933,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return prompt, None
         # duration_ms: đo thời gian tra qdrant THẬT ở bước pre-fetch để event tool_result
         # giả lập (xem _grounding_sse_frames) hiển thị đúng độ trễ thay vì hard-code 0ms.
-        return prompt, {"query": prompt, "result": result.content,
+        # "query" phản ánh CHUỖI THẬT đã gửi cho qdrant_search (có thể là entity-id resolved
+        # + câu hỏi gốc, không chỉ câu hỏi gốc) — minh bạch cho FE ToolTimeline/API JSON.
+        return prompt, {"query": query, "result": result.content,
                         "summary": result.summary, "duration_ms": grounding_ms}
 
     def _grounding_context_text(grounding: dict[str, Any] | None) -> str | None:
@@ -850,19 +959,27 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def _grounding_sse_frames(grounding: dict[str, Any] | None) -> list[bytes]:
         """Dựng cặp SSE tool_call/tool_result giả lập từ kết quả pre-fetch của
         ``_ground_chat_prompt`` — cùng shape với ``event_to_sse`` (api/sse.py) thật, để FE
-        (``ToolTimeline.tsx``) render đúng như khi model tự gọi ``qdrant_search``."""
+        (``ToolTimeline.tsx``) render đúng như khi model tự gọi ``qdrant_search``.
+
+        H3 (2026-09-22): ``tool_result`` now always carries the same clean ``summary`` the
+        real ``qdrant_search`` produced (previously only the ``tool_call`` frame had it) and
+        shrinks ``result`` to a short preview (``_SSE_RESULT_PREVIEW_CHARS``) instead of the
+        raw KB dump — ToolTimeline only reads ``summary``/first-140-chars-of-``result``, so
+        the rest was pure wire weight with no FE reader."""
         if not grounding:
             return []
         tool_id = f"pre-fetch-{uuid4()}"
+        summary = grounding.get("summary")
         return [
             sse_frame("tool_call", {
                 "id": tool_id, "name": "qdrant_search",
-                "input": {"query": grounding["query"]}, "summary": grounding.get("summary"),
+                "input": {"query": grounding["query"]}, "summary": summary,
             }),
             sse_frame("tool_result", {
                 "id": tool_id, "name": "qdrant_search", "is_error": False,
                 "duration_ms": int(grounding.get("duration_ms", 0) or 0),
-                "result": grounding["result"][:4000],
+                "summary": summary,
+                "result": (grounding.get("result") or "")[:_SSE_RESULT_PREVIEW_CHARS],
             }),
         ]
 
@@ -886,7 +1003,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    {"label": "unsupported_language", "action": "refuse_language", "pii": False})
             metadata = {
                 "run_id": run_id, "profile": "chat",
-                "tool_registry": sorted(registry_for("chat")),
+                "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
                 "input_classification": {"label": "unsupported_language",
                                          "action": "refuse_language", "blocked": True, "pii": False},
                 "short_circuit": True,
@@ -907,7 +1024,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                               "blocked": True, "pii": False, "reason": "unicode_smuggling"}
             metadata = {
                 "run_id": run_id, "profile": "chat",
-                "tool_registry": sorted(registry_for("chat")),
+                "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
                 "input_classification": classification, "short_circuit": True,
             }
             return REFUSE_INJECTION_MSG, metadata
@@ -937,7 +1054,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
                         "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
                     verdict = replace(verdict, injection=judge_verdict)
-            decision = decide(verdict, state.settings)
+            decision = decide(verdict, state.settings, text=prompt)
         except Exception:  # a guard must never break chat
             logger.exception("input classifier failed → fail-open")
             return None
@@ -969,7 +1086,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return None
         metadata = {
             "run_id": run_id, "profile": "chat",
-            "tool_registry": sorted(registry_for("chat")),
+            "tool_registry": _chat_tool_registry(),  # bug #13/CQ4: gated, see helper above
             "input_classification": classification, "short_circuit": True,
         }
         return decision.message, metadata
@@ -996,8 +1113,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text, grounding = await _ground_chat_prompt(text)
         session_id = _chat_session_id(body)
+        text, grounding = await _ground_chat_prompt(text, session_id)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run — nothing to do
@@ -1079,7 +1196,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         gated = await _chat_gate(text)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        text, grounding = await _ground_chat_prompt(text)
+        text, grounding = await _ground_chat_prompt(text, sid)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
             # linch persists the turn to its session store during the run; the meta
@@ -1102,10 +1219,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
     # mid-chunk) — stripped as two separate passes rather than one combined pattern so
     # either survives without the other.
     _DATE_BRACKET_RE = re.compile(r"\[Hôm nay là [^\]]*\]\s*")
-    _INSTRUCTION_RE = re.compile(r"Dịch văn bản sau\b.{0,400}?\n\n?", re.DOTALL)
+    # Bound raised 400 → 2000 (TR2/F1 fix, 2026-09-22): messages.build_translate_prompt's
+    # instruction "head" grew from ~150-300 chars to up to ~1410 chars once the TR2
+    # anti-injection spotlighting guard (_INJECTION_GUARD) was added in front of the wrapped
+    # input — the old 400-char cap silently stopped matching the (now longer) head, so an
+    # echoed preamble — INCLUDING the anti-injection guard text itself — leaked straight into
+    # the translated output instead of being stripped. Anchored on the
+    # `<untrusted_retrieved_content` wrapper tag (always immediately follows the head's
+    # trailing blank line — see build_translate_prompt) so the match reliably covers the
+    # WHOLE head regardless of its exact length, with the raised numeric cap kept as a
+    # backstop (never eats arbitrarily far into real translated content if the tag anchor
+    # doesn't apply for some reason) and a bare `\n\n?` fallback for that same case.
+    _INSTRUCTION_RE = re.compile(
+        r"Dịch văn bản sau\b.{0,2000}?(?:\n\n(?=<untrusted_retrieved_content\b)|\n\n?)",
+        re.DOTALL,
+    )
+    # F3 fix (2026-09-22): strip the `<untrusted_retrieved_content>` spotlighting wrapper
+    # itself out of the OUTPUT if the model echoes it verbatim (open tag, close tag, or the
+    # angle-escaped `&lt;...&gt;` form a forged closing tag inside the input is neutralized
+    # to — see security.wrap_untrusted_content) — belt-and-suspenders alongside
+    # _INSTRUCTION_RE, which only strips the head that precedes the tag, not the tag itself.
+    _WRAPPER_TAG_RE = re.compile(
+        r"(?:<|&lt;)/?untrusted_retrieved_content(?:\s[^>&]*)?(?:>|&gt;)\s*", re.IGNORECASE)
 
     def _strip_prompt_echo(text: str) -> str:
-        return _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+        cleaned = _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+        return _WRAPPER_TAG_RE.sub("", cleaned)
 
     # A caller can post a whole JSON record as the text to translate — the ias.id.vn
     # datalake page sends the entire "cves_detail" object. Round-tripping that through
@@ -1167,6 +1306,69 @@ def register_routes(app: FastAPI, state: Any) -> None:
             raise HTTPException(413, f"Văn bản quá dài để dịch (>{state.settings.translate_max_chunks} "
                                      "khối). Vui lòng chia nhỏ yêu cầu.")
 
+    # TR5 fix (2026-09-22): source_lang/target_lang used to flow straight into
+    # build_translate_prompt() with zero validation — it just interpolates whatever string
+    # arrives ("Dịch văn bản sau từ {src} sang {tgt}."). A typo'd/garbage code (e.g.
+    # source_lang="xx", target_lang="zz") silently produced an unrecognizable instruction
+    # instead of failing — reproduced live as HTTP 200 with a silently-ignored code instead
+    # of an error. Validate against the real ISO 639-1 two-letter codes — a superset that
+    # covers everything the gateway documents/tests (vi, en — see docs/api-guide.md §3 and
+    # tests/test_translate_mask.py) while keeping any other language already reachable
+    # through this same permissive field (e.g. "fr") working, unchanged. `None`/omitted
+    # (→ the documented bidirectional vi/en auto-detect default) and the explicit sentinel
+    # "auto" are always valid: they mean "unspecified", not a language choice, so there is
+    # nothing to validate.
+    _ISO_639_1_LANGS = frozenset({
+        "aa", "ab", "ae", "af", "ak", "am", "an", "ar", "as", "av", "ay", "az",
+        "ba", "be", "bg", "bh", "bi", "bm", "bn", "bo", "br", "bs",
+        "ca", "ce", "ch", "co", "cr", "cs", "cu", "cv", "cy",
+        "da", "de", "dv", "dz",
+        "ee", "el", "en", "eo", "es", "et", "eu",
+        "fa", "ff", "fi", "fj", "fo", "fr", "fy",
+        "ga", "gd", "gl", "gn", "gu", "gv",
+        "ha", "he", "hi", "ho", "hr", "ht", "hu", "hy", "hz",
+        "ia", "id", "ie", "ig", "ii", "ik", "io", "is", "it", "iu",
+        "ja", "jv",
+        "ka", "kg", "ki", "kj", "kk", "kl", "km", "kn", "ko", "kr", "ks", "ku", "kv", "kw", "ky",
+        "la", "lb", "lg", "li", "ln", "lo", "lt", "lu", "lv",
+        "mg", "mh", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my",
+        "na", "nb", "nd", "ne", "ng", "nl", "nn", "no", "nr", "nv", "ny",
+        "oc", "oj", "om", "or", "os",
+        "pa", "pi", "pl", "ps", "pt",
+        "qu",
+        "rm", "rn", "ro", "ru", "rw",
+        "sa", "sc", "sd", "se", "sg", "si", "sk", "sl", "sm", "sn", "so", "sq", "sr", "ss",
+        "st", "su", "sv", "sw",
+        "ta", "te", "tg", "th", "ti", "tk", "tl", "tn", "to", "tr", "ts", "tt", "tw", "ty",
+        "ug", "uk", "ur", "uz",
+        "ve", "vi", "vo",
+        "wa", "wo",
+        "xh",
+        "yi", "yo",
+        "za", "zh", "zu",
+    })
+
+    def _validate_lang_code(code: Any, field: str) -> None:
+        """400 if `code` is a non-empty value that isn't a real ISO 639-1 code. Omitted/None
+        (the pre-existing auto-detect default) and the explicit sentinel "auto" are always
+        accepted — they carry no language-code claim to validate, so must NOT be rejected."""
+        if code is None:
+            return
+        normalized = str(code).strip().lower()
+        if not normalized or normalized == "auto":
+            return
+        if normalized not in _ISO_639_1_LANGS:
+            raise HTTPException(
+                400,
+                f"{field} không hợp lệ: {code!r}. Dùng mã ngôn ngữ ISO 639-1 (vd: vi, en) "
+                "hoặc bỏ trống/'auto' để tự nhận diện.",
+            )
+
+    def _validate_translate_langs(body: LegacyRequest) -> None:
+        src, tgt = translate_langs(body)
+        _validate_lang_code(src, "source_lang")
+        _validate_lang_code(tgt, "target_lang")
+
     # Chunks below this aren't worth the per-call overhead and start costing coherence
     # (each chunk is translated without its neighbours' context).
     _MIN_CHUNK_CHARS = 800
@@ -1188,7 +1390,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return split_for_translation(text, _chunk_budget(len(text)))
 
     def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
-        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt)."""
+        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt).
+
+        TR4/TR5 fix (2026-09-22): reject an empty/whitespace-only input up front (400) — no
+        text means there is nothing to translate, so there is no legitimate reason to still
+        call the model (which would otherwise either echo nothing back, giving the old
+        200-empty bug its input, or burn a call for no reason) — and validate source_lang/
+        target_lang before any model call, not after."""
+        if not body.supplied_text().strip():
+            raise HTTPException(400, "Thiếu nội dung cần dịch (text rỗng).")
+        _validate_translate_langs(body)
         src, tgt = translate_langs(body)
         chunks = _split_adaptive(body.supplied_text())
         _guard_chunk_cap(len(chunks))
@@ -1198,14 +1409,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
         """Translate the whole input, chunking long text so no single model turn has to emit
         a translation past its output-token cap (which would truncate). Each chunk runs the
         full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
-        separators. complete() already sanitizes; we unmask each chunk's literals here."""
+        separators. complete() already sanitizes; we unmask each chunk's literals here.
+
+        TR5 fix (2026-09-22): validated here (before EITHER the record or the plain-text
+        branch below runs) so a garbage source_lang/target_lang 400s regardless of which
+        shape the input takes — not just the plain-text path covered by _translate_chunks."""
+        _validate_translate_langs(body)
         src, tgt = translate_langs(body)
         sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
 
         async def render(chunk_text: str) -> str:
             prompt, literals = build_translate_prompt(chunk_text, src, tgt)
             out, _meta = await complete("translate", body, prompt_override=prompt)
-            return _strip_prompt_echo(unmask_literals(out, literals))
+            cleaned = _strip_prompt_echo(unmask_literals(out, literals))
+            if not cleaned.strip():
+                # TR4 fix (2026-09-22): a blank/whitespace-only completion used to flow
+                # straight through as a "successful" 200 with translated_text="" — the
+                # caller had no signal the translation actually failed. The input itself is
+                # guaranteed non-empty here (empty input is rejected earlier, in
+                # _translate_chunks/this function's top, before any model call), so an empty
+                # result here can only mean the model/provider failed to produce a
+                # translation — surface that as a real error instead of a silent success.
+                raise HTTPException(
+                    502,
+                    "Dịch thất bại: mô hình trả về kết quả rỗng (translation failed / empty completion).",
+                )
+            return cleaned
 
         async def render_bounded(chunk_text: str) -> str:
             async with sem:
@@ -1333,30 +1562,43 @@ def register_routes(app: FastAPI, state: Any) -> None:
         (``set_session_real_code_evidence``) — prefetch's own fetches land in the ledger
         under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
         cannot see them any other way (see prefetch.py's own docstring on these functions).
-        Returns ``{"evidence", "cve_id", "cve_known"}``."""
+        Also fetches ``cwe_refs`` (H1, 2026-09-22) — the CWE ids this CVE's record links to
+        via ``cve_cwe_refs`` (retrieval/neo4j.py, same CVE-record KB lookup as
+        ``cve_exists_in_kb`` above, one hop further) — so ``/ai/exploit``'s
+        ``metadata.cwe_refs`` (populated alongside evidence_ids/edb_ids/provenance, see
+        exploit()/exploit_stream()) reflects the real KB record instead of always being
+        empty. ``[]`` whenever there's no CVE id or no CVE record (fail-open, same
+        contract as ``cve_known``).
+
+        Returns ``{"evidence", "cve_id", "cve_known", "cwe_refs"}``."""
         from ..poc.inject import has_synthesis_evidence
         from ..poc.prefetch import (
             exploit_relevance_ok, set_session_coverage, set_session_cve_known,
             set_session_real_code_evidence, set_session_synthesis_evidence,
         )
-        from ..retrieval.neo4j import cve_exists_in_kb
+        from ..retrieval.neo4j import cve_cwe_refs, cve_exists_in_kb
         cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
         ledger = getattr(state.runner, "ledger", None)
         if poc is None or ledger is None:
             set_session_coverage(session_id, "failed")
-            cve_known = await cve_exists_in_kb(cve_id) if cve_id else False
+            if cve_id:
+                cve_known, cwe_refs = await asyncio.gather(
+                    cve_exists_in_kb(cve_id), cve_cwe_refs(cve_id))
+            else:
+                cve_known, cwe_refs = False, []
             set_session_cve_known(session_id, cve_known)
             set_session_synthesis_evidence(session_id, False)
             set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known}
+            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         run_id = f"prefetch:{uuid4().hex}"
         try:
             if cve_id:
-                report, cve_known = await asyncio.gather(
-                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id))
+                report, cve_known, cwe_refs = await asyncio.gather(
+                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id),
+                    cve_cwe_refs(cve_id))
             else:
-                report, cve_known = await prefetch_evidence(poc, ledger, prompt, run_id), False
+                report, cve_known, cwe_refs = await prefetch_evidence(poc, ledger, prompt, run_id), False, []
                 # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt
                 # (no CVE id) that maps to no sufficiently-relevant KB entry is treated as
                 # "nothing found" — so the exploit path does not build a PoC from a weak
@@ -1368,7 +1610,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     set_session_cve_known(session_id, False)
                     set_session_synthesis_evidence(session_id, False)
                     set_session_real_code_evidence(session_id, False)
-                    return {"evidence": [], "cve_id": None, "cve_known": False,
+                    return {"evidence": [], "cve_id": None, "cve_known": False, "cwe_refs": [],
                             "coverage": "empty", "gated": "low_relevance"}
             cov = report.get("coverage") or "failed"
             if cov not in ("enough", "empty", "partial", "failed"):
@@ -1378,19 +1620,21 @@ def register_routes(app: FastAPI, state: Any) -> None:
             evidence = ledger.evidence_for_run(run_id)
             set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
             set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
-            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known}
+            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         except Exception:
             logger.exception("deterministic PoC prefetch failed")
             set_session_coverage(session_id, "failed")
             set_session_cve_known(session_id, False)
             set_session_synthesis_evidence(session_id, False)
             set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": False}
+            return {"evidence": [], "cve_id": cve_id, "cve_known": False, "cwe_refs": []}
 
     async def inject_reference_code(text: str, run_id: str | None,
                                     pre_evidence: list[dict[str, Any]] | None = None, *,
                                     cve_known: bool = False,
-                                    cve_id: str | None = None) -> tuple[str, dict[str, Any]]:
+                                    cve_id: str | None = None,
+                                    prompt_text: str | None = None,
+                                    target: str | None = None) -> tuple[str, dict[str, Any]]:
         """Deterministic Section-1 placement via `enforce_section1` (poc/inject.py): the
         tier (real fetched code / synthesized-from-README / synthesized-from-CVE-definition
         / not-found) is decided from the merged evidence (deterministic prefetch + whatever
@@ -1407,7 +1651,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
         Before rendering, each evidence file's context-truncated code is swapped for its FULL
         store bytes (`_fullen_evidence_for_display`) — the model already ran on the bounded
         slice, so the DISPLAYED Section 1 (which the FE renders) shows the complete PoC while
-        the model context stays capped. No new endpoint, no FE change needed."""
+        the model context stays capped. No new endpoint, no FE change needed.
+
+        Also redacts any REAL target host the user named in `prompt_text`/`target` (see
+        `collect_named_targets`) out of the model's Mục 2/3 prose and force-inserts the
+        mandatory authorization disclaimer under Mục 2 — PC2 (2026-09-22): a request that
+        both asked for a real CVE's PoC and named a live third-party host got that host
+        baked verbatim into a runnable Mục 2 command with no authorization framing at all."""
         ledger = getattr(state.runner, "ledger", None)
         try:
             text = strip_system_narration(text)
@@ -1420,6 +1670,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # may still emit in Mục 2/3 despite prompt rules. Runs on model text only, before
             # Section-1 injection, so the real injected PoC code is never rewritten.
             text = sanitize_airgap_runguide(text, cve_id)
+            # Deterministic target-redaction + authorization backstop (PC2): same placement
+            # (model text only, before Section-1 injection) so the real injected PoC source
+            # is never touched — only the model's own Mục 2/3 prose/commands are.
+            text = redact_user_target(text, collect_named_targets(prompt_text, target))
+            text = ensure_target_disclaimer(text)
             run_evidence = ledger.evidence_for_run(run_id) if (ledger is not None and run_id) else []
             evidence = merge_evidence(pre_evidence or [], run_evidence)
             evidence = await _fullen_evidence_for_display(evidence, getattr(state.runner, "poc", None))
@@ -1442,13 +1697,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             meta.update(ledger.exploit_metadata(run_id))
         meta.setdefault("evidence_ids", []); meta.setdefault("edb_ids", [])
         meta.setdefault("provenance", []); meta.setdefault("candidate_status", "not_generated")
+        meta.setdefault("cwe_refs", [])  # H1: populated from prefetch_result by the caller
         return meta
 
     def exploit_guidance_meta() -> dict[str, Any]:
         """Metadata for the chitchat→"nhập CVE" guidance reply: keeps the same shape the FE
         reads (evidence/provenance/candidate_status) but flags no PoC work was done."""
         meta = base_meta("exploit_research", None)
-        meta.update({"evidence_ids": [], "edb_ids": [], "provenance": [],
+        meta.update({"evidence_ids": [], "edb_ids": [], "provenance": [], "cwe_refs": [],
                      "candidate_status": "not_generated",
                      "reference_code_injected": False, "input_kind": "chitchat"})
         return meta
@@ -1581,7 +1837,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                  _resolve_poc_strategy(strategy_override, settings), cve_id)
                 consolidated = None
 
-        if consolidated:
+        # PC4 (2026-09-22): a stub/degenerate merge output (poc/inject.py::_is_stub_markup —
+        # e.g. the LLM ignoring its real source and emitting a narrative "it worked" HTML shell,
+        # observed live for CVE-2025-30065, tagged `section1_tier=real_consolidated` even though
+        # Mục 1 had zero exploit logic) must NOT be used as Section 1 just because *some* bytes
+        # came back. Treat it exactly like a failed consolidation (`consolidated is None`) and
+        # fall through to the verbatim/synthesis path below, which still has the genuinely real
+        # fetched evidence (`base_evidence`/`extra_real`, untouched by consolidate_poc) to inject
+        # instead of silently losing a real PoC just because its LLM merge degraded.
+        if consolidated and has_real_code_evidence([consolidated]):
             desc_only = [e for e in list(base_evidence) + list(web_hints or [])
                          if not has_real_code_evidence([e])]
             pre_evidence = [consolidated] + merge_evidence(desc_only)
@@ -1637,8 +1901,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         web_hints = await _maybe_web_hints(prefetch_result)
         # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
+        exploit_target = _exploit_target(body, prompt_text)
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
-            prefetch_result, web_hints, session_id, target=_exploit_target(body, prompt_text),
+            prefetch_result, web_hints, session_id, target=exploit_target,
             strategy_override=getattr(body, "poc_strategy", None))
         agent_prompt = (prompt_text
                         + (_kt_prompt_appendix(kt_result) if kt_result else "")
@@ -1647,11 +1912,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                         prompt_override=agent_prompt)
         text, injected = await inject_reference_code(
             text, metadata.get("run_id"), pre_evidence,
-            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
+            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+            prompt_text=prompt_text, target=exploit_target)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
         metadata.update(injected)
+        # H1 (2026-09-22): cwe_refs comes from the CVE-record KB lookup exploit_prefetch()
+        # already did (cve_cwe_refs, retrieval/neo4j.py), not from PoC evidence — set
+        # independently of `injected` (enforce_section1's report never carries this key).
+        metadata["cwe_refs"] = prefetch_result.get("cwe_refs", [])
         metadata["poc_strategy"] = _resolve_poc_strategy(getattr(body, "poc_strategy", None), state.settings)
         if kt_result is not None:
             metadata["poc_kt_exploit"] = kt_result
@@ -1750,9 +2020,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
             final, injected = await inject_reference_code(
                 final, run_id, pre_evidence,
-                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"))
+                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                prompt_text=text, target=_exploit_target(body, text))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
+            # H1 (2026-09-22): see the non-stream exploit() endpoint's identical comment —
+            # cwe_refs comes from the prefetch's CVE-record lookup, not from `injected`.
+            meta["cwe_refs"] = prefetch_result.get("cwe_refs", [])
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
             safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too

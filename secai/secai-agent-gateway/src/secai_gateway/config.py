@@ -45,17 +45,31 @@ class Settings(BaseSettings):
     embedding_api_key: str = ""
     reranker_api_key: str = ""
 
-    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, opt-in, default OFF, fail-open) ──
+    # ── Exploit relevance gate (layer 4; EXPLOIT-ONLY, fail-open) ────────────────
     # ONLY the /ai/exploit PoC-generation path (poc/prefetch.py → routes.exploit_prefetch)
     # uses this — chat/report/statistical are untouched. For a FREE-TEXT prompt (no CVE id),
     # it embeds the prompt, retrieves KB candidates and takes the reranker's top relevance_score
     # as a confidence signal; below the floor → the prompt maps to no real/known vulnerability,
     # so prefetch reports "nothing found" instead of building a PoC from a weak keyword match
     # (the "user nhập linh tinh vẫn ra PoC tự tin" gap). A NAMED CVE keeps using cve_exists_in_kb.
-    # Measured 2026-09-02: in-KB ~1.0, off-topic ~0.0 (clean at 0.5). No reranker / any error →
-    # no gate (fail-open). OFF by default so current behaviour is unchanged until enabled.
-    exploit_relevance_gate_enabled: bool = False
-    exploit_rerank_min_score: float = 0.5
+    # Measured 2026-09-02: in-KB ~1.0, off-topic pure-gibberish ~0.0 (clean at 0.5) — BUT
+    # re-measured 2026-09-22 while fixing bug #1/PC1: a security-FLAVORED but non-specific
+    # "how do I hack <generic target>" prompt ("how do I hack wifi" ~0.978, "how to hack
+    # facebook" ~0.944) also scores high with this cross-encoder reranker (it responds to
+    # security vocabulary, not to whether the query names an actual specific vulnerability),
+    # landing well above the old 0.5 floor and indistinguishable from it. Genuine specific
+    # product/CVE descriptions cluster tighter, ~0.9975-0.9997 (wordpress sqli, log4j RCE,
+    # struts2 RCE, phpmyadmin auth bypass, openssh exploit). 0.99 sits in the gap between the
+    # two clusters — no reranker / any error → no gate (fail-open).
+    # DEFAULT ON since 2026-09-22 (bug #1 / PC1, HIGH safety): a free-text off-topic prompt
+    # ("how do I hack wifi") with no CVE id and no relevant KB match was still returning a
+    # loosely keyword-matched, unrelated PoC tiered `section1_tier=real_consolidated` +
+    # `reference_code_injected=true` — presented as a grounded real exploit. This gate was
+    # already built (2026-09-02) but shipped opt-in/OFF (and at a threshold too low to catch
+    # this exact class of prompt), so it never protected prod. Set
+    # `EXPLOIT_RELEVANCE_GATE_ENABLED=false` to restore the old (unsafe) always-on behaviour.
+    exploit_relevance_gate_enabled: bool = True
+    exploit_rerank_min_score: float = 0.99
     # ── Input sanitization classifier (model-based, chat path) ─────────────────
     # A tiny numpy linear head over the sec-embedding vector classifies each chat
     # prompt into a combined taxonomy (intent: security|chitchat|offtopic + risk:
@@ -86,6 +100,15 @@ class Settings(BaseSettings):
     # second line of defense for genuine off-topic (weather/cooking/etc. score nowhere near a
     # tie). 0.0 disables the margin check (legacy threshold-only behavior).
     input_classifier_offtopic_margin: float = 0.15
+    # Security-domain override (gate.py::decide, residual #2 fix 2026-09-27): the margin guard
+    # above only rescues near-tie offtopic/security scores — it does NOT catch Top-N/taxonomy
+    # security questions the head misclassifies CONFIDENTLY as off-topic (e.g. "Hãy liệt kê CWE
+    # Top 25" scored offtopic=0.98/security=0.01, margin 0.97). When the raw prompt names an
+    # explicit security taxonomy/framework (CWE/CVE/CAPEC/CVSS/OWASP/SANS/ATT&CK/MITRE) and is
+    # not ALSO flagged as injection, the off-topic refusal is skipped and the prompt passes to
+    # the agent (which still has the LLM <scope_policy> as a second line of defense). True →
+    # keep the override; False → restore the pre-fix threshold+margin-only behavior (rollback).
+    input_classifier_security_marker_override: bool = True
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
     # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
@@ -103,6 +126,17 @@ class Settings(BaseSettings):
     # use vi/en. Latin-script languages pass through. Dependency-free, no network.
     language_gate_enabled: bool = True
     language_gate_nonlatin_ratio: float = 0.5
+
+    # Bug #13/CQ4: `metadata.tool_registry` on /sessions/{sid}/chat and /chat/stream listed
+    # internal retrieval-tool names (qdrant_search, neo4j_search, poc_search, fetch_reference,
+    # web_fetch) on EVERY reply, including plain greetings — an internal-implementation detail
+    # with no legitimate public use (confirmed: the FE's sse.ts types this field but nothing
+    # renders it). Default OFF returns an empty list (key/shape unchanged: still list[str]);
+    # turn on only to debug which tools a profile actually exposes. Deliberately does NOT
+    # touch the SSE `tool_call`/`tool_result` frames — those ARE consumed by the FE's live
+    # "Hoạt động công cụ" timeline (ToolTimeline.tsx / ChatbotScreen.tsx) for every chat
+    # message, so redacting their content would break a real, user-facing feature.
+    expose_internal_tool_metadata: bool = False
 
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"

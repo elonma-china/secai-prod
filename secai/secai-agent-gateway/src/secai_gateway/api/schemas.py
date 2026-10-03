@@ -136,6 +136,15 @@ class LegacyRequest(BaseModel):
     # structure) | "consolidate" (legacy LLM merge) | "auto". None → Settings.poc_strategy.
     # Lets ONE gateway serve both the new and old paths for side-by-side comparison.
     poc_strategy: str | None = None
+    # /ai/generate-statistical-report inputs (messages.py::statistical_prompt/
+    # statistical_detail_table). `detail` is either the legacy free-text CVE list (fed to
+    # the LLM as-is) or the new structured per-machine array
+    # [{name, ip, scaned, cves: [{cve, severity, description}]}] (rendered to a table in
+    # code, never sent to the LLM — see statistical_prompt()'s docstring for why).
+    from_date: str | None = None
+    to_date: str | None = None
+    summary: str | None = None
+    detail: str | list[dict[str, Any]] | None = None
 
     def supplied_text(self) -> str:
         """Return the first non-empty user text across legacy request shapes."""

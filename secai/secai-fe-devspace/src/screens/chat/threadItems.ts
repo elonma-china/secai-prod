@@ -13,6 +13,11 @@ export type ThreadItem =
       streaming: boolean;
       runId?: string;
       error?: string;
+      /** Set while waiting out a backend-triggered SSE `regenerate` (require_chat_grounding
+       * discarding a fabricated draft and restarting the answer) — lets the thread show a
+       * meaningful "đang tra cứu lại…" indicator instead of silently blanking back to the
+       * generic "đang soạn…" placeholder. Cleared on the next token/final. */
+      regenerating?: boolean;
     }
   | { kind: "blocked422"; id: string; detail: string };
 

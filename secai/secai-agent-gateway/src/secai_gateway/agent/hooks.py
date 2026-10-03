@@ -16,6 +16,7 @@ from typing import Any
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
 from linch.hooks.types import HookResult, ToolResult
 
+from ..config import get_settings
 from ..poc.inject import has_real_code_evidence, has_synthesis_evidence, section1_has_body
 from ..poc.prefetch import (
     COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known,
@@ -689,15 +690,27 @@ def _chat_final_guarantee(prompt: str, text: str) -> HookResult | None:
 
 
 def chat_final_text(prompt: str, text: str) -> str:
-    """Text-returning twin of ``_chat_final_guarantee`` for the RELIABLE code path.
+    """Text-returning twin of ``_chat_final_guarantee`` — a redundant, unconditional backstop
+    applied at the value layer after the run loop returns.
 
-    ``_chat_final_guarantee`` lives on ``RequireChatGroundingHook.on_before_final_answer``,
-    which the container's linch never dispatches — so that guard is INERT in production
-    (verified 2026-09: a stderr probe at the top of that method never printed). This helper
-    is what ``LinchRunner.complete()`` calls INSTEAD, post-processing the final answer TEXT
-    after the run loop. It reuses the exact same constants/regex as the hook and returns the
-    deterministic replacement string for an empty/closer-only answer, a meta deflection, or a
-    false CVSS-superlative claim — otherwise it returns ``text`` unchanged. The ONLY thing it
+    CORRECTION (2026-09-26): this docstring used to claim ``RequireChatGroundingHook.
+    on_before_final_answer`` (which ``_chat_final_guarantee`` lives on) is never dispatched by
+    linch in production ("INERT"), based on a 2026-09 stderr probe that never printed. That was
+    a misdiagnosis, not a fact about linch — the max_retries/"phantom regenerate" investigation
+    (agent/hooks.py::RequireChatGroundingHook.__init__ docstring, same date) proves the opposite:
+    ``on_before_final_answer`` DOES run in production and its ``force_continue`` DOES reach
+    ``dispatch_before_final_answer``/``loop/finalize.py`` (that's the exact mechanism the
+    max_retries bug lived in — a hook call that doesn't fire can't emit an SSE ``regenerate``
+    frame, and live probes counted 2 of them for one Top-N question). Whatever caused the
+    earlier probe to stay silent was specific to that probe (placement, stderr capture under
+    the container's logging setup, etc.), not evidence the hook itself is dead code.
+    ``chat_final_text`` is kept anyway — not because the hook is inert, but as a deliberate
+    second, independent layer: it reuses the exact same constants/regex as
+    ``_chat_final_guarantee`` and applies them to the run's FINAL text value regardless of
+    whether the hook's own ``mutate`` already fired, so the anti-empty/meta/aggregate floor
+    holds even if the hook chain, profile wiring, or dispatch behavior ever changes. It returns
+    the deterministic replacement string for an empty/closer-only answer, a meta deflection, or
+    a false CVSS-superlative claim — otherwise it returns ``text`` unchanged. The ONLY thing it
     changes is the answer TEXT value; the caller's ``(final, metadata)`` return shape, the
     metadata dict and every schema/SSE contract are untouched.
 
@@ -741,11 +754,36 @@ class RequireChatGroundingHook:
     - Post-tool: only successful calls satisfy the requirement (errors do not count).
     - Before-final: force_continue until required tools ran (bounded retries).
     Concept questions (no ID / no Top-N / no "CVE nào") use parametric knowledge.
+
+    ``max_retries`` bug (found 2026-09-26, "regenerate giả"): this hook used to default to
+    3 — its OWN counter of how many times it's willing to ask for a redo — but linch's run
+    loop caps how many of those requests it will actually HONOR at
+    ``_MAX_FINAL_ANSWER_REENTRIES = 1`` (``linch/loop/runner.py``, module-level constant,
+    not configurable via ``Agent(...)``; threaded into ``FinalizeCtx.max_final_answer_
+    reentries`` and checked in ``loop/finalize.py``:
+    ``if hook_action == "retry" and ctx.final_answer_reentries[0] < ctx.max_final_answer_
+    reentries``). With 3 > 1, this hook's 2nd/3rd ``force_continue`` still fired — and
+    ``dispatch_before_final_answer`` (``loop/dispatch.py``) still yields the
+    ``HookEventRecord(action="force_continue")`` for it BEFORE finalize.py's reentry-budget
+    check runs — but linch's own counter was already exhausted, so it silently shipped the
+    STALE draft instead of actually re-running the model. ``api/sse.py::event_to_sse`` maps
+    any ``HookEventRecord`` with ``action in {"force_continue", "retry"}`` straight to an
+    SSE ``regenerate`` frame regardless of whether linch went on to honor it — so the client
+    reset its buffer for a "regeneration" that never happened (verified live: a Top-N
+    question got 2 ``regenerate`` frames, the 2nd one pointless — same stale draft came back).
+    Setting the default to 1 caps this hook's own budget at the SAME number linch will
+    actually re-run (exactly the one force_continue the loop honors) — beyond that, on
+    attempt >= max_retries the ``on_before_final_answer`` branch below falls through to
+    ``HookResult.mutate(final_text=_CHAT_EMPTY_FALLBACK, ...)`` instead of another
+    ``force_continue``: ``mutate`` is NOT in ``_REGENERATE_ACTIONS`` (api/sse.py), so no
+    phantom ``regenerate`` SSE frame is ever sent for it. Net effect: at most ONE real
+    regenerate per run (the anti-fabrication guarantee is unchanged — chat still gets
+    exactly one forced grounding attempt before falling back), zero fake ones.
     """
 
     name = "require_chat_grounding"
 
-    def __init__(self, profile: str = "chat", max_retries: int = 3) -> None:
+    def __init__(self, profile: str = "chat", max_retries: int = 1) -> None:
         self.profile = profile
         self.max_retries = max_retries
         self._web: OrderedDict[str, bool] = OrderedDict()
@@ -846,6 +884,28 @@ class RequireChatGroundingHook:
         has_kb = RequireSearchBeforeAnswerHook._get(self._kb, run_id, False)
         missing_web = plan.need_web and not has_web
         missing_kb = plan.need_kb and not has_kb
+
+        # 2026-09-27 (🅱2 Lớp 2 fix): when web is unreachable (airgap → web_fetch_enabled=
+        # False), agent/runner.py never even REGISTERS the web_fetch tool (`**({web_fetch.name:
+        # web_fetch} if get_settings().web_fetch_enabled else {})`) — so the model has no way
+        # to call it, ever. Enforcing missing_web here in that state is unsatisfiable by
+        # construction: force_continue burns the single reentry (max_retries=1, see this
+        # class's docstring) asking for a tool call that literally cannot happen, and once
+        # exhausted this hook ships `_CHAT_EMPTY_FALLBACK` OVER an already-correct, already-
+        # streamed draft — the exact "giật"/false-apology bug this fix targets. prompts/
+        # chat.md already tells the model what to do in this state (answer Top-N/taxonomy from
+        # parametric knowledge + an explicit "không lấy được trang nguồn hiện tại" disclaimer),
+        # so once web is confirmed off, accept that answer instead of fighting it.
+        #
+        # Deliberately narrow: this ONLY clears the WEB leg of the requirement for THIS turn.
+        # It does NOT touch missing_kb (id_lookup/entity KB grounding stays enforced exactly
+        # as before — the KB IS reachable, so there's nothing unsatisfiable about asking for
+        # it), and it does NOT change behavior at all when web_fetch_enabled=True (non-airgap):
+        # missing_web enforcement below is byte-for-byte the same as before this fix in that
+        # case, since this branch is simply never taken.
+        if missing_web and not get_settings().web_fetch_enabled:
+            missing_web = False
+
         if not missing_web and not missing_kb:
             return None
 

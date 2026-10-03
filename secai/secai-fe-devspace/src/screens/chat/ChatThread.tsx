@@ -103,6 +103,7 @@ export default function ChatThread({
               }
 
               const cve = !it.streaming && it.text ? detectCve(it.text) : null;
+              const cveSplit = cve ? splitCveTitle(it.text, cve.id) : null;
               const foot = !it.streaming && it.text && (
                 <div className="msg-foot">
                   {it.runId && <span className="mono runid">run_id: {it.runId}</span>}
@@ -119,39 +120,13 @@ export default function ChatThread({
                 </div>
               );
 
-              if (cve) {
-                const { title, body } = splitCveTitle(it.text, cve.id);
-                return (
-                  <div key={it.id} className="msg-row">
-                    <div className="msg-avatar">
-                      <Bot size={16} strokeWidth={1.5} />
-                    </div>
-                    <div className="msg-col">
-                      {it.tools.length > 0 && <ToolTimeline tools={it.tools} defaultOpen={false} />}
-                      <Blueprint className="iascard cve-card">
-                        <h4>{title}</h4>
-                        <div className="cve-tags">
-                          {cve.cvss && (
-                            <span className={"chip " + (Number(cve.cvss) >= 9 || cve.severity === "CRITICAL" ? "crit" : "warn")}>
-                              CVSS {cve.cvss}
-                              {cve.severity ? ` · ${cve.severity}` : ""}
-                            </span>
-                          )}
-                          {cve.cwe.map((c) => (
-                            <span key={c} className="chip">
-                              {c}
-                            </span>
-                          ))}
-                          {cve.kev && <span className="chip warn">CISA KEV</span>}
-                        </div>
-                        <Markdown>{body}</Markdown>
-                        {foot}
-                      </Blueprint>
-                    </div>
-                  </div>
-                );
-              }
-
+              // IMPORTANT: this renders ONE stable answer container (same element + key) for both
+              // the plain bubble and the CVE-card variant. Streaming ends and the CVE card appears
+              // in the SAME patchAssistant tick (see ChatbotScreen onFinal) — if that transition
+              // swapped element types (e.g. plain <div> vs a <Blueprint> component) React would
+              // unmount the whole answer subtree and remount a new one, which is exactly the
+              // "GIẬT" (unmount/remount flash) this was fixed for. Keeping the div itself constant
+              // and only toggling its className/inner content lets React patch in place instead.
               return (
                 <div key={it.id} className="msg-row">
                   <div className="msg-avatar">
@@ -159,21 +134,48 @@ export default function ChatThread({
                   </div>
                   <div className="msg-col">
                     {it.tools.length > 0 && <ToolTimeline tools={it.tools} defaultOpen={it.streaming} />}
-                    {it.phases.length > 0 && <PhaseChips items={it.phases} />}
-                    {it.streaming && !it.text && (
+                    {!cve && it.phases.length > 0 && <PhaseChips items={it.phases} />}
+                    {!cve && it.streaming && !it.text && (
                       <span className="chip accent" style={{ gap: 5 }}>
                         <span className="blink" style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--teal)" }} />
-                        đang soạn…
+                        {it.regenerating ? "Đang tra cứu lại để trả lời chính xác hơn…" : "đang soạn…"}
                       </span>
                     )}
                     {(it.text || !it.streaming) && (
-                      <div className="bubble-assistant">
-                        <Markdown>{it.text}</Markdown>
+                      <div className={cve ? "blueprint iascard cve-card" : "bubble-assistant"}>
+                        {cve && cveSplit && (
+                          <>
+                            <i className="corner tl" aria-hidden="true" />
+                            <i className="corner tr" aria-hidden="true" />
+                            <i className="corner bl" aria-hidden="true" />
+                            <i className="corner br" aria-hidden="true" />
+                            <h4>{cveSplit.title}</h4>
+                            <div className="cve-tags">
+                              {cve.cvss && (
+                                <span className={"chip " + (Number(cve.cvss) >= 9 || cve.severity === "CRITICAL" ? "crit" : "warn")}>
+                                  CVSS {cve.cvss}
+                                  {cve.severity ? ` · ${cve.severity}` : ""}
+                                </span>
+                              )}
+                              {cve.cwe.map((c) => (
+                                <span key={c} className="chip">
+                                  {c}
+                                </span>
+                              ))}
+                              {cve.kev && <span className="chip warn">CISA KEV</span>}
+                            </div>
+                          </>
+                        )}
+                        {/* Explicit key: keeps this exact Markdown instance across the streaming→
+                            final transition even though CVE-only siblings (corners/h4/tags) get
+                            inserted before it, so the body doesn't re-parse/flash on that switch. */}
+                        <Markdown key="body">{cve && cveSplit ? cveSplit.body : it.text}</Markdown>
                         {it.streaming && it.text && <span className="blink" style={{ color: "var(--teal)", fontWeight: 700 }}>▌</span>}
+                        {cve && foot}
                       </div>
                     )}
-                    {it.error && <div style={{ color: "var(--danger)", fontSize: 12 }}>{it.error}</div>}
-                    {foot}
+                    {!cve && it.error && <div style={{ color: "var(--danger)", fontSize: 12 }}>{it.error}</div>}
+                    {!cve && foot}
                   </div>
                 </div>
               );
