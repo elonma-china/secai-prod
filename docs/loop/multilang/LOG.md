@@ -58,3 +58,5 @@ Vanguard4883e87 committedplan+13independenttests+report;19pass including6legacy,
 CoreR3FAIL1Medium vs4prior. R3-01mixedArabic+longRussian falsepositive; fix3/5, abandonratioheuristic reservepurecontraryscript mismatch; samecriterion twice triggers approachchange, explicitlyenforced. No stagnantcountstop (8→4→1).
 
 Frozen coref6b7834 codee9a2fd0 (139targetedpass) reviewerround4 session24339; assessment368afcd(75targetedpass) reviewerround2 session52745. Wardencheckpoint2 session53279 ongoing. CPUintegration stillwaitreview.
+
+Wardencheckpoint2 permits CPUwork flagsOFF, counters3/1/1 andVanguard0return. Requested staleSHA updates alreadyapplied; scratchledger rewrittenauthoritativecurrent snapshot. OtherfileSTOPboundary retained.
