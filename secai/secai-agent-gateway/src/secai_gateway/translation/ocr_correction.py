@@ -2,13 +2,27 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import re
 
 from .technical_tokens import literal_spans
 from .types import CorrectedOcr, DocumentBlock, OcrEdit, OcrResult, ProcessingContext, WarningItem
 
 _REASONS = {"spelling", "spacing", "punctuation"}
-_AMBIGUOUS = re.compile(r"(?i)\bCVE[- ]?[12OIl]{2,4}[- ]?[0-9OIl]{3,7}\b|\b\d{1,3}(?:[.O]\d{1,3}){3}\b")
+_AMBIGUOUS_CVE = re.compile(r"(?i)\bCVE[- ]?[0-9OIl]{4}[- ]?[0-9OIl]{3,7}\b")
+_IP_LIKE = re.compile(r"(?<!\w)(?:[0-9OIl]{1,3}[.O]){3}[0-9OIl]{1,3}(?:/\d{1,2})?(?!\w)")
+
+
+def _has_ambiguous_technical(text: str) -> bool:
+    for match in _AMBIGUOUS_CVE.finditer(text):
+        if not re.fullmatch(r"CVE-\d{4}-\d{4,7}", match.group(), re.I):
+            return True
+    for match in _IP_LIKE.finditer(text):
+        try:
+            ipaddress.ip_network(match.group(), strict=False)
+        except ValueError:
+            return True
+    return False
 
 
 def _fallback(result: OcrResult, code: str) -> CorrectedOcr:
@@ -59,7 +73,7 @@ def _validate(result: OcrResult, proposal: object) -> CorrectedOcr:
         corrected_blocks.append(DocumentBlock(id=block.id, kind=block.kind, order=block.order,
                                                text=text, metadata=block.metadata))
         accepted.extend(edits)
-    needs_review = any(_AMBIGUOUS.search(block.text) for block in result.blocks)
+    needs_review = any(_has_ambiguous_technical(block.text) for block in result.blocks)
     return CorrectedOcr(blocks=tuple(corrected_blocks), raw_text=result.raw_text,
                         corrected_text="\n".join(block.text for block in corrected_blocks),
                         edits=tuple(accepted), warnings=result.warnings, needs_review=needs_review)
