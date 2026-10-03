@@ -19,6 +19,7 @@ SPLITS = frozenset({"TRAIN", "DEV", "TEST"})
 REQUIRED = frozenset({
     "id", "direction", "source", "reference", "split", "stratum",
     "protected_spans", "source_revision", "license", "source_group",
+    "aligned_item_id",
 })
 
 
@@ -61,10 +62,11 @@ def validate_manifest(
     records = list(rows)
     ids: set[str] = set()
     groups: dict[str, str] = {}
-    sources: dict[str, str] = {}
+    aligned_items: dict[str, tuple[str, str]] = {}
+    sources: dict[str, tuple[str, str]] = {}
     seen_sources: list[tuple[str, str]] = []
     directions: set[str] = set()
-    counts: dict[str, int] = {}
+    counts: dict[str, set[str]] = {}
     for row in records:
         if not isinstance(row, dict) or not REQUIRED.issubset(row):
             missing = sorted(REQUIRED - set(row)) if isinstance(row, dict) else ["row is not an object"]
@@ -77,7 +79,6 @@ def validate_manifest(
         if direction not in DIRECTIONS:
             raise ManifestError(f"unsupported direction: {direction}")
         directions.add(direction)
-        counts[direction] = counts.get(direction, 0) + 1
         split = _nonempty(row, "split")
         if split not in SPLITS:
             raise ManifestError(f"invalid split: {split}")
@@ -85,21 +86,26 @@ def validate_manifest(
         if group in groups and groups[group] != split:
             raise ManifestError(f"source_group appears in multiple splits: {group}")
         groups[group] = split
+        counts.setdefault(direction, set()).add(group)
+        aligned_item = _nonempty(row, "aligned_item_id")
+        if aligned_item in aligned_items and aligned_items[aligned_item] != (split, group):
+            raise ManifestError(f"aligned_item_id appears in multiple splits or groups: {sample_id}")
+        aligned_items[aligned_item] = split, group
         source = _nonempty(row, "source")
         _nonempty(row, "reference")
         norm = normalized_source(source)
-        if norm in sources and sources[norm] != split:
-            raise ManifestError(f"duplicate source appears in multiple splits: {sample_id}")
+        if norm in sources and sources[norm] != (aligned_item, group):
+            raise ManifestError(f"duplicate source claims multiple aligned items or groups: {sample_id}")
         if len(norm) >= 20:
             grams = _ngrams(norm)
-            for prior, prior_split in seen_sources:
-                if prior_split == split or len(prior) < 20:
+            for prior, prior_group in seen_sources:
+                if prior_group == group or len(prior) < 20:
                     continue
                 prior_grams = _ngrams(prior)
                 if len(grams & prior_grams) / len(grams | prior_grams) >= 0.80:
-                    raise ManifestError(f"near duplicate source appears in multiple splits: {sample_id}")
-        sources[norm] = split
-        seen_sources.append((norm, split))
+                    raise ManifestError(f"near duplicate source claims a different group: {sample_id}")
+        sources[norm] = aligned_item, group
+        seen_sources.append((norm, group))
         revision = _nonempty(row, "source_revision")
         if revision.casefold() in {"latest", "main", "head", "unknown", "none", "unversioned"} or not re.search(r"[0-9a-f]{7,}$", revision):
             raise ManifestError(f"source_revision is not pinned: {sample_id}")
@@ -126,8 +132,8 @@ def validate_manifest(
             previous_end = end
     if require_directions and directions != set(DIRECTIONS):
         raise ManifestError(f"manifest must include all 18 directions; missing {sorted(set(DIRECTIONS) - directions)}")
-    if min_per_direction and any(counts.get(direction, 0) < min_per_direction for direction in (DIRECTIONS if require_directions else directions)):
-        raise ManifestError(f"fewer than {min_per_direction} samples in a direction")
+    if min_per_direction and any(len(counts.get(direction, set())) < min_per_direction for direction in (DIRECTIONS if require_directions else directions)):
+        raise ManifestError(f"fewer than {min_per_direction} unique source groups in a direction")
     return ManifestSummary(
         directions=tuple(direction for direction in DIRECTIONS if direction in directions),
         samples=len(records),

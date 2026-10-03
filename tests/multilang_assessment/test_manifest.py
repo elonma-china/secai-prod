@@ -22,6 +22,7 @@ def row(sample_id="s1", direction="vi>ja", split="DEV", source="Xin chào bạn.
         "source_revision": "public-corpus@1234567",
         "license": "CC-BY-4.0",
         "source_group": group,
+        "aligned_item_id": group,
     }
 
 
@@ -75,3 +76,29 @@ def test_protected_span_must_match_source_offsets():
     bad["protected_spans"] = [{"start": 8, "end": 21, "text": "CVE-2024-1234", "kind": "cve"}]
     with pytest.raises(ManifestError, match="protected_span"):
         validate_manifest([bad], require_directions=False)
+
+
+def test_translated_aligned_item_cannot_cross_split_with_different_group():
+    other = row("en", "en>vi", "TEST", "The patch is available.", "other-doc")
+    other["aligned_item_id"] = "doc-1"
+    with pytest.raises(ManifestError, match="aligned_item_id"):
+        validate_manifest([row(), other], require_directions=False)
+
+
+def test_repeated_source_cannot_claim_multiple_independent_groups():
+    with pytest.raises(ManifestError, match="duplicate source"):
+        validate_manifest([row(), row("copy", group="doc-2")], require_directions=False)
+
+
+def test_manifest_quota_counts_distinct_groups_not_repeated_rows():
+    repeated = [row(f"s{i}", source=f"Câu {i}.", group="same-doc") for i in range(30)]
+    with pytest.raises(ManifestError, match="unique source groups"):
+        validate_manifest(repeated, require_directions=False, min_per_direction=30)
+
+
+def test_near_duplicate_same_split_cannot_create_new_group():
+    with pytest.raises(ManifestError, match="near duplicate"):
+        validate_manifest([
+            row(source="The package is vulnerable to CVE-2024-1234."),
+            row("copy", source="The package is vulnerable to CVE-2024-1234!", group="new-doc"),
+        ], require_directions=False)

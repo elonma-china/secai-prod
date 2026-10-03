@@ -26,3 +26,5 @@ Ngày kiểm tra: 2026-10-03/04 (Asia/Ho_Chi_Minh). Worktree `feature/multilang-
 | License | Inventory HF của plan ghi `apache-2.0` tại cùng Cyber-F1 revision | README card không nằm trong cached snapshot; cần nguồn gốc trực tiếp trước Gate C/license decision |
 
 Không dùng `/health` để suy embedding/reranker hoạt động; `/v1/models` chỉ chứng minh ID được công bố, không chứng minh inference hay chất lượng. Gate A/B/D, dataset 18 hướng, ≥70% rubric, off-target và entity acceptance đều **NOT RUN**. OCR đang benchmark trên cùng GPU nên không có quyền chạy live.
+
+Cập nhật read-only 2026-10-04: task OCR đã dừng process/tunnel do nó sở hữu và chốt STOPPED/BLOCKED; ba lượt auxiliary OCR/LID/QE đã dùng hết. Dịch vụ DuyTa hiện hữu không đổi. Assessment vẫn không có reservation riêng hay dữ liệu/bằng chứng để gọi live; trạng thái live tiếp tục BLOCKED. Xem [auxiliary ledger](auxiliary-ledger.md).

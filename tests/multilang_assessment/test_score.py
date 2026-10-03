@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 
 from evals.multilang.manifest import canonical_hash
@@ -37,7 +39,7 @@ def result(sample_id, round_number=1, output="こんにちは。", error=None):
     }
 
 
-def annotation(sample_id, round_number=1, passed=True, off_target=False):
+def annotation(sample_id, round_number=1, passed=True, off_target=False, output="こんにちは。"):
     return {
         "sample_id": sample_id,
         "round": round_number,
@@ -54,6 +56,7 @@ def annotation(sample_id, round_number=1, passed=True, off_target=False):
         "reviewer": "blind-reviewer-1",
         "blind": True,
         "calibration_id": "labeled-calibration@1234567",
+        "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
     }
 
 
@@ -123,6 +126,24 @@ def test_extra_cve_fails_entity_gate():
     assert direction["quality_passes"] == 0
 
 
+def test_extra_url_fails_exact_gate_with_per_sample_mismatch():
+    source = "Mở https://example.org/path để kiểm tra."
+    sample = row(source=source)
+    literal = "https://example.org/path"
+    start = source.index(literal)
+    sample["protected_spans"] = [{"start": start, "end": start + len(literal),
+                                  "text": literal, "kind": "url"}]
+    output = "https://example.org/path と https://evil.example/extra を開く。"
+    report = score_results([sample], [result("s1", output=output)],
+                           [annotation("s1", output=output)], rounds=1,
+                           min_samples_per_direction=1)
+    direction = report["directions"]["vi>ja"]["rounds"]["1"]
+    assert direction["entity_gate"] == "FAIL"
+    assert direction["entity_details"][0]["sample_id"] == "s1"
+    assert any(item["kind"] == "url" and item["status"] == "MISMATCH"
+               for item in direction["entity_details"][0]["literals"])
+
+
 def test_duplicate_result_row_is_rejected():
     with pytest.raises(ScoreError, match="duplicate result"):
         score_results([row()], [result("s1"), result("s1")], [], rounds=1)
@@ -141,9 +162,29 @@ def test_one_off_target_in_thirty_fails_separate_gate():
     reviews = [annotation(f"s{i}", off_target=(i == 0)) for i in range(30)]
     report = score_results(manifest, results, reviews, rounds=1)
     direction = report["directions"]["vi>ja"]["rounds"]["1"]
-    assert direction["quality_gate"] == "PASS"
+    assert direction["rubric_threshold_gate"] == "PASS"
+    assert direction["quality_gate"] == "BLOCKED"
     assert direction["off_target"] == 1
     assert direction["off_target_gate"] == "FAIL"
+
+
+def test_thirty_repeats_of_one_group_cannot_pass_quality_quota():
+    manifest = [row(f"s{i}", source=f"Câu {i}.", group="one-document") for i in range(30)]
+    report = score_results(manifest, [result(f"s{i}") for i in range(30)],
+                           [annotation(f"s{i}") for i in range(30)], rounds=1)
+    direction = report["directions"]["vi>ja"]["rounds"]["1"]
+    assert direction["unique_sources"] == 1
+    assert direction["rubric_threshold_gate"] == "BLOCKED"
+    assert direction["quality_gate"] == "BLOCKED"
+
+
+def test_stale_pass_review_cannot_score_changed_output():
+    report = score_results([row()], [result("s1", output="Clearly wrong output")],
+                           [annotation("s1")], rounds=1, min_samples_per_direction=1)
+    direction = report["directions"]["vi>ja"]["rounds"]["1"]
+    assert direction["stale_reviews"] == 1
+    assert direction["quality_passes"] == 0
+    assert direction["quality_gate"] == "BLOCKED"
 
 
 def test_changed_config_between_repeated_rounds_is_rejected():
@@ -233,3 +274,20 @@ def test_known_cost_and_timestamps_report_rate_and_throughput():
     assert direction["cost_status"] == "KNOWN"
     assert direction["usd_per_1000_input_chars"] == pytest.approx(0.002 * 1000 / len(sample["source"]))
     assert direction["throughput_requests_per_second"] == 0.5
+
+
+def test_diagnostic_rates_and_off_target_interval_report_coverage():
+    sample = row()
+    output = "Translation: Xin chào bạn. Xin chào bạn. Xin chào bạn."
+    translated = result("s1", output=output)
+    review = annotation("s1", off_target=True, output=output)
+    review["rubric"]["no_hallucination"] = False
+    review["decision"] = "fail"
+    report = score_results([sample], [translated], [review], rounds=1,
+                           min_samples_per_direction=1)
+    direction = report["directions"]["vi>ja"]["rounds"]["1"]
+    assert direction["off_target_wilson95_unique"] is not None
+    assert direction["diagnostic_rates"]["script_mismatch"]["count"] == 1
+    assert direction["diagnostic_rates"]["preamble"]["count"] == 1
+    assert direction["diagnostic_rates"]["repetition"]["count"] == 1
+    assert direction["diagnostic_rates"]["hallucination"]["count"] == 1
