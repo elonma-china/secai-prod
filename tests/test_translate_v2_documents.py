@@ -161,3 +161,19 @@ def test_docx_merged_cells_emit_one_origin_with_spans(tmp_path):
     assert len(cells) == 1
     assert cells[0].metadata["row_span"] == 2
     assert cells[0].metadata["column_span"] == 2
+
+
+def test_docx_paragraph_linebreak_and_tab_are_preserved(tmp_path):
+    from docx import Document
+    from secai_gateway.translation.documents import extract_docx
+
+    document = Document()
+    run = document.add_paragraph().add_run("First")
+    run.add_break()
+    run.add_text("Second")
+    run.add_tab()
+    run.add_text("Third")
+    path = tmp_path / "breaks.docx"
+    document.save(path)
+    result = extract_docx(path, _settings())
+    assert result.blocks[0].text == "First\nSecond\tThird"

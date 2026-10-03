@@ -1,4 +1,5 @@
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -77,3 +78,35 @@ def test_expired_lease_cannot_publish_or_heartbeat(tmp_path):
     expired = 1000 + store.settings.lease_seconds + 1
     assert store.heartbeat(job["job_id"], claim["generation"], now=expired) is False
     assert store.finish(job["job_id"], claim["generation"], result={"x": 1}, now=expired) is False
+
+
+def test_simultaneous_same_key_creates_one_job(tmp_path):
+    store = _store(tmp_path)
+    def submit(_):
+        return store.admit("file", b"same", ".txt", "en", "vi", "peer", "a" * 32)
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        jobs = list(pool.map(submit, range(5)))
+    assert len({job["job_id"] for job in jobs}) == 1
+
+
+def test_rate_and_global_ip_limits_are_transactional(tmp_path):
+    store = _store(tmp_path)
+    for _ in range(store.settings.lookup_rate_per_minute):
+        store.rate("peer", "lookup", store.settings.lookup_rate_per_minute, now=1000)
+    with pytest.raises(TranslationError) as e:
+        store.rate("peer", "lookup", store.settings.lookup_rate_per_minute, now=1000)
+    assert e.value.code == "RATE_LIMITED"
+    store.admit("file", b"a", ".txt", "en", "vi", "peer", None)
+    store.admit("file", b"b", ".txt", "en", "vi", "peer", None)
+    with pytest.raises(TranslationError) as e:
+        store.admit("file", b"c", ".txt", "en", "vi", "peer", None)
+    assert e.value.code == "QUEUE_FULL"
+
+
+def test_private_storage_permissions(tmp_path):
+    store = _store(tmp_path)
+    assert store.db_path.parent.stat().st_mode & 0o077 == 0
+    assert store.artifact_dir.stat().st_mode & 0o077 == 0
+    assert store.db_path.stat().st_mode & 0o077 == 0
+    job = store.admit("file", b"private", ".txt", "en", "vi", "peer", None)
+    assert Path(job["input_path"]).stat().st_mode & 0o077 == 0
