@@ -1,0 +1,36 @@
+{
+  "base_sha": "ce9cd47ee1273018fec1c5cbab944a86d68d6ed5",
+  "command": "env -i with isolated .venv/run-postchange.sh; timeout 600s pytest -q --tb=short --timeout=10 --timeout-method=signal --junitxml=.venv/post-change.junit.xml",
+  "counts": {
+    "total": 968,
+    "passed": 948,
+    "failed": 19,
+    "skipped": 1
+  },
+  "exact_baseline_failure_match": true,
+  "failure_ids": [
+    "tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal",
+    "tests/test_chat_poc_drilldown_regression.py::test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref",
+    "tests/test_chat_poc_drilldown_regression.py::test_uc2b_fetch_same_run_returns_real_grounded_source_code",
+    "tests/test_chat_poc_drilldown_regression.py::test_uc2c_ref_reused_in_a_different_turn_run_is_rejected",
+    "tests/test_chat_poc_drilldown_regression.py::test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref",
+    "tests/test_chat_poc_drilldown_regression.py::test_uc4_fetch_budget_enforced_within_a_single_chat_run",
+    "tests/test_consolidate.py::test_exploit_endpoint_consolidated_tier",
+    "tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_cwe_refs_empty_when_no_cve_record",
+    "tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_populates_cwe_refs_from_cve_record",
+    "tests/test_exploit_metadata_grounding.py::test_exploit_stream_endpoint_populates_cwe_refs",
+    "tests/test_exploit_relevance_gate.py::test_exploit_freetext_at_threshold_still_tiers_real",
+    "tests/test_exploit_relevance_gate.py::test_exploit_genuine_freetext_no_cve_still_tiers_real",
+    "tests/test_exploit_relevance_gate.py::test_exploit_named_cve_bypasses_freetext_gate",
+    "tests/test_exploit_relevance_gate.py::test_exploit_offtopic_freetext_gated_to_not_found",
+    "tests/test_exploit_relevance_gate.py::test_exploit_vi_generic_hack_gated_even_with_a_passing_score",
+    "tests/test_gateway.py::test_exploit_chitchat_returns_cve_guide",
+    "tests/test_gateway.py::test_exploit_stream_section1_preview_arrives_before_final",
+    "tests/test_gateway.py::test_legacy_contract_paths_and_profiles",
+    "tests/test_gateway.py::test_streaming_endpoints"
+  ],
+  "new_failure_ids": [],
+  "resolved_baseline_failure_ids": [],
+  "quality_assessment": "NOT_RUN",
+  "release_gate": "BLOCKED"
+}

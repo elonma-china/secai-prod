@@ -1,0 +1,102 @@
+{
+  "base_sha": "ce9cd47ee1273018fec1c5cbab944a86d68d6ed5",
+  "command": ".venv/run-baseline.sh (pytest -q --tb=short --timeout=10 --timeout-method=signal, outer timeout 600s)",
+  "import_path": "/home/ict/secai-multilang-assessment-wt/secai/secai-agent-gateway/src/secai_gateway/__init__.py",
+  "versions": {
+    "pytest": "9.1.1",
+    "pytest-timeout": "2.4.0",
+    "redis": "8.0.1",
+    "linch": "1.2.1",
+    "secai-agent-gateway": "0.2.0"
+  },
+  "counts": {
+    "total": 925,
+    "passed": 905,
+    "failed": 19,
+    "errors": 0,
+    "skipped": 1,
+    "seconds": 152.043
+  },
+  "failures": [
+    {
+      "nodeid": "tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_chat_poc_drilldown_regression.py::test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_chat_poc_drilldown_regression.py::test_uc2b_fetch_same_run_returns_real_grounded_source_code",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_chat_poc_drilldown_regression.py::test_uc2c_ref_reused_in_a_different_turn_run_is_rejected",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_chat_poc_drilldown_regression.py::test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_chat_poc_drilldown_regression.py::test_uc4_fetch_budget_enforced_within_a_single_chat_run",
+      "category": "external_dependency_or_data"
+    },
+    {
+      "nodeid": "tests/test_consolidate.py::test_exploit_endpoint_consolidated_tier",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_populates_cwe_refs_from_cve_record",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_cwe_refs_empty_when_no_cve_record",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_metadata_grounding.py::test_exploit_stream_endpoint_populates_cwe_refs",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_relevance_gate.py::test_exploit_offtopic_freetext_gated_to_not_found",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_relevance_gate.py::test_exploit_freetext_at_threshold_still_tiers_real",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_relevance_gate.py::test_exploit_named_cve_bypasses_freetext_gate",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_relevance_gate.py::test_exploit_vi_generic_hack_gated_even_with_a_passing_score",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_exploit_relevance_gate.py::test_exploit_genuine_freetext_no_cve_still_tiers_real",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_gateway.py::test_legacy_contract_paths_and_profiles",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_gateway.py::test_streaming_endpoints",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_gateway.py::test_exploit_chitchat_returns_cve_guide",
+      "category": "timeout"
+    },
+    {
+      "nodeid": "tests/test_gateway.py::test_exploit_stream_section1_preview_arrives_before_final",
+      "category": "timeout"
+    }
+  ],
+  "errors": [],
+  "skipped": [
+    "tests/test_chat_poc_drilldown_regression.py::test_uc3_license_gated_or_unfetched_poc_returns_metadata_only_not_fabricated"
+  ]
+}
