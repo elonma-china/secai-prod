@@ -60,12 +60,11 @@ def score(manifest: dict, rows: list[dict], field: str) -> dict:
                 "micro_accuracy": 100 * max(0, 1 - sum(x["edits"] for x in rows) /
                                              sum(x["reference_len"] for x in rows)),
                 "macro_accuracy": sum(x["accuracy"] for x in rows) / len(rows)}
-    result = {"overall": aggregate(per_image), "per_image": per_image,
-              "subsets": {label: aggregate([x for x in per_image if predicate(x)]) for label, predicate in {
-                  "vi": lambda x: x["language"] == "vi",
-                  "en": lambda x: x["language"] == "en",
-                  "technical": lambda x: x["category"] == "technical",
-              }.items()}}
+    languages = sorted({item["language"] for item in manifest["images"]})
+    subsets = {language: aggregate([x for x in per_image if x["language"] == language])
+               for language in languages}
+    subsets["technical"] = aggregate([x for x in per_image if x["category"] == "technical"])
+    result = {"overall": aggregate(per_image), "per_image": per_image, "subsets": subsets}
     for kind, c in counts.items():
         denom = 2 * c["tp"] + c["fp"] + c["fn"]
         c["f1"] = None if denom == 0 else 2 * c["tp"] / denom

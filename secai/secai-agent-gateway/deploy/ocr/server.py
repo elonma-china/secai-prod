@@ -20,6 +20,7 @@ MAX_PEAK_MIB = 7168
 _lock = threading.Lock()
 _model = None
 _processor = None
+_host_pid: int | None = None
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 
 
@@ -32,21 +33,67 @@ def _free_mib() -> int:
     return torch.cuda.mem_get_info()[0] // (1024 * 1024)
 
 
-def _owned_mib() -> int:
+def _gpu_processes() -> dict[int, tuple[str, int]]:
     listing = subprocess.check_output(
-        ["nvidia-smi", "--query-compute-apps=pid,used_gpu_memory", "--format=csv,noheader,nounits"],
+        ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_gpu_memory",
+         "--format=csv,noheader,nounits"],
         text=True, timeout=3,
     )
-    return sum(int(parts[1].strip()) for line in listing.splitlines()
-               if (parts := line.split(",")) and len(parts) == 2 and
-               parts[0].strip() == str(os.getpid()))
+    return {int(parts[1].strip()): (parts[0].strip(), int(parts[2].strip()))
+            for line in listing.splitlines()
+            if (parts := line.split(",")) and len(parts) == 3}
+
+
+def _gpu_uuid() -> str:
+    listing = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"],
+        text=True, timeout=3,
+    ).splitlines()
+    if len(listing) != 1:
+        raise HTTPException(503, "GPU device ambiguous")
+    return listing[0].strip()
+
+
+def identify_owned_process(incumbents: set[int], processes: dict[int, tuple[str, int]],
+                           device_uuid: str) -> int | None:
+    if not incumbents <= set(processes):
+        raise HTTPException(503, "Incumbent GPU process changed")
+    new = set(processes) - incumbents
+    if len(new) > 1:
+        raise HTTPException(503, "GPU accounting ambiguous")
+    if not new:
+        return None
+    pid = next(iter(new))
+    if processes[pid][0] != device_uuid:
+        raise HTTPException(503, "OCR GPU device mismatch")
+    return pid
+
+
+# Vast exposes GPU process host PIDs, while /proc exposes container PIDs. Record
+# the incumbent set before this process creates a CUDA context; a unique new
+# GPU PID is ours. Fail closed if another process appears at the same time.
+_incumbent_pids = set(_gpu_processes())
+_device_uuid = _gpu_uuid()
+
+
+def _owned_mib() -> int:
+    global _host_pid
+    processes = _gpu_processes()
+    if _host_pid is None:
+        _host_pid = identify_owned_process(_incumbent_pids, processes, _device_uuid)
+    elif _host_pid not in processes:
+        raise HTTPException(503, "OCR GPU process disappeared")
+    if _host_pid is not None and processes[_host_pid][0] != _device_uuid:
+        raise HTTPException(503, "OCR GPU device mismatch")
+    return processes.get(_host_pid, (_device_uuid, 0))[1]
 
 
 def _guard() -> None:
     if not torch.cuda.is_available():
         raise HTTPException(503, "GPU unavailable")
+    free = _free_mib()  # Creates our CUDA context before resolving its host PID.
     owned = _owned_mib()
-    if owned > MAX_PEAK_MIB or _free_mib() < max(2048, MIN_FREE_MIB - owned):
+    if owned > MAX_PEAK_MIB or free < max(2048, MIN_FREE_MIB - owned):
         raise HTTPException(503, "GPU reserve unavailable")
 
 

@@ -19,5 +19,6 @@ def test_complete_manifest_identity_scores_100():
     assert result["overall"]["macro_accuracy"] == 100
     assert result["tokens"]["cve"]["f1"] == 1
     assert result["tokens"]["ip"]["f1"] == 1
-    assert result["tokens"]["cve"]["tp"] == 32
-    assert result["tokens"]["ip"]["tp"] == 32
+    assert result["tokens"]["cve"]["tp"] == 40
+    assert result["tokens"]["ip"]["tp"] == 40
+    assert len([key for key in result["subsets"] if key != "technical"]) == 10

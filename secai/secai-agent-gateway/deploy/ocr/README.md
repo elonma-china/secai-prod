@@ -15,7 +15,10 @@ snapshot SHA and each downloaded file checksum. Before loading, require 9216 MiB
 free when OCR owns no GPU memory. After loading, require free memory at least
 `max(2048, 9216 - owned_OCR_MiB)` before each inference. This charges the
 already loaded OCR process once while reserving 2 GiB for incumbents. Query
-the OCR PID through `nvidia-smi`, including CUDA context and runtime memory;
+the OCR host PID through `nvidia-smi`, including CUDA context and runtime memory.
+Vast's container PID differs from the host GPU PID, so the service captures
+the incumbent GPU PID set before CUDA initialization and requires exactly one
+new process when its context is created; ambiguous changes fail closed;
 reject when owned usage exceeds 7168 MiB or global free falls below 2048 MiB.
 Start one uvicorn worker only. Keep the service token
 outside git and outside process arguments; use an environment file readable
