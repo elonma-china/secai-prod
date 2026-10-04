@@ -22,7 +22,9 @@ import httpx
 
 
 LANGUAGES = frozenset({"vi", "en", "zh", "ja", "ko", "fr", "de", "es", "ru", "ar"})
-EXTENSIONS = frozenset({".txt", ".docx", ".doc"})
+FILE_EXTENSIONS = frozenset({".txt", ".docx", ".doc"})
+IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg"})
+EXTENSIONS = FILE_EXTENSIONS | IMAGE_EXTENSIONS
 TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 MAX_FILES = 2000
 MAX_FILE_BYTES = 10 * 1024 * 1024
@@ -84,7 +86,22 @@ def _digest_file(path: Path) -> str:
 def _binding(row: dict[str, Any]) -> str:
     value = [row["sha256"], row["source_lang"], row["target_lang"],
              Path(row["path"]).suffix.lower()]
+    if "kind" in row:
+        value.append(row["kind"])
     return hashlib.sha256(json.dumps(value, separators=(",", ":")).encode()).hexdigest()
+
+
+def _kind(path: Path) -> str:
+    extension = path.suffix.lower()
+    if extension in FILE_EXTENSIONS:
+        return "file"
+    if extension in IMAGE_EXTENSIONS:
+        return "image"
+    raise BatchError("unsupported file extension")
+
+
+def _upload_route(kind: str) -> str:
+    return "/ai/v2/translate/images" if kind == "image" else "/ai/v2/translate/files"
 
 
 def _atomic_json(path: Path, data: dict[str, Any]) -> None:
@@ -122,8 +139,7 @@ def _validate_entry(entry: BatchEntry) -> None:
     if (entry.source_lang not in {"auto", "vi", entry.target_lang}
             and entry.target_lang != "vi"):
         raise BatchError("unsupported language pair")
-    if entry.path.suffix.lower() not in EXTENSIONS:
-        raise BatchError("unsupported file extension")
+    _kind(entry.path)
     if not entry.path.is_file() or entry.path.stat().st_size > MAX_FILE_BYTES:
         raise BatchError("missing or oversized file")
     if not entry.path.name or len(entry.path.name) > 255 or any(c in entry.path.name for c in "\\\x00"):
@@ -140,6 +156,7 @@ def create_manifest(entries: Sequence[BatchEntry], path: Path) -> dict[str, Any]
         _validate_entry(entry)
         row = {"path": str(entry.path), "source_lang": entry.source_lang,
                      "target_lang": entry.target_lang, "sha256": _digest_file(entry.path),
+                     "kind": _kind(entry.path),
                      "key": secrets.token_hex(16), "job_id": None, "status": "pending",
                      "error_code": None, "output_txt": None, "output_json": None}
         row["binding"] = _binding(row)
@@ -155,10 +172,23 @@ def _load_manifest(path: Path) -> dict[str, Any]:
         raise BatchError("unsupported manifest")
     if not 1 <= len(data["entries"]) <= MAX_FILES:
         raise BatchError("invalid manifest size")
+    migrated = False
+    for row in data["entries"]:
+        if "kind" not in row and row.get("binding") == _binding(row):
+            try:
+                row["kind"] = _kind(Path(row["path"]))
+            except (BatchError, KeyError, TypeError):
+                continue
+            row["binding"] = _binding(row)
+            migrated = True
+    if migrated:
+        _atomic_json(path, data)
     return data
 
 
 def _validate_row(row: dict[str, Any]) -> None:
+    if row.get("kind") != _kind(Path(row["path"])):
+        raise BatchError("file kind changed")
     if row.get("binding") != _binding(row):
         raise BatchError("input or language binding changed")
     if (not isinstance(row["key"], str) or len(row["key"]) != 32
@@ -237,7 +267,7 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
                     await asyncio.sleep(max(0, next_upload - time.monotonic()))
                     next_upload = time.monotonic() + upload_interval
                     with path.open("rb") as source:
-                        response = await _request(client, "POST", "/ai/v2/translate/files", deadline,
+                        response = await _request(client, "POST", _upload_route(row["kind"]), deadline,
                             files={"file": (path.name, source)},
                             data={"source_lang": row["source_lang"], "target_lang": row["target_lang"]},
                             headers={"Idempotency-Key": row["key"]})
@@ -371,7 +401,7 @@ async def _cancel_batch_locked(client: httpx.AsyncClient, manifest_path: Path) -
                 if _digest_file(path) != row["sha256"]:
                     raise BatchError("input changed before cancel recovery")
                 with path.open("rb") as source:
-                    admitted = await _request(client, "POST", "/ai/v2/translate/files", deadline,
+                    admitted = await _request(client, "POST", _upload_route(row["kind"]), deadline,
                         files={"file": (path.name, source)},
                         data={"source_lang": row["source_lang"], "target_lang": row["target_lang"]},
                         headers={"Idempotency-Key": row["key"]})

@@ -506,3 +506,149 @@ def test_cli_exits_nonzero_for_unfinished_known_jobs(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         multifile_batch.main()
     assert exc.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_mixed_documents_and_images_use_own_routes_and_preserve_ocr_result(tmp_path, monkeypatch):
+    from secai_gateway.translation import ocr_client
+    from secai_gateway.translation.types import CorrectedOcr, DocumentBlock, WarningItem
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("TRANSLATE_V2_OCR_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_OCR_BASE_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("TRANSLATE_V2_UPLOAD_RATE_PER_MINUTE", "100")
+
+    async def fake_ocr(self, input_path, *, work_dir, context):
+        block = DocumentBlock(id="b000001", kind="ocr_text", order=0,
+                              text="Corrected OCR", metadata={})
+        return CorrectedOcr(blocks=(block,), raw_text="Raw OCR",
+                            corrected_text="Corrected OCR", needs_review=True,
+                            warnings=(WarningItem(code="AMBIGUOUS_TECHNICAL_TOKEN",
+                                                  message="Review token."),))
+
+    monkeypatch.setattr(ocr_client.ImageOcrPipeline, "process", fake_ocr)
+    app = create_app(NoModel())
+    text = tmp_path / "note.txt"
+    text.write_text("Hello")
+    docx = tmp_path / "report.docx"
+    document = Document()
+    document.add_paragraph("Hello")
+    document.save(docx)
+    png = tmp_path / "scan.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"mocked-image")
+    jpeg = tmp_path / "photo.jpg"
+    jpeg.write_bytes(b"\xff\xd8\xff" + b"mocked-image")
+    entries = [BatchEntry(path, "en", "en") for path in (text, docx, png, jpeg)]
+    worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+
+    async def consume():
+        for _ in range(150):
+            await worker.run_once()
+            await asyncio.sleep(0.005)
+
+    task = asyncio.create_task(consume())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        counts = await run_batch(client, entries, tmp_path / "manifest.json", tmp_path / "out",
+                                 max_inflight=2, upload_interval=0, poll_interval=0.01,
+                                 job_timeout=10)
+    await task
+    assert counts["succeeded"] == counts["total"] == 4
+    saved = json.loads((tmp_path / "manifest.json").read_text())["entries"]
+    assert [row["kind"] for row in saved] == ["file", "file", "image", "image"]
+    for index in (2, 3):
+        result = json.loads((tmp_path / "out" / saved[index]["output_json"]).read_text())
+        assert result["kind"] == "image"
+        assert result["ocr"]["raw_text"] == "Raw OCR"
+        assert result["ocr"]["corrected_text"] == "Corrected OCR"
+        assert result["ocr"]["needs_review"] is True
+        assert result["warnings"][0]["code"] == "AMBIGUOUS_TECHNICAL_TOKEN"
+
+
+@pytest.mark.asyncio
+async def test_ambiguous_image_upload_replays_image_route_for_resume_and_cancel(tmp_path, monkeypatch):
+    from evals.multilang.multifile_batch import create_manifest
+    from secai_gateway.translation import ocr_client
+    from secai_gateway.translation.types import CorrectedOcr, DocumentBlock
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("TRANSLATE_V2_OCR_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_OCR_BASE_URL", "http://127.0.0.1:1")
+    monkeypatch.setenv("TRANSLATE_V2_UPLOAD_RATE_PER_MINUTE", "100")
+
+    async def fake_ocr(self, input_path, *, work_dir, context):
+        block = DocumentBlock(id="b000001", kind="ocr_text", order=0,
+                              text="Visible", metadata={})
+        return CorrectedOcr(blocks=(block,), raw_text="Visible", corrected_text="Visible")
+
+    monkeypatch.setattr(ocr_client.ImageOcrPipeline, "process", fake_ocr)
+    app = create_app(NoModel())
+    image = tmp_path / "scan.jpeg"
+    image.write_bytes(b"\xff\xd8\xff" + b"mocked-image")
+    manifest = tmp_path / "manifest.json"
+    saved = create_manifest([BatchEntry(image, "en", "en")], manifest)
+    saved["entries"][0]["status"] = "uploading"
+    manifest.write_text(json.dumps(saved))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        admitted = await client.post("/ai/v2/translate/images",
+                                     files={"file": (image.name, image.read_bytes())},
+                                     data={"source_lang": "en", "target_lang": "en"},
+                                     headers={"Idempotency-Key": saved["entries"][0]["key"]})
+        assert admitted.status_code == 202
+        worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+        task = asyncio.create_task(worker.run_once())
+        counts = await run_batch(client, None, manifest, tmp_path / "out",
+                                 max_inflight=1, upload_interval=0, poll_interval=0.01,
+                                 job_timeout=10)
+        await task
+        assert counts["succeeded"] == 1
+        assert json.loads(manifest.read_text())["entries"][0]["job_id"] == admitted.json()["job_id"]
+
+        second = tmp_path / "cancel.png"
+        second.write_bytes(b"\x89PNG\r\n\x1a\n" + b"mocked-image")
+        cancel_manifest = tmp_path / "cancel-manifest.json"
+        cancelling = create_manifest([BatchEntry(second, "en", "vi")], cancel_manifest)
+        cancelling["entries"][0]["status"] = "uploading"
+        cancel_manifest.write_text(json.dumps(cancelling))
+        second_job = await client.post("/ai/v2/translate/images",
+                                       files={"file": (second.name, second.read_bytes())},
+                                       data={"source_lang": "en", "target_lang": "vi"},
+                                       headers={"Idempotency-Key": cancelling["entries"][0]["key"]})
+        assert second_job.status_code == 202
+        cancelled = await cancel_batch(client, cancel_manifest)
+        assert cancelled["cancel_requested"] == 1 and cancelled["unresolved"] == 0
+        assert (await client.get(second_job.json()["status_url"])).json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_existing_file_manifest_migrates_kind_without_replacing_key(tmp_path, monkeypatch):
+    from evals.multilang.multifile_batch import create_manifest, _binding
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(NoModel())
+    path = tmp_path / "old.txt"
+    path.write_text("Hello")
+    manifest = tmp_path / "manifest.json"
+    saved = create_manifest([BatchEntry(path, "en", "en")], manifest)
+    original_key = saved["entries"][0]["key"]
+    saved["entries"][0].pop("kind")
+    saved["entries"][0]["binding"] = _binding(saved["entries"][0])
+    manifest.write_text(json.dumps(saved))
+    worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        async def consume():
+            for _ in range(80):
+                await worker.run_once()
+                await asyncio.sleep(0.005)
+        task = asyncio.create_task(consume())
+        counts = await run_batch(client, None, manifest, tmp_path / "out",
+                                 upload_interval=0, poll_interval=0.01, job_timeout=10)
+        await task
+    row = json.loads(manifest.read_text())["entries"][0]
+    assert counts["succeeded"] == 1
+    assert row["kind"] == "file" and row["key"] == original_key

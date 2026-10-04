@@ -1,8 +1,8 @@
 # Provisional multi-file CPU translation path
 
-This branch adds a usable batch client for the existing v2 file-job API. It is a
+This branch adds a usable batch client for the existing v2 file/image-job API. It is a
 provisional test path, not approved main or production integration. The gateway
-already accepts one TXT/DOCX/DOC per request, gives each file its own durable job,
+already accepts one TXT/DOCX/DOC or PNG/JPG/JPEG per request, gives each item its own durable job,
 and exposes status, result and cancellation. The client submits at most two jobs
 at once, defaults to one upload every 12 seconds for the existing five uploads
 per minute peer limit, polls each job no faster than every four seconds, and
@@ -39,7 +39,7 @@ PYTHONPATH=src:. python -m evals.multilang.multifile_batch cancel \
 `run --plan /private/batch-plan.jsonl` replaces the homogeneous language flags
 for mixed batches. Each JSONL row needs `path`, `source_lang` and `target_lang`.
 Languages use the v2 wire codes, including `zh`, and may use `auto` as source.
-One manifest entry records the original path, source/target, file digest,
+One manifest entry records the original path, derived file/image kind, source/target, file digest,
 idempotency key, job ID, status, error code and output names. The client saves
 keys before upload, so a restart can replay an accepted POST without creating
 a duplicate job. It checks file bytes and language binding before replay. A
@@ -54,7 +54,8 @@ The manifest and each output file are written with
 mode 0600; the output directory is created with mode 0700. If a directory is
 given, the client enumerates supported files recursively, stops at 2,000 inputs
 or 10,000 scanned files, and streams one upload at a time. This client does not
-reconstruct a DOCX document: it writes the v2 result blocks to `0001.json` and
+reconstruct a DOCX document: it writes the complete v2 result to `0001.json`
+(including image OCR raw/corrected text and warnings when present) and
 the translated text to `0001.txt`, with the input-name mapping in the manifest.
 
 ## Frozen DEV file preparation
@@ -92,9 +93,9 @@ by the separate quality review, so its output cannot qualify this path.
 
 ## Checks recorded on this branch
 
-- `PYTHONPATH=src:. /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_multifile_batch.py tests/test_translate_v2_job_access.py tests/test_translate_v2_jobs.py tests/test_translate_v2_worker.py tests/test_translate_v2_documents.py`
+- `PYTHONPATH=src:. /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_multifile_batch.py tests/test_translate_v2_job_access.py tests/test_translate_v2_jobs.py tests/test_translate_v2_worker.py tests/test_translate_v2_documents.py tests/test_translate_v2_ocr_client.py`
   with `POC_CATALOG_DB=/tmp/secai-multifile-test-poc.db SESSION_STORE_BACKEND=memory REDIS_URL=''`:
-  58 passed after the second review patch. The batch tests process mixed TXT/DOCX through actual ASGI routes and
+  63 passed after adding mixed TXT/DOCX/PNG/JPEG coverage and old-manifest migration. The batch tests process mixed inputs through actual ASGI routes and
   JobStore/Worker for all 18 directions, observes at most two active jobs, checks
   output files, replay after an accepted POST loses every response, one-file
   failure, cancellation of ambiguous and unsubmitted files, lock contention,
@@ -133,3 +134,11 @@ counts queued/running/cancelling/other entries, reports `total` and
 `unfinished`, and exits nonzero if unfinished work remains. Regressions cover
 both non-JSON 503 bodies and a halted queue of saved job IDs. Independent
 re-review of this second patch remains required.
+
+The file/image extension determines the existing v2 `/files` or `/images`
+admission route. The derived kind is persisted and bound to the manifest row,
+including when a lost image POST is replayed during resume or cancellation.
+Older file-only manifests are upgraded from their validated binding on load.
+Mocked ASGI/Worker tests cover mixed documents and images, image replay/cancel,
+and full OCR JSON/warning retention. No OCR model was called; image quality is
+not established by these tests. This extension needs its own review.
