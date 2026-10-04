@@ -31,13 +31,20 @@ _LITERAL = re.compile(
 def _literal_value(match: re.Match) -> str:
     value = match.group(0)
     if value.lower().startswith(('http://', 'https://')):
-        value = value.rstrip('.,;')
+        # A dot inside <...> or (...) is URL data; bare sentence punctuation is not.
+        if match.end() == len(match.string) or match.string[match.end()].isspace():
+            value = value.rstrip('.,;')
+        return value  # URL path and query are case-sensitive.
     return value.casefold()
 
 
 def preserve_other_sections(content: str, previous: str, sections: list[str], instruction: str) -> str:
     named = [section for section in sections if section.casefold() in instruction.casefold()]
-    if len(named) != 1:
+    kept = {section for section in named if re.search(
+        r'(?:giữ nguyên|không sửa)\s+(?:(?:phần|mục)\s+)?' + re.escape(section) + r'(?=$|[.,;:!?\s])',
+        instruction, re.I)}
+    editable = [section for section in named if section not in kept]
+    if len(editable) != 1:
         return content
 
     def spans(text: str):
@@ -58,7 +65,7 @@ def preserve_other_sections(content: str, previous: str, sections: list[str], in
     if not old_spans or not new_spans:
         return content
     return content[:new_spans[0][0]] + ''.join(
-        content[new_spans[i][0]:new_spans[i][1]] if section == named[0]
+        content[new_spans[i][0]:new_spans[i][1]] if section == editable[0]
         else previous[old_spans[i][0]:old_spans[i][1]]
         for i, section in enumerate(sections)
     )

@@ -387,3 +387,42 @@ def test_recorded_action_cannot_be_reported_as_missing():
     assert exc.value.status_code == 422
     valid = '## Xử lý\nĐã chặn phiên đăng nhập.'
     assert validate_report(valid, ['Xử lý'], source) == valid
+
+
+def test_url_path_and_query_case_remain_significant():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Bằng chứng: https://example.test/Scan/A?Token=AbC'
+    for changed in ('https://example.test/scan/A?Token=AbC',
+                    'https://example.test/Scan/A?token=AbC',
+                    'https://example.test/Scan/A?Token=abc'):
+        with pytest.raises(HTTPException) as exc:
+            validate_report('## Bằng chứng\n' + changed, ['Bằng chứng'], source)
+        assert exc.value.status_code == 422
+
+
+def test_explicit_delimiter_keeps_url_final_dot_significant():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Bằng chứng <https://example.test/scan/a.>'
+    with pytest.raises(HTTPException) as exc:
+        validate_report('## Bằng chứng\n<https://example.test/scan/a>', ['Bằng chứng'], source)
+    assert exc.value.status_code == 422
+
+
+def test_explicit_keep_section_overrides_second_section_mention():
+    from secai_gateway.report_v2.validation import preserve_other_sections, validate_report
+
+    sections = ['Mốc thời gian', 'Xử lý']
+    previous = '## Mốc thời gian\n09:10 phát hiện.\n## Xử lý\nĐã chặn phiên.'
+    proposed = '## Mốc thời gian\n09:10 phát hiện; tóm tắt.\n## Xử lý\nChưa có thông tin.'
+    result = preserve_other_sections(proposed, previous, sections,
+                                     'Chỉ sửa Mốc thời gian; giữ nguyên Xử lý.')
+    assert '09:10 phát hiện; tóm tắt.' in result
+    assert '## Xử lý\nĐã chặn phiên.' in result
+    assert 'Chưa có thông tin.' not in result
+    assert validate_report(result, sections, '09:10 phát hiện. Đã chặn phiên.') == result
