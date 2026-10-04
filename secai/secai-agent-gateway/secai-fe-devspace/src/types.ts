@@ -1,7 +1,7 @@
 // Contract khớp src/secai_gateway/api/{routes,sse,schemas,projects}.py
 
-/** The 5 functional "Nền tảng AI" screens — the only routable content in the app. */
-export type AiScreenId = "chat" | "translate" | "exploit" | "report" | "models";
+/** The functional "Nền tảng AI" screens — the only routable content in the app. */
+export type AiScreenId = "chat" | "translate" | "exploit" | "report" | "models" | "review";
 
 // ── Project / Session (api/projects.py) ─────────────────────────────────────────────
 

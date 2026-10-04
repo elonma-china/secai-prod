@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { BarChart3, CalendarRange, ClipboardList, Download, FileText, ShieldX, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { BarChart3, CalendarRange, ClipboardList, Download, FileText, Maximize2, Minimize2, ShieldX, Sparkles } from "lucide-react";
 import { ApiError, reportStream, statisticalReport } from "../api";
 import Markdown from "../components/Markdown";
+import ReportMvpPanel from "./ReportMvpPanel";
+import ReportTemplatePanel from "./review/ReportTemplatePanel";
 
 /** "Báo cáo thông minh" — Tạo báo cáo (free text → markdown, streamed) / Thống kê kỳ (structured
  * JSON → report_title/summary/detail, one-shot). Field-name notes from
@@ -11,7 +13,8 @@ import Markdown from "../components/Markdown";
  * field server-side; we resolve the picked period into concrete `from_date`/`to_date` +
  * a short Vietnamese `message` client-side so the prompt the model sees is meaningful. */
 
-type Tab = "create" | "stats";
+type Tab = "create" | "stats" | "templates" | "review-template";
+const REPORT_MVP_ENABLED = import.meta.env.VITE_REPORT_FEATURE_ENABLED === "true";
 type Period = "week" | "month" | "quarter";
 
 const PERIOD_OPTS: { id: Period; label: string }[] = [
@@ -68,6 +71,20 @@ const SAMPLE_DETAIL = [
 
 export default function ReportScreen({ userId }: { userId: string }) {
   const [tab, setTab] = useState<Tab>("create");
+
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    const shell = document.querySelectorAll<HTMLElement>(".ias-header, .ias-sidebar");
+    const previous = Array.from(shell, (element) => element.inert);
+    shell.forEach((element) => { element.inert = true; });
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("keydown", escape);
+      shell.forEach((element, index) => { element.inert = previous[index]; });
+    };
+  }, [expanded]);
 
   // Tạo báo cáo
   const [logsText, setLogsText] = useState("");
@@ -168,7 +185,7 @@ export default function ReportScreen({ userId }: { userId: string }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+    <div className={`report-screen${expanded ? " report-screen-expanded" : ""}`}>
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -177,19 +194,30 @@ export default function ReportScreen({ userId }: { userId: string }) {
         }
       `}</style>
 
-      <div style={{ padding: "16px 26px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+      <div className="report-screen-toolbar">
         <h3 style={{ fontSize: 21 }}>Báo cáo thông minh</h3>
         <div className="iasseg">
-          <div className={"opt" + (tab === "create" ? " on" : "")} onClick={() => setTab("create")}>
+          <button type="button" className={"opt" + (tab === "create" ? " on" : "")} aria-pressed={tab === "create"} onClick={() => setTab("create")}>
             Tạo báo cáo
-          </div>
-          <div className={"opt" + (tab === "stats" ? " on" : "")} onClick={() => setTab("stats")}>
+          </button>
+          <button type="button" className={"opt" + (tab === "stats" ? " on" : "")} aria-pressed={tab === "stats"} onClick={() => setTab("stats")}>
             Thống kê kỳ
-          </div>
+          </button>
+          {REPORT_MVP_ENABLED && (
+            <button type="button" className={"opt" + (tab === "templates" ? " on" : "")} aria-pressed={tab === "templates"} onClick={() => setTab("templates")}>
+              Theo mẫu
+            </button>
+          )}
+          <button type="button" className={"opt" + (tab === "review-template" ? " on" : "")} aria-pressed={tab === "review-template"} onClick={() => setTab("review-template")}>Template bằng prompt</button>
         </div>
+        <button className="iasbtn ghost report-expand" type="button" aria-pressed={expanded}
+          onClick={() => setExpanded((value) => !value)} title={expanded ? "Thu gọn (Esc)" : "Mở toàn màn hình"}>
+          {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          {expanded ? "Thu gọn" : "Toàn màn hình"}
+        </button>
       </div>
 
-      <div style={{ flex: 1, overflow: "auto", padding: "24px 26px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 980 }}>
+      <div className={`report-screen-body${tab === "templates" || tab === "review-template" ? " report-screen-body-templates" : ""}`}>
         {tab === "create" && (
           <>
             {blocked && (
@@ -351,6 +379,8 @@ export default function ReportScreen({ userId }: { userId: string }) {
             </div>
           </>
         )}
+        {REPORT_MVP_ENABLED && <div className="report-template-tab" hidden={tab !== "templates"}><ReportMvpPanel /></div>}
+        <div className="report-template-tab" hidden={tab !== "review-template"}><ReportTemplatePanel logs={logsText} onLogsChange={setLogsText} /></div>
       </div>
     </div>
   );

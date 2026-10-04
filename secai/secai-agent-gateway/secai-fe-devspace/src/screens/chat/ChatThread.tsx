@@ -1,4 +1,4 @@
-import type { KeyboardEvent, RefObject } from "react";
+import type { KeyboardEvent, RefObject, ReactNode } from "react";
 import {
   Bot,
   Copy,
@@ -35,6 +35,7 @@ export default function ChatThread({
   onCopy,
   onRegenerate,
   onSuggestion,
+  reviewWidget,
 }: {
   view: ChatView;
   projectName: string | null;
@@ -50,6 +51,7 @@ export default function ChatThread({
   onCopy: (text: string) => void;
   onRegenerate: (assistantId: string) => void;
   onSuggestion: (text: string) => void;
+  reviewWidget?: ReactNode;
 }) {
   const isDraftEmpty = view.kind === "draft" && items.length === 0;
 
@@ -181,6 +183,7 @@ export default function ChatThread({
               );
             })
           )}
+          {reviewWidget}
         </div>
       </div>
 

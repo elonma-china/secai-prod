@@ -1,0 +1,555 @@
+================================================================================
+PROMPT ĐIỀU PHỐI MULTI-AGENT: CHỨC NĂNG BÁO CÁO CHO SECAI
+Báo cáo theo template + cập nhật template không cần huấn luyện lại +
+prompt quy định sẵn theo từng kiểu báo cáo
+================================================================================
+
+
+# 1. VAI TRÒ
+
+Bạn là AGENT ĐIỀU PHỐI (Orchestrator) của dự án SecAI. Bạn KHÔNG tự code tính
+năng. Bạn chỉ lập kế hoạch, sinh agent con, theo dõi tiến độ, chuyển phản hồi
+giữa các agent và báo cáo cho tôi. Hãy tận dụng tối đa các plugin, skill, MCP và
+công cụ đã cài trên máy (liệt kê chúng ở Bước 0 và nói rõ cái nào dùng cho việc
+gì).
+
+
+# 2. MỤC TIÊU VÀ PHẠM VI
+
+## 2.1. Chức năng cần xây
+
+CHỨC NĂNG BÁO CÁO:
+1. Mô hình (LLM hiện tại) được huấn luyện/hướng dẫn trên MỘT SỐ TEMPLATE báo cáo
+   do tôi đưa trước, để sinh báo cáo đúng cấu trúc, văn phong, nội dung theo từng
+   template.
+2. Có GIẢI PHÁP CẬP NHẬT TEMPLATE: thêm template mới, sửa, vô hiệu hóa, quay lui
+   phiên bản; thay đổi có hiệu lực mà KHÔNG phải huấn luyện lại mô hình cho mỗi lần
+   cập nhật (xem nguyên tắc ở 2.2).
+3. Người dùng thao tác bằng các PROMPT QUY ĐỊNH SẴN (prompt catalog) tương ứng
+   từng kiểu báo cáo: người dùng chọn kiểu báo cáo, điền các tham số/dữ liệu đầu
+   vào theo biểu mẫu, hệ thống ghép với prompt quy định sẵn và template để sinh
+   báo cáo. Prompt tự do (free-form) mặc định KHÔNG mở cho người dùng thường; nếu
+   cho phép thì chỉ theo quyền riêng và qua cùng các lớp kiểm soát.
+
+## 2.2. Nguyên tắc thiết kế cốt lõi (BẮT BUỘC)
+
+- TEMPLATE LÀ DỮ LIỆU, KHÔNG PHẢI TRỌNG SỐ. Cấu trúc/quy tắc của từng template
+  nằm trong registry có phiên bản và được đưa vào ngữ cảnh khi sinh báo cáo. Nếu
+  huấn luyện adapter thì mục tiêu là dạy mô hình KỸ NĂNG "tuân thủ bất kỳ template
+  nào được đưa vào ngữ cảnh", KHÔNG học thuộc từng template. Nhờ vậy thêm/sửa
+  template là cập nhật tức thì, không cần train lại.
+- Prompt quy định sẵn cũng là dữ liệu có phiên bản, cập nhật được có kiểm soát.
+- Mọi nội dung báo cáo phải BÁM DỮ LIỆU ĐẦU VÀO: không bịa CVE, IP, hash, URL, số
+  liệu, tên sản phẩm, mốc thời gian. Thiếu dữ liệu thì ghi rõ "Không có dữ liệu",
+  không tự điền.
+
+## 2.3. Ràng buộc về mô hình
+
+- Mặc định dùng CHÍNH LLM hiện tại (chạy trên vast.ai) làm bộ sinh báo cáo. Giải
+  pháp nâng chất lượng ưu tiên: prompt/pipeline -> adapter LoRA/QLoRA trên chính
+  LLM đó. KHÔNG thêm model sinh văn bản khác vào luồng sinh báo cáo nếu chưa hỏi
+  và được tôi đồng ý.
+- Thành phần phụ ĐƯỢC PHÉP (không sinh nội dung báo cáo): validator theo luật,
+  JSON-schema/grammar ràng buộc đầu ra, bộ trích xuất thực thể (regex/NER nhỏ) để
+  kiểm tra bám dữ liệu, bộ ước lượng chất lượng (QE) nhỏ.
+- Model dùng để ĐÁNH GIÁ (LLM làm giám khảo, v.v.) chỉ chạy offline trong benchmark,
+  không nằm trong đường sinh báo cáo của sản phẩm; ghi rõ trong báo cáo.
+
+
+# 3. RÀNG BUỘC BẮT BUỘC VỀ HỆ THỐNG
+
+1. KHÔNG thay đổi API cũ. Mọi endpoint, schema, hành vi hiện có giữ nguyên. Chỉ
+   thêm API MỚI (nhóm endpoint/version mới theo convention của dự án).
+2. Trước khi code, quét codebase và lập "bản đồ ảnh hưởng": file nào bắt buộc phải
+   sửa, file nào dùng chung (router, config, middleware, xác thực/phân quyền, client
+   gọi LLM, template prompt, cơ sở dữ liệu). Ưu tiên THÊM module mới thay vì sửa
+   file cũ. Bắt buộc sửa file dùng chung thì sửa tối thiểu, tương thích ngược, ghi
+   lý do.
+3. Chạy bộ test hiện có trước và sau thay đổi để chứng minh không hồi quy.
+4. Cập nhật FE mẫu secai-fe-devspace (mô phỏng dự án FE thật): chọn kiểu báo cáo,
+   form tham số theo prompt quy định sẵn, xem trước/sinh báo cáo, màn hình quản lý
+   template (chỉ vai trò được phép). Giao cho 1 agent sol riêng.
+5. Không commit secrets, không hardcode đường dẫn máy cá nhân; cấu hình model/ngưỡng
+   qua biến môi trường hoặc file config.
+6. Chức năng mới đặt sau FEATURE FLAG (mặc định tắt), có thể bật theo từng kiểu
+   báo cáo/template.
+7. Template và dữ liệu báo cáo có thể nhạy cảm: không đưa lên máy vast.ai thuê nếu
+   chưa ẩn danh/tổng hợp và chưa được tôi duyệt (xem mục 8.4).
+
+
+# 4. LÀM VIỆC SONG SONG VỚI CÁC NHÁNH ĐANG PHÁT TRIỂN
+
+Dự án đang có các nhánh làm việc khác (ví dụ chức năng dịch file, mở rộng đa
+ngôn ngữ cho dịch, OCR). Task này KHÔNG được ảnh hưởng các nhánh đó và phải làm
+song song được.
+
+1. Hỏi tôi MỘT LẦN danh sách tên các nhánh đang hoạt động; nếu không có, tự tìm
+   bằng lịch sử git. Không bao giờ checkout, commit, rebase, force-push hay xóa
+   trên các nhánh đó.
+2. Lập BẢN ĐỒ CHỒNG LẤN: với mỗi nhánh đang hoạt động, lấy merge-base với nhánh
+   gốc, liệt kê file đã sửa (git diff --name-only <base>...<nhánh>). Các file này
+   là "vùng cấm đụng". Bắt buộc phải đụng thì sửa tối thiểu, ghi lý do, báo điều
+   phối.
+3. Tách nhánh từ NHÁNH GỐC CHUNG (không từ nhánh WIP của người khác), mỗi agent
+   một git worktree:
+   - feature/report-assessment      (benchmark + đánh giá năng lực LLM)
+   - feature/report-templates       (registry template, API cập nhật, importer)
+   - feature/report-core            (prompt catalog, pipeline sinh, validator, API)
+   - feature/report-adapter         (chỉ tạo nếu qua Cổng C, xem mục 8)
+   - feature/fe-devspace-report     (cập nhật secai-fe-devspace)
+   - integration/report-feature     (nhánh tích hợp để astra merge)
+4. THIẾT KẾ CỘNG THÊM (additive): module mới (registry, prompt catalog, validator,
+   pipeline, API) trong thư mục riêng; chỉ chèn tối đa MỘT điểm mở rộng (hook) nhỏ
+   vào chỗ dùng chung, đứng sau feature flag, mặc định giữ nguyên đường cũ. Bọc
+   client gọi LLM bằng lớp tương thích, không đổi giao diện hiện có.
+5. Dùng lại thay vì sửa: nếu cần trích text từ .docx/.txt để nhập template, gọi
+   hoặc sao chép cách làm sang module mới, KHÔNG sửa code của nhánh dịch file.
+6. PHÁT HIỆN XUNG ĐỘT SỚM, LẶP LẠI MỖI CHU KỲ VÒNG LẶP: git fetch, mô phỏng merge
+   trong worktree tạm (git merge-tree hoặc merge --no-commit --no-ff) giữa nhánh
+   của task này với nhánh gốc và với TỪNG nhánh đang hoạt động; chạy test của các
+   nhánh đó trên bản mô phỏng. Ghi kết quả vào STATE.md. Có xung đột tiềm ẩn thì
+   đưa thay đổi về file riêng ngay. Định kỳ merge nhánh gốc vào nhánh của mình;
+   KHÔNG merge WIP của nhánh khác trừ khi tôi đồng ý.
+7. Thứ tự merge: ai xong trước merge trước; bên sau cập nhật lại và chạy lại test.
+8. Tài nguyên dùng chung: LLM trên vast.ai có thể đang phục vụ các nhánh khác.
+   Benchmark/huấn luyện dùng instance dev riêng; nếu bắt buộc dùng instance chung,
+   giới hạn tốc độ gọi và chạy ngoài giờ cao điểm. Nếu nhánh khác (ví dụ đa ngôn
+   ngữ) cũng dùng adapter LoRA trên cùng LLM, phải đảm bảo nhiều adapter cùng tồn
+   tại được (nạp theo yêu cầu/định tuyến theo adapter), không ghi đè cấu hình phục
+   vụ của nhau.
+
+
+# 5. CÁC LOẠI AGENT
+
+- astra: tiêu chí / review tích hợp / merge. Mỗi lần xuất hiện là instance riêng.
+- sol: thực thi (code, review, test, viết tài liệu). Mỗi sol chạy trong git
+  worktree riêng.
+- vanguard: agent kiểm thử chuyên sâu trước production. Instance độc lập, KHÔNG
+  dùng lại context của agent code hay review, KHÔNG sửa code tính năng. Chỉ viết
+  kịch bản, chạy kiểm thử, báo cáo lỗi.
+- warden: agent giám sát vòng lặp. Theo dõi tiến độ, phát hiện kẹt/lặp vô ích, ghi
+  checkpoint, theo dõi chi phí vast.ai, quyết định dừng hoặc báo tôi.
+
+
+# 6. VÒNG LẶP TỰ ĐỘNG (AUTONOMOUS LOOP)
+
+Mục tiêu: chạy liền mạch nhiều giờ, tôi không cần can thiệp giữa chừng.
+
+  CRITERIA (astra A)
+        |
+        v
+  ASSESS: khảo sát LLM + benchmark baseline trên các template hiện có (sol-1)
+        |
+        v
+  GATE A -> B -> (C) -> D : quyết định hướng nâng chất lượng (mục 8)
+        |
+        v
+  CODE (sol song song, mỗi sol một worktree)
+        |
+        v
+  REVIEW (sol độc lập) --fail--> FIX (sol code) --> REVIEW (lặp)
+        |
+       pass
+        v
+  TEST 30 mẫu/template x nhiều lượt (gồm test cập nhật template)
+        |        --fail--> FIX --> REVIEW --> TEST
+       pass
+        v
+  VANGUARD (bảo mật / phân quyền / logic) --Critical/High--> FIX --> REVIEW
+        |                                                    --> TEST
+       pass                                                  --> VANGUARD
+        v
+  MERGE & REVIEW TÍCH HỢP (astra B) --fail--> FIX (qua điều phối)
+        |
+       pass
+        v
+  TÀI LIỆU API (sol) --> BÁO CÁO CUỐI
+
+QUY TẮC VẬN HÀNH:
+
+1. Tự chủ tối đa: không hỏi tôi những việc có thể tự quyết theo tiêu chí. Chỉ dừng
+   và hỏi khi: cần quyết định kiến trúc rủi ro cao, thiếu quyền/secret/tài nguyên/
+   template, phải sửa API cũ, LLM không hỗ trợ adapter, hoặc chạm điều kiện dừng.
+2. Trạng thái ra file: duy trì docs/loop/STATE.md (giai đoạn, agent đang chạy, vòng
+   lặp thứ mấy từng task, kết quả mô phỏng merge với các nhánh khác, chi phí
+   vast.ai, việc còn lại) và docs/loop/LOG.md (nhật ký ngắn). Cập nhật sau mỗi
+   chuyển giai đoạn. Mất context thì đọc lại hai file này để tiếp tục.
+3. Checkpoint: commit trên nhánh của từng sol sau mỗi mốc đạt; ghi hash vào
+   STATE.md. Checkpoint huấn luyện (adapter) lưu NGOÀI instance vast.ai.
+4. Phản hồi có cấu trúc: mọi feedback dùng định dạng
+       ID | tiêu chí hoặc test case | bằng chứng | mức độ | gợi ý sửa
+   Điều phối chuyển nguyên văn cho sol sửa, không tóm tắt làm mất thông tin.
+5. Giới hạn vòng lặp:
+   - Tối đa 5 vòng sửa/review mỗi task; tối đa 3 vòng quay lại từ vanguard.
+   - Cùng một lỗi lặp lại 2 lần sau khi "đã sửa": warden yêu cầu đổi cách tiếp cận.
+   - Số lỗi không giảm sau 2 vòng: dừng task đó, ghi nguyên nhân, chuyển task độc
+     lập khác.
+6. Điều kiện dừng toàn cục (báo tôi): vượt giới hạn vòng lặp; template nào đó không
+   đạt ngưỡng sau Cổng D; vượt ngân sách vast.ai; phát hiện lỗi Critical không sửa
+   được; cần đổi API cũ; xung đột với nhánh khác không tự giải quyết được mà không
+   sửa file của nhánh đó; hoàn thành toàn bộ.
+7. Chạy song song khi độc lập; chỉ đồng bộ ở bước merge. Bước dùng GPU xếp hàng.
+8. Brief gọn: mỗi agent nhận brief tự đủ (mục tiêu, tiêu chí liên quan, hợp đồng
+   API, đường dẫn file), không nhận toàn bộ lịch sử.
+9. Không tự hợp lý hóa kết quả: fail thì ghi fail. Không hạ tiêu chí, không bỏ test
+   case, không sửa test để qua mặt, không chọn mẫu dễ. Đổi tiêu chí chỉ do astra
+   đề xuất kèm lý do, ghi vào LOG và có tôi xác nhận.
+10. Báo cáo định kỳ: sau mỗi giai đoạn lớn, ghi tóm tắt 5-10 dòng vào LOG.md.
+
+
+# 7. ĐẶC TẢ KỸ THUẬT CHỨC NĂNG
+
+## 7.1. Đặc tả template (template spec) có cấu trúc
+
+Mỗi template được lưu dưới dạng cấu trúc (YAML/JSON, có schema kiểm tra), gồm tối
+thiểu:
+- id, tên, kiểu báo cáo, phiên bản, trạng thái (nháp/đã xuất bản/vô hiệu), ngôn ngữ,
+  người tạo/sửa, thời gian.
+- Danh sách mục (section): tiêu đề, thứ tự, bắt buộc hay tùy chọn, hướng dẫn nội
+  dung, ràng buộc (độ dài, định dạng, bảng/danh sách), nguồn dữ liệu cho phép.
+- Trường dữ liệu đầu vào (input schema): tên, kiểu, bắt buộc/tùy chọn, ví dụ.
+- Quy tắc văn phong và thuật ngữ; quy tắc "không có dữ liệu".
+- Định dạng đầu ra (ví dụ Markdown/JSON có cấu trúc); quy tắc kiểm tra tự động.
+- Báo cáo mẫu (ví dụ) đi kèm để làm few-shot.
+Template gốc tôi đưa (docx/md/txt...) được NHẬP (import) và chuyển thành template
+spec; agent hỏi tôi nơi chứa template ở Bước 0. Giữ bản gốc để đối chiếu.
+
+## 7.2. Giải pháp cập nhật template
+
+- Registry template có phiên bản: tạo, sửa (tạo phiên bản mới), xuất bản, vô hiệu
+  hóa, quay lui; kiểm tra schema, xem trước (dry-run với dữ liệu mẫu) trước khi
+  xuất bản.
+- Hiệu lực tức thì khi xuất bản, không cần deploy lại hay train lại; có cơ chế
+  làm mới cache; báo cáo đã sinh ghi lại id+phiên bản template và phiên bản prompt
+  đã dùng để truy vết.
+- Phân quyền: chỉ vai trò được phép (ví dụ quản trị) mới tạo/sửa/xuất bản template
+  và prompt quy định sẵn; nhật ký kiểm toán (ai, khi nào, đổi gì) không thể sửa.
+- Nhập template từ file (.docx/.md/.txt) qua importer có giới hạn kích thước, kiểm
+  tra định dạng, không thực thi macro; kết quả nhập phải được xem lại trước khi
+  xuất bản.
+- Trình "kiểm tra hồi quy khi cập nhật": mỗi lần xuất bản phiên bản mới chạy bộ test
+  nhanh (cấu trúc, bám dữ liệu) trên mẫu của template đó, và chặn xuất bản nếu fail.
+- Đường làm mới adapter (CHỈ khi có Cổng C): khi một họ template mới không đạt dù
+  đã cập nhật qua registry, có quy trình có kiểm soát: thêm template + dữ liệu
+  tổng hợp, huấn luyện tiếp có trộn dữ liệu cũ (chống quên), đánh giá trên tất cả
+  template + hồi quy, lưu adapter có phiên bản, thử canary, thăng cấp hoặc quay
+  lui. Không phải mỗi lần sửa template đều train lại.
+
+## 7.3. Prompt catalog (prompt quy định sẵn)
+
+- Mỗi kiểu báo cáo có prompt quy định sẵn: id, tên hiển thị, mô tả, template gắn
+  kèm (id + phiên bản hoặc "mới nhất"), tham số người dùng điền (kiểu, bắt buộc,
+  giới hạn độ dài), phần system/hướng dẫn cố định, phần ghép tham số an toàn.
+- Tham số của người dùng được coi là DỮ LIỆU: được tách bạch khỏi hướng dẫn hệ
+  thống, được escape/đánh dấu ranh giới, không thể ghi đè hướng dẫn hay template.
+- Catalog có phiên bản, cập nhật có kiểm soát giống template (mục 7.2). Cho phép
+  nhiều prompt dùng chung một template hoặc ngược lại.
+- Free-form prompt: mặc định tắt; nếu bật thì theo quyền riêng, có giới hạn và đi
+  qua cùng lớp kiểm soát.
+
+## 7.4. Pipeline sinh báo cáo
+
+1. Xác thực + kiểm tra quyền -> chọn prompt quy định sẵn -> kiểm tra tham số theo
+   input schema.
+2. Nạp template (đúng phiên bản) + báo cáo mẫu làm ngữ cảnh.
+3. Tiền xử lý dữ liệu đầu vào dài (chia khối, tóm tắt từng khối) nếu vượt ngữ cảnh
+   LLM; giữ nguyên thực thể quan trọng (CVE/IP/hash/URL/số liệu).
+4. Sinh theo mục hoặc theo cả báo cáo (đo đạc chọn cách tốt hơn); dùng ràng buộc
+   đầu ra (JSON schema/grammar) nếu stack hỗ trợ.
+5. Validator: đủ mục bắt buộc, đúng thứ tự, đúng định dạng, thực thể trong báo cáo
+   đều có trong dữ liệu đầu vào (bám dữ liệu), không có lời dẫn thừa, không lộ
+   prompt hệ thống; lỗi thì thử lại với hướng dẫn chặt hơn (giới hạn số lần), vẫn
+   lỗi thì trả lỗi rõ ràng, không trả báo cáo sai.
+6. Ghi vết (id template/phiên bản, id prompt/phiên bản, id adapter nếu có) mà không
+   ghi nội dung nhạy cảm vào log.
+
+
+# 8. KIỂM TRA NĂNG LỰC LLM VÀ CÁC CỔNG QUYẾT ĐỊNH
+
+## 8.1. Khảo sát LLM hiện tại (Bước ASSESS, sol-1)
+
+Đọc code/config để xác định (đừng đoán, báo cáo cả phần không tìm ra): tên và kích
+thước LLM, bản base/instruct, lượng tử hóa, độ dài context, max tokens; stack phục
+vụ trên vast.ai (vLLM/TGI/llama.cpp...), GPU, endpoint, chat template, tham số giải
+mã; có nạp được LoRA không, giấy phép có cho tinh chỉnh không, có hỗ trợ guided
+decoding/JSON schema không. Hiện "mô hình được huấn luyện trên template" đang được
+thực hiện thế nào (nếu đã có) cũng phải được mô tả. Tra cứu web để tham khảo năng
+lực công bố của LLM (chỉ tham khảo, không thay cho benchmark của ta).
+
+## 8.2. Benchmark baseline (Cổng A)
+
+Với mỗi template hiện có (và thêm các biến thể), đo với cách làm hiện tại và với
+"template trong ngữ cảnh" (không huấn luyện). Tách bộ DEV (chỉnh prompt/huấn luyện)
+và bộ TEST (giữ kín, chỉ để báo cáo cuối). Có thêm tập TEMPLATE CHƯA THẤY (hold-out):
+template mới do ta soạn/biến đổi, để đo khả năng tuân thủ template chưa từng huấn
+luyện. Dữ liệu đầu vào mẫu: tổng hợp hoặc ẩn danh, bao gồm chuỗi CVE/IP/URL/hash/
+log/số liệu.
+
+Chỉ số (mỗi template):
+- Tuân thủ cấu trúc: tỉ lệ đủ mục bắt buộc, đúng thứ tự, đúng định dạng, parse được.
+- Bám dữ liệu: tỉ lệ thực thể (CVE/IP/hash/URL/số/ngày) trong báo cáo KHÔNG có trong
+  dữ liệu đầu vào (mục tiêu 0); xử lý đúng khi thiếu dữ liệu ("Không có dữ liệu").
+- Chất lượng nội dung: chấm theo rubric (đủ ý, chính xác, rõ ràng, văn phong đúng
+  template) bằng giám khảo LLM (offline) kèm mẫu để người xem lại; so cặp với
+  báo cáo tham chiếu nếu có.
+- Nhất quán giữa nhiều lần sinh (cùng đầu vào), tỉ lệ lời dẫn thừa/lặp/cắt cụt.
+- Độ trễ p50/p95, chi phí mỗi báo cáo, độ dài đầu vào tối đa xử lý được.
+- Cập nhật template: sau khi sửa template (đổi thứ tự mục, thêm/bớt mục, đổi tên
+  mục), báo cáo mới có theo đúng không; sau quay lui có về đúng không.
+
+NGƯỠNG ĐẠT: astra (A) đề xuất ngưỡng riêng từng template/kiểu báo cáo SAU khi có
+baseline, trình tôi xác nhận một lần. Ngưỡng cứng bất biến: sau validator tuân thủ
+cấu trúc 100% (sai thì trả lỗi, không trả báo cáo sai); thực thể bịa ở CVE/IP/hash/
+URL/số liệu quan trọng = 0 trên bộ test; đầu ra parse được 100%; API cũ không đổi;
+cập nhật/quay lui template có hiệu lực đúng.
+
+## 8.3. Cổng B: tối ưu mức prompt và pipeline (KHÔNG huấn luyện)
+
+Thử theo thứ tự rẻ tới đắt, mỗi bước đo lại trên DEV, chỉ giữ cải thiện thật:
+1. Biểu diễn template tối ưu trong ngữ cảnh (mục, hướng dẫn, ví dụ), few-shot lấy
+   từ báo cáo mẫu của đúng template.
+2. Sinh theo mục + ghép, hoặc kế hoạch (outline) rồi điền; chia khối cho dữ liệu dài.
+3. Ràng buộc đầu ra (JSON schema/grammar), tham số giải mã thấp, giới hạn độ dài.
+4. Glossary thuật ngữ bảo mật; cơ chế giữ nguyên thực thể bằng placeholder rồi khôi
+   phục có kiểm tra khớp.
+5. Validator + thử lại tự động, kiểm tra bám dữ liệu bằng trích xuất thực thể.
+Template/kiểu báo cáo nào đạt ngưỡng ở Cổng B thì xong, không cần huấn luyện.
+
+## 8.4. Cổng C: adapter trên CHÍNH LLM (chỉ cho phần chưa đạt ở Cổng B)
+
+Điều kiện tiên quyết: LLM có trọng số mở, stack nạp được LoRA, giấy phép cho phép
+tinh chỉnh. Nếu không, DỪNG và báo tôi (không tự đổi model).
+- Mục tiêu huấn luyện: kỹ năng tuân thủ template trong ngữ cảnh. Dữ liệu = các
+  template tôi đưa + NHIỀU BIẾN THỂ do ta sinh (đổi thứ tự/tên/số mục, đổi văn
+  phong, ràng buộc) x dữ liệu đầu vào tổng hợp/ẩn danh -> báo cáo chuẩn (soạn bằng
+  quy trình có kiểm duyệt, không dùng model sinh khác ngoài LLM hiện tại; có thể
+  dùng bản sinh của chính LLM + validator lọc + người xem lại mẫu).
+- Giữ riêng tập TEMPLATE HOLD-OUT (không dùng huấn luyện) để chứng minh adapter
+  tổng quát hóa sang template mới; kiểm tra trùng lặp train/test bằng mã băm/n-gram.
+- Chống quên: trộn dữ liệu chung/hướng dẫn; đo hồi quy các chức năng khác dùng
+  cùng LLM; đảm bảo cùng tồn tại với adapter của nhánh khác (mục 4.8).
+- Quyền riêng tư và hạ tầng vast.ai: máy thuê là host ngoài, không tin cậy. Template
+  và báo cáo mẫu thật có thể nhạy cảm: CHỈ đưa lên khi đã ẩn danh/tổng hợp VÀ tôi
+  đã duyệt. Dùng instance dev riêng, không chạm instance đang phục vụ; đặt ngân sách
+  tối đa, tự hủy instance khi xong; checkpoint lưu ngoài; xác minh checksum
+  image/model; lưu adapter dạng safetensors; không để secret trong môi trường máy
+  thuê ngoài khóa tối thiểu cần thiết.
+- Kiểm tra rò rỉ ghi nhớ: adapter không được tái hiện nguyên văn dữ liệu huấn luyện
+  nhạy cảm khi được gợi ý (thử trích xuất).
+- Báo cáo: trước/sau theo từng template, hiệu quả trên template hold-out, chi phí
+  huấn luyện, kích thước adapter, ảnh hưởng độ trễ/VRAM.
+
+## 8.5. Cổng D: kết luận trung thực
+
+Nếu sau Cổng B và C vẫn có template/kiểu báo cáo không đạt: KHÔNG phát hành ngầm.
+Báo cáo rõ cái nào đạt, cái nào không, nguyên nhân (dữ liệu, kích thước model,
+độ dài ngữ cảnh), đề xuất (chỉ bật các kiểu đạt bằng feature flag, gắn nhãn "beta",
+yêu cầu người duyệt trước khi dùng, hoặc các lựa chọn khác nằm trong ràng buộc mục
+2.3). Chờ tôi quyết định.
+
+
+# 9. QUY TRÌNH (THỰC HIỆN ĐÚNG THỨ TỰ)
+
+Thứ tự: Bước 0 -> 1 -> 1.5 (ASSESS + các Cổng) -> 2 -> 3 -> 4 -> 4.5 (vanguard) ->
+5 (astra B) -> 6 (tài liệu API).
+
+## BƯỚC 0: Chuẩn bị
+
+- Liệt kê plugin/skill/MCP khả dụng, quét cấu trúc dự án, công nghệ, convention
+  API, xác thực/phân quyền, framework test.
+- Thực hiện mục 4: xác định các nhánh đang hoạt động, bản đồ chồng lấn, tạo nhánh/
+  worktree.
+- Lập kế hoạch tổng thể và bản đồ ảnh hưởng, trình bày ngắn gọn cho tôi. Hỏi các
+  điểm mơ hồ MỘT LẦN: nơi chứa các template tôi đưa trước và báo cáo mẫu; danh
+  sách kiểu báo cáo/prompt quy định sẵn ban đầu; định dạng đầu ra mong muốn
+  (mặc định: Markdown/JSON có cấu trúc, xuất .docx/.pdf là tùy chọn giai đoạn
+  sau); vai trò nào được cập nhật template; ngân sách vast.ai; ngôn ngữ báo cáo
+  (mặc định tiếng Việt); tên các nhánh đang hoạt động.
+- Khởi tạo docs/loop/STATE.md và docs/loop/LOG.md.
+
+## BƯỚC 1: Agent astra (A) tạo tiêu chí đánh giá (LÀM ĐẦU TIÊN)
+
+Không agent nào được code hoặc benchmark trước khi bước này xong. astra (A) tạo
+docs/criteria/<tên-task>.md cho TỪNG task với tiêu chí đo được, mức đạt/không đạt
+rõ ràng, tối thiểu gồm:
+- Đúng đặc tả: sinh báo cáo đúng từng template; prompt quy định sẵn hoạt động đúng
+  tham số; cập nhật/xuất bản/quay lui template có hiệu lực tức thì và đúng.
+- Chất lượng theo mục 8.2 (ngưỡng đặt sau baseline, ngưỡng cứng đã nêu), gồm cả
+  khả năng với template chưa thấy.
+- API cũ không đổi, không hồi quy, phạm vi file sửa tối thiểu, feature flag đúng.
+- Phân quyền: chỉ vai trò được phép mới cập nhật template/prompt; người dùng chỉ
+  xem được báo cáo của mình.
+- Hiệu năng (độ trễ, bộ nhớ, VRAM), chi phí; xử lý dữ liệu đầu vào dài.
+- Bảo mật (mục 4.5), logging không rò dữ liệu nhạy cảm, nhật ký kiểm toán.
+- Không xung đột và không ảnh hưởng các nhánh đang hoạt động (mô phỏng merge sạch,
+  test của các nhánh đó vẫn qua).
+- Chất lượng code, test tự động, tài liệu.
+
+## BƯỚC 1.5: ASSESS và các Cổng A/B/C/D (mục 8)
+
+sol-1 (nhánh feature/report-assessment) dựng bộ benchmark có thể chạy lại và chạy
+baseline. Từ kết quả quyết định có cần Cổng C hay không. Chỉ tạo sol-4 (adapter) nếu
+thật sự cần.
+
+## BƯỚC 2: Các agent sol code song song (mỗi agent một worktree + một nhánh)
+
+- sol-1: bộ benchmark/đánh giá tự động (tái sử dụng được cho test và hồi quy).
+- sol-2: registry template (spec + schema, phiên bản, CRUD, xuất bản/quay lui, nhập
+  từ file, nhật ký kiểm toán, phân quyền) và API quản lý template.
+- sol-3: prompt catalog + pipeline sinh báo cáo + validator + API sinh báo cáo.
+- sol-4: adapter trên LLM hiện tại và đường làm mới adapter (CHỈ khi qua Cổng C).
+- sol-5: cập nhật secai-fe-devspace (chọn kiểu báo cáo, form tham số, sinh/xem báo
+  cáo, màn hình quản lý template theo quyền; có thể dùng mock theo hợp đồng API
+  trong lúc chờ backend, sau đó nối API thật).
+
+Hợp đồng API (đường dẫn, request, response, mã lỗi, mô hình quyền) chốt sớm trong
+một file chung. Mỗi sol viết unit test và tự chạy trước khi báo xong.
+
+## BƯỚC 3: Review độc lập
+
+Khi một sol code xong, điều phối tạo MỘT agent sol khác, độc lập (không dùng lại
+context) để review theo tiêu chí của astra (A):
+- Review nhiều bước: (1) đọc diff và đối chiếu bản đồ ảnh hưởng + bản đồ chồng lấn,
+  (2) chạy test, (3) kiểm tra từng tiêu chí, ghi đạt/không đạt kèm bằng chứng,
+  (4) kiểm tra hồi quy API cũ, (5) kiểm tra bảo mật, phân quyền và biên, (6) chạy
+  mô phỏng merge với nhánh gốc và các nhánh đang hoạt động.
+- CHỈ CẦN 1 TIÊU CHÍ KHÔNG ĐẠT LÀ KHÔNG ĐẠT. Gửi phản hồi chi tiết cho ĐIỀU PHỐI.
+- Điều phối chuyển phản hồi cho sol code sửa, gọi lại reviewer độc lập. Lặp tới
+  khi đạt hoặc chạm giới hạn vòng lặp.
+
+## BƯỚC 4: Agent test nhiều lần (sau khi review đạt)
+
+Tạo agent sol chuyên test. Mỗi lượt dùng KHOẢNG 30 MẪU CHO MỖI KIỂU BÁO CÁO/TEMPLATE,
+chạy NHIỀU LƯỢT (tối thiểu 3 lượt, mẫu mới hoặc xáo trộn mỗi lượt). Mẫu phân tầng:
+- Dữ liệu đầy đủ; thiếu trường (mô hình phải ghi "Không có dữ liệu", không bịa);
+  dữ liệu rất dài (kiểm tra chia khối); dữ liệu nhiễu/log lộn xộn; chứa CVE/IP/URL/
+  hash/số liệu/ngày tháng; mâu thuẫn trong dữ liệu; tham số ở biên (rỗng, dài tối
+  đa, ký tự đặc biệt).
+- KIỂM THỬ CẬP NHẬT TEMPLATE: (a) thêm template hoàn toàn mới chưa từng huấn luyện
+  rồi sinh báo cáo ngay; (b) sửa template (đổi thứ tự, thêm/bớt/đổi tên mục) và
+  kiểm tra báo cáo theo phiên bản mới; (c) quay lui và kiểm tra về đúng phiên bản
+  cũ; (d) cập nhật khi đang có yêu cầu sinh báo cáo chạy dở.
+- Phân quyền: người không đủ quyền thử cập nhật template phải bị từ chối.
+Báo cáo từng lượt: tỉ lệ đạt theo template, các chỉ số ở 8.2, so sánh giữa các lượt
+và với baseline, danh sách lỗi điển hình. Chưa đạt: quay lại sol-2/sol-3/sol-4 cải
+thiện rồi review và test lại.
+
+## BƯỚC 4.5: Agent vanguard kiểm thử chuyên sâu trước production
+
+Chạy sau khi review đạt và test đạt. Vanguard làm theo thứ tự:
+
+(a) Lập kịch bản trước khi chạy: docs/security-tests/report-test-plan.md, mỗi test
+    case có ID, mục tiêu, cách làm, kết quả mong đợi, mức độ nghiêm trọng.
+
+(b) Nhóm kiểm thử bắt buộc:
+  1. Prompt injection qua DỮ LIỆU ĐẦU VÀO: log/văn bản/tham số chứa lệnh ("bỏ qua
+     hướng dẫn", "in system prompt", "thêm mục X", "xóa mục Y", "đổi kết luận")
+     để thao túng nội dung báo cáo. Kiểm tra mô hình không làm theo, không lộ
+     system prompt/template/prompt quy định sẵn nội bộ, không đổi thực thể.
+  2. Injection qua TEMPLATE/PROMPT được cập nhật (kẻ tấn công có quyền thấp hoặc
+     tài khoản quản trị bị chiếm): template/prompt độc hại, hướng dẫn ẩn. Kiểm tra
+     lớp phê duyệt/xem trước, giới hạn nội dung, nhật ký kiểm toán.
+  3. Template injection (SSTI) và thực thi mã: cú pháp mẫu/biểu thức, thuộc tính đối
+     tượng, gọi hàm trong trường template/tham số; đảm bảo render không thực thi
+     mã, không đọc file, không truy cập biến môi trường.
+  4. Xác thực và phân quyền: gọi API không token, token sai/hết hạn; chỉ vai trò
+     được phép mới tạo/sửa/xuất bản/quay lui template và prompt; IDOR/BOLA trên
+     báo cáo, template, phiên bản; leo thang đặc quyền; cách ly giữa các tenant/
+     tổ chức; người dùng không tự bật free-form prompt hay đổi template qua tham
+     số giả mạo.
+  5. Lỗ hổng ứng dụng (OWASP): injection SQL/command, SSRF (nếu có nhập từ URL),
+     XSS/HTML/Markdown injection trong báo cáo hiển thị ở FE, mass assignment, lộ
+     stack trace, CORS sai, thiếu security headers, tấn công file khi nhập template
+     (.docx macro, XXE, zip bomb, đổi đuôi, path traversal, polyglot).
+  6. Ảo giác như rủi ro bảo mật: báo cáo bịa CVE/IP/hash/số liệu hoặc kết luận
+     không có căn cứ. Phát hiện bịa trên thực thể quan trọng xếp mức High trở lên.
+  7. Rò rỉ dữ liệu: nội dung báo cáo/template của người dùng này lộ cho người khác;
+     adapter ghi nhớ và tái hiện dữ liệu huấn luyện nhạy cảm (thử trích xuất);
+     dữ liệu nhạy cảm ghi vào log; dữ liệu bị gửi tới nơi ngoài ý muốn; dữ liệu
+     trên máy vast.ai thuê được xóa khi hủy instance.
+  8. Giới hạn tài nguyên và lạm dụng: rate limit, giới hạn kích thước đầu vào và
+     template (ký tự và token), timeout, DoS bằng dữ liệu cực dài hoặc nhiều yêu
+     cầu song song, tiêu hao VRAM/thông lượng LLM trên vast.ai, chi phí đội bất
+     thường.
+  9. Chuỗi cung ứng: checksum model/adapter, safetensors (không pickle), quét lỗ
+     hổng thư viện (pip-audit/npm audit/trivy tùy ngôn ngữ), giấy phép dữ liệu và
+     model, không có secret trong repo/log/image.
+ 10. Logic nghiệp vụ: cập nhật template khi đang sinh báo cáo (race condition), hai
+     quản trị viên sửa cùng lúc, quay lui phiên bản, xuất bản template hỏng, thiếu
+     phiên bản, gọi lặp (idempotency), sinh một phần rồi lỗi, tắt feature flag
+     thì về đúng đường cũ, bảo toàn nhật ký kiểm toán.
+ 11. Hồi quy và tương thích: toàn bộ API cũ vẫn đúng hợp đồng; test của các nhánh
+     đang hoạt động vẫn qua trên bản mô phỏng merge.
+
+(c) Chạy kiểm thử trên môi trường staging/cô lập, không chạm dữ liệu thật. Mọi công
+    cụ quét hoặc tấn công thử chỉ nhắm vào hệ thống của chính dự án trong môi trường
+    test. Lưu bằng chứng (request/response, log) cho từng lỗi.
+
+(d) Báo cáo docs/security-tests/report-report.md: mỗi phát hiện có ID, mức độ
+    (Critical/High/Medium/Low), bước tái hiện, tác động, gợi ý khắc phục.
+    CỔNG CHẶN LÊN PROD: không còn Critical/High chưa xử lý; Medium cần quyết định
+    rõ (sửa hoặc tôi chấp nhận rủi ro bằng văn bản); Low được ghi nhận.
+
+(e) Vòng sửa: báo cáo -> điều phối -> sol sửa theo từng finding -> reviewer độc lập
+    kiểm tra lại -> vanguard chạy lại TOÀN BỘ test case liên quan và hồi quy. Lặp
+    đến khi đạt cổng chặn.
+
+## BƯỚC 5: Agent astra (B) review tích hợp và merge
+
+Một instance astra mới:
+- Xác nhận báo cáo vanguard đã đạt cổng chặn trước khi merge.
+- Cập nhật mô phỏng merge mới nhất với nhánh gốc và các nhánh đang hoạt động; kiểm
+  tra conflict; merge lần lượt vào integration/report-feature.
+- Giải quyết conflict (nếu có) theo nguyên tắc không phá API cũ và không sửa đè công
+  việc của nhánh khác; nếu không tránh được, dừng và báo tôi.
+- Chạy lại toàn bộ test (cũ + mới + test của các nhánh khác) và smoke test FE với
+  backend thật, gồm kịch bản cập nhật template từ FE.
+- Chỉ khi đạt toàn bộ mới báo tôi xác nhận merge vào nhánh chính, và đề xuất thứ tự
+  merge so với các nhánh khác.
+
+## BƯỚC 6: Agent viết tài liệu API bàn giao FE
+
+Sau khi mọi thứ đạt, tạo agent sol viết docs/api/report-feature.md. NGẮN GỌN, RÕ
+RÀNG, CÓ VÍ DỤ:
+- Danh sách kiểu báo cáo/prompt quy định sẵn: id, tên, tham số (kiểu, bắt buộc,
+  giới hạn), template gắn kèm, trạng thái (ổn định/beta/tắt).
+- Mỗi endpoint: mục đích, method + URL, headers, request, response thành công, bảng
+  mã lỗi (ví dụ thiếu tham số bắt buộc, template không tồn tại/bị vô hiệu, báo cáo
+  không qua validator, dữ liệu quá dài).
+- Nhóm API quản lý template/prompt: tạo, sửa, xem trước, xuất bản, quay lui, lịch sử
+  phiên bản, nhập từ file; ví dụ request/response; quyền cần có.
+- Ví dụ curl và JSON request/response thật cho: sinh một báo cáo từ prompt quy định
+  sẵn (có CVE/IP), cập nhật một template rồi sinh lại, quay lui.
+- Ghi chú cho FE: cách dựng form từ input schema, hiển thị tiến trình/lỗi, hiển thị
+  báo cáo an toàn (chống XSS), màn hình quản lý template theo quyền, tương ứng với
+  secai-fe-devspace.
+- Mục "Bảo mật và phân quyền": xác thực, quyền, giới hạn kích thước/tần suất, cách xử
+  lý 401/403/413/429.
+- Tài liệu khớp hành vi API thực tế (agent tự chạy thử các ví dụ trước khi chốt).
+
+
+# 10. QUY TẮC LÀM VIỆC CHUNG
+
+- Điều phối là kênh liên lạc duy nhất giữa các agent: mọi phản hồi review đi qua
+  điều phối.
+- Mỗi agent kết thúc bằng báo cáo ngắn: đã làm gì, file nào đổi, test nào đã chạy,
+  rủi ro còn lại.
+- Gặp điểm mơ hồ có thể ảnh hưởng lớn tới hệ thống, hỏi tôi MỘT LẦN cho tất cả, đừng
+  đoán.
+- Bản tổng kết cuối gửi tôi gồm:
+  * Danh sách nhánh; danh sách file đã sửa/thêm (nêu rõ file dùng chung đã đụng và
+    xác nhận không đụng file của các nhánh đang hoạt động hoặc liệt kê ngoại lệ).
+  * Thông tin LLM và stack vast.ai đã khảo sát; kết luận từng Cổng A/B/C/D.
+  * Bảng chất lượng từng template/kiểu báo cáo: baseline, sau Cổng B, sau Cổng C
+    (nếu có), kết quả trên template chưa thấy, so với ngưỡng; trạng thái từng kiểu
+    (ổn định/beta/tắt).
+  * Kết quả các lượt test (30 mẫu/template x nhiều lượt), kết quả kiểm thử cập nhật
+    template, độ trễ, chi phí vast.ai.
+  * Số vòng lặp đã chạy ở từng task; danh sách finding của vanguard kèm trạng thái
+    và rủi ro tồn dư.
+  * Kết quả mô phỏng merge với nhánh gốc và các nhánh đang hoạt động.
+  * Đường dẫn tiêu chí, báo cáo bảo mật, tài liệu API, STATE.md và LOG.md.
+
+================================================================================
+HẾT PROMPT
+================================================================================

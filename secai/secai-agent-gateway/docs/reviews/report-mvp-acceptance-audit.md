@@ -1,0 +1,22 @@
+# Audit độc lập: áp dụng hard gate đã khóa cho live05
+
+Ngày 2026-10-04. Đây là **diễn giải tiêu chí nghiệm thu**, không sửa manifest, output, điểm, `judgement-05.json` hay verdict lịch sử. Nguồn đối chiếu: `report-mvp-quality-fix-05/manifest.json` và 36 output đã lưu; đánh giá độc lập gốc ở `secai-report-quality-review-05-wt/evals/report_mvp/judgement-05.json`. Bộ dữ liệu là tổng hợp, không phải nghiệm thu khách hàng.
+
+## Ranh giới tiêu chí
+
+- Manifest đã khóa, dòng 203–224: chấm nội dung theo **coverage, semantic accuracy, clarity, style**, mỗi chiều 0–2; ngưỡng 70% từng template/thao tác. `hard_gates` dòng 217–220 chỉ gồm: đúng section, **không có CVE/IP/URL/hash/numeric claim thiếu căn cứ**, và revision lưu đúng/giữ bản gốc.
+- Tiêu chí MVP `docs/criteria/report-mvp.md` dòng 14 và 22–24: không bịa các thực thể/số liệu quan trọng; lỗi hard không được bù điểm nội dung. `docs/criteria/report-common.md` dòng 30–40 nói membership chuỗi không đủ — CVE đúng nhưng gắn sai IP vẫn là sai — và kết luận cũng phải bám nguồn. Điều đó đòi hỏi phạt lỗi quan hệ/suy diễn; nó không tự thêm **mọi** thiếu sót hay câu mơ hồ vào danh sách hard gate đã khóa. Lỗi nội dung vẫn phải phản ánh trong hai chiều coverage/semantic accuracy.
+- `judgement-05.json` ghi numeric threshold **PASS**, 18/18 generation và 18/18 edit được chấp nhận, section và readback/revision **PASS**, nhưng verdict gốc **FAIL** do bốn hard issue. Audit này giữ nguyên toàn bộ điểm và verdict đó trong tệp gốc.
+
+## Xem lại từng hard issue đã được gắn nhãn
+
+| Case / thao tác | Đối chiếu source và output | Phân loại theo hard gate đã khóa |
+|---|---|---|
+| `compliance-noisy` generation + edit | Manifest dòng 125–130: CT-04 được gắn DB-LAB-3/203.0.113.33, CT-05 không có hệ thống xác định, tổng kiểm soát duy nhất là 2. Hai output lưu đều ghi trong **Phạm vi**: `Hệ thống DB-LAB-3 (203.0.113.33).` và `Tổng số kiểm soát duy nhất: 2.`; Bằng chứng/Kết luận phân biệt CT-04 và CT-05. Không có câu `CT-05 ... DB-LAB-3/IP` hoặc `CT-04 và CT-05 trên DB-LAB-3`. | **Soft ambiguity/coverage**, chưa đủ chứng cứ cho hard ungrounded IP claim: IP và tổng 2 đều có trong nguồn, còn việc đặt một hệ thống dưới heading Phạm vi của báo cáo hai kiểm soát dễ khiến người đọc suy rộng sang CT-05 nhưng không khẳng định rõ. Cần nêu `CT-05: hệ thống chưa xác định` để tránh hiểu sai. Nếu output nói rõ CT-05 gắn DB-LAB-3/IP, đó là **hard fail** theo RC-02; không miễn trừ các trường hợp gán sai tường minh trong run cũ. |
+| `incident-2-vs-3` generation + edit | Manifest dòng 159–165: 14:30 ngày 2099-06-03 là thời điểm cô lập **đã xác nhận**. Hai output lưu đều nêu đúng mốc đó ở **Mốc thời gian**, phân biệt 2 so với 3 tài khoản chưa đối soát, nhưng **Xử lý** chỉ ghi `Chưa thể xác nhận.` | **Soft coverage/semantic accuracy**: mục Xử lý mơ hồ, có thể làm người đọc hiểu nhầm rằng chưa xác nhận hành động nào, trong khi cô lập đã được xác nhận. Đây là lỗi nội dung cần trừ điểm và sửa. Nó không tạo CVE/IP/URL/hash/số hoặc mốc thời gian mới; 14:30 đã được nêu đúng. Không đủ căn cứ nâng thành hard entity/numeric hallucination theo danh sách manifest. |
+
+Với đúng bốn issue mà judge05 liệt kê, **không issue nào chứng minh vi phạm hard gate được viết trong manifest**. Cách phân loại trên là một audit đối chứng; nó không tuyên bố judge đã “sai” ở điểm nội dung, vì cả hai kiểu output đều có lỗi chất lượng thật. Cách đọc chặt hơn có thể coi heading Phạm vi là mệnh đề ngầm về mọi control; nếu áp dụng cách đọc đó như quy tắc hard, cần viết rõ quy tắc trước lượt đánh giá tương lai. Không thể thêm nó hồi tố vào manifest đã khóa chỉ vì output này.
+
+Theo `judgement-05.json`, các điểm nội dung đều qua 70% từng template/thao tác ở cả cohort gốc và bổ sung; thấp nhất là incident supplemental 81.25% cho generation và edit. Section, readback và giữ revision gốc cũng được báo PASS. **Nếu** danh sách hard issue của judge05 là đầy đủ, áp dụng nguyên văn manifest sẽ cho kết luận nghiệm thu trên tập live05 là **PASS có ghi nhận lỗi nội dung**, khác với verdict gốc FAIL. Đây không phải chứng nhận chất lượng cho dữ liệu khách hàng, full regression, bảo mật hoặc phát hành production.
+
+Không điều chỉnh bất kỳ số điểm, mẫu số, saved output hay verdict lịch sử nào. Những lỗi thực sự bịa/gán sai CVE, IP, URL, hash, số liệu quan trọng hoặc nhân đôi một hành động thành hai vẫn là hard fail; ví dụ CT-05 được **khẳng định** trên IP của CT-04, hoặc duplicate log được kể như hành động chặn thứ hai. Audit chỉ phân biệt các lỗi đó với câu thiếu/khó hiểu trong live05.
