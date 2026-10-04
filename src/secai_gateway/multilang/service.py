@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .chunks import split
-from .config import EXPECTED_MODEL, MultilangSettings
+from .config import EXPECTED_MODEL, HyMtCounter, MultilangSettings
 from .errors import TranslationError
 from .literals import TOKEN_SHAPE, protect, validate_unicode
 from .provider import GenerationRequest, LlmPort
@@ -146,11 +146,12 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                     model_semaphore: asyncio.Semaphore | None = None) -> TranslationResult:
     source, target = resolve_pair(request.source_lang, request.target_lang, settings)
     specialist = settings.backend == "specialist"
+    hymt = specialist and settings.specialist_profile == "hymt2_7b_gguf"
     expected_model = settings.specialist_model if specialist else EXPECTED_MODEL
     chunk_budget = settings.specialist_chunk_input_tokens if specialist else settings.chunk_input_tokens
     output_budget = settings.specialist_max_output_tokens if specialist else settings.max_output_tokens
     context_budget = settings.specialist_context_tokens if specialist else settings.context_tokens
-    prefix = f"<2{'zh' if target == 'zh-Hans' else target}> " if specialist else ""
+    prefix = f"<2{'zh' if target == 'zh-Hans' else target}> " if specialist and not hymt else ""
     text = request.text
     if len(text) > settings.max_text_chars:
         raise TranslationError("TEXT_TOO_LONG")
@@ -159,7 +160,8 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     prose = re.sub(r"⟦ML-[A-Za-z0-9_-]+-\d+⟧", "", protected.masked)
     if not any(c.isalpha() for c in prose):
         raise TranslationError("INVALID_REQUEST")
-    if (token_count is None or not context_budget or not expected_model
+    if (token_count is None or (hymt and not isinstance(token_count, HyMtCounter))
+            or not context_budget or not expected_model
             or (not specialist and not settings.chat_template_overhead_tokens)):
         raise TranslationError("MODEL_UNAVAILABLE")
     if token_count(text) > settings.max_source_tokens:
@@ -173,7 +175,13 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     canary = secrets.token_hex(12)
     system = SYSTEM.format(source=source, target=target, canary=canary)
     for chunk, _, _ in chunks:
-        if specialist:
+        if hymt:
+            # The private sidecar sends exactly one user turn through the pinned
+            # GGUF template. Count the whole rendered prompt, not a T5 prefix.
+            full_prompt_tokens = token_count.prompt_tokens(target, chunk)
+            if full_prompt_tokens > 1024 or full_prompt_tokens + output_budget > context_budget:
+                raise TranslationError("TOKEN_LIMIT_EXCEEDED")
+        elif specialist:
             # T5 encoder and decoder budgets are separate. The tokenizer postprocessor
             # includes EOS; count the complete target-prefix + masked source input.
             if token_count(prefix + chunk) > context_budget:
@@ -203,7 +211,7 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                     raise TranslationError("MODEL_UNAVAILABLE")
                 if result.stop_reason != "stop" or not isinstance(result.text, str):
                     raise TranslationError("OUTPUT_VALIDATION_FAILED")
-                if specialist and token_count(result.text) > output_budget:
+                if specialist and token_count(result.text) + (1 if hymt else 0) > output_budget:
                     raise TranslationError("TOKEN_LIMIT_EXCEEDED")
                 if not result.text.strip():
                     raise TranslationError("EMPTY_TRANSLATION")
