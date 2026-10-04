@@ -560,3 +560,18 @@ def test_ordinary_achievement_language_is_not_compliance_status():
     source = 'Nhóm có tiến độ trong quý.'
     content = '## Kết luận\nNhóm không đạt được mục tiêu triển khai.'
     assert validate_report(content, ['Kết luận'], source) == content
+
+
+def test_bare_conclusive_status_phrases_require_source_status():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Hồ sơ sao lưu: không có dữ liệu; chưa thể xác nhận trạng thái kiểm soát.'
+    for conclusion in ('Đạt yêu cầu.', 'Chưa đạt yêu cầu.', 'Không đáp ứng yêu cầu.', 'Đáp ứng yêu cầu.'):
+        with pytest.raises(HTTPException) as exc:
+            validate_report('## Kết luận\n' + conclusion, ['Kết luận'], source)
+        assert exc.value.status_code == 422
+
+    recorded = 'Trạng thái: đạt yêu cầu.'
+    assert validate_report('## Kết luận\nĐạt yêu cầu.', ['Kết luận'], recorded)

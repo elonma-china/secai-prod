@@ -23,7 +23,10 @@ _OUTCOME_WORD = re.compile(
     re.I,
 )
 _OUTCOME_CONTEXT = re.compile(r'\bCT-\d+|kiểm soát|trạng thái|tuân thủ|đánh giá|hồ sơ', re.I)
-_BARE_OUTCOME = re.compile(r'^\s*[-*]?\s*(?:(?:chưa|không)\s+)?đạt\s*[.!]?\s*$', re.I)
+_BARE_OUTCOME = re.compile(
+    r'^\s*[-*]?\s*(?:(?:(?:chưa|không)\s+)?đạt(?:\s+yêu\s+cầu)?|'
+    r'(?:không\s+)?đáp\s+ứng\s+yêu\s+cầu)\s*[.!]?\s*$', re.I,
+)
 _UNCERTAIN_OUTCOME = re.compile(
     r'chưa thể xác nhận|chưa xác định|không thể kết luận|chưa có kết luận|chưa đối soát|'
     r'không đủ bằng chứng để kết luận', re.I,
