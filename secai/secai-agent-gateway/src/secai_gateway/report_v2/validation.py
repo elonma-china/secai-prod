@@ -18,6 +18,12 @@ _CONFLICT_COUNT = re.compile(r'(?:báo cáo|hồ sơ)\s+[AB]\s+ghi\s+(\d+)\s+tà
 _NO_DATA_LOSS = re.compile(r'(?:chưa|không)[^\n.]{0,40}mất dữ liệu', re.I)
 _RECORDED_ACTION = re.compile(r'(?:chặn|cô lập) phiên|đổi mật khẩu', re.I)
 _UNKNOWN = re.compile(r'chưa có (?:thông tin|dữ liệu)', re.I)
+_CONCLUSIVE_OUTCOME = re.compile(
+    r'(?<!\w)(?:chưa\s+đạt|không\s+đạt|đạt(?!\s+được)|không\s+đáp\s+ứng(?:\s+yêu\s+cầu)?|đáp\s+ứng\s+yêu\s+cầu)(?!\w)', re.I,
+)
+_UNCERTAIN_OUTCOME = re.compile(
+    r'chưa thể xác nhận|chưa xác định|không thể kết luận|chưa có kết luận|chưa đối soát', re.I,
+)
 
 _LITERAL = re.compile(
     r'\bCVE-\d{4}-\d{3,7}\b'
@@ -112,6 +118,10 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
     current_literals = {_literal_value(match) for match in _CRITICAL.finditer(content)}
     if not prior_literals.issubset(current_literals):
         raise HTTPException(422, 'Report edit removed a critical identifier')
+    if not _CONCLUSIVE_OUTCOME.search(source):
+        for line in content.splitlines():
+            if _CONCLUSIVE_OUTCOME.search(line) and not _UNCERTAIN_OUTCOME.search(line):
+                raise HTTPException(422, 'Unsupported outcome: source has no conclusive status; use chưa thể xác nhận and remove inferred reasons')
     counts = set(_CONFLICT_COUNT.findall(source))
     if len(counts) > 1 and not all(re.search(r'(?<!\d)' + re.escape(count) + r'(?!\d)', content) for count in counts):
         raise HTTPException(422, 'Report omitted conflicting source counts')
