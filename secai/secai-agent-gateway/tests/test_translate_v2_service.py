@@ -154,7 +154,8 @@ async def test_spaced_target_separates_sentence_outputs_without_source_spaces():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('first', ['Xin,', 'Xin;', 'Xin:', 'Xin)', 'Xin]',
-                                          'Xin"', 'Xin，', 'Xin；'])
+                                          'Xin"', 'Xin，', 'Xin；', 'Xin…', 'Xin؟',
+                                          'Xin）', 'Xin”', 'Xin۔', 'Xin、', 'Xin»'])
 async def test_spaced_target_separates_after_punctuation(first):
     class Sentences(Context):
         model_context_tokens = 4096
@@ -169,21 +170,50 @@ async def test_spaced_target_separates_after_punctuation(first):
 
 
 @pytest.mark.asyncio
-async def test_spaced_target_does_not_insert_before_closing_punctuation():
+async def test_spaced_target_separates_after_decomposed_latin_grapheme():
     class Sentences(Context):
         model_context_tokens = 4096
 
         async def translate(self, text, source_lang, target_lang):
             self.calls.append(text)
-            return ('Xin', ', chào', 'bạn')[len(self.calls) - 1]
+            return ('Cafe\u0301', 'chào', 'bạn')[len(self.calls) - 1]
 
     result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=Sentences())
-    assert result[0].translated_text == 'Xin, chào bạn'
+    assert result[0].translated_text == 'Cafe\u0301 chào bạn'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('second', [', chào', '，chào', ')chào', '”chào'])
+async def test_spaced_target_does_not_insert_before_closing_punctuation(second):
+    class Sentences(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('Xin', second, 'bạn')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=Sentences())
+    assert result[0].translated_text == 'Xin' + second + ' bạn'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('opening', ['"', '“', '(', '¿', '¡', '«', '「'])
+async def test_spaced_target_does_not_insert_after_opening_punctuation(opening):
+    class Sentences(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return (opening, 'xin', 'bạn')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=Sentences())
+    assert result[0].translated_text == opening + 'xin bạn'
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('target', ['zh', 'ja'])
-@pytest.mark.parametrize('first', ['OpenAI', 'Café'])
+@pytest.mark.parametrize('first', ['OpenAI', 'Café', 'OpenAI,', 'Cafe\u0301',
+                                          'OpenAI…', '接口,'])
 async def test_cjk_target_keeps_latin_word_space_at_chunk_seam(target, first):
     class Mixed(Context):
         model_context_tokens = 4096
@@ -195,7 +225,20 @@ async def test_cjk_target_keeps_latin_word_space_at_chunk_seam(target, first):
     context = Mixed()
     result = await translate_blocks((block('a ' * 400),), 'vi', target, context=context)
     assert len(context.calls) == 3
-    assert result[0].translated_text == first + ' API接口 '
+    assert result[0].translated_text == first + ' API 接口 '
+
+
+@pytest.mark.asyncio
+async def test_cjk_target_drops_space_after_cjk_comma_before_latin_word():
+    class Mixed(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('接口，', 'API', '接口')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('a ' * 400),), 'vi', 'zh', context=Mixed())
+    assert result[0].translated_text == '接口，API 接口 '
 
 
 @pytest.mark.asyncio
