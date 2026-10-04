@@ -6,6 +6,8 @@ SSE (/ai/*/stream) is streamed chunk-by-chunk — never buffered with resp.read(
 from __future__ import annotations
 
 import http.client
+import ipaddress
+import json
 import mimetypes
 import os
 import socket
@@ -19,6 +21,8 @@ REPORT_UPSTREAM_FILE = Path(__file__).resolve().parent / ".report-upstream"
 REPORT_GATEWAY = os.environ.get("REPORT_GATEWAY_PROXY", REPORT_UPSTREAM_FILE.read_text().strip() if REPORT_UPSTREAM_FILE.exists() else GATEWAY)
 TRANSLATION_UPSTREAM_FILE = Path(__file__).resolve().parent / ".translation-upstream"
 TRANSLATION_GATEWAY = os.environ.get("TRANSLATION_GATEWAY_PROXY", TRANSLATION_UPSTREAM_FILE.read_text().strip() if TRANSLATION_UPSTREAM_FILE.exists() else GATEWAY)
+REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
+TAILNET = ipaddress.ip_network("100.64.0.0/10")
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
 PROXY_PREFIXES = ("/ai", "/health", "/poc", "/projects", "/sessions", "/admin", "/review-api")
@@ -38,6 +42,24 @@ HOP_BY_HOP = {
 def _gw_parts(target=GATEWAY):
     u = urlsplit(target)
     return u.hostname or "127.0.0.1", u.port or 80, u.scheme == "https"
+
+
+def _tailnet_connection(peer: str, local: str) -> bool:
+    try:
+        return ipaddress.ip_address(peer) in TAILNET and ipaddress.ip_address(local) in TAILNET
+    except ValueError:
+        return False
+
+
+def _review_token(role: str) -> str | None:
+    if role not in {"admin", "reviewer"}:
+        return None
+    try:
+        tokens = json.loads(REVIEW_TOKENS_FILE.read_text(encoding="utf-8"))
+        value = tokens.get(role)
+        return value if isinstance(value, str) and value else None
+    except (OSError, ValueError, AttributeError):
+        return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -94,6 +116,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _proxy(self) -> None:
         path = urlsplit(self.path).path
+        review_role = self.headers.get("X-Review-Role") if path == "/review-api" or path.startswith("/review-api/") else None
+        if review_role is not None:
+            if not _tailnet_connection(self.client_address[0], self.connection.getsockname()[0]):
+                self.send_error(403, "Devspace review access requires Tailnet")
+                return
+            review_token = _review_token(review_role)
+            if review_token is None:
+                self.send_error(503, "Devspace review access is not configured")
+                return
         target = REPORT_GATEWAY if path == "/ai/v2/reports" or path.startswith("/ai/v2/reports/") else GATEWAY
         if any(path == prefix or path.startswith(prefix + "/")
                for prefix in ("/ai/v2/translate", "/ai/v3/translate")):
@@ -110,8 +141,10 @@ class Handler(BaseHTTPRequestHandler):
         headers = {
             k: v
             for k, v in self.headers.items()
-            if k.lower() not in {"host", "content-length", "connection", "accept-encoding"}
+            if k.lower() not in {"host", "content-length", "connection", "accept-encoding", "x-review-role"}
         }
+        if review_role is not None:
+            headers["Authorization"] = f"Bearer {review_token}"
         headers["Host"] = f"{host}:{port}"
         # Avoid compressed bodies so we can stream easily
         headers["Accept-Encoding"] = "identity"

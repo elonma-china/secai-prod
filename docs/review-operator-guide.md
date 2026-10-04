@@ -29,7 +29,13 @@ for name, value in [('credentials.json', {'credentials': credentials}), ('tokens
         json.dump(value, f, indent=2)
 ```
 
-Phân phối từng token qua kênh riêng cho đúng người; `tokens.json` chỉ phục vụ cấp phát và không được đưa lên web. Backend chỉ đọc `credentials.json`. Đổi/thu hồi token bằng cập nhật credential file và restart dịch vụ review theo quy trình vận hành. UI giữ token trong memory, reload cần nhập lại; logout xóa token. HTTPS bắt buộc khi truy cập ngoài localhost. Reverse proxy cần ẩn header Authorization khỏi log và không cache API review. Module chỉ thêm `/review-api/*`; không thay đổi API, CORS hoặc rate limit hiện có. Frontend review dùng cùng origin qua proxy.
+Phân phối từng token qua kênh riêng cho đúng người khi dùng API trực tiếp; `tokens.json` chỉ phục vụ cấp phát và không được đưa lên web. Backend chỉ đọc `credentials.json`. Đổi/thu hồi token bằng cập nhật credential file và restart dịch vụ review theo quy trình vận hành. HTTPS bắt buộc khi truy cập ngoài localhost. Reverse proxy cần ẩn header Authorization khỏi log và không cache API review. Module chỉ thêm `/review-api/*`; không thay đổi API, CORS hoặc rate limit hiện có.
+
+## Devspace nội bộ: vào thẳng không nhập token
+
+Devspace tĩnh (`serve_static.py`) có thể dùng hai tài khoản **dùng chung** để vào thẳng màn “Đánh giá A/B”. Đặt file `secai-fe-devspace/.review-devspace-tokens.local` ở phía server, chỉ tài khoản chạy frontend được đọc, với JSON `{"admin":"<token quản trị>","reviewer":"<token chuyên gia>"}`. File này phải nằm ngoài Git; không đưa token vào bundle JavaScript, HTML, URL hay log. Proxy chỉ tự gắn token cho request `/review-api/*` có vai trò `admin` hoặc `reviewer` khi cả địa chỉ nguồn và địa chỉ cổng nhận thuộc Tailnet (`100.64.0.0/10`). Truy cập qua tunnel công cộng hoặc cổng không thuộc Tailnet không được dùng đường tắt. API gateway vẫn đòi bearer token và giữ nguyên kiểm tra role. Sau khi cấu hình file, khởi động lại `serve_static.py` để dùng bản proxy mới.
+
+Đây là lối vào nhanh cho Devspace, **không phải đăng nhập cá nhân**: mọi người có quyền vào Devspace qua Tailnet đều có thể chọn cả hai vai trò; phiếu của họ được ghi dưới actor dùng chung. Không dùng dấu vết này để quy trách nhiệm từng chuyên gia. Khi cần phân quyền và truy vết cá nhân, thay lối vào này bằng SSO/identity proxy và credential riêng theo người. Frontend Vite `npm run dev` không có proxy cấp role này; dùng Devspace tĩnh hoặc API bearer trực tiếp để thử review local.
 
 ## Chạy local ở worktree riêng
 
@@ -55,7 +61,7 @@ npm ci
 VITE_GATEWAY_PROXY=http://127.0.0.1:8187 npm run dev -- --host 127.0.0.1 --port 5187
 ```
 
-Vào trang “Đánh giá A/B”. Backend phải được bật rõ ràng; menu không có nghĩa dịch vụ đã bật. Với frontend build production, reverse proxy cần chuyển `/review-api` tới gateway, giống các API hiện có.
+Vào trang “Đánh giá A/B”. Backend phải được bật rõ ràng; menu không có nghĩa dịch vụ đã bật. Khi chạy Vite đơn lẻ, lối vào không token chưa được cấu hình và màn sẽ báo chưa kết nối. Với frontend build production, reverse proxy cần chuyển `/review-api` tới gateway, giống các API hiện có.
 
 ## Chấm thử
 
@@ -133,7 +139,7 @@ Bộ rubric v1 chỉ là điểm khởi đầu. Dùng các mẫu chấm chung v�
 
 ## Template báo cáo bằng prompt
 
-Sau khi đăng nhập review, vào “Báo cáo thông minh” -> “Template báo cáo”. Dán hoặc nhập file Markdown (64 KiB), nhập yêu cầu sửa, kiểm tra đầu vào rồi xác nhận không chứa prompt injection. Bấm “Đề xuất bản nháp bằng prompt”, kiểm tra bản gốc/bản nháp và bấm “Áp dụng bản nháp” nếu phù hợp. Thao tác đề xuất không tự thay bản gốc; lỗi không làm mất template hiện tại.
+Sau khi vào mục Đánh giá A/B trên Devspace để khởi tạo vai trò, vào “Báo cáo thông minh” -> “Template báo cáo”. Dán hoặc nhập file Markdown (64 KiB), nhập yêu cầu sửa, kiểm tra đầu vào rồi xác nhận không chứa prompt injection. Bấm “Đề xuất bản nháp bằng prompt”, kiểm tra bản gốc/bản nháp và bấm “Áp dụng bản nháp” nếu phù hợp. Thao tác đề xuất không tự thay bản gốc; lỗi không làm mất template hiện tại.
 
 Template và bản nháp chỉ giữ trong memory của màn hình MVP. Xuất `.md` để dùng lại; có thể nhập lại file sau. Sau áp dụng/chỉnh input, cần xác nhận sạch lại trước khi gọi model. Nhập logs và chọn “Tạo báo cáo theo template”; xem và tải `.md`. Hai nút tạo báo cáo/thống kê cũ giữ nguyên API và hành vi.
 

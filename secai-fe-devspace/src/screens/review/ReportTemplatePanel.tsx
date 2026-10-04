@@ -44,7 +44,7 @@ export default function ReportTemplatePanel({logs, onLogsChange}: {logs: string;
   }
   return <section className="review-screen" style={{height: "auto"}}>
     <p className="review-note">Template và bản nháp lưu trong bộ nhớ của màn hình. Có thể tải file .md để giữ lại. Công cụ không cung cấp bộ phát hiện prompt injection riêng; người dùng chịu trách nhiệm kiểm tra đầu vào. Checkbox xác nhận không chứng minh nội dung an toàn.</p>
-    {!identity && <p role="status">Đăng nhập token trong mục Đánh giá A/B để dùng sửa template và tạo báo cáo theo template.</p>}
+    {!identity && <p role="status">Mở mục Đánh giá A/B để kết nối Devspace trước khi sửa template bằng prompt.</p>}
     {error && <p className="review-error" role="alert">{error} Template đang dùng và kết quả trước đó được giữ nguyên.</p>}
     {notice && <p className="review-note" role="status">{notice}</p>}
     <section className="iascard review-card">

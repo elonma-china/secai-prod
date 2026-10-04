@@ -5,8 +5,8 @@ import { clearReviewIdentity, setReviewIdentity, useReviewIdentity } from "../re
 import ReviewPair from "./review/ReviewPair";
 import ReviewAdmin from "./review/ReviewAdmin";
 export default function ReviewScreen() {
-  const [tokenInput, setTokenInput] = useState("");
   const identity = useReviewIdentity();
+  const [role, setRole] = useState<"admin" | "reviewer">(identity?.actor.role || "admin");
   const token = identity?.token || "";
   const actor = identity?.actor || null;
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -21,11 +21,20 @@ export default function ReviewScreen() {
   const [notice, setNotice] = useState("");
   const api = useMemo(() => createReviewApi(token), [token]);
   const campaign = campaigns.find(c => c.id === campaignId);
-  function logout() {clearReviewIdentity(); setTokenInput(""); setCampaigns([]); setCampaignId(""); setQueue([]); setAssignment(null); setError(""); setSubmitError(""); setNotice("");}
-  async function login() {
+  useEffect(() => {
+    if (identity?.token === `devspace:${role}`) return;
+    let alive = true;
     setBusy(true); setError("");
-    try {const identity = await createReviewApi(tokenInput.trim()).me(); setReviewIdentity(tokenInput.trim(), identity); setTokenInput("");}
-    catch(e) {setError(reviewError(e));} finally {setBusy(false);}
+    createReviewApi(`devspace:${role}`).me()
+      .then(actor => {if (alive) setReviewIdentity(`devspace:${role}`, actor);})
+      .catch(e => {if (alive) setError(reviewError(e));})
+      .finally(() => {if (alive) setBusy(false);});
+    return () => {alive = false;};
+  }, [role]);
+  function switchRole(next: "admin" | "reviewer") {
+    if (next === role) return;
+    clearReviewIdentity(); setCampaigns([]); setCampaignId(""); setQueue([]); setAssignment(null);
+    setError(""); setSubmitError(""); setNotice(""); setRole(next);
   }
   async function loadCampaigns() { const rows = await api.campaigns(); setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows[0]?.id || ""); }
   useEffect(() => { if (!actor) return; let alive = true; setBusy(true); api.campaigns().then(rows => {if (alive) {setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows[0]?.id || "");}}).catch(e => alive && setError(reviewError(e))).finally(() => alive && setBusy(false)); return () => {alive = false;}; }, [api, actor]);
@@ -49,9 +58,10 @@ export default function ReviewScreen() {
       } catch (e) {setError("Phiếu đã lưu. " + reviewError(e));}
     } catch(e) {setSubmitError(reviewError(e));} finally {setBusy(false);}
   }
-  return <div className="review-screen"><div className="review-toolbar review-header"><h2>Đánh giá A/B</h2>{actor && <><span>{actor.actor_id} · {actor.role === "admin" ? "Quản trị viên" : "Chuyên gia"}</span><button className="iasbtn" disabled={busy} onClick={logout}>Đăng xuất</button></>}</div>
+  return <div className="review-screen"><div className="review-toolbar review-header"><h2>Quản trị & dán nhãn A/B</h2><div className="review-toolbar" role="group" aria-label="Vai trò Devspace"><button className="iasbtn" type="button" aria-pressed={role === "admin"} disabled={busy} onClick={() => switchRole("admin")}>Quản trị</button><button className="iasbtn" type="button" aria-pressed={role === "reviewer"} disabled={busy} onClick={() => switchRole("reviewer")}>Chuyên gia</button></div>{actor && <span>{actor.actor_id} · tài khoản dùng chung</span>}</div>
     <div className="review-body">
-      {!actor ? <form className="iascard review-card review-login" onSubmit={e => {e.preventDefault(); void login();}}><h3>Đăng nhập công cụ đánh giá</h3><p>Nhập token được quản trị cấp. Token chỉ giữ trong bộ nhớ; tải lại trang hoặc đăng xuất sẽ xóa token. Có thể chuyển sang chat để nhận lời mời đánh giá A/B tùy chọn.</p><label className="review-field">Token truy cập<input className="iasin" type="password" autoComplete="off" autoFocus required value={tokenInput} disabled={busy} onChange={e => setTokenInput(e.target.value)}/></label><button className="iasbtn review-primary" disabled={busy || !tokenInput.trim()}>{busy ? "Đang xác thực…" : "Đăng nhập"}</button>{error && <p className="review-error" role="alert">{error}</p>}</form> : <>
+      {!actor ? <div className="iascard review-card review-login" role="status"><h3>{busy ? "Đang mở công cụ đánh giá…" : "Chưa kết nối được công cụ đánh giá"}</h3>{error && <p className="review-error" role="alert">{error}</p>}<button className="iasbtn" type="button" disabled={busy} onClick={() => {setBusy(true); createReviewApi(`devspace:${role}`).me().then(found => {setReviewIdentity(`devspace:${role}`, found); setError("");}).catch(e => setError(reviewError(e))).finally(() => setBusy(false));}}>Thử lại</button></div> : <>
+        <p className="review-muted">Devspace dùng tài khoản {actor.role === "admin" ? "quản trị" : "chuyên gia"} chung. Phiếu và quyết định được lưu thật, nhưng chưa định danh riêng từng người. Preference đã duyệt có thể xuất để chuyển cho nhóm Reward Function; màn này không huấn luyện model.</p>
         {error && <div className="review-error" role="alert">{error}<button className="iasbtn" disabled={busy} onClick={() => void (actor.role === "reviewer" && campaignId ? loadQueue() : loadCampaigns().catch(e => setError(reviewError(e))))}>Thử tải lại</button></div>}
         {notice && <p className="review-note" role="status">{notice}</p>}
         <div className="review-toolbar"><label className="review-field">Đợt đánh giá<select className="iasin" value={campaignId} disabled={busy} onChange={e => {setCampaignId(e.target.value); setNotice("");}}><option value="">Chọn đợt đánh giá</option>{campaigns.map(c => <option key={c.id} value={c.id}>{c.title} · {c.state === "open" ? "Đang mở" : "Đã đóng"}</option>)}</select></label>{actor.role === "reviewer" && <label className="review-field">Trạng thái phiếu<select className="iasin" value={status} disabled={busy} onChange={e => setStatus(e.target.value)}><option value="pending">Chưa nộp</option><option value="submitted">Đã nộp</option></select></label>}</div>

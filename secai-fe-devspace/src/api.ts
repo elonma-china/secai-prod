@@ -262,13 +262,3 @@ export function statisticalReportStream(
 ): Promise<void> {
   return streamRequest(`${BASE}/ai/generate-statistical-report/stream`, body, handlers, signal);
 }
-
-// ── admin ────────────────────────────────────────────────────────────────────────────
-
-export async function refreshModels(apiKey: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${BASE}/admin/refresh-models`, {
-    method: "POST",
-    headers: { "X-API-Key": apiKey },
-  });
-  return parseJson(res);
-}
