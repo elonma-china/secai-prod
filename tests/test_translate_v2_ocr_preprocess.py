@@ -1,4 +1,6 @@
+import asyncio
 import io
+import threading
 
 import pytest
 from PIL import Image
@@ -50,3 +52,86 @@ async def test_rejects_bad_image(data, tmp_path):
     with pytest.raises(TranslationError) as error:
         await preprocess_image(source, work_dir=tmp_path / "work")
     assert error.value.code == "CORRUPT_IMAGE"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fmt", ["PNG", "JPEG"])
+async def test_cancel_preserves_caller_owned_workdir_and_files(tmp_path, monkeypatch, fmt):
+    from secai_gateway.translation import ocr_preprocess
+
+    source = tmp_path / ("source.png" if fmt == "PNG" else "source.jpg")
+    Image.new("RGB", (64, 64), "white").save(source, format=fmt)
+    work_dir = tmp_path / "existing"
+    work_dir.mkdir()
+    png = work_dir / "ocr-prepared.png"
+    jpg = work_dir / "ocr-prepared.jpg"
+    png.write_bytes(b"caller PNG")
+    jpg.write_bytes(b"caller JPEG")
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    real_prepare = ocr_preprocess._prepare
+
+    def stalled_deskew(image):
+        started.set()
+        assert release.wait(5)
+        return image
+
+    def tracked_prepare(*args):
+        try:
+            return real_prepare(*args)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(ocr_preprocess, "_deskew", stalled_deskew)
+    monkeypatch.setattr(ocr_preprocess, "_prepare", tracked_prepare)
+    task = asyncio.create_task(preprocess_image(source, work_dir=work_dir))
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(started.wait, 2), 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 1)
+    finally:
+        release.set()
+        assert await asyncio.wait_for(asyncio.to_thread(finished.wait, 3), 4)
+    assert work_dir.is_dir()
+    assert png.read_bytes() == b"caller PNG"
+    assert jpg.read_bytes() == b"caller JPEG"
+
+
+@pytest.mark.asyncio
+async def test_cancel_preserves_caller_owned_empty_workdir(tmp_path, monkeypatch):
+    from secai_gateway.translation import ocr_preprocess
+
+    source = tmp_path / "source.png"
+    Image.new("RGB", (64, 64), "white").save(source)
+    work_dir = tmp_path / "existing"
+    work_dir.mkdir()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    real_prepare = ocr_preprocess._prepare
+
+    def stalled_deskew(image):
+        started.set()
+        assert release.wait(5)
+        return image
+
+    def tracked_prepare(*args):
+        try:
+            return real_prepare(*args)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(ocr_preprocess, "_deskew", stalled_deskew)
+    monkeypatch.setattr(ocr_preprocess, "_prepare", tracked_prepare)
+    task = asyncio.create_task(preprocess_image(source, work_dir=work_dir))
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(started.wait, 2), 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(task, 1)
+    finally:
+        release.set()
+        assert await asyncio.wait_for(asyncio.to_thread(finished.wait, 3), 4)
+    assert work_dir.is_dir()

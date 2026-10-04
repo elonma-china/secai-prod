@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -43,7 +44,7 @@ def _deskew(image: Image.Image) -> Image.Image:
     return image
 
 
-def _prepare(input_path: Path, work_dir: Path) -> PreparedImage:
+def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> PreparedImage:
     try:
         if input_path.stat().st_size > _MAX_BYTES:
             raise TranslationError("UPLOAD_TOO_LARGE", "Image exceeds size limit")
@@ -64,7 +65,8 @@ def _prepare(input_path: Path, work_dir: Path) -> PreparedImage:
                 image = ImageEnhance.Contrast(image).enhance(1.35)
             fmt = "JPEG" if source.format == "JPEG" else "PNG"
             output = work_dir / ("ocr-prepared.jpg" if fmt == "JPEG" else "ocr-prepared.png")
-            work_dir.mkdir(parents=True, exist_ok=True)
+            if cancelled.is_set():
+                raise asyncio.CancelledError
             image.save(output, format=fmt, exif=b"", quality=90 if fmt == "JPEG" else None)
             if output.stat().st_size > _MAX_BYTES:
                 output.unlink(missing_ok=True)
@@ -78,4 +80,12 @@ def _prepare(input_path: Path, work_dir: Path) -> PreparedImage:
 
 
 async def preprocess_image(input_path: Path, *, work_dir: Path) -> PreparedImage:
-    return await asyncio.to_thread(_prepare, input_path, work_dir)
+    # The thread must never recreate a directory already removed by its
+    # cancelling caller's TemporaryDirectory cleanup.
+    work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    cancelled = threading.Event()
+    try:
+        return await asyncio.to_thread(_prepare, input_path, work_dir, cancelled)
+    except asyncio.CancelledError:
+        cancelled.set()
+        raise
