@@ -575,3 +575,59 @@ def test_bare_conclusive_status_phrases_require_source_status():
 
     recorded = 'Trạng thái: đạt yêu cầu.'
     assert validate_report('## Kết luận\nĐạt yêu cầu.', ['Kết luận'], recorded)
+
+
+def test_report_rejects_cross_control_ip_attribution_but_allows_shared_scope():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = ('CT-04 hệ thống DB-LAB-3 (203.0.113.33): có bằng chứng. '
+              'CT-05: thiếu bằng chứng.')
+    bad = '## Phạm vi\nCT-04 và CT-05 trên DB-LAB-3 (203.0.113.33).'
+    with pytest.raises(HTTPException) as exc:
+        validate_report(bad, ['Phạm vi'], source)
+    assert exc.value.status_code == 422
+
+    shared = 'Phạm vi DB-LAB-3 (203.0.113.33). CT-04 có bằng chứng. CT-05 thiếu bằng chứng.'
+    assert validate_report(bad, ['Phạm vi'], shared) == bad
+    explicit = 'CT-04 và CT-05 trên DB-LAB-3 (203.0.113.33).'
+    assert validate_report(bad, ['Phạm vi'], explicit) == bad
+
+
+def test_report_rejects_duplicate_event_as_second_action_only_when_source_marks_duplicate():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = ('08:20 chặn phiên. duplicate 08:20 chặn phiên. '
+              '08:20 đổi mật khẩu cũng được ghi nhận.')
+    repeated = ('## Mốc thời gian\n- 08:20: Chặn phiên.\n'
+                '- 08:20: Chặn phiên (lặp lại).\n- 08:20: Đổi mật khẩu.')
+    with pytest.raises(HTTPException) as exc:
+        validate_report(repeated, ['Mốc thời gian'], source)
+    assert exc.value.status_code == 422
+    independent = '08:20 chặn phiên. 08:20 chặn phiên lần nữa.'
+    assert validate_report(repeated, ['Mốc thời gian'], independent) == repeated
+
+    dated_source = ('2099-05-04 08:20 chặn phiên; duplicate log. '
+                    '2099-05-05 08:20 chặn phiên lần nữa.')
+    distinct_days = ('## Mốc thời gian\n- 2099-05-04 08:20: Chặn phiên.\n'
+                     '- 2099-05-05 08:20: Chặn phiên.')
+    assert validate_report(distinct_days, ['Mốc thời gian'], dated_source) == distinct_days
+
+    recap = '## Mốc thời gian\n- 08:20: Chặn phiên.\n## Xử lý\n- 08:20: Chặn phiên.'
+    assert validate_report(recap, ['Mốc thời gian', 'Xử lý'], source) == recap
+
+
+def test_confirmed_isolation_time_cannot_be_called_unknown_treatment():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Thời điểm cô lập đã xác nhận là 2099-06-03 14:30.'
+    content = ('## Mốc thời gian\nThời điểm cô lập: 2099-06-03 14:30.\n'
+               '## Xử lý\nChưa có dữ liệu về các bước xử lý cụ thể.')
+    with pytest.raises(HTTPException) as exc:
+        validate_report(content, ['Mốc thời gian', 'Xử lý'], source)
+    assert exc.value.status_code == 422
