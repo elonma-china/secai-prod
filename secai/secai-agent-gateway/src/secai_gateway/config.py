@@ -201,6 +201,7 @@ class Settings(BaseSettings):
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     gateway_db_path: str = "./data/gateway.db"
+    document_agent_enabled: bool = False
     redis_url: str = ""
     admin_api_key: str = ""
     allowed_origins: str = ""
