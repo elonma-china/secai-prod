@@ -18,3 +18,11 @@ The existing IAS report endpoints remain unchanged. This is an opt-in internal A
 The report store retains the original `data` and the selected template section snapshot for later edit validation; these internal fields are not returned by the API. Generated and edited drafts must contain every selected section in order and must not introduce new CVE IDs, IP addresses, URLs, hashes, or numeric literals absent from the original data. Edits must also retain all prior CVE IDs, IP addresses, URLs, and hashes. An invalid draft is retried once with validation feedback. If both attempts fail, the API returns 422 without creating a report or revision. These checks are deliberately narrow and do not verify the meaning of ordinary prose.
 
 Report creation and editing use the configured `LLM_PROVIDER` chat-completions endpoint (Qwen/vLLM by default). The service returns 502 if the model is unavailable and stores a report only after successful generation. Prompts ask the model to use only supplied facts; this is a drafting aid, not a factual guarantee. Human review remains necessary before publication. No serving, LoRA, live quality claim, catalog or publishing workflow is included in this MVP.
+
+## Quality fixes (2026-10-04)
+
+URL checks preserve path/query case and punctuation inside explicit URL delimiters; bare sentence-ending punctuation is excluded from comparison. New peer-level sections after required template sections are rejected; nested subheadings remain allowed.
+
+Edits receive the original source as untrusted data as well as the current report. When an instruction names exactly one editable template section, the service copies other section bodies from the previous revision before validation. It recognizes the supported explicit keep phrases and overlapping section names; free-form or multi-section instructions still depend on the model following the prompt. Source facts and revision history remain stored in SQLite.
+
+Prompts distinguish missing evidence from a failed control, require separate entity-to-system/IP/evidence associations, and retain conflicting values rather than inventing a resolution. A few narrow Vietnamese phrase checks catch known omissions; these are not general semantic verification. Synthetic live quality results and full saved reports are indexed at `/home/ict/secai-report-evidence/INDEX.md`.
