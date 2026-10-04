@@ -140,10 +140,13 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
         if chunk_count > 300:
             raise TranslationError("TEXT_TOO_LONG", "Document needs too many model chunks.")
         for attempt in range(2):
-            pieces: list[str] = []
+            pieces: list[tuple[str, str, str]] = []
             for chunk in chunks:
                 if len(chunk) > 6000:
-                    pieces.append(chunk)  # indivisible technical literal
+                    pieces.append(("", chunk, ""))  # indivisible technical literal
+                    continue
+                if not chunk.strip():
+                    pieces.append((chunk, "", ""))
                     continue
                 try:
                     response = await context.translate(chunk, source_lang, target_lang)
@@ -153,10 +156,36 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                     raise
                 if not response.strip():
                     raise TranslationError("EMPTY_TRANSLATION", "Translation was empty.")
-                pieces.append(response)
+                leading = chunk[:len(chunk) - len(chunk.lstrip())]
+                trailing = chunk[len(chunk.rstrip()):]
+                pieces.append((leading, response.strip(), trailing))
             else:
                 try:
-                    output = restore_literals("".join(pieces), protected)
+                    joined: list[str] = []
+                    pending_whitespace = ""
+                    previous = ""
+                    for leading, core, trailing in pieces:
+                        pending_whitespace += leading
+                        if not core:
+                            pending_whitespace += trailing
+                            continue
+                        seam = pending_whitespace
+                        if previous:
+                            if target_lang in {"zh", "ja"}:
+                                if ("\n" not in seam and "\r" not in seam and
+                                        not previous.endswith("⟧") and not core.startswith("⟦")):
+                                    seam = ""
+                            elif not seam:
+                                left_word = (previous[-1].isalnum() or previous.endswith("⟧") or
+                                             previous[-1] in ".!?。！？")
+                                right_word = core[0].isalnum() or core.startswith("⟦")
+                                if left_word and right_word:
+                                    seam = " "
+                        joined.extend((seam, core))
+                        pending_whitespace = trailing
+                        previous = core
+                    joined.append(pending_whitespace)
+                    output = restore_literals("".join(joined), protected)
                     source_literals = [block.text[start:end] for start, end in literal_spans(block.text)]
                     output_literals = [output[start:end] for start, end in literal_spans(output)]
                     if output_literals != source_literals:
