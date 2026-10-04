@@ -155,14 +155,17 @@ async def test_resume_rejects_changed_bytes_and_language_binding(tmp_path):
     create_manifest([BatchEntry(source, "en", "vi")], manifest)
     async with httpx.AsyncClient(base_url="http://test") as client:
         source.write_text("Changed")
-        with pytest.raises(BatchError, match="input changed"):
-            await run_batch(client, None, manifest, tmp_path / "out")
+        counts = await run_batch(client, None, manifest, tmp_path / "out")
+        assert counts["failed"] == 1
+        assert json.loads(manifest.read_text())["entries"][0]["job_id"] is None
         source.write_text("Hello")
-        saved = json.loads(manifest.read_text())
+        other = tmp_path / "other-manifest.json"
+        saved = create_manifest([BatchEntry(source, "en", "vi")], other)
         saved["entries"][0]["target_lang"] = "zh"
-        manifest.write_text(json.dumps(saved))
-        with pytest.raises(BatchError, match="binding changed"):
-            await run_batch(client, None, manifest, tmp_path / "out")
+        other.write_text(json.dumps(saved))
+        counts = await run_batch(client, None, other, tmp_path / "out")
+        assert counts["failed"] == 1
+        assert json.loads(other.read_text())["entries"][0]["job_id"] is None
 
 
 @pytest.mark.asyncio
@@ -316,3 +319,117 @@ def test_cli_returns_nonzero_for_failed_manifest(tmp_path, monkeypatch):
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_known_job_after_source_deleted(tmp_path, monkeypatch):
+    from evals.multilang.multifile_batch import create_manifest
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(NoModel())
+    source = tmp_path / "gone.txt"
+    source.write_text("Hello")
+    manifest = tmp_path / "manifest.json"
+    saved = create_manifest([BatchEntry(source, "en", "en")], manifest)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.post("/ai/v2/translate/files",
+            files={"file": (source.name, source.read_bytes())},
+            data={"source_lang": "en", "target_lang": "en"},
+            headers={"Idempotency-Key": saved["entries"][0]["key"]})
+        saved["entries"][0].update(job_id=response.json()["job_id"], status="queued")
+        manifest.write_text(json.dumps(saved))
+        source.unlink()
+        worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+        task = asyncio.create_task(worker.run_once())
+        result = await run_batch(client, None, manifest, tmp_path / "out",
+                                 upload_interval=0, poll_interval=0.01, job_timeout=10)
+        await task
+    assert result["succeeded"] == 1
+    assert (tmp_path / "out" / "0001.txt").read_text() == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_changed_pending_file_fails_only_its_own_row(tmp_path, monkeypatch):
+    from evals.multilang.multifile_batch import create_manifest
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(NoModel())
+    bad, good = tmp_path / "changed.txt", tmp_path / "good.txt"
+    bad.write_text("original")
+    good.write_text("Hello")
+    manifest = tmp_path / "manifest.json"
+    create_manifest([BatchEntry(bad, "en", "en"), BatchEntry(good, "en", "en")], manifest)
+    bad.write_text("changed")
+    worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        async def consume():
+            for _ in range(100):
+                await worker.run_once()
+                await asyncio.sleep(0.005)
+        task = asyncio.create_task(consume())
+        result = await run_batch(client, None, manifest, tmp_path / "out",
+                                 upload_interval=0, poll_interval=0.01, job_timeout=10)
+        await task
+    assert result["failed"] == result["succeeded"] == 1
+    assert (tmp_path / "out" / "0002.txt").read_text() == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_status_outage_does_not_admit_beyond_two_remote_jobs(tmp_path):
+    paths = []
+    for index in range(5):
+        path = tmp_path / f"{index}.txt"
+        path.write_text("Hello")
+        paths.append(BatchEntry(path, "en", "vi"))
+    submitted = []
+
+    async def respond(request):
+        if request.method == "POST":
+            submitted.append(request.headers["Idempotency-Key"])
+            job_id = f"{len(submitted):032x}"
+            return httpx.Response(202, json={"job_id": job_id})
+        return httpx.Response(503, json={"error": {"code": "DEPENDENCY_UNAVAILABLE"}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond), base_url="http://test") as client:
+        counts = await run_batch(client, paths, tmp_path / "manifest.json", tmp_path / "out",
+                                 max_inflight=2, upload_interval=0, poll_interval=0.01,
+                                 job_timeout=5)
+    assert len(submitted) <= 2
+    assert counts["interrupted"] == len(submitted)
+    assert counts["pending"] == 5 - len(submitted)
+
+
+@pytest.mark.asyncio
+async def test_post_503_is_retryable_on_resume_with_same_key(tmp_path, monkeypatch):
+    from evals.multilang.multifile_batch import create_manifest
+    source = tmp_path / "x.txt"
+    source.write_text("Hello")
+    manifest = tmp_path / "manifest.json"
+    original = create_manifest([BatchEntry(source, "en", "en")], manifest)
+
+    async def unavailable(request):
+        return httpx.Response(503, json={"error": {"code": "DEPENDENCY_UNAVAILABLE"}})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable), base_url="http://test") as client:
+        counts = await run_batch(client, None, manifest, tmp_path / "out",
+                                 upload_interval=0, poll_interval=0.01, job_timeout=5)
+    assert counts["interrupted"] == 1 and counts["failed"] == 0
+    assert json.loads(manifest.read_text())["entries"][0]["key"] == original["entries"][0]["key"]
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(NoModel())
+    worker = Worker(app.state.translation_v2_store, app.state.translation_v2_settings, None)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        async def consume():
+            for _ in range(80):
+                await worker.run_once()
+                await asyncio.sleep(0.005)
+        task = asyncio.create_task(consume())
+        counts = await run_batch(client, None, manifest, tmp_path / "out",
+                                 upload_interval=0, poll_interval=0.01, job_timeout=10)
+        await task
+    assert counts["succeeded"] == 1
