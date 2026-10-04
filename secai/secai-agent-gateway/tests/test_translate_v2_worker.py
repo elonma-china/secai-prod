@@ -1,9 +1,12 @@
 import asyncio
+import io
+import threading
 import time
 from types import SimpleNamespace
 
 import pytest
 from linch.errors import ProviderError
+from PIL import Image
 
 from secai_gateway.translation.jobs import JobStore
 from secai_gateway.translation.settings import TranslationSettings
@@ -139,6 +142,56 @@ async def test_running_cancel_aborts_ocr_before_remote_completion(tmp_path, monk
     assert stopped, "cancelled OCR should stop without an external task timeout"
     assert cancelled.is_set()
     assert store.get(job["job_id"])["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preprocess_raises", [False, True])
+async def test_cancelled_image_preprocess_cannot_resurrect_temp_files(tmp_path, monkeypatch,
+                                                                    preprocess_raises):
+    from secai_gateway.translation import ocr_preprocess, worker as worker_module
+
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    real_prepare = ocr_preprocess._prepare
+    real_tempdir = worker_module.TemporaryDirectory
+
+    def stalled_deskew(image):
+        started.set()
+        assert release.wait(5), "test failed to release preprocessing thread"
+        if preprocess_raises:
+            raise ValueError("synthetic preprocessing failure")
+        return image
+
+    def tracked_prepare(*args):
+        try:
+            return real_prepare(*args)
+        finally:
+            finished.set()
+
+    def private_tempdir(*args, **kwargs):
+        return real_tempdir(*args, dir=tmp_path, **kwargs)
+
+    monkeypatch.setattr(ocr_preprocess, "_deskew", stalled_deskew)
+    monkeypatch.setattr(ocr_preprocess, "_prepare", tracked_prepare)
+    monkeypatch.setattr(worker_module, "TemporaryDirectory", private_tempdir)
+    image = io.BytesIO()
+    Image.new("RGB", (64, 64), "white").save(image, format="PNG")
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("image", image.getvalue(), ".png", "en", "vi", "peer", None)
+    work = asyncio.create_task(worker_module.Worker(store, settings, EchoRunner()).run_once())
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(started.wait, 2), 3)
+        store.cancel(job["job_id"])
+        store.cancel(job["job_id"])
+        assert await asyncio.wait_for(work, 3)
+        assert store.get(job["job_id"])["status"] == "cancelled"
+    finally:
+        release.set()
+        await asyncio.wait_for(asyncio.to_thread(finished.wait, 3), 4)
+    assert not list(tmp_path.glob("secai-image-*")), "preprocessing must not recreate its deleted workdir"
 
 
 @pytest.mark.asyncio
