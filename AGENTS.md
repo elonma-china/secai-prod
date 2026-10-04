@@ -25,7 +25,8 @@
 - `secai-serving-vast/`: repo Git riêng cho rental 1/2/4 GPU A100 80GB, installer và supervisor OCR/MT; đọc `CLAUDE.md` trước sửa serving.
 - `secai-fe-devspace/`: frontend React/TypeScript/Vite khi có trong checkout; đọc `package.json` và `src/api.ts` trước khi sửa contract.
 - `demo/`: giao diện showcase và KPI Studio; `kpi_bench/`, `evals/`: benchmark và đánh giá.
-- `tests/`: pytest; `docs/`: tài liệu API và bằng chứng nghiệm thu; `deploy/`: cấu hình triển khai.
+- `tests/`: pytest; `docs/`: tài liệu API và bằng chứng nghiệm thu (mục lục `docs/README.md`); `deploy/`: cấu hình triển khai.
+- `scripts/`: utility vận hành/debug/eval (mục lục `scripts/README.md`); chạy từ root dự án. Log local ở `logs/`, dữ liệu runtime ở `data/`, ngoài Git.
 
 ## Cài đặt và chạy local
 
