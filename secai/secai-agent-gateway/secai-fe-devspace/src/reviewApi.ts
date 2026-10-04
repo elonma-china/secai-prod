@@ -3,8 +3,11 @@ const BASE = ((import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/
 export class ReviewApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 export function reviewError(error: unknown): string { return error instanceof ReviewApiError ? `Lỗi ${error.status}: ${error.message}` : "Không kết nối được máy chủ. Kiểm tra kết nối và thử lại."; }
 export function createReviewApi(token: string) {
+  const authHeaders: Record<string, string> = token === "devspace:admin" || token === "devspace:reviewer"
+    ? {"X-Review-Role": token.slice("devspace:".length)}
+    : {Authorization: `Bearer ${token}`};
   async function request<T>(path: string, method = "GET", body?: unknown, contentType = "application/json"): Promise<T> {
-    const response = await fetch(BASE + path, {method, headers: {Authorization: `Bearer ${token}`, ...(body === undefined ? {} : {"Content-Type": contentType})}, body: body === undefined ? undefined : contentType === "application/json" ? JSON.stringify(body) : body as BodyInit});
+    const response = await fetch(BASE + path, {method, headers: {...authHeaders, ...(body === undefined ? {} : {"Content-Type": contentType})}, body: body === undefined ? undefined : contentType === "application/json" ? JSON.stringify(body) : body as BodyInit});
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
       const detail = data.detail;
@@ -40,7 +43,7 @@ export function createReviewApi(token: string) {
     adjudicate: (id: string, outcome: string, winning_candidate_id: string | null, reason: string) => request(`/items/${encodeURIComponent(id)}/adjudication`, "PUT", {outcome, winning_candidate_id, reason}),
     stats: (id: string) => request<ReviewStats>(`/campaigns/${encodeURIComponent(id)}/stats`),
     async export(id: string, format: "raw" | "preference") {
-      const response = await fetch(`${BASE}/campaigns/${encodeURIComponent(id)}/export?format=${format}`, {headers: {Authorization: `Bearer ${token}`}});
+      const response = await fetch(`${BASE}/campaigns/${encodeURIComponent(id)}/export?format=${format}`, {headers: authHeaders});
       if (!response.ok) { const data = await response.json().catch(() => ({})); throw new ReviewApiError(response.status, typeof data.detail === "string" ? data.detail : response.statusText); }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a"); link.href = url; link.download = `review-${id}-${format}.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

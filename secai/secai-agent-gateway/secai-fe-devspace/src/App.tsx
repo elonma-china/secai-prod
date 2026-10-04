@@ -22,7 +22,6 @@ import ChatbotScreen from "./screens/ChatbotScreen";
 import TranslateScreen from "./screens/TranslateScreen";
 import ExploitScreen from "./screens/ExploitScreen";
 import ReportScreen from "./screens/ReportScreen";
-import ModelsScreen from "./screens/ModelsScreen";
 import ReviewScreen from "./screens/ReviewScreen";
 
 /** The functional "Nền tảng AI" screens — the only routable/functional entries in the sidebar. */
@@ -32,7 +31,6 @@ const AI_ITEMS: { id: AiScreenId; label: string }[] = [
   { id: "exploit", label: "Sinh mã khai thác" },
   { id: "report", label: "Báo cáo thông minh" },
   { id: "review", label: "Đánh giá A/B" },
-  { id: "models", label: "Quản lý huấn luyện, triển khai" },
 ];
 
 /** Other IAS product-nav sections shown in the design but out of scope here — visually
@@ -160,7 +158,6 @@ export default function App() {
           {screen === "exploit" && <ExploitScreen userId={userId} />}
           {screen === "report" && <ReportScreen userId={userId} />}
           {screen === "review" && <ReviewScreen />}
-          {screen === "models" && <ModelsScreen userId={userId} />}
         </main>
       </div>
     </div>
