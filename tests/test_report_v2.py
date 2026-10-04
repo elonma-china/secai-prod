@@ -668,3 +668,11 @@ def test_confirmed_action_cannot_be_replaced_with_bare_uncertainty():
 
     recorded = content.replace('- Chưa thể xác nhận.', '- Đã cô lập lúc 2099-06-03 14:30.')
     assert validate_report(recorded, ['Mốc thời gian', 'Xử lý'], source) == recorded
+
+
+def test_uncertain_isolation_is_not_treated_as_recorded_action():
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Chưa xác nhận đã cô lập máy lúc 14:30.'
+    content = '## Xử lý\n- Chưa thể xác nhận.'
+    assert validate_report(content, ['Xử lý'], source) == content

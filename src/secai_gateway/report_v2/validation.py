@@ -19,6 +19,9 @@ _NO_DATA_LOSS = re.compile(r'(?:chưa|không)[^\n.]{0,40}mất dữ liệu', re.
 _RECORDED_ACTION = re.compile(
     r'(?:chặn|cô lập) phiên|đổi mật khẩu|thời điểm cô lập (?:đã )?xác nhận|đã cô lập', re.I,
 )
+_UNCERTAIN_ACTION = re.compile(
+    r'chưa (?:thể )?xác nhận|chưa xác định|không xác nhận|chưa rõ|chưa có (?:thông tin|bằng chứng|dữ liệu)', re.I,
+)
 _UNKNOWN = re.compile(r'chưa có (?:thông tin|dữ liệu)|chưa thể xác nhận|chưa xác định', re.I)
 _CONTROL_ID = re.compile(r'\bCT-\d+\b', re.I)
 _IP_ADDRESS = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
@@ -103,6 +106,16 @@ def _repeated_duplicate_event(content: str, source: str) -> bool:
             return True
         seen.add(key)
     return False
+
+
+def _confirmed_action(source: str) -> re.Match | None:
+    for clause in re.split(r'\.\s+|[;\n,]', source):
+        if _UNCERTAIN_ACTION.search(clause):
+            continue
+        match = _RECORDED_ACTION.search(clause)
+        if match:
+            return match
+    return None
 
 _LITERAL = re.compile(
     r'\bCVE-\d{4}-\d{3,7}\b'
@@ -206,11 +219,11 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
     counts = set(_CONFLICT_COUNT.findall(source))
     if len(counts) > 1 and not all(re.search(r'(?<!\d)' + re.escape(count) + r'(?!\d)', content) for count in counts):
         raise HTTPException(422, 'Report omitted conflicting source counts')
-    if _RECORDED_ACTION.search(source):
+    action = _confirmed_action(source)
+    if action:
         treatment = re.search(r'^#{1,6}\s+Xử lý\s*$([\s\S]*?)(?=^#{1,6}\s+|\Z)', content, re.I | re.M)
         if treatment and _UNKNOWN.search(treatment.group(1)) and not _RECORDED_ACTION.search(treatment.group(1)):
-            action = _RECORDED_ACTION.search(source).group(0)
-            raise HTTPException(422, f'Mục Xử lý phải nêu hành động nguồn đã xác nhận ({action}); không ghi chung là chưa rõ')
+            raise HTTPException(422, f'Mục Xử lý phải nêu hành động nguồn đã xác nhận ({action.group(0)}); không ghi chung là chưa rõ')
     if previous and _NO_DATA_LOSS.search(source) and _NO_DATA_LOSS.search(previous) and not _NO_DATA_LOSS.search(content):
         raise HTTPException(422, 'Report edit removed the no-data-loss observation')
     return neutralize_active_content(content.strip())
