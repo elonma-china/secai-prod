@@ -133,24 +133,21 @@ def create_manifest(entries: Sequence[BatchEntry], path: Path) -> dict[str, Any]
     return data
 
 
-def _load_manifest(path: Path, *, check_inputs: bool = True) -> dict[str, Any]:
+def _load_manifest(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
     if data.get("schema") != "translate-v2-batch-v1" or not isinstance(data.get("entries"), list):
         raise BatchError("unsupported manifest")
     if not 1 <= len(data["entries"]) <= MAX_FILES:
         raise BatchError("invalid manifest size")
-    for row in data["entries"]:
-        if row.get("binding") != _binding(row):
-            raise BatchError("input or language binding changed")
-        entry = BatchEntry(Path(row["path"]), row["source_lang"], row["target_lang"])
-        if check_inputs and row["status"] not in TERMINAL:
-            _validate_entry(entry)
-            if _digest_file(entry.path) != row["sha256"]:
-                raise BatchError("input changed since manifest creation")
-        if (not isinstance(row["key"], str) or len(row["key"]) != 32
-                or any(c not in "0123456789abcdef" for c in row["key"])):
-            raise BatchError("invalid manifest key")
     return data
+
+
+def _validate_row(row: dict[str, Any]) -> None:
+    if row.get("binding") != _binding(row):
+        raise BatchError("input or language binding changed")
+    if (not isinstance(row["key"], str) or len(row["key"]) != 32
+            or any(c not in "0123456789abcdef" for c in row["key"])):
+        raise BatchError("invalid manifest key")
 
 
 async def _request(client: httpx.AsyncClient, method: str, url: str, deadline: float,
@@ -197,11 +194,8 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     lock = asyncio.Lock()
     upload_lock = asyncio.Lock()
+    halt_admissions = asyncio.Event()
     next_upload = 0.0
-    queue = asyncio.Queue()
-    for index, row in enumerate(data["entries"]):
-        if row["status"] not in TERMINAL:
-            queue.put_nowait(index)
 
     async def save():
         async with lock:
@@ -211,7 +205,9 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
         nonlocal next_upload
         row = data["entries"][index]
         deadline = time.monotonic() + job_timeout
+        remote_terminal = False
         try:
+            _validate_row(row)
             if row["job_id"] is None:
                 path = Path(row["path"])
                 _validate_entry(BatchEntry(path, row["source_lang"], row["target_lang"]))
@@ -230,8 +226,10 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
                             data={"source_lang": row["source_lang"], "target_lang": row["target_lang"]},
                             headers={"Idempotency-Key": row["key"]})
                 if response.status_code != 202:
-                    row["status"] = "failed"
+                    row["status"] = "interrupted" if response.status_code >= 500 else "failed"
                     row["error_code"] = response.json().get("error", {}).get("code", "HTTP_ERROR")
+                    if row["status"] == "interrupted":
+                        halt_admissions.set()
                     await save()
                     return
                 row["job_id"] = response.json()["job_id"]
@@ -240,11 +238,17 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
             job_id = row["job_id"]
             while True:
                 response = await _request(client, "GET", f"/ai/v2/translate/jobs/{job_id}", deadline)
+                if response.status_code in {404, 410}:
+                    row["status"] = "failed"
+                    row["error_code"] = response.json().get("error", {}).get("code", "JOB_NOT_FOUND")
+                    await save()
+                    return
                 if response.status_code != 200:
                     raise BatchError(f"status HTTP {response.status_code}")
                 status = response.json()["status"]
                 row["status"] = status
                 if status in TERMINAL:
+                    remote_terminal = True
                     break
                 await asyncio.sleep(min(poll_interval, max(0, deadline - time.monotonic())))
             if status == "succeeded":
@@ -262,22 +266,48 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
         except (BatchError, ValueError, KeyError, OSError, json.JSONDecodeError) as exc:
             # A POST may have committed even if its response was lost. The
             # persisted key makes this state safe to replay on resume.
-            row["status"] = "interrupted"
+            uncertain_remote = (row.get("job_id") is not None and not remote_terminal
+                                or row.get("status") == "uploading")
+            row["status"] = "interrupted" if uncertain_remote or remote_terminal else "failed"
             row["error_code"] = type(exc).__name__.upper()
+            if uncertain_remote:
+                halt_admissions.set()
             await save()
 
-    async def worker():
-        while not queue.empty():
-            try:
-                index = queue.get_nowait()
-            except asyncio.QueueEmpty:
-                return
-            await process(index)
-            queue.task_done()
+    async def run_group(indices: list[int]):
+        queue = asyncio.Queue()
+        for index in indices:
+            queue.put_nowait(index)
 
-    await asyncio.gather(*(worker() for _ in range(max_inflight)))
-    return {status: sum(row["status"] == status for row in data["entries"])
-            for status in ("succeeded", "failed", "cancelled", "interrupted", "pending")}
+        async def worker():
+            while not halt_admissions.is_set():
+                try:
+                    index = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                await process(index)
+                queue.task_done()
+
+        await asyncio.gather(*(worker() for _ in range(max_inflight)))
+
+    remaining = [(index, row) for index, row in enumerate(data["entries"])
+                 if row.get("status") not in TERMINAL]
+    known = [index for index, row in remaining if row.get("job_id")]
+    recover = [index for index, row in remaining if not row.get("job_id")
+               and row.get("status") in {"uploading", "interrupted"}]
+    deferred = set(known + recover)
+    fresh = [index for index, row in remaining if index not in deferred]
+    for group in (known, recover, fresh):
+        if halt_admissions.is_set():
+            break
+        await run_group(group)
+    return {
+        "succeeded": sum(row.get("status") == "succeeded" for row in data["entries"]),
+        "failed": sum(row.get("status") == "failed" for row in data["entries"]),
+        "cancelled": sum(row.get("status") == "cancelled" for row in data["entries"]),
+        "interrupted": sum(row.get("status") in {"interrupted", "uploading"} for row in data["entries"]),
+        "pending": sum(row.get("status") == "pending" for row in data["entries"]),
+    }
 
 
 async def run_batch(client: httpx.AsyncClient, entries: Sequence[BatchEntry] | None,
@@ -293,11 +323,16 @@ async def run_batch(client: httpx.AsyncClient, entries: Sequence[BatchEntry] | N
 
 
 async def _cancel_batch_locked(client: httpx.AsyncClient, manifest_path: Path) -> dict[str, int]:
-    data = _load_manifest(manifest_path, check_inputs=False)
+    data = _load_manifest(manifest_path)
     cancelled = 0
     skipped = 0
     unresolved = 0
     for row in data["entries"]:
+        try:
+            _validate_row(row)
+        except (BatchError, KeyError, ValueError):
+            unresolved += 1
+            continue
         if row["status"] in TERMINAL:
             continue
         if row["job_id"] is None and row["status"] == "pending":

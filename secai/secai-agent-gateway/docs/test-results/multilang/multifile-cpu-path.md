@@ -94,7 +94,7 @@ by the separate quality review, so its output cannot qualify this path.
 
 - `PYTHONPATH=src:. /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_multifile_batch.py tests/test_translate_v2_job_access.py tests/test_translate_v2_jobs.py tests/test_translate_v2_worker.py tests/test_translate_v2_documents.py`
   with `POC_CATALOG_DB=/tmp/secai-multifile-test-poc.db SESSION_STORE_BACKEND=memory REDIS_URL=''`:
-  50 passed. The batch tests process mixed TXT/DOCX through actual ASGI routes and
+  54 passed after the recovery patch. The batch tests process mixed TXT/DOCX through actual ASGI routes and
   JobStore/Worker for all 18 directions, observes at most two active jobs, checks
   output files, replay after an accepted POST loses every response, one-file
   failure, cancellation of ambiguous and unsubmitted files, lock contention,
@@ -106,3 +106,20 @@ by the separate quality review, so its output cannot qualify this path.
 
 No quality percentage, live latency, CPU model availability, or production
 readiness is claimed here.
+
+## Independent review recovery patch
+
+The independent review of `4edf83f` found three batch recovery defects. The
+follow-up patch moves input hashing into the individual row immediately before
+a POST. A known job can be polled and exported even if its original file has
+since been removed; a changed pending file fails only its own row. On resume,
+known jobs are reconciled before uncertain POSTs, then fresh uploads. If an
+accepted job's status cannot be established, or a POST may have been accepted
+without a response, the client records `interrupted` and stops admitting more
+files until a later resume/cancel resolves it. This keeps unresolved remote
+work inside the two-job batch budget. Transient POST 5xx responses remain
+`interrupted` with the same persisted idempotency key. Validation responses
+remain terminal per-file failures. The batch command exits nonzero while any
+work is pending, interrupted or failed. These changes address the reported
+locations around manifest preflight, scheduling, and POST response handling;
+independent re-review is still required.
