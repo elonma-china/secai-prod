@@ -8,7 +8,7 @@
 
 **Tech Stack:** Existing Python/FastAPI/Pydantic v2, SQLite, Linch>=1.2.1,<2, existing DuyTa HTTP service and OCR backend; no new model or framework dependency.
 
-**Spec:** [Approved design](ocr-specialist-orchestration.md), approved by user “oke” on2026-10-04. This plan freezes the ingress details left open by the design. Status: PLAN READY, not implemented.
+**Spec:** [Approved design](ocr-specialist-orchestration.md), approved by user “oke” on2026-10-04. This plan freezes the ingress details left open by the design. Status: approved; CPU implementation in progress.
 
 ## Global Constraints
 
@@ -117,3 +117,11 @@ HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/
 ## Plan self-review / handoff
 
 All approved design sections map to Tasks1–5. New ingress, token/handle distinction, pending continuation, internal kind sentinel and public-kind containment are explicit. The five review-focus cases have owning tests. No fourth auxiliary model, new training, PDF rasterization, UI redesign or production rollout is included. Self-review caught internal tombstone leakage and context/job expiry mismatch; Task2 now explicitly covers both before implementation. The previously selected execution method remains isolated SOL workers plus independent reviews; it is not necessary to choose that method again. Implementation has not started and dependency acceptance is still pending.
+
+## MVP delivery priority — 2026-10-04
+
+Latest user instruction prioritizes the fastest usable feature, with iterative optimization afterward. Deliver the smallest complete flow: DuyTa calls OCR for an image, receives an honest pending state, and retrieves the scoped result on a later request. Preserve context isolation, bounded inputs, durable idempotency, cancellation, existing API compatibility and focused independent review. No additional abstraction, framework or model is required.
+
+CPU tools/runner and ingress may be implemented against the frozen backend interface with a scripted backend while the shared file/OCR branch is under review. Such tests establish adapter behavior only; actual backend integration and live routing remain required before claiming a usable integrated feature. Do not wait for broad model-quality certification to finish CPU functionality.
+
+Wide corpus expansion, repeated quality rounds, performance tuning and optional refinements move to follow-up. Prior failed results remain failed; deferred evaluation is not PASS and does not certify the 70% target. The original translation/model-selection objective remains open. Shared GPU remains owned by the other runtime agent, which is now preparing a translation specialist after checkpointing OCR; do not interpret an unloaded OCR helper as permission to launch competing inference.
