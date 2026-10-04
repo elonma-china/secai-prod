@@ -9,7 +9,7 @@ from linch.providers.vllm import VLLMProvider, VLLMProviderOptions
 from ..config import get_settings
 
 
-def build_llm_provider() -> tuple[Any, str]:
+def build_llm_provider(*, temperature_override: float | None = None) -> tuple[Any, str]:
     """Select the chat LLM backend from ``LLM_PROVIDER`` (default ``vllm``/Qwen).
 
     ``LLM_PROVIDER=deepseek`` routes to DeepSeek's OpenAI-compatible chat API
@@ -39,7 +39,8 @@ def build_llm_provider() -> tuple[Any, str]:
         # merges these into the actual HTTP request body.
         extra_body={
             "chat_template_kwargs": {"enable_thinking": False},
-            "temperature": s.llm_temperature, "top_p": s.llm_top_p, "top_k": s.llm_top_k,
+            "temperature": (s.llm_temperature if temperature_override is None
+                            else temperature_override), "top_p": s.llm_top_p, "top_k": s.llm_top_k,
             "min_p": s.llm_min_p, "presence_penalty": s.llm_presence_penalty,
             "repetition_penalty": s.llm_repetition_penalty,
         },
