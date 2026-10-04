@@ -17,7 +17,7 @@ const LANGS: Array<{ code: V2Lang; label: string }> = [
   { code: "ar", label: "العربية" },
 ];
 const HEX = /^[0-9a-f]{32}$/;
-type Phase = "waiting" | "posting" | "retry" | "uncertain" | "needs_file" | "active" | "succeeded" | "failed" | "cancelled";
+type Phase = "waiting" | "posting" | "retry" | "uncertain" | "needs_file" | "active" | "succeeded" | "failed" | "cancelled" | "unavailable";
 type Row = {
   id: string; name: string; size: number; extension: string; hash: string; key: string;
   kind: V2Kind; source: V2Source; target: V2Lang; phase: Phase;
@@ -76,7 +76,13 @@ function errorLabel(error: unknown): string {
 }
 
 function terminal(phase: string): boolean {
-  return phase === "succeeded" || phase === "failed" || phase === "cancelled";
+  return phase === "succeeded" || phase === "failed" || phase === "cancelled" || phase === "unavailable";
+}
+
+function definitiveMissing(error: unknown): error is TranslateV2Error {
+  return error instanceof TranslateV2Error &&
+    ((error.status === 410 && error.code === "JOB_EXPIRED") ||
+      (error.status === 404 && error.code === "JOB_NOT_FOUND"));
 }
 
 function download(name: string, content: string, type: string) {
@@ -120,6 +126,11 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
     save(rowsRef.current.map((row) => row.id === id ? { ...row, ...update } : row));
   }
 
+  function markUnavailable(id: string, error: TranslateV2Error) {
+    change(id, { phase: "unavailable", job: undefined, result: undefined,
+      cancelRequested: false, lookupError: false, error: error.code ?? "JOB_EXPIRED" });
+  }
+
   async function pump() {
     if (busyRef.current) return;
     busyRef.current = true;
@@ -133,6 +144,10 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
           change(cancelling.id, { job, phase: job.status === "cancelled" ? "cancelled" : "active",
             cancelRequested: false, lookupError: false, nextPollAt: Date.now() + POLL_INTERVAL_MS, retryAt: 0 });
         } catch (error) {
+          if (definitiveMissing(error)) {
+            markUnavailable(cancelling.id, error);
+            return;
+          }
           if (error instanceof TranslateV2Error && error.status === 409) {
             change(cancelling.id, { cancelRequested: false, lookupError: true,
               nextPollAt: Date.now(), error: errorLabel(error) });
@@ -164,6 +179,10 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
               nextPollAt: Date.now() + (phase === "succeeded" ? 0 : POLL_INTERVAL_MS) });
           }
         } catch (error) {
+          if (definitiveMissing(error)) {
+            markUnavailable(checking.id, error);
+            return;
+          }
           change(checking.id, { lookupError: true, error: errorLabel(error),
             nextPollAt: Date.now() + Math.max(POLL_INTERVAL_MS, (error instanceof TranslateV2Error ? error.retryAfter ?? 0 : 0) * 1000) });
         }
@@ -253,8 +272,8 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
         return;
       }
       filesRef.current.set(id, file);
-      change(id, { phase: row.phase === "uncertain" ? "retry" : "waiting", error: undefined,
-        retryAt: Math.max(Date.now(), nextUploadAt.current) });
+      change(id, { phase: row.unknownAcceptance || row.phase === "uncertain" ? "retry" : "waiting", error: undefined,
+        retryAt: Math.max(row.retryAt ?? 0, Date.now(), nextUploadAt.current) });
       void pump();
     } catch {
       change(id, { error: "Không đọc được tệp đã chọn." });
@@ -308,7 +327,7 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
               <strong>{row.name}</strong>
               <span>{row.source} → {row.target} · {row.kind === "image" ? "Ảnh OCR" : "Tài liệu"}</span>
             </div>
-            <p role="status">{row.phase === "uncertain" ? "Chưa rõ máy chủ đã nhận; chọn lại đúng tệp để kiểm tra bằng khóa cũ." :
+            <p role="status">{row.phase === "uncertain" || (row.phase === "needs_file" && row.unknownAcceptance) ? "Chưa rõ máy chủ đã nhận; chọn lại đúng tệp để kiểm tra bằng khóa cũ." :
               row.phase === "needs_file" ? "Chưa gửi; cần chọn lại tệp." :
               row.job ? `${row.job.status} · ${row.job.stage} · ${row.job.progress.completed}/${row.job.progress.total ?? "?"} đoạn` : row.phase}</p>
             {row.error && <p role="alert">{row.error}</p>}
