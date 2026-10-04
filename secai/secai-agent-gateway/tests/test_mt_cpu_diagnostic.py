@@ -5,8 +5,10 @@ import hashlib
 import json
 import os
 import sys
+import zipfile
 
 import pytest
+from docx import Document
 
 from deploy.mt_cpu_service import diagnostic
 from evals.multilang.prepare_multifile_dev_grouped import APPROVED_DEV_SHA256, DIRECTIONS
@@ -30,8 +32,16 @@ def _grouped_inputs(tmp_path):
         source = "zh" if source == "zh-Hans" else source
         target = "zh" if target == "zh-Hans" else target
         path = inputs / f"{source}-to-{target}.docx"
+        document = Document()
+        blocks = []
+        for index in range(30):
+            text = f"Prepared {direction} source {index}"
+            document.add_paragraph(text)
+            blocks.append({"index": index, "block_id": f"b{index + 1:06d}",
+                           "source_sha256": hashlib.sha256(text.encode()).hexdigest()})
+        document.save(path)
         files.append({"path": str(path), "direction": direction,
-                      "source_lang": source, "target_lang": target})
+                      "source_lang": source, "target_lang": target, "blocks": blocks})
         plan.append({"path": str(path), "source_lang": source, "target_lang": target})
     (inputs / "sample-block-map.json").write_text(json.dumps({
         "schema": "translate-v2-grouped-dev-v1",
@@ -65,6 +75,7 @@ def test_live_gateway_must_be_plain_loopback(url):
 
 def test_live_batch_uses_private_http_and_two_durable_jobs(monkeypatch, tmp_path):
     _grouped_inputs(tmp_path)
+    assert diagnostic._create_seal(tmp_path) == 18
     observed = {}
 
     class FakeClient:
@@ -79,7 +90,7 @@ def test_live_batch_uses_private_http_and_two_durable_jobs(monkeypatch, tmp_path
 
     async def fake_run(client, entries, manifest, results, **kwargs):
         assert client is not None
-        assert len(entries) == 18
+        assert entries is None  # The offline-sealed manifest owns the file digests.
         assert manifest.parent == tmp_path
         assert results == tmp_path / "results"
         observed.update(kwargs)
@@ -104,6 +115,37 @@ def test_tampered_plan_rejected_before_network(monkeypatch, tmp_path):
         diagnostic._entries(tmp_path)
 
 
+def test_changed_source_docx_rejected_before_client_creation(monkeypatch, tmp_path):
+    _grouped_inputs(tmp_path)
+    assert diagnostic._create_seal(tmp_path) == 18
+    path = next((tmp_path / "inputs").glob("*.docx"))
+    document = Document(path)
+    document.paragraphs[0].text = "MUTATED SOURCE"
+    document.save(path)
+
+    def forbidden_client(**kwargs):
+        raise AssertionError("network client must not be created")
+
+    monkeypatch.setattr(diagnostic.httpx, "AsyncClient", forbidden_client)
+    with pytest.raises(ValueError, match="source block"):
+        asyncio.run(diagnostic._live("run", tmp_path, "http://127.0.0.1:18181"))
+
+
+def test_changed_docx_bytes_with_same_source_rejected_before_network(monkeypatch, tmp_path):
+    _grouped_inputs(tmp_path)
+    assert diagnostic._create_seal(tmp_path) == 18
+    path = next((tmp_path / "inputs").glob("*.docx"))
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.comment = b"changed after prepare"
+
+    def forbidden_client(**kwargs):
+        raise AssertionError("network client must not be created")
+
+    monkeypatch.setattr(diagnostic.httpx, "AsyncClient", forbidden_client)
+    with pytest.raises(ValueError, match="digest"):
+        asyncio.run(diagnostic._live("run", tmp_path, "http://127.0.0.1:18181"))
+
+
 def test_v3_smoke_uses_five_sequential_public_dev_and_literal_requests(monkeypatch, tmp_path):
     directions = ("vi>ja", "ja>vi", "vi>zh-Hans", "vi>ar")
     manifest = tmp_path / "dev.jsonl"
@@ -112,6 +154,7 @@ def test_v3_smoke_uses_five_sequential_public_dev_and_literal_requests(monkeypat
                                 for index, direction in enumerate(directions)))
     monkeypatch.setattr(diagnostic, "APPROVED_DEV_SHA256",
                         hashlib.sha256(manifest.read_bytes()).hexdigest())
+    monkeypatch.setattr(diagnostic, "_verified_batch", lambda work_dir: None)
     calls = []
 
     class Response:
@@ -153,3 +196,17 @@ def test_v3_smoke_requires_live_gate(monkeypatch, tmp_path):
                                   "--base-url", "http://127.0.0.1:18181"])
     with pytest.raises(SystemExit, match="2"):
         diagnostic.main()
+
+
+def test_v3_smoke_rejects_unfinished_batch_before_client_creation(monkeypatch, tmp_path):
+    manifest = tmp_path / "dev.jsonl"
+    manifest.write_text("{}\n")
+    monkeypatch.setattr(diagnostic, "APPROVED_DEV_SHA256",
+                        hashlib.sha256(manifest.read_bytes()).hexdigest())
+
+    def forbidden_client(**kwargs):
+        raise AssertionError("network client must not be created")
+
+    monkeypatch.setattr(diagnostic.httpx, "AsyncClient", forbidden_client)
+    with pytest.raises(ValueError, match="batch"):
+        asyncio.run(diagnostic._v3_smoke(tmp_path, "http://127.0.0.1:18181", manifest))
