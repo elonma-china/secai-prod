@@ -16,6 +16,15 @@
 - Warden runs legacy local baseline in its own worktree in parallel. Root requested no shared virtualenv mutations or uncontrolled external model calls.
 - Native agent thread limit encountered; reuse finished SOL as frontend coder. Independent review will use a fresh-context reviewer (fresh CLI if native thread limit persists).
 
+### MVP checkpoint evidence
+
+- Backend `b2213e1`: 41 focused report/session tests passed; full suite attempt interrupted, not PASS.
+- FE `864c1b8`, source snapshots `419f90c`/`9a2aeef`: npm ci/build passed. Existing snapshot dependency advisories:1low/1moderate/1high; feature does not change package lock.
+- Baseline Warden `909b0fd`: 925collected, distinct303pass/6fail/1skip completed;1interrupted and614without result. Six failures concern missing external Bughunt tree/unseeded PoC catalog. Full baseline INCOMPLETE.
+- Review candidate `0a0dbdd` in review/report-mvp combines FE/backend. Fresh CLI SOL independent review in progress, no coder history;7new report tests and5selected old gateway tests pass at review time.
+- Root browser smoke passed core form/generate/edit/history/MD draft import with real SQLite/API and MOCK LLM. See browser-smoke.md; no live quality score.
+- First independent findings being fixed: encrypted DOCX unhandled exception; edit drops prior CVE facts. Review/fix cycle1, not yet final PASS.
+
 ## Authority and isolation
 
 - Governing request: `../../plans/report-feature-user-spec.txt` (verbatim user attachment).
