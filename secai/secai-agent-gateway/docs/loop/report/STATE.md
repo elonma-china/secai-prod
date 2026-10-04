@@ -2,7 +2,19 @@
 
 ## Stage
 
-2026-10-04: STEP 0 preflight in progress; ASTRA A criteria drafting. No product code, benchmark, GPU inference, rental, deployment, or legacy API changes.
+2026-10-04: MVP IMPLEMENTATION under latest user override: ship quickly, iterate later, test sufficiently, content threshold 70%, independent review, avoid perfectionism. This overrides original mandatory long assessment/gate sequence before code. No remote inference, rental or deployment authorized.
+
+## Current MVP authority (supersedes historical full-plan sequencing below)
+
+- Criteria checkpoint `1f0d611` (historical full criteria `de20361`), `docs/criteria/report-mvp.md` in criteria worktree.
+- Scope: SQLite template storage; form and DOCX/MD/TXT draft import; template-driven generation; natural-language edits with report revisions; FE; focused tests/full regression evidence; independent review.
+- Content quality >=70% separately measured; mock tests are not live quality evidence. Security, critical factual grounding and legacy compatibility are hard checks. No 70%-passing test-suite shortcut.
+- Dedicated REPORT_API_KEY protects all new routes for an internal shared workspace; do not expose the global ADMIN_API_KEY to this UI. Multi-user/tenant auth is deferred, not claimed complete.
+- Advanced lifecycle/catalog/LoRA/30x3 campaigns deferred. No need to wait for their historical gates to implement MVP.
+- Backend SOL: `/home/ict/secai-report-core-wt`, `feature/report-core`, owns new backend + minimal app/config hook.
+- Frontend SOL (reused preflight agent): `/home/ict/secai-report-fe-wt`, `feature/fe-devspace-report`, owns source snapshot/new UI only.
+- Warden runs legacy local baseline in its own worktree in parallel. Root requested no shared virtualenv mutations or uncontrolled external model calls.
+- Native agent thread limit encountered; reuse finished SOL as frontend coder. Independent review will use a fresh-context reviewer (fresh CLI if native thread limit persists).
 
 ## Authority and isolation
 
