@@ -68,13 +68,21 @@ Any changed model/binary/metadata requires a reviewed allowlist update.
 The child is fixed to `--n-gpu-layers 0`, one generation slot, context 4096,
 at most 1024 actual formatted prompt tokens, and at most 512 generated tokens.
 The 105-second request deadline includes body receipt, queueing, tokenization,
-and completion. At most one request may wait behind the active generation.
+and completion, including any needed child restart. At most one request may
+wait behind the active generation. A request that times out while queued does
+not terminate the active request's child.
 The sidecar terminates and waits for **its own** child after a timeout,
 disconnect, or uncertain upstream state. If it cannot prove the child exited,
 it keeps the generation reservation poisoned and refuses further requests.
 It never treats a client HTTP timeout as evidence that generation stopped.
-After a successful reap the process remains unavailable until an operator
-restarts and reattests it; there is no automatic retry with a different model.
+After a successful reap, the next request may lazily restart the **same** pinned
+model under the same exclusive process lock and generation slot. Restart
+reattests the artifact, gets at most one attempt for that request, and must
+finish within its remaining absolute deadline. Repeated startup failures return
+503 and use exponential backoff capped at 30 seconds; a request during backoff
+does not spawn another child. There is no automatic source-text retry or model
+fallback. The lock is released only during sidecar shutdown after child death
+has been proved.
 
 Run the isolated mock suite without starting a model:
 

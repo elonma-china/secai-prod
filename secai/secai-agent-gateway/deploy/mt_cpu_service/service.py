@@ -239,6 +239,7 @@ class OwnedLlamaServer:
         self.client = httpx.AsyncClient(base_url=f"http://127.0.0.1:{settings.server_port}",
                                         trust_env=False, follow_redirects=False)
         self.live = False
+        self._attest_task: asyncio.Task | None = None
 
     def command(self) -> list[str]:
         cfg = self.settings
@@ -254,40 +255,73 @@ class OwnedLlamaServer:
             argv.extend(("--override-kv", ",".join(cfg.candidate.runtime_overrides)))
         return argv
 
-    async def start(self) -> None:
+    async def start(self, deadline: float | None = None) -> None:
         if self.settings.token_file is None:
             raise ValueError("private child token file is required")
-        lock_path = self.settings.lock_path
-        lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        self.lock_file = lock_path.open("a+b")
+        if self.proc is not None or self.live:
+            raise RuntimeError("owned model process has not been reaped")
+        ready_deadline = min(deadline if deadline is not None else float("inf"),
+                             time.monotonic() + 120)
+        if ready_deadline <= time.monotonic():
+            raise TimeoutError("restart deadline expired")
+        had_lock = self.lock_file is not None
         try:
-            fcntl.flock(self.lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            await asyncio.to_thread(attest_artifacts, self.settings.model_path,
-                                    self.settings.server_path, self.settings.candidate)
+            if self.lock_file is None:
+                lock_path = self.settings.lock_path
+                lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+                lock_file = lock_path.open("a+b")
+                try:
+                    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BaseException:
+                    lock_file.close()
+                    raise
+                self.lock_file = lock_file
+            if self._attest_task is None:
+                self._attest_task = asyncio.create_task(asyncio.to_thread(
+                    attest_artifacts, self.settings.model_path,
+                    self.settings.server_path, self.settings.candidate))
+            attestation = self._attest_task
+            try:
+                await asyncio.wait_for(asyncio.shield(attestation),
+                                       timeout=max(0, ready_deadline - time.monotonic()))
+            finally:
+                if attestation.done():
+                    self._attest_task = None
+            if ready_deadline <= time.monotonic():
+                raise TimeoutError("restart deadline expired")
+            if self.client.is_closed:
+                self.client = httpx.AsyncClient(
+                    base_url=f"http://127.0.0.1:{self.settings.server_port}",
+                    trust_env=False, follow_redirects=False)
             self.proc = subprocess.Popen(self.command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                          stderr=subprocess.DEVNULL, close_fds=True,
                                          env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
                                               "LC_ALL": "C", "CUDA_VISIBLE_DEVICES": ""})
-            deadline = time.monotonic() + 120
-            while time.monotonic() < deadline:
+            while time.monotonic() < ready_deadline:
                 if self.proc.poll() is not None:
                     raise RuntimeError("owned model process exited before readiness")
                 try:
-                    response = await self.client.get("/health", timeout=1, headers={
+                    response = await self.client.get("/health", timeout=min(1, ready_deadline - time.monotonic()), headers={
                         "Authorization": f"Bearer {self.settings.token}"})
                     if response.status_code == 200:
                         self.live = True
                         return
                 except httpx.HTTPError:
                     pass
-                await asyncio.sleep(.2)
+                await asyncio.sleep(min(.2, max(0, ready_deadline - time.monotonic())))
             raise RuntimeError("owned model process did not become ready")
         except BaseException:
-            if self.proc is not None:
-                await self.reap()
-            else:
+            cleanup = asyncio.create_task(self.reap())
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    continue
+                except Exception:
+                    break
+            if (not had_lock and cleanup.done() and not cleanup.cancelled() and
+                    cleanup.exception() is None and cleanup.result()):
                 self._unlock()
-                await self.client.aclose()
             raise
 
     async def post_json(self, path: str, body: dict, deadline: float) -> dict:
@@ -319,8 +353,8 @@ class OwnedLlamaServer:
         self.live = False
         proc = self.proc
         if proc is None:
-            self._unlock()
-            await self.client.aclose()
+            with suppress(Exception):
+                await self.client.aclose()
             return True
         try:
             if proc.poll() is None:
@@ -330,14 +364,21 @@ class OwnedLlamaServer:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     await asyncio.to_thread(proc.wait, timeout=5)
-            if proc.poll() is None:
-                return False
-            self.proc = None
-            await self.client.aclose()
-            self._unlock()
-            return True
         except (OSError, subprocess.TimeoutExpired):
+            pass
+        if proc.poll() is None:
             return False
+        self.proc = None
+        with suppress(Exception):
+            await self.client.aclose()
+        return True
+
+    async def shutdown(self) -> bool:
+        """Release the cross-instance lock only after the owned PID is gone."""
+        reaped = await self.reap()
+        if reaped:
+            self._unlock()
+        return reaped
 
     def _unlock(self) -> None:
         if self.lock_file is not None:
@@ -354,6 +395,8 @@ class TranslationRuntime:
         self.admission = asyncio.Lock()
         self.waiting = 0
         self.poisoned = False
+        self.restart_failures = 0
+        self.restart_after = 0.0
 
     async def _reap_after_uncertain_call(self) -> None:
         cleanup = asyncio.create_task(self.backend.reap())
@@ -367,9 +410,33 @@ class TranslationRuntime:
         if cleanup.cancelled() or cleanup.exception() or not cleanup.result():
             self.poisoned = True
 
+    async def _ensure_live(self, deadline: float) -> None:
+        if self.backend.live:
+            return
+        now = time.monotonic()
+        if now < self.restart_after:
+            raise ServiceFailure(503, "UNAVAILABLE")
+        if now >= deadline:
+            raise ServiceFailure(504, "TIMEOUT")
+        try:
+            await self.backend.start(deadline=deadline)
+            if time.monotonic() >= deadline:
+                raise TimeoutError("restart exceeded request deadline")
+        except (Exception, asyncio.CancelledError):
+            await self._reap_after_uncertain_call()
+            if self.poisoned:
+                raise ServiceFailure(503, "UNAVAILABLE") from None
+            self.restart_failures = min(self.restart_failures + 1, 6)
+            self.restart_after = time.monotonic() + min(2 ** (self.restart_failures - 1), 30)
+            if time.monotonic() >= deadline:
+                raise ServiceFailure(504, "TIMEOUT") from None
+            raise ServiceFailure(503, "UNAVAILABLE") from None
+        self.restart_failures = 0
+        self.restart_after = 0.0
+
     async def translate(self, text: str, source_lang: str, target_lang: str,
                         *, deadline: float, disconnected: asyncio.Event | None = None) -> str:
-        if self.poisoned or not self.backend.live:
+        if self.poisoned:
             raise ServiceFailure(503, "UNAVAILABLE")
         async with self.admission:
             if self.waiting >= self.settings.max_waiters and (self.slot.locked() or self.waiting):
@@ -386,10 +453,11 @@ class TranslationRuntime:
             async with self.admission:
                 self.waiting -= 1
         try:
-            if self.poisoned or not self.backend.live:
+            if self.poisoned:
                 raise ServiceFailure(503, "UNAVAILABLE")
             if disconnected is not None and disconnected.is_set():
                 raise ServiceFailure(503, "DISCONNECTED")
+            await self._ensure_live(deadline)
             remote_started = True
             work = asyncio.create_task(self._translate_inner(text, target_lang, deadline))
             def consume_late_result(task: asyncio.Task) -> None:
@@ -482,13 +550,13 @@ def create_app(settings: ServiceSettings | None = None,
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        if backend is not None:
-            await backend.start()
         try:
+            if backend is not None:
+                await backend.start()
             yield
         finally:
             if backend is not None:
-                await backend.reap()
+                await backend.shutdown()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
