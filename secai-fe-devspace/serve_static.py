@@ -15,6 +15,8 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent / "dist"
 GATEWAY = os.environ.get("VITE_GATEWAY_PROXY", "http://127.0.0.1:8131")
+REPORT_UPSTREAM_FILE = Path(__file__).resolve().parent / ".report-upstream"
+REPORT_GATEWAY = os.environ.get("REPORT_GATEWAY_PROXY", REPORT_UPSTREAM_FILE.read_text().strip() if REPORT_UPSTREAM_FILE.exists() else GATEWAY)
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
 PROXY_PREFIXES = ("/ai", "/health", "/poc", "/projects", "/sessions", "/admin", "/review-api")
@@ -31,8 +33,8 @@ HOP_BY_HOP = {
 }
 
 
-def _gw_parts():
-    u = urlsplit(GATEWAY)
+def _gw_parts(target=GATEWAY):
+    u = urlsplit(target)
     return u.hostname or "127.0.0.1", u.port or 80, u.scheme == "https"
 
 
@@ -89,7 +91,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _proxy(self) -> None:
-        host, port, tls = _gw_parts()
+        path = urlsplit(self.path).path
+        target = REPORT_GATEWAY if path == "/ai/v2/reports" or path.startswith("/ai/v2/reports/") else GATEWAY
+        host, port, tls = _gw_parts(target)
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else None
         if tls:
