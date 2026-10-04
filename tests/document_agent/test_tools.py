@@ -11,7 +11,7 @@ class Backend:
     def __init__(self):
         self.calls = 0
 
-    async def submit(self, scope, attachment, peer):
+    async def submit(self, scope, attachment, peer, *, submission_key):
         self.calls += 1
         return ScopedTask("a" * 32, "queued", False)
 
@@ -31,7 +31,7 @@ def test_extract_rejects_missing_and_fabricated_attachment():
     result = asyncio.run(tools["ocr_extract"].execute({"attachment_id": "f" * 32}, ctx(None)))
     assert result.is_error
     backend = Backend()
-    deps = DocumentRunDeps(object(), {}, backend, "127.0.0.1")
+    deps = DocumentRunDeps(object(), {}, backend, "127.0.0.1", "c" * 64)
     result = asyncio.run(tools["ocr_extract"].execute({"attachment_id": "f" * 32}, ctx(deps)))
     assert result.is_error and backend.calls == 0
 
@@ -39,7 +39,7 @@ def test_extract_rejects_missing_and_fabricated_attachment():
 def test_extract_is_once_and_pending_is_explicit():
     backend = Backend()
     attachment = ImageAttachment("f" * 32, "image/png", b"png")
-    deps = DocumentRunDeps(object(), {attachment.attachment_id: attachment}, backend, "127.0.0.1")
+    deps = DocumentRunDeps(object(), {attachment.attachment_id: attachment}, backend, "127.0.0.1", "c" * 64)
     async def run():
         first = await build_document_tools()["ocr_extract"].execute({"attachment_id": attachment.attachment_id}, ctx(deps))
         second = await build_document_tools()["ocr_extract"].execute({"attachment_id": attachment.attachment_id}, ctx(deps))
@@ -51,7 +51,7 @@ def test_extract_is_once_and_pending_is_explicit():
 
 def test_result_preview_is_bounded_and_untrusted():
     backend = Backend()
-    deps = DocumentRunDeps(object(), {}, backend, "127.0.0.1")
+    deps = DocumentRunDeps(object(), {}, backend, "127.0.0.1", "c" * 64)
     deps.allowed_task_handles.add("a" * 32)
     result = asyncio.run(build_document_tools()["ocr_result"].execute({"task_handle": "a" * 32}, ctx(deps)))
     content = json.loads(result.content)

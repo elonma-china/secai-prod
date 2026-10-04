@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import secrets
 import time
@@ -18,6 +19,8 @@ from ...document_agent.scope import (DocumentScopeStore, ExpiredContext, Invalid
 from ...document_agent.tools import DocumentRunDeps
 from ...state import FixedWindowRateLimiter
 from .schemas import _bad, parse_turn
+
+MAX_OCR_RESULT_BYTES = 10 * 1024 * 1024
 
 
 def _sse(kind: str, data: dict) -> bytes:
@@ -89,7 +92,15 @@ def build_router(scope_store: DocumentScopeStore, backend: OcrBackend, runner: D
                 await asyncio.to_thread(scope_store.abort_turn, scope, key, start.reservation, time.time())
                 raise _bad("TASK_NOT_FOUND", 404)
         attachment = ImageAttachment(secrets.token_hex(16), parsed.media_type, parsed.file_bytes) if parsed.file_bytes is not None else None
-        deps = DocumentRunDeps(scope, {attachment.attachment_id: attachment} if attachment else {}, backend, peer, allowed)
+        # Stable across retries even when the ephemeral attachment_id changes. The
+        # durable backend must deduplicate this key and verify image/OCR config identity.
+        submission_key = hashlib.sha256(
+            (scope.context_id + ":" + key + ":" + parsed.digest()).encode("ascii")
+        ).hexdigest()
+        deps = DocumentRunDeps(
+            scope, {attachment.attachment_id: attachment} if attachment else {},
+            backend, peer, submission_key=submission_key, allowed_task_handles=allowed,
+        )
         # Opaque attachment_id is supplied only to this turn. The caller never supplies a path or URL.
         prompt = parsed.prompt + (f"\nAttachment ID: {attachment.attachment_id}" if attachment else "") + (f"\nTask handle: {parsed.task_handle}" if parsed.task_handle else "")
         request_id = secrets.token_hex(16)
@@ -138,7 +149,10 @@ def build_router(scope_store: DocumentScopeStore, backend: OcrBackend, runner: D
         state = await backend.status(scope, task_handle)
         if state.status != "succeeded":
             raise _bad("RESULT_NOT_READY", 409)
-        return (await backend.result(scope, task_handle)).public()
+        ocr = await backend.result(scope, task_handle)
+        if ocr.public_size_exceeds(MAX_OCR_RESULT_BYTES):
+            raise _bad("RESULT_TOO_LARGE", 413)
+        return ocr.public()
 
     @router.delete("/tasks/{task_handle}")
     async def cancel(request: Request, task_handle: str):

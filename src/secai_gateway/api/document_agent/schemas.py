@@ -58,9 +58,9 @@ async def parse_turn(request: Request) -> TurnInput:
         raise _bad("MULTIPART_REQUIRED")
     raw = bytearray()
     async for chunk in request.stream():
-        raw.extend(chunk)
-        if len(raw) > MAX_REQUEST_BYTES:
+        if len(raw) + len(chunk) > MAX_REQUEST_BYTES:
             raise _bad("REQUEST_TOO_LARGE", 413)
+        raw.extend(chunk)
     # The stdlib parser reads this already-bounded in-memory body. No UploadFile spool.
     message = BytesParser(policy=default).parsebytes(b"MIME-Version: 1.0\r\nContent-Type: " + content_type.encode("ascii", "ignore") + b"\r\n\r\n" + raw)
     if not message.is_multipart() or message.defects:

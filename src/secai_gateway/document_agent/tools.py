@@ -20,6 +20,7 @@ class DocumentRunDeps:
     attachments: dict[str, ImageAttachment]
     backend: OcrBackend
     peer: str
+    submission_key: str = ""
     allowed_task_handles: set[str] = field(default_factory=set)
     submitted: ScopedTask | None = None
     observed_tasks: dict[str, ScopedTask] = field(default_factory=dict)
@@ -43,14 +44,14 @@ def build_document_tools() -> dict[str, object]:
     @tool(name="ocr_extract", description="Submit the attached image for OCR. Pass only its attachment_id.", scope="read", parallel=False, retryable=False)
     async def ocr_extract(attachment_id: str, ctx: ToolContext) -> ToolResult:
         deps = _deps(ctx)
-        if deps is None:
+        if deps is None or len(deps.submission_key) != 64:
             return _error("DOCUMENT_CONTEXT_REQUIRED")
         attachment = deps.attachments.get(attachment_id)
         if attachment is None:
             return _error("ATTACHMENT_NOT_FOUND")
         if deps.submitted is None:
             try:
-                deps.submitted = await deps.backend.submit(deps.scope, attachment, deps.peer)
+                deps.submitted = await deps.backend.submit(deps.scope, attachment, deps.peer, submission_key=deps.submission_key)
             except Exception:
                 deps.admission_failed = True
                 return _error("OCR_ADMISSION_FAILED")
