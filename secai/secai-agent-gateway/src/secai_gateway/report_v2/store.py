@@ -31,9 +31,12 @@ def _connect(path: str) -> sqlite3.Connection:
         );
         CREATE TABLE IF NOT EXISTS revisions (
             report_id TEXT NOT NULL, revision INTEGER NOT NULL, content TEXT NOT NULL,
-            created_at TEXT NOT NULL, PRIMARY KEY(report_id, revision)
+            created_at TEXT NOT NULL, instruction TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY(report_id, revision)
         );
     """)
+    if 'instruction' not in {row[1] for row in db.execute('PRAGMA table_info(revisions)')}:
+        db.execute("ALTER TABLE revisions ADD COLUMN instruction TEXT NOT NULL DEFAULT ''")
     return db
 
 
@@ -104,7 +107,7 @@ def create_report(path: str, template: dict, source_data: str, content: str) -> 
         db.execute('INSERT INTO reports VALUES (?,?,?,?,?,?,?,?)',
                    (report_id, template['id'], template['version'], 1, content, now,
                     source_data, json.dumps(template['sections'])))
-        db.execute('INSERT INTO revisions VALUES (?,?,?,?)', (report_id, 1, content, now))
+        db.execute('INSERT INTO revisions VALUES (?,?,?,?,?)', (report_id, 1, content, now, ''))
     return get_report(path, report_id)
 
 
@@ -118,7 +121,7 @@ def get_report_context(path: str, report_id: str) -> dict | None:
         return result
 
 
-def edit_report(path: str, report_id: str, content: str, expected_revision: int) -> tuple[str, dict | None]:
+def edit_report(path: str, report_id: str, content: str, expected_revision: int, instruction: str) -> tuple[str, dict | None]:
     with _db(path) as db:
         db.execute('BEGIN IMMEDIATE')
         row = db.execute('SELECT revision FROM reports WHERE id=?', (report_id,)).fetchone()
@@ -128,7 +131,7 @@ def edit_report(path: str, report_id: str, content: str, expected_revision: int)
             return 'conflict', None
         revision, now = expected_revision + 1, _now()
         db.execute('UPDATE reports SET revision=?,content=? WHERE id=?', (revision, content, report_id))
-        db.execute('INSERT INTO revisions VALUES (?,?,?,?)', (report_id, revision, content, now))
+        db.execute('INSERT INTO revisions VALUES (?,?,?,?,?)', (report_id, revision, content, now, instruction))
         result = _report(db.execute('SELECT * FROM reports WHERE id=?', (report_id,)).fetchone())
     return 'ok', result
 
@@ -138,5 +141,5 @@ def list_revisions(path: str, report_id: str) -> list[dict] | None:
         if not db.execute('SELECT 1 FROM reports WHERE id=?', (report_id,)).fetchone():
             return None
         return [dict(row) for row in db.execute(
-            'SELECT revision,content,created_at FROM revisions WHERE report_id=? ORDER BY revision',
+            'SELECT revision,content,created_at,instruction FROM revisions WHERE report_id=? ORDER BY revision',
             (report_id,))]
