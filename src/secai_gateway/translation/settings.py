@@ -16,6 +16,12 @@ class TranslationSettings(BaseSettings):
     ocr_model: str = ""
     ocr_timeout_seconds: float = 120
     ocr_max_retries: int = 1
+    specialist_base_url: str = ""
+    specialist_api_key: str = Field(default="", repr=False)
+    specialist_model: str = "tencent/Hy-MT2-1.8B"
+    specialist_timeout_seconds: float = 120
+    specialist_context_tokens: int = 8192
+    ocr_correction_supported: bool = False
 
     db_path: str = "./data/translate-v2/jobs.sqlite3"
     artifact_dir: str = "./data/translate-v2/artifacts"

@@ -103,6 +103,7 @@ class ImageOcrPipeline:
     async def process(self, input_path: Path, *, work_dir: Path,
                       context: ProcessingContext):
         from .ocr_correction import correct_ocr
+        from .types import CorrectedOcr, WarningItem
 
         await context.checkpoint("preprocessing")
         prepared = await preprocess_image(input_path, work_dir=work_dir)
@@ -111,4 +112,10 @@ class ImageOcrPipeline:
         if not result.blocks:
             raise TranslationError("NO_TEXT_DETECTED", "No text detected")
         await context.checkpoint("correcting")
+        if not self.settings.ocr_correction_supported:
+            return CorrectedOcr(blocks=result.blocks, raw_text=result.raw_text,
+                                corrected_text=result.raw_text, needs_review=True,
+                                warnings=(*result.warnings, WarningItem(
+                                    code="OCR_CORRECTION_REJECTED",
+                                    message="Automatic OCR correction is unavailable; review raw text.")))
         return await correct_ocr(result, context=context)

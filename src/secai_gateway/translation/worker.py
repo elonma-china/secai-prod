@@ -9,11 +9,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from ..config import get_settings
 from .documents import extract_docx, extract_txt
 from .jobs import JobStore
 from .service import translate_blocks
 from .settings import TranslationSettings
+from .specialist import TranslationAgent
 from .types import ProcessingContext, TranslationError
 
 
@@ -25,10 +25,7 @@ class WorkerContext(ProcessingContext):
         self.runner = runner
         self.row = row
         self.llm_gate = llm_gate
-        provider_settings = get_settings()
-        self.model_context_tokens = (provider_settings.deepseek_context_window
-                                     if provider_settings.llm_provider.lower() == "deepseek"
-                                     else provider_settings.qwen_context_window)
+        self.model_context_tokens = settings.specialist_context_tokens
 
     async def checkpoint(self, stage: str, completed: int = 0, total: int | None = None) -> None:
         if time.time() >= self.row["deadline"]:
@@ -39,7 +36,7 @@ class WorkerContext(ProcessingContext):
             raise asyncio.CancelledError
 
     async def complete(self, profile: str, prompt: str) -> tuple[str, dict[str, Any]]:
-        if profile not in {"translate_v2", "ocr_correction"}:
+        if profile != "ocr_correction" or not self.settings.ocr_correction_supported or self.runner is None:
             raise TranslationError("INTERNAL_ERROR", "Unsupported transformation profile.")
         await self.checkpoint("translating" if profile == "translate_v2" else "correcting")
         remaining = max(0.01, self.row["deadline"] - time.time())
@@ -74,6 +71,37 @@ class WorkerContext(ProcessingContext):
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
+
+    async def translate(self, text: str, source_lang: str, target_lang: str) -> str:
+        await self.checkpoint("translating")
+        remaining = self.row["deadline"] - time.time()
+        if remaining <= 0:
+            raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+        async with self.llm_gate:
+            call = asyncio.create_task(TranslationAgent(self.settings).translate(
+                text, source_lang, target_lang, timeout_seconds=remaining))
+
+            async def watch_cancel():
+                while True:
+                    await asyncio.sleep(0.5)
+                    state = await asyncio.to_thread(self.store.get, self.row["job_id"])
+                    if state["status"] != "running":
+                        return
+
+            watcher = asyncio.create_task(watch_cancel())
+            try:
+                done, _ = await asyncio.wait({call, watcher}, timeout=min(
+                    self.settings.specialist_timeout_seconds, remaining),
+                    return_when=asyncio.FIRST_COMPLETED)
+                if watcher in done:
+                    raise asyncio.CancelledError
+                if call not in done:
+                    raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.", retryable=True)
+                return call.result()
+            finally:
+                call.cancel()
+                watcher.cancel()
+                await asyncio.gather(call, watcher, return_exceptions=True)
 
 
 class Worker:
@@ -179,7 +207,12 @@ async def main() -> None:
         raise RuntimeError("Translation v2 is disabled")
     from ..agent.runner import LinchRunner
 
-    runner = LinchRunner(settings.worker_db_path)
-    if runner.session_store.__class__.__name__ != "InMemorySessionStore":
+    TranslationAgent(settings)  # fail startup before claiming work if specialist is absent
+    runner = LinchRunner(settings.worker_db_path) if settings.ocr_correction_supported else None
+    if runner is not None and runner.session_store.__class__.__name__ != "InMemorySessionStore":
         raise RuntimeError("Translation worker session store is not in memory")
     await Worker(JobStore(settings), settings, runner).serve()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
