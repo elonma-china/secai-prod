@@ -1,0 +1,172 @@
+"""Private, single-process OCR service for a pinned local PaddleOCR-VL snapshot."""
+from __future__ import annotations
+
+import base64
+import io
+import os
+import subprocess
+import threading
+from typing import Literal
+
+import torch
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
+from PIL import Image
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
+MODEL_ID = "PaddlePaddle/PaddleOCR-VL-1.6"
+MODEL_REVISION = "c5630abae1d940eafe0697512a0325494b02ab42"
+MIN_FREE_MIB = 9216
+MAX_PEAK_MIB = 7168
+_lock = threading.Lock()
+_model = None
+_processor = None
+_host_pid: int | None = None
+app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+
+class Request(BaseModel):
+    model: str
+    image_base64: str = Field(max_length=15_000_000)
+    calibration_prompt: Literal["standard", "logical", "arabic"] = "standard"
+
+
+CALIBRATION_PROMPTS = {
+    "standard": "OCR:",
+    "logical": "Transcribe all visible text in its natural reading order. Preserve identifiers and IP addresses exactly.",
+    "arabic": "Transcribe the Arabic text in logical right-to-left reading order, keeping Latin identifiers and IP addresses exactly as printed.",
+}
+
+
+def _free_mib() -> int:
+    return torch.cuda.mem_get_info()[0] // (1024 * 1024)
+
+
+def _gpu_processes() -> dict[int, tuple[str, int]]:
+    listing = subprocess.check_output(
+        ["nvidia-smi", "--query-compute-apps=gpu_uuid,pid,used_gpu_memory",
+         "--format=csv,noheader,nounits"],
+        text=True, timeout=3,
+    )
+    return {int(parts[1].strip()): (parts[0].strip(), int(parts[2].strip()))
+            for line in listing.splitlines()
+            if (parts := line.split(",")) and len(parts) == 3}
+
+
+def _gpu_uuid() -> str:
+    listing = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=uuid", "--format=csv,noheader"],
+        text=True, timeout=3,
+    ).splitlines()
+    if len(listing) != 1:
+        raise HTTPException(503, "GPU device ambiguous")
+    return listing[0].strip()
+
+
+def identify_owned_process(incumbents: set[int], processes: dict[int, tuple[str, int]],
+                           device_uuid: str) -> int | None:
+    if not incumbents <= set(processes):
+        raise HTTPException(503, "Incumbent GPU process changed")
+    new = set(processes) - incumbents
+    if len(new) > 1:
+        raise HTTPException(503, "GPU accounting ambiguous")
+    if not new:
+        return None
+    pid = next(iter(new))
+    if processes[pid][0] != device_uuid:
+        raise HTTPException(503, "OCR GPU device mismatch")
+    return pid
+
+
+# Vast exposes GPU process host PIDs, while /proc exposes container PIDs. Record
+# the incumbent set before this process creates a CUDA context; a unique new
+# GPU PID is ours. Fail closed if another process appears at the same time.
+_incumbent_pids = set(_gpu_processes())
+_device_uuid = _gpu_uuid()
+
+
+def _owned_mib() -> int:
+    global _host_pid
+    processes = _gpu_processes()
+    if _host_pid is None:
+        _host_pid = identify_owned_process(_incumbent_pids, processes, _device_uuid)
+    elif _host_pid not in processes:
+        raise HTTPException(503, "OCR GPU process disappeared")
+    if _host_pid is not None and processes[_host_pid][0] != _device_uuid:
+        raise HTTPException(503, "OCR GPU device mismatch")
+    return processes.get(_host_pid, (_device_uuid, 0))[1]
+
+
+def _guard() -> None:
+    if not torch.cuda.is_available():
+        raise HTTPException(503, "GPU unavailable")
+    free = _free_mib()  # Creates our CUDA context before resolving its host PID.
+    owned = _owned_mib()
+    if owned > MAX_PEAK_MIB or free < max(2048, MIN_FREE_MIB - owned):
+        raise HTTPException(503, "GPU reserve unavailable")
+
+
+def _load() -> None:
+    global _model, _processor
+    if _model is not None:
+        return
+    _guard()
+    path = os.environ["OCR_MODEL_PATH"]
+    _processor = AutoProcessor.from_pretrained(path, local_files_only=True, trust_remote_code=False)
+    _model = AutoModelForImageTextToText.from_pretrained(
+        path, local_files_only=True, trust_remote_code=False, torch_dtype=torch.bfloat16,
+    ).to("cuda").eval()
+    if _owned_mib() > MAX_PEAK_MIB or _free_mib() < 2048:
+        _model = None
+        torch.cuda.empty_cache()
+        raise HTTPException(503, "OCR GPU quota exceeded")
+
+
+@app.get("/health")
+def health():
+    return {"ready": _model is not None, "model": MODEL_ID, "revision": MODEL_REVISION}
+
+
+@app.post("/v1/ocr")
+def ocr(request: Request, authorization: str = Header(default="")):
+    token = os.environ.get("OCR_SERVICE_TOKEN", "")
+    if not token or authorization != f"Bearer {token}":
+        raise HTTPException(401, "Unauthorized")
+    if request.model != MODEL_ID:
+        raise HTTPException(422, "Unsupported model")
+    if not _lock.acquire(blocking=False):
+        raise HTTPException(503, "OCR busy")
+    try:
+        _guard()
+        _load()
+        try:
+            raw = base64.b64decode(request.image_base64, validate=True)
+            if len(raw) > 10 * 1024 * 1024:
+                raise ValueError("image limit")
+            image = Image.open(io.BytesIO(raw)).convert("RGB")
+            if image.width * image.height > 20_000_000 or max(image.size) > 10_000:
+                raise ValueError("pixel limit")
+        except Exception as exc:
+            raise HTTPException(422, "Invalid image") from exc
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": image},
+            {"type": "text", "text": CALIBRATION_PROMPTS[request.calibration_prompt]}]}]
+        encoded = _processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_dict=True,
+            return_tensors="pt", images_kwargs={"size": {
+                "shortest_edge": _processor.image_processor.size.shortest_edge,
+                "longest_edge": 1280 * 28 * 28}},
+        ).to(_model.device)
+        torch.cuda.reset_peak_memory_stats()
+        with torch.inference_mode():
+            output = _model.generate(**encoded, max_new_tokens=1024, do_sample=False)
+        peak = _owned_mib()
+        if peak > MAX_PEAK_MIB or _free_mib() < 2048:
+            raise HTTPException(503, "OCR GPU quota exceeded")
+        text = _processor.decode(output[0][encoded["input_ids"].shape[-1]:-1],
+                                 skip_special_tokens=True)
+        # The model does not provide reliable region boxes or confidence for this task.
+        blocks = [] if not text.strip() else [{"text": text, "bbox": None, "confidence": None}]
+        return {"model": MODEL_ID, "blocks": blocks}
+    finally:
+        _lock.release()
