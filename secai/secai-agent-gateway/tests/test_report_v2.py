@@ -162,3 +162,50 @@ def test_model_truncation_is_rejected(monkeypatch):
         assert exc.status_code == 502
     else:
         assert False, 'Truncated output must be rejected'
+
+
+def test_encrypted_docx_returns_422(tmp_path, monkeypatch):
+    import struct
+
+    c = client(tmp_path, monkeypatch)
+    bio = BytesIO()
+    with ZipFile(bio, 'w') as archive:
+        archive.writestr('word/document.xml', '<w:document/>')
+    data = bytearray(bio.getvalue())
+    local = data.index(b'PK\x03\x04')
+    central = data.index(b'PK\x01\x02')
+    for pos in (local + 6, central + 8):
+        flags = struct.unpack_from('<H', data, pos)[0]
+        struct.pack_into('<H', data, pos, flags | 1)
+    response = c.post('/ai/v2/reports/templates/import',
+                      files={'file': ('encrypted.docx', bytes(data))}, headers=auth())
+    assert response.status_code == 422
+
+
+def test_edit_cannot_drop_prior_cve(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    template_id = c.post('/ai/v2/reports/templates', json=template(), headers=auth()).json()['id']
+    report = c.post('/ai/v2/reports/generate',
+                    json={'template_id': template_id, 'data': 'CVE-2026-1234'}, headers=auth()).json()
+
+    async def loses_fact(system, user, settings):
+        return '## Tóm tắt\nĐã cập nhật\n## Kết luận\nChưa có thông tin'
+
+    monkeypatch.setattr(api, 'generate_text', loses_fact)
+    response = c.post(f"/ai/v2/reports/{report['id']}/edit",
+                      json={'instruction': 'Làm rõ', 'expected_revision': 1}, headers=auth())
+    assert response.status_code == 422
+    assert c.get(f"/ai/v2/reports/{report['id']}", headers=auth()).json()['revision'] == 1
+
+
+def test_edit_preserves_other_critical_literals():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    for identifier in ('192.0.2.1', 'https://example.test/path', 'a' * 32):
+        previous = f'## Tóm tắt\n{identifier}'
+        with pytest.raises(HTTPException) as exc:
+            validate_report('## Tóm tắt\nĐã chỉnh sửa', ['Tóm tắt'], identifier, previous)
+        assert exc.value.status_code == 422
+        assert identifier in validate_report(previous, ['Tóm tắt'], identifier, previous)
