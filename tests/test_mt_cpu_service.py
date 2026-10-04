@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import hashlib
 import json
 import subprocess
@@ -37,6 +38,8 @@ class FakeBackend:
         self.release = asyncio.Event()
         self.release.set()
         self.fail_reap = False
+        self.fail_starts = 0
+        self.start_calls = 0
         self.ignore_cancel = ignore_cancel
         self.profile = profile
 
@@ -65,6 +68,14 @@ class FakeBackend:
         self.live = False
         self.release.set()
         return True
+
+    async def start(self, deadline=None):
+        self.start_calls += 1
+        assert deadline is not None and deadline > time.monotonic()
+        if self.fail_starts:
+            self.fail_starts -= 1
+            raise RuntimeError("fake startup failed")
+        self.live = True
 
 
 def settings(tmp_path):
@@ -150,6 +161,7 @@ async def test_single_generation_bounded_wait_and_absolute_deadline(tmp_path):
     with pytest.raises(Exception) as exc:
         await second
     assert getattr(exc.value, "status", None) == 504
+    assert backend.reaped == 0  # This waiter never owned the active generation.
     assert len([c for c in backend.calls if c[0] == "/completion"]) == 1
     backend.release.set()
     assert await first == "Bản dịch"
@@ -169,9 +181,32 @@ async def test_disconnect_reaps_owned_child_before_slot_reuse(tmp_path):
         await task
     assert getattr(exc.value, "status", None) == 503
     assert backend.reaped == 1
-    with pytest.raises(Exception) as exc:
-        await runtime.translate("two", "vi", "ja", deadline=time.monotonic() + 1)
-    assert getattr(exc.value, "status", None) == 503
+    assert await runtime.translate("two", "vi", "ja", deadline=time.monotonic() + 1) == "Bản dịch"
+    assert backend.start_calls == 1
+    assert len([c for c in backend.calls if c[0] == "/completion"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_cancelled_waiter_does_not_reap_active_generation(tmp_path):
+    backend = FakeBackend()
+    backend.release.clear()
+    runtime = TranslationRuntime(settings(tmp_path), backend)
+    first = asyncio.create_task(runtime.translate("one", "vi", "ja", deadline=time.monotonic() + 1))
+    await backend.completion_started.wait()
+    disconnected = asyncio.Event()
+    second = asyncio.create_task(runtime.translate("two", "vi", "ja",
+                                                   deadline=time.monotonic() + 1,
+                                                   disconnected=disconnected))
+    await asyncio.sleep(.01)
+    disconnected.set()
+    assert backend.reaped == 0
+    backend.release.set()
+    assert await first == "Bản dịch"
+    with pytest.raises(ServiceFailure) as exc:
+        await second
+    assert exc.value.status == 503
+    assert backend.reaped == 0
+    assert backend.start_calls == 0
 
 
 @pytest.mark.asyncio
@@ -186,6 +221,36 @@ async def test_timeout_reap_failure_poison_and_keep_reservation(tmp_path):
     assert backend.reaped == 1
     assert runtime.poisoned
     assert runtime.slot.locked()
+    with pytest.raises(ServiceFailure):
+        await runtime.translate("two", "vi", "ja", deadline=time.monotonic() + 1)
+    assert backend.start_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_restart_failure_backoff_is_bounded_and_not_poisoned(tmp_path):
+    backend = FakeBackend()
+    backend.live = False  # A previous request already reaped this owned child.
+    backend.fail_starts = 2
+    runtime = TranslationRuntime(settings(tmp_path), backend)
+    with pytest.raises(ServiceFailure) as exc:
+        await runtime.translate("one", "vi", "ja", deadline=time.monotonic() + 1)
+    assert exc.value.status == 503
+    assert backend.start_calls == 1
+    assert not runtime.poisoned
+    first_wait = runtime.restart_after - time.monotonic()
+    assert 0 < first_wait <= 2
+    with pytest.raises(ServiceFailure):
+        await runtime.translate("two", "vi", "ja", deadline=time.monotonic() + 1)
+    assert backend.start_calls == 1  # Backoff rejects without another spawn.
+    runtime.restart_after = time.monotonic() - 1
+    with pytest.raises(ServiceFailure):
+        await runtime.translate("three", "vi", "ja", deadline=time.monotonic() + 1)
+    assert backend.start_calls == 2
+    assert 0 < runtime.restart_after - time.monotonic() <= 4
+    runtime.restart_after = time.monotonic() - 1
+    assert await runtime.translate("four", "vi", "ja", deadline=time.monotonic() + 1) == "Bản dịch"
+    assert backend.start_calls == 3
+    assert runtime.restart_failures == 0
 
 
 @pytest.mark.asyncio
@@ -283,6 +348,9 @@ async def test_hash_mismatch_prevents_owned_child_spawn(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_reap_waits_for_exact_owned_child(tmp_path):
     server = OwnedLlamaServer(settings(tmp_path))
+    lock_file = (tmp_path / "owner.lock").open("a+b")
+    fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    server.lock_file = lock_file
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL)
@@ -292,6 +360,48 @@ async def test_reap_waits_for_exact_owned_child(tmp_path):
         assert await server.reap()
         assert child.poll() is not None
         assert not server.live
+        assert server.lock_file is lock_file
+        probe = (tmp_path / "owner.lock").open("a+b")
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            probe.close()
+        await server.shutdown()
+        assert server.lock_file is None
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=3)
+
+
+@pytest.mark.asyncio
+async def test_expired_restart_deadline_never_spawns(tmp_path, monkeypatch):
+    cfg = settings(tmp_path)
+    cfg = ServiceSettings(**{**cfg.__dict__, "lock_path": tmp_path / "owner.lock"})
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **kw: pytest.fail("spawned after deadline"))
+    server = OwnedLlamaServer(cfg)
+    with pytest.raises(TimeoutError):
+        await server.start(deadline=time.monotonic() - 1)
+    await server.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_dead_child_proof_survives_http_client_close_error(tmp_path):
+    server = OwnedLlamaServer(settings(tmp_path))
+    await server.client.aclose()
+    class BrokenClose:
+        async def aclose(self):
+            raise OSError("client close failed")
+    server.client = BrokenClose()
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+    server.proc = child
+    server.live = True
+    try:
+        assert await server.reap()
+        assert child.poll() is not None
     finally:
         if child.poll() is None:
             child.kill()
