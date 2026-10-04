@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -98,6 +99,57 @@ class GpuStageOwner:
         self._fd: int | None = None
         self._busy = asyncio.Lock()
 
+    @property
+    def _evidence_root(self) -> Path:
+        # The guarded Q4 launcher checks this same gpu-run-* namespace.
+        return self.lock_path.parent / "evidence"
+
+    def _check_history(self) -> None:
+        if (self.lock_path.parent / "poisoned-cleanup.json").exists():
+            raise StageFailure("POISONED", pre_admission=True)
+        try:
+            for run_dir in self._evidence_root.glob("gpu-run-*"):
+                if not run_dir.is_dir():
+                    raise ValueError("invalid stage record")
+                summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+                if not isinstance(summary, dict) or summary.get("clean_exit_attested") is not True:
+                    raise ValueError("unproved stage cleanup")
+        except (OSError, ValueError) as exc:
+            raise StageFailure("POISONED", pre_admission=True) from exc
+
+    @staticmethod
+    def _fsync_dir(path: Path) -> None:
+        descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
+    def _arm_record(self) -> Path:
+        # No child may be spawned until its incomplete record is durable.
+        self._evidence_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._fsync_dir(self._evidence_root.parent)
+        run_dir = self._evidence_root / f"gpu-run-broker-{time.time_ns()}-{os.getpid()}"
+        run_dir.mkdir(mode=0o700)
+        self._fsync_dir(self._evidence_root)
+        return run_dir
+
+    def _complete_record(self, run_dir: Path, child_pid: int) -> None:
+        # Only call after wait() and a fresh full-reserve GPU sample succeed.
+        path = run_dir / "summary.json"
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_CLOEXEC, 0o600)
+        try:
+            data = json.dumps({"clean_exit_attested": True, "stage": "broker",
+                               "owner_container_pid": child_pid,
+                               "gpu_uuid": self.budget.uuid}, sort_keys=True).encode() + b"\n"
+            with os.fdopen(descriptor, "wb", closefd=False) as sink:
+                sink.write(data)
+                sink.flush()
+                os.fsync(sink.fileno())
+        finally:
+            os.close(descriptor)
+        self._fsync_dir(run_dir)
+
     async def start(self) -> None:
         if self._fd is not None:
             raise RuntimeError("GPU owner already started")
@@ -105,6 +157,7 @@ class GpuStageOwner:
         fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR | os.O_CLOEXEC, 0o600)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._check_history()
         except BaseException:
             os.close(fd)
             raise
@@ -193,7 +246,12 @@ class GpuStageOwner:
             self.budget.check_preload(await asyncio.to_thread(self.observer.sample, None))
             if deadline <= time.monotonic() or cancel.is_set():
                 raise StageFailure("TIMEOUT", pre_admission=True)
-            child = self._spawn(command)
+            try:
+                record = self._arm_record()
+                child = self._spawn(command)
+            except BaseException as exc:
+                self.poisoned = True
+                raise StageFailure("GPU_CLEANUP", poison=True) from exc
             watchdog = asyncio.create_task(self._deadline_watch(child, deadline))
             task = asyncio.create_task(work(child, cancel, deadline))
             seen_owner = False
@@ -250,6 +308,12 @@ class GpuStageOwner:
                     else:
                         with suppress(asyncio.CancelledError, Exception):
                             task.exception()
+                if not self.poisoned:
+                    try:
+                        self._complete_record(record, child.pid)
+                    except BaseException:
+                        self.poisoned = True
+                        error = StageFailure("GPU_CLEANUP", poison=True)
             if error is not None:
                 raise error
             if not seen_owner:

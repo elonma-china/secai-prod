@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -72,6 +73,42 @@ async def test_owned_stage_returns_only_after_child_reaped_and_reserve_verified(
         assert observer.samples >= 1 and spawned
         assert not Path(f"/proc/{spawned[0]}").exists()
         assert not owner.poisoned
+        summaries = list((tmp_path / "evidence").glob("gpu-run-broker-*/summary.json"))
+        assert len(summaries) == 1
+        assert __import__("json").loads(summaries[0].read_text())["clean_exit_attested"] is True
+    finally:
+        await owner.close()
+
+
+@pytest.mark.asyncio
+async def test_incomplete_persistent_stage_vetoes_fresh_owner(tmp_path):
+    evidence = tmp_path / "evidence" / "gpu-run-broker-crashed"
+    evidence.mkdir(parents=True)
+    owner = GpuStageOwner(tmp_path / "owner.lock", GpuBudget("GPU-test", frozenset()),
+                          FakeObserver())
+    with pytest.raises(StageFailure, match="POISONED"):
+        await owner.start()
+    assert owner._fd is None
+
+
+@pytest.mark.asyncio
+async def test_spawn_observes_durable_incomplete_stage_before_child(tmp_path):
+    owner = GpuStageOwner(tmp_path / "owner.lock", GpuBudget("GPU-test", frozenset()),
+                          FakeObserver(), sample_interval=.02, cleanup_grace=.2)
+    await owner.start()
+    observed = []
+    original = owner._spawn
+
+    def checked_spawn(command):
+        records = list((tmp_path / "evidence").glob("gpu-run-broker-*"))
+        observed.append(len(records) == 1 and not (records[0] / "summary.json").exists())
+        return original(command)
+
+    owner._spawn = checked_spawn
+    try:
+        await owner.run(_command(tmp_path), lambda *_: asyncio.sleep(.1, result="ok"),
+                        fake_proof, deadline=time.monotonic() + 2, cancel=asyncio.Event())
+        assert observed == [True]
     finally:
         await owner.close()
 
@@ -124,6 +161,17 @@ async def test_unproved_post_reap_reserve_poison_blocks_another_spawn(tmp_path):
             await owner.run(_command(tmp_path), work, fake_proof,
                             deadline=time.monotonic() + 2,
                             cancel=asyncio.Event())
+        assert not await owner.close()
+        incomplete = list((tmp_path / "evidence").glob("gpu-run-broker-*"))
+        assert len(incomplete) == 1 and not (incomplete[0] / "summary.json").exists()
+        # Simulate owner process death: its flock disappears, but the next
+        # process must still reject the durable incomplete stage.
+        os.close(owner._fd)
+        owner._fd = None
+        restarted = GpuStageOwner(tmp_path / "owner.lock", GpuBudget("GPU-test", frozenset()),
+                                  FakeObserver())
+        with pytest.raises(StageFailure, match="POISONED"):
+            await restarted.start()
     finally:
         await owner.close()
 
