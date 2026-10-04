@@ -15,9 +15,10 @@ from pydantic import BaseModel, ConfigDict, StrictStr, ValidationError
 from starlette.middleware.cors import CORSMiddleware
 
 from secai_gateway.config import Settings as LegacySettings
-from secai_gateway.multilang.config import MultilangSettings, incumbent_ok, verified_counter
+from secai_gateway.multilang.config import (MultilangSettings, incumbent_ok,
+                                            verified_counter, verified_specialist_counter)
 from secai_gateway.multilang.errors import MESSAGES, STATUS, TranslationError
-from secai_gateway.multilang.provider import HttpLlm, LlmPort
+from secai_gateway.multilang.provider import HttpLlm, LlmPort, SpecialistLlm
 from secai_gateway.multilang.registry import capabilities, resolve_pair
 from secai_gateway.multilang.service import TranslationRequest, translate
 
@@ -117,6 +118,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
     admission = Admission()
     app.state.llm = llm
     app.state.http_client = None
+    app.state.specialist_client = None
     model_semaphore = asyncio.Semaphore(settings_factory().max_concurrent_model_calls)
 
     @app.get("/ai/v3/translate/languages")
@@ -144,15 +146,25 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
                 parsed = await _read_json(request, settings.max_body_bytes)
                 resolve_pair(parsed.source_lang, parsed.target_lang, settings)
                 # Identity check is server-side and cannot be influenced by JSON or headers.
-                if not incumbent_ok(legacy):
-                    raise TranslationError("MODEL_UNAVAILABLE")
-                counter = await asyncio.to_thread(verified_counter, settings)
-                active_llm = app.state.llm
-                if active_llm is None:
-                    client: httpx.AsyncClient | None = app.state.http_client
-                    if client is None:
+                if settings.backend == "specialist":
+                    counter = await asyncio.to_thread(verified_specialist_counter, settings)
+                    if counter is None:
                         raise TranslationError("MODEL_UNAVAILABLE")
-                    active_llm = HttpLlm(client, legacy.qwen_base_url, legacy.qwen_api_key)
+                    active_llm = app.state.llm
+                    if active_llm is None:
+                        # Specialist owns a no-proxy client so environment proxy variables
+                        # cannot redirect private translation data outside the host.
+                        active_llm = SpecialistLlm(app.state.specialist_client, settings)
+                else:
+                    if not incumbent_ok(legacy):
+                        raise TranslationError("MODEL_UNAVAILABLE")
+                    counter = await asyncio.to_thread(verified_counter, settings)
+                    active_llm = app.state.llm
+                    if active_llm is None:
+                        client: httpx.AsyncClient | None = app.state.http_client
+                        if client is None:
+                            raise TranslationError("MODEL_UNAVAILABLE")
+                        active_llm = HttpLlm(client, legacy.qwen_base_url, legacy.qwen_api_key)
                 task = asyncio.create_task(translate(
                     TranslationRequest(parsed.text, parsed.source_lang, parsed.target_lang),
                     llm=active_llm, settings=settings, token_count=counter,

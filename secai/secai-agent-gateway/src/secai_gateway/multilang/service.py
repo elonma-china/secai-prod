@@ -145,6 +145,12 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                     token_count: Callable[[str], int] | None = None,
                     model_semaphore: asyncio.Semaphore | None = None) -> TranslationResult:
     source, target = resolve_pair(request.source_lang, request.target_lang, settings)
+    specialist = settings.backend == "specialist"
+    expected_model = settings.specialist_model if specialist else EXPECTED_MODEL
+    chunk_budget = settings.specialist_chunk_input_tokens if specialist else settings.chunk_input_tokens
+    output_budget = settings.specialist_max_output_tokens if specialist else settings.max_output_tokens
+    context_budget = settings.specialist_context_tokens if specialist else settings.context_tokens
+    prefix = f"<2{'zh' if target == 'zh-Hans' else target}> " if specialist else ""
     text = request.text
     if len(text) > settings.max_text_chars:
         raise TranslationError("TEXT_TOO_LONG")
@@ -153,20 +159,26 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     prose = re.sub(r"⟦ML-[A-Za-z0-9_-]+-\d+⟧", "", protected.masked)
     if not any(c.isalpha() for c in prose):
         raise TranslationError("INVALID_REQUEST")
-    if token_count is None or not settings.context_tokens or not settings.chat_template_overhead_tokens:
+    if (token_count is None or not context_budget or not expected_model
+            or (not specialist and not settings.chat_template_overhead_tokens)):
         raise TranslationError("MODEL_UNAVAILABLE")
     if token_count(text) > settings.max_source_tokens:
         raise TranslationError("TOKEN_LIMIT_EXCEEDED")
-    if any(token_count(literal) > settings.chunk_input_tokens for literal in protected.literals):
+    if any(token_count(literal) > chunk_budget for literal in protected.literals):
         raise TranslationError("TOKEN_LIMIT_EXCEEDED")
-    chunks = split(protected, count=token_count, budget=settings.chunk_input_tokens,
+    chunks = split(protected, count=token_count, budget=chunk_budget,
                    max_chunks=settings.max_chunks)
     if not chunks:
         raise TranslationError("INVALID_REQUEST")
     canary = secrets.token_hex(12)
     system = SYSTEM.format(source=source, target=target, canary=canary)
     for chunk, _, _ in chunks:
-        if token_count(system) + token_count(chunk) + settings.max_output_tokens + settings.chat_template_overhead_tokens > settings.context_tokens:
+        if specialist:
+            # T5 encoder and decoder budgets are separate. The tokenizer postprocessor
+            # includes EOS; count the complete target-prefix + masked source input.
+            if token_count(prefix + chunk) > context_budget:
+                raise TranslationError("TOKEN_LIMIT_EXCEEDED")
+        elif token_count(system) + token_count(chunk) + output_budget + settings.chat_template_overhead_tokens > context_budget:
             raise TranslationError("TOKEN_LIMIT_EXCEEDED")
     if _strong_source_mismatch(prose, source):
         raise TranslationError("SOURCE_LANGUAGE_MISMATCH")
@@ -176,19 +188,23 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     attempts = 0
     for chunk, separator, tokens in chunks:
         user = chunk
+        generation = GenerationRequest(system, user, output_budget,
+                                       source_lang=source, target_lang=target)
         for attempt in range(settings.max_retries + 1):
             attempts += 1
             try:
                 async with GLOBAL_CALLS:
                     if model_semaphore is None:
-                        result = await llm.generate(GenerationRequest(system, user, settings.max_output_tokens))
+                        result = await llm.generate(generation)
                     else:
                         async with model_semaphore:
-                            result = await llm.generate(GenerationRequest(system, user, settings.max_output_tokens))
-                if result.model != EXPECTED_MODEL:
+                            result = await llm.generate(generation)
+                if result.model != expected_model:
                     raise TranslationError("MODEL_UNAVAILABLE")
                 if result.stop_reason != "stop" or not isinstance(result.text, str):
                     raise TranslationError("OUTPUT_VALIDATION_FAILED")
+                if specialist and token_count(result.text) > output_budget:
+                    raise TranslationError("TOKEN_LIMIT_EXCEEDED")
                 if not result.text.strip():
                     raise TranslationError("EMPTY_TRANSLATION")
                 try:
