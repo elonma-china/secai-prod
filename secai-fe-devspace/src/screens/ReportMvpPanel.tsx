@@ -41,6 +41,7 @@ export default function ReportMvpPanel() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draft, setDraft] = useState<ReportTemplateInput>(EMPTY_DRAFT);
   const [sectionsText, setSectionsText] = useState("");
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [editing, setEditing] = useState<ReportTemplate | null>(null);
   const [sourceData, setSourceData] = useState("");
   const [report, setReport] = useState<GeneratedReport | null>(null);
@@ -95,6 +96,7 @@ export default function ReportMvpPanel() {
   }
 
   function setDraftFromTemplate(value: ReportTemplateInput) {
+    setTemplateEditorOpen(true);
     setDraft({
       name: value.name || "",
       description: value.description || "",
@@ -142,6 +144,7 @@ export default function ReportMvpPanel() {
       await reloadTemplates(saved.id);
       setEditing(saved);
       setDraftFromTemplate(saved);
+      setTemplateEditorOpen(false);
       setNotice(`Đã lưu mẫu “${saved.name}” phiên bản ${saved.version}.`);
     });
   }
@@ -187,7 +190,7 @@ export default function ReportMvpPanel() {
 
   return (
     <div className="report-mvp">
-      <div className="iascard report-mvp-card">
+      <div className="iascard report-mvp-card report-mvp-connection">
         <h4>Kết nối kho báo cáo</h4>
         <p className="report-mvp-muted">Nhập khóa báo cáo của workspace. Khóa chỉ giữ trong bộ nhớ trang này, không lưu vào trình duyệt.</p>
         <div className="report-mvp-row">
@@ -206,6 +209,8 @@ export default function ReportMvpPanel() {
       {error && <div className="error-box" role="alert">{error}</div>}
       {notice && <div className="report-mvp-notice" role="status">{notice}</div>}
 
+      <div className="report-mvp-workspace">
+      <div className="report-mvp-controls">
       <div className="iascard report-mvp-card">
         <h4>Mẫu báo cáo</h4>
         <div className="report-mvp-row">
@@ -223,6 +228,9 @@ export default function ReportMvpPanel() {
           </button>
           <button className="iasbtn ghost" type="button" disabled={!!busy} onClick={resetDraft}>Mẫu mới</button>
         </div>
+        <details className="report-template-editor" open={templateEditorOpen}
+          onToggle={(event) => setTemplateEditorOpen(event.currentTarget.open)}>
+          <summary>{editing ? "Chỉnh nội dung mẫu" : "Tạo mẫu mới / nhập từ tệp"}</summary>
         <div className="report-mvp-form">
           <label className="report-mvp-field"><span>Tên mẫu *</span><input className="iasin" value={draft.name} maxLength={160} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
           <label className="report-mvp-field"><span>Mô tả</span><input className="iasin" value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} /></label>
@@ -241,6 +249,7 @@ export default function ReportMvpPanel() {
           </button>
         </div>
         <p className="report-mvp-muted">File nhập chỉ điền bản nháp; hãy soát lại trước khi lưu. Chỉnh mẫu đã lưu sẽ tạo phiên bản mới.</p>
+        </details>
       </div>
 
       <div className="iascard report-mvp-card">
@@ -255,8 +264,9 @@ export default function ReportMvpPanel() {
         </button>
       </div>
 
-      <div className="iascard report-mvp-card">
-        <h4>Mở và chỉnh báo cáo</h4>
+      </div>
+      <div className="iascard report-mvp-card report-mvp-document">
+        <h4>Bản báo cáo</h4>
         <div className="report-mvp-row">
           <label className="report-mvp-field report-mvp-grow"><span>ID báo cáo đã lưu</span>
             <input className="iasin" value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="Dán ID để mở lại báo cáo" />
@@ -283,7 +293,8 @@ export default function ReportMvpPanel() {
             {busy === "edit" ? "Đang chỉnh…" : "Tạo bản sửa mới"}
           </button>
         </>}
-        {!report && <p className="report-mvp-muted">Báo cáo mới hoặc báo cáo mở theo ID sẽ hiển thị tại đây.</p>}
+        {!report && <div className="report-mvp-empty"><h4>Không gian báo cáo của bạn</h4><p>Chọn mẫu và nhập dữ liệu ở bên trái để tạo báo cáo, hoặc mở một báo cáo đã lưu bằng ID.</p><span>Nội dung và lịch sử chỉnh sửa được lưu tự động.</span></div>}
+      </div>
       </div>
     </div>
   );

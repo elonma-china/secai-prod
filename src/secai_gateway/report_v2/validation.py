@@ -7,7 +7,14 @@ from fastapi import HTTPException
 
 from ..security import neutralize_active_content
 
-_HEADING = re.compile(r'^\s{0,3}#{1,6}\s+(?:\d+[.)]\s+)?(.+?)\s*#*\s*$', re.M)
+_HEADING = re.compile(r'^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$', re.M)
+_LIST_MARKER = re.compile(r'^[ \t]*[0-9]{1,9}[.)][ \t]+', re.M)
+
+
+def _section_label(text: str) -> str:
+    return re.sub(r'\s+', ' ', re.sub(r'^\d+[.)]\s+', '', text.strip())).casefold()
+
+
 _CRITICAL = re.compile(
     r'\bCVE-\d{4}-\d{3,7}\b'
     r'|\b(?:\d{1,3}\.){3}\d{1,3}\b'
@@ -59,11 +66,10 @@ def _has_conclusive_outcome(text: str) -> bool:
 
 def _unsupported_control_ip_pair(content: str, source: str) -> bool:
     # Bounded to CT-<number> control IDs; a source-wide IP is shared, a record IP is local.
-    factual_source = re.sub(r'(?ms)^```.*?^```', '', source)
     shared_ips: set[str] = set()
     pairs: set[tuple[str, str]] = set()
     source_controls: set[str] = set()
-    for clause in re.split(r'\.\s+|[;\n]', factual_source):
+    for clause in re.split(r'\.\s+|[;\n]', source):
         controls = {match.group(0).casefold() for match in _CONTROL_ID.finditer(clause)}
         source_controls.update(controls)
         ips = {match.group(0) for match in _IP_ADDRESS.finditer(clause)}
@@ -137,6 +143,11 @@ def _literal_value(match: re.Match) -> str:
 
 
 def preserve_other_sections(content: str, previous: str, sections: list[str], instruction: str) -> str:
+    # ponytail: recognize explicit Vietnamese global edits; other phrasing stays model-driven.
+    global_edit = r'\b(?:rút ngắn|rút gọn|viết lại|chỉnh sửa|sửa|tóm tắt|cập nhật)\s+(?:toàn bộ|toàn|cả)\s+(?:bản\s+)?báo cáo\b'
+    for match in re.finditer(global_edit, instruction, re.I):
+        if not re.search(r'(?:không|đừng|chớ)\s*$', instruction[:match.start()], re.I):
+            return content
     mentions = []
     occupied = []
     for section in sorted(sections, key=len, reverse=True):
@@ -160,8 +171,8 @@ def preserve_other_sections(content: str, previous: str, sections: list[str], in
         result = []
         cursor = 0
         for section in sections:
-            target = section.casefold()
-            found = next((m for m in matches[cursor:] if re.sub(r'\s+', ' ', m.group(1)).casefold() == target), None)
+            target = _section_label(section)
+            found = next((m for m in matches[cursor:] if _section_label(m.group(1)) == target), None)
             if found is None:
                 return None
             result.append(found)
@@ -182,8 +193,8 @@ def preserve_other_sections(content: str, previous: str, sections: list[str], in
 def validate_report(content: str, sections: list[str], source: str, previous: str = "") -> str:
     if not content.strip() or len(content) > 40000:
         raise HTTPException(422, 'Model output is empty or too long')
-    found = [re.sub(r'\s+', ' ', match.group(1)).casefold() for match in _HEADING.finditer(content)]
-    required = [re.sub(r'\s+', ' ', section).casefold() for section in sections]
+    found = [_section_label(match.group(1)) for match in _HEADING.finditer(content)]
+    required = [_section_label(section) for section in sections]
     cursor = 0
     for section in required:
         try:
@@ -192,17 +203,19 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
             raise HTTPException(422, 'Report is missing a required section or section order') from exc
     # One document title before the first section is fine; a new peer-level section is not.
     headings = list(_HEADING.finditer(content))
-    required_matches = [match for match in headings if re.sub(r'\s+', ' ', match.group(1)).casefold() in required]
+    required_matches = [match for match in headings if _section_label(match.group(1)) in required]
     if required_matches:
         level = min(len(re.match(r'^\s*(#+)', match.group(0)).group(1)) for match in required_matches)
         first = required_matches[0].start()
         if any(match.start() > first and len(re.match(r'^\s*(#+)', match.group(0)).group(1)) <= level
-               and re.sub(r'\s+', ' ', match.group(1)).casefold() not in required
+               and _section_label(match.group(1)) not in required
                for match in headings):
             raise HTTPException(422, 'Report contains a section outside the template')
     # Ignore required heading labels: the template may contain an ordinal or year not in source facts.
-    body = _HEADING.sub(lambda match: '' if re.sub(r'\s+', ' ', match.group(1)).casefold() in required else match.group(0), content)
-    allowed = {_literal_value(match) for match in _LITERAL.finditer(source)}
+    body = _HEADING.sub(lambda match: '' if _section_label(match.group(1)) in required else match.group(0), content)
+    # List ordinals are Markdown structure, not quantities (in either input or output).
+    body = _LIST_MARKER.sub('', body)
+    allowed = {_literal_value(match) for match in _LITERAL.finditer(_LIST_MARKER.sub('', source))}
     for match in _LITERAL.finditer(body):
         if _literal_value(match) not in allowed:
             raise HTTPException(422, 'Report contains an unverified identifier or number')

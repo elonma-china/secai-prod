@@ -676,3 +676,75 @@ def test_uncertain_isolation_is_not_treated_as_recorded_action():
     source = 'Chưa xác nhận đã cô lập máy lúc 14:30.'
     content = '## Xử lý\n- Chưa thể xác nhận.'
     assert validate_report(content, ['Xử lý'], source) == content
+
+
+def test_numbered_template_import_generate_and_edit_persist(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    markdown = '## 1. Tóm tắt\nMáy chủ bị lỗi.\n## 2. Kết luận\nCần kiểm tra.'
+    draft = c.post('/ai/v2/reports/templates/import', headers=auth(),
+                   files={'file': ('numbered.md', markdown.encode())}).json()
+    saved = c.post('/ai/v2/reports/templates', headers=auth(), json=draft).json()
+
+    async def generate(system, user, settings):
+        return markdown
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    response = c.post('/ai/v2/reports/generate', headers=auth(), json={
+        'template_id': saved['id'], 'data': 'Máy chủ bị lỗi. Cần kiểm tra.'})
+    assert response.status_code == 200, response.text
+    report = response.json()
+
+    async def edit(system, user, settings):
+        return '## 1. Tóm tắt\nMáy chủ lỗi.\n## 2. Kết luận\nBị thay đổi ngoài yêu cầu.'
+
+    monkeypatch.setattr(api, 'generate_text', edit)
+    response = c.post(f"/ai/v2/reports/{report['id']}/edit", headers=auth(), json={
+        'instruction': 'Chỉ sửa 1. Tóm tắt.', 'expected_revision': 1})
+    assert response.status_code == 200, response.text
+    assert response.json()['content'].endswith('Cần kiểm tra.')
+    revisions = c.get(f"/ai/v2/reports/{report['id']}/revisions", headers=auth()).json()
+    assert [r['revision'] for r in revisions] == [1, 2]
+    assert revisions[0]['content'] == markdown
+    assert revisions[1]['content'] == response.json()['content']
+
+
+def test_list_ordinals_are_formatting_but_body_numbers_remain_checked():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Máy chủ bị lỗi. Cần kiểm tra.'
+    for marker in ('1.', '2)', '   3.'):
+        content = f'## Nội dung\n{marker} Máy chủ bị lỗi.'
+        assert validate_report(content, ['Nội dung'], source) == content
+        with pytest.raises(HTTPException):
+            validate_report(f'## Nội dung\n{marker} Có 99 máy chủ lỗi.', ['Nội dung'], source)
+    # Source list numbering must not license invented quantities either.
+    with pytest.raises(HTTPException):
+        validate_report('## Nội dung\nCó 9 máy chủ lỗi.', ['Nội dung'], '9. Máy chủ bị lỗi.')
+
+
+def test_fenced_source_keeps_control_ip_facts_without_allowing_reassignment():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    for fence in ('```text', '~~~text'):
+        source = f'{fence}\nCT-04: 203.0.113.33.\nCT-05: thiếu bằng chứng.\n{fence[:3]}'
+        content = '## Phạm vi\nCT-04: 203.0.113.33.'
+        assert validate_report(content, ['Phạm vi'], source) == content
+        with pytest.raises(HTTPException):
+            validate_report(content.replace('CT-04', 'CT-05'), ['Phạm vi'], source)
+
+
+def test_global_edit_is_not_narrowed_by_an_example_section_name():
+    from secai_gateway.report_v2.validation import preserve_other_sections
+
+    sections = ['Tóm tắt', 'Kết luận']
+    previous = '## Tóm tắt\nNội dung dài.\n## Kết luận\nNội dung dài.'
+    proposed = '## Tóm tắt\nNgắn.\n## Kết luận\nNgắn.'
+    assert preserve_other_sections(proposed, previous, sections,
+        'Rút ngắn toàn bộ báo cáo, kể cả phần Tóm tắt.') == proposed
+    scoped = preserve_other_sections(proposed, previous, sections,
+        'Không sửa toàn bộ báo cáo; chỉ sửa Tóm tắt.')
+    assert scoped.endswith('## Kết luận\nNội dung dài.')

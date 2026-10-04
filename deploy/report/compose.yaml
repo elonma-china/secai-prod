@@ -1,0 +1,13 @@
+name: secai-report-devspace
+services:
+  reports:
+    image: ${REPORT_IMAGE:-secai-report-backend:20261004}
+    container_name: secai-report-backend
+    restart: unless-stopped
+    env_file:
+      - ${REPORT_ENV_FILE:-/home/ict/secai-report-devspace/docker-report/report.env}
+    ports:
+      - "127.0.0.1:18183:8131"
+    volumes:
+      - /home/ict/secai-report-devspace/docker-report/gateway-data:/app/data
+      - /home/ict/secai-report-devspace/data:/srv/reports
