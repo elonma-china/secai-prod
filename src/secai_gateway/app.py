@@ -68,6 +68,9 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
         openapi_url="/openapi.json",
         lifespan=lifespan,
     )
+    if state.settings.report_feature_enabled:
+        from .report_v2.api import router as report_v2_router
+        app.include_router(report_v2_router)
     configure_middleware(app, state)
     register_routes(app, state)
     from .api import projects as _projects_router
