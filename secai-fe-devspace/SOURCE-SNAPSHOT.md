@@ -5,6 +5,7 @@ Source: gateway `secai-fe-devspace` in the original workspace, copied before rep
 
 | File | SHA-256 |
 |---|---|
+| `.env.example` | `cf31e1738a01d819fe43e880c7e34e3e787ae6e992aa2edc93c5ec4dcfd910c3` |
 | `.gitignore` | `52540091ac65fdc44b2dbbdf0401dc5322f9aa8a3f7f43e8f686fc71d260116b` |
 | `BAO-CAO-THONG-MINH-YEU-CAU-FE.md` | `aa3db33d818e8c0695f342aeff1182ae30cffa3fbab9bc18dbfe1890e2740194` |
 | `README.md` | `230baed30ba139cff5e6502b0bdc7f81321a44a6a441864d5b6c36091398eef9` |
