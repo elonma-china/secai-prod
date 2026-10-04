@@ -108,3 +108,16 @@ statistical_report:
   tools: [qdrant_search, neo4j_search]
   base: false
   max_turns: 6
+
+# Additive review-authenticated Markdown template tools; existing report profiles unchanged.
+report_template_edit:
+  prompt: report_template_edit.md
+  tools: []
+  base: false
+  max_turns: 2
+
+report_template_render:
+  prompt: report_template_render.md
+  tools: []
+  base: false
+  max_turns: 2
