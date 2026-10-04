@@ -1,0 +1,12 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.DS_Store
+.vite
+*.tsbuildinfo
+
+# design handoff (không commit)
+*.zip
+design-ref/

@@ -1,0 +1,37 @@
+.report-mvp {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.report-mvp-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+}
+
+.report-mvp-card h4 { margin: 0; font-size: 16px; }
+.report-mvp-muted { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.report-mvp-muted code { overflow-wrap: anywhere; }
+.report-mvp-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.report-mvp-grow { flex: 1 1 260px; }
+.report-mvp-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.report-mvp-form .report-mvp-field:nth-child(n + 3) { grid-column: 1 / -1; }
+.report-mvp-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.report-mvp-field .iasin { width: 100%; max-height: none; }
+.report-mvp-field textarea { resize: vertical; min-height: 75px; }
+.report-mvp-upload { display: inline-flex; align-items: center; padding: 9px 13px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; color: var(--text); font-size: 12.5px; }
+.report-mvp-upload:focus-within { outline: 2px solid var(--teal); }
+.report-mvp-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.report-mvp-notice { padding: 10px 13px; border: 1px solid var(--teal); border-radius: 8px; color: var(--text); font-size: 13px; }
+.report-mvp-revisions { display: flex; flex-wrap: wrap; gap: 7px; }
+.report-mvp-revisions button { padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.report-mvp-revisions button.on { color: var(--teal); border-color: var(--teal); }
+.report-mvp-preview { overflow-wrap: anywhere; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; line-height: 1.6; }
+
+@media (max-width: 680px) {
+  .report-mvp-form { grid-template-columns: 1fr; }
+  .report-mvp-row > .iasbtn { flex: 1 1 auto; }
+}
