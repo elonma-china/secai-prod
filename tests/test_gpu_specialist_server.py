@@ -58,6 +58,18 @@ def test_pinned_server_command_forces_full_offload_and_correct_eog():
     assert "tokenizer.ggml.eot_token_id=int:127967" in gpu.EOG_OVERRIDE
 
 
+def test_separate_file_context_changes_only_ctx_and_never_relaxes_gpu_guard():
+    raw = gpu.server_command()
+    file_command = gpu.server_command(4096)
+    assert raw[raw.index("--ctx-size") + 1] == "2048"
+    assert file_command[file_command.index("--ctx-size") + 1] == "4096"
+    assert ["4096" if item == "2048" else item for item in raw] == file_command
+    assert gpu.OWNED_CAP_MIB == 6144
+    assert gpu.FREE_RESERVE_MIB == 2048
+    with pytest.raises(ValueError, match="unsupported_context_size"):
+        gpu.server_command(8192)
+
+
 def test_full_offload_log_is_required(tmp_path):
     log = tmp_path / "server.log"
     log.write_text("offloaded 32/33 layers to GPU\n")

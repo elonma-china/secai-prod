@@ -50,6 +50,8 @@ PRELOAD_FREE_MIB = OWNED_CAP_MIB + FREE_RESERVE_MIB
 MIN_RAM_BYTES = 16 * 1024**3
 MIN_DISK_BYTES = 15 * 1024**3
 PORT = 18767
+DEFAULT_CONTEXT_SIZE = 2048
+FILE_DIAGNOSTIC_CONTEXT_SIZE = 4096
 MAX_SERVE_SECONDS = 6 * 60 * 60
 MODEL_ALIAS = f"tencent/Hy-MT2-7B-GGUF@{MODEL_REVISION}:Q4_K_M:gpu"
 EOG_OVERRIDE = ("tokenizer.ggml.eos_token_id=int:127960,"
@@ -153,10 +155,12 @@ def verify_artifacts() -> dict:
             "compat_sha256": COMPAT_SHA256, "llama_commit": LLAMA_COMMIT}
 
 
-def server_command() -> list[str]:
+def server_command(context_size: int = DEFAULT_CONTEXT_SIZE) -> list[str]:
+    if context_size not in (DEFAULT_CONTEXT_SIZE, FILE_DIAGNOSTIC_CONTEXT_SIZE):
+        raise ValueError("unsupported_context_size")
     return [str(SERVER), "--model", str(MODEL), "--host", "127.0.0.1",
             "--port", str(PORT), "--threads", "4", "--threads-batch", "4",
-            "--parallel", "1", "--ctx-size", "2048", "--batch-size", "512",
+            "--parallel", "1", "--ctx-size", str(context_size), "--batch-size", "512",
             "--ubatch-size", "256", "--n-gpu-layers", "99", "--fit", "off",
             "--override-kv", EOG_OVERRIDE, "--verbosity", "4",
             "--no-webui", "--alias", MODEL_ALIAS]
@@ -175,7 +179,8 @@ def listener_pid() -> int | None:
     return next(iter(pids))
 
 
-def check_only() -> dict:
+def check_only(context_size: int = DEFAULT_CONTEXT_SIZE) -> dict:
+    command = server_command(context_size)
     if POISONED.exists():
         raise RuntimeError("prior_gpu_cleanup_not_proven")
     # A crash or disk-full failure may prevent the poison marker from being
@@ -194,7 +199,8 @@ def check_only() -> dict:
     if listener_pid() is not None:
         raise RuntimeError("server_port_already_bound")
     return {"status": "READY_FOR_ROOT_OWNED_GPU_LOAD", "artifacts": artifacts,
-            "host": resources, "gpu": snapshot, "server_command": server_command(),
+            "host": resources, "gpu": snapshot, "context_size": context_size,
+            "server_command": command,
             "warning": "OCR does not yet share the advisory lock; root must hold its slot stopped"}
 
 
@@ -274,12 +280,12 @@ def _arm_parent_death(parent_pid: int) -> None:
         os._exit(127)
 
 
-def serve() -> None:
+def serve(context_size: int = DEFAULT_CONTEXT_SIZE) -> None:
     os.umask(0o077)
     LOCK.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with LOCK.open("a+") as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        baseline = check_only()
+        baseline = check_only(context_size)
         run_dir = BASE / "evidence" / time.strftime("gpu-run-%Y%m%dT%H%M%SZ", time.gmtime())
         run_dir.mkdir(mode=0o700, parents=True, exist_ok=False)
         (run_dir / "preflight.json").write_text(json.dumps(baseline, sort_keys=True) + "\n")
@@ -299,7 +305,7 @@ def serve() -> None:
         signal.signal(signal.SIGINT, request_stop)
         parent_pid = os.getpid()
         with log_path.open("x") as log_file:
-            process = subprocess.Popen(server_command(), stdout=log_file,
+            process = subprocess.Popen(server_command(context_size), stdout=log_file,
                                        stderr=subprocess.STDOUT, env=environment,
                                        start_new_session=True,
                                        pass_fds=(lock_file.fileno(),),
@@ -360,8 +366,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve", action="store_true",
                         help="load the GPU model under the ownership and resource guard")
+    parser.add_argument("--context-size", type=int, default=DEFAULT_CONTEXT_SIZE,
+                        choices=(DEFAULT_CONTEXT_SIZE, FILE_DIAGNOSTIC_CONTEXT_SIZE),
+                        help="2048 for frozen raw DEV; 4096 only for separate file diagnostic")
     args = parser.parse_args()
     if args.serve:
-        serve()
+        serve(args.context_size)
     else:
-        print(json.dumps(check_only(), sort_keys=True))
+        print(json.dumps(check_only(args.context_size), sort_keys=True))
