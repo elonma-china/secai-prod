@@ -101,3 +101,112 @@ def test_url_termination_and_unicode_iri(source, literal):
 ])
 def test_ascii_identifier_substrings_are_not_literals(source):
     assert literal_spans(source) == ()
+
+
+@pytest.mark.parametrize("left,right", [("中", "文"), ("نص", "عربي"), ("текст", "слово")])
+@pytest.mark.parametrize("literal", [
+    "2001:db8::1", "2001:db8::/64", "::1", "::ffff:192.0.2.1",
+    "fe80::1%eth0", "C:\\Program Files\\Vendor\\app.exe",
+    "https://example.com/search?q=a(b)c",
+    "https://example.com/(outer(inner))/end",
+])
+def test_full_ipv6_url_and_windows_path_occurrences(left, right, literal):
+    source = f"{left}{literal}{right} then {left}{literal}{right}"
+    spans = literal_spans(source)
+    assert [source[start:end] for start, end in spans] == [literal, literal]
+    protected = protect_literals(source)
+    assert restore_literals(protected.text, protected) == source
+
+
+def test_quoted_windows_path_with_spaces_in_final_name():
+    literal = r"C:\Program Files\Vendor Suite\app name.exe"
+    source = f'Type "{literal}" now'
+    spans = literal_spans(source)
+    assert any(source[start:end] == literal for start, end in spans)
+    protected = protect_literals(source)
+    assert restore_literals(protected.text, protected) == source
+
+
+@pytest.mark.parametrize("source", [
+    "2001:db8::zz", "2001:db8::1/129", "12345:db8::1",
+    "x2001:db8::1", "2001:db8::1suffix",
+])
+def test_invalid_or_embedded_ipv6_not_partially_masked(source):
+    assert literal_spans(source) == ()
+
+
+def test_generated_valid_ipv6_and_cidr_roundtrip():
+    import ipaddress
+    import random
+
+    rng = random.Random(80419)
+    for index in range(100):
+        address = ipaddress.IPv6Address(rng.getrandbits(128))
+        literal = (str(address) if index % 2 else
+                   str(ipaddress.IPv6Network((address, rng.randrange(0, 129)), strict=False)))
+        source = f"中{literal}文"
+        assert [source[start:end] for start, end in literal_spans(source)] == [literal]
+        protected = protect_literals(source)
+        assert restore_literals(protected.text, protected) == source
+
+
+@pytest.mark.parametrize("literal", [
+    "2001:0db8:0000:0000:0000:0000:0000:0001",
+    "2001:db8::1/128", "::/0", "::ffff:192.0.2.1/128",
+])
+def test_ipv6_full_and_prefix_extremes(literal):
+    source = f"راجع{literal}ثم"
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+
+
+@pytest.mark.parametrize("literal", [
+    r"\\server\share\Program Files\tool.exe",
+    r"C:\Program Files\Vendor\tool.exe",
+    "/opt/My App/bin/tool",
+])
+def test_unquoted_paths_with_spaced_directory_segments(literal):
+    source = f"Run {literal} now"
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+
+
+@pytest.mark.parametrize("literal", [
+    r"\\server\share\Program Files\my tool.exe",
+    r"C:\Program Files\Vendor\my tool.exe",
+    "/opt/My App/bin/my tool",
+    "/my tool",
+])
+def test_quoted_paths_with_spaced_final_segment(literal):
+    source = f'Run "{literal}" now'
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+
+
+@pytest.mark.parametrize("literal", [
+    "https://example.com/search?q=a(b)c",
+    "https://example.com/(a(b)c)/tail",
+    "https://example.com/search?q=a%28b%29c",
+])
+def test_complete_url_after_balanced_or_percent_encoded_parentheses(literal):
+    source = f"See ({literal})."
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+
+
+@pytest.mark.parametrize("source,literal", [
+    ("Reach 192.0.2.1. Next", "192.0.2.1"),
+    ("CIDR: 192.0.2.0/24. Next", "192.0.2.0/24"),
+    ("Reach 2001:db8::1. Next", "2001:db8::1"),
+    ("Allow 2001:db8::/64. Next", "2001:db8::/64"),
+    ("Node 2001:db8::1: next", "2001:db8::1"),
+])
+def test_ip_sentence_punctuation_is_not_part_of_address(source, literal):
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+
+
+def test_generated_balanced_uri_groups_keep_every_suffix():
+    for depth in range(5):
+        for suffix in ("c", "/tail", "%29c"):
+            literal = "https://example.com/search?q=" + "(" * depth + "a" + ")" * depth + suffix
+            for left, right in (("See (", ")."), ("中", "文"), ("نص", "عربي")):
+                source = left + literal + right
+                assert [source[a:b] for a, b in literal_spans(source)] == [literal]
+                protected = protect_literals(source)
+                assert restore_literals(protected.text, protected) == source
