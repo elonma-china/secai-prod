@@ -1,6 +1,8 @@
 """Apply or roll back the private Docker snapshot, reverting failed readiness."""
-import json,pathlib,subprocess,sys,time,urllib.request
+import fcntl,json,pathlib,subprocess,sys,time,urllib.request
 root=pathlib.Path(__file__).resolve().parent
+lock=(root.parent/'gateway-deploy.lock').open('a')
+fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
 
 def compose(file,*args):
  subprocess.run(['docker','compose','-f',str(root/file),*args],check=True)
@@ -23,7 +25,7 @@ def ready(new):
     assert worker['Image']==expected
     assert worker['Config']['Labels'].get('com.docker.compose.project.config_files')==str(root/file)
     state=worker['State']
-    assert state['Running'] and not state['Restarting']
+    assert state['Running'] and not state['Restarting'] and state.get('Health',{}).get('Status')=='healthy'
    return
   except Exception:time.sleep(2)
  raise RuntimeError('Gateway readiness failed')
