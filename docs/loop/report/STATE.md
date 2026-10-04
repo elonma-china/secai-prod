@@ -2,7 +2,18 @@
 
 ## Stage
 
-2026-10-04: MVP IMPLEMENTATION under latest user override: ship quickly, iterate later, test sufficiently, content threshold 70%, independent review, avoid perfectionism. This overrides original mandatory long assessment/gate sequence before code. No remote inference, rental or deployment authorized.
+2026-10-04: MVP IMPLEMENTATION + INDEPENDENT REVIEW + ISOLATED INTEGRATION COMPLETE. Live content quality70% remains UNMEASURED/PENDING. Latest user scope prioritizes quick usable functionality, sufficient tests and no perfectionism. No remote inference, rental or deployment performed.
+
+## Final handoff
+
+- Integrated code `2eff70f`; integration evidence/documentation `99abb73`, branch `integration/report-feature`, worktree `/home/ict/secai-report-integration-wt`.
+- Backend head `f43aacd`, frontend head `864c1b8`; independent SOL recheck report `b625fe9` confirms R1–R6 resolved on candidate `d2e8bda`. Fresh ASTRA B then merged and verified exact reviewed code.
+- Integrated checks:48 focused tests PASS, FE build PASS, diff check PASS. Full suite INCOMPLETE with six existing dependency/fixture failures, not passed.
+- Browser smoke with real API/SQLite and visibly mocked LLM: form/save/generate/edit/history + Markdown draft import PASS. After fix, edited report retained original CVE/IP; temporary Vite and mock backend processes stopped.
+- Reports: `integration-result.md`, `../../reviews/report-mvp-review.md`, `../../test-results/report-mvp-baseline.md`, `../../api/report-mvp.md`.
+- Enable explicitly: backend REPORT_FEATURE_ENABLED=true and nonempty dedicated REPORT_API_KEY; frontend VITE_REPORT_FEATURE_ENABLED=true. Defaults remain OFF. Internal shared workspace only.
+- Import/OCR merge simulations clean; multilingual FE has seven known add/add conflicts requiring coordination before combining WIP. Other branches/main and original workspace untouched. No push/main merge/deployment.
+- Work finished for requested MVP implementation scope. Remaining quality70% scoring needs authorized model test data/environment; advanced full-spec functionality remains deferred. One independent review/fix/recheck cycle; no unattended agents or GPU workloads required to keep this state.
 
 ## Current MVP authority (supersedes historical full-plan sequencing below)
 

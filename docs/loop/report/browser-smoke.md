@@ -16,6 +16,7 @@ Limitations/findings:
 - Initial T3 host was outside Vite allowedHosts; temporary dev-server override added exactly the preview host, no product config changes.
 - Isolated report-only backend does not implement old /health, /projects or /sessions; their404s are harness limitations and not production regression evidence.
 - Mock edit removed critical facts; independent reviewer separately reproduced real validator acceptance of that omission. Backend fix requested before final PASS. Recheck validation after fix.
+- Follow-up at backend5ffb785: mock server reloaded fixed validator and fact-preserving edit response; fresh browser generate/edit produced revision2 retaining CVE-2021-44228 and10.0.0.5. Later R3–R6 changes independently passed focused tests. Temporary smoke servers stopped after verification.
 - DOCX import is covered by backend tests, not this browser file-upload smoke.
 - Live LLM content score70% remains unmeasured, not inferred from UI success.
 

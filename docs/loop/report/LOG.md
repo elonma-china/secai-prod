@@ -1,5 +1,13 @@
 # Report feature — log
 
+## 2026-10-04 — MVP handoff
+
+- Independent SOL review initially found R1–R6; backend fixed all, recheck PASS with48 targeted tests.
+- Fresh ASTRA B merged backend f43aacd and frontend864c1b8 into integration/report-feature; final code2eff70f, evidence99abb73. Integrated48tests/build/diff passed.
+- Real API/SQLite browser smoke with mocked LLM passed core flows including file draft and revision history; post-fix edit preserved identifiers. Temporary smoke servers stopped.
+- Live content70% remains unmeasured. Full baseline/regression incomplete, six known external-dependency/fixture failures recorded.
+- Import/OCR simulated merges clean; multilingual FE seven add/add conflicts left for later coordination. No WIP/main merge, push or production changes.
+
 ## 2026-10-04 — Explicit user MVP override
 
 - User: ship quickest functional version, improve gradually; test sufficiently, >=70% content quality, review and report; do not over-perfect.
