@@ -156,3 +156,32 @@ async def test_offline_worker_overdue_job_status_and_result(tmp_path, monkeypatc
             "failed", "PROCESSING_TIMEOUT")
         result = await client.get(f"/ai/v2/translate/jobs/{job['job_id']}/result")
         assert (result.status_code, result.json()["error"]["code"]) == (409, "JOB_FAILED")
+
+
+@pytest.mark.asyncio
+async def test_web_reaper_terminalizes_idle_deadline_without_worker_or_request(tmp_path, monkeypatch):
+    import asyncio
+    import sqlite3
+    import time
+    from pathlib import Path
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setenv("TRANSLATE_V2_REAPER_INTERVAL_SECONDS", "1")
+    monkeypatch.setenv("INPUT_CLASSIFIER_ENABLED", "false")
+    app = create_app(FakeRunner())
+    store = app.state.translation_v2_store
+    job = store.admit("file", b"sensitive", ".txt", "en", "vi", "peer", None,
+                      now=time.time() - 3600)
+    path = Path(job["input_path"])
+    async with app.router.lifespan_context(app):
+        for _ in range(40):
+            with sqlite3.connect(store.db_path) as db:
+                status, input_path = db.execute(
+                    "SELECT status,input_path FROM jobs WHERE id=?", (job["job_id"],)
+                ).fetchone()
+            if status == "failed" and input_path is None and not path.exists():
+                break
+            await asyncio.sleep(0.05)
+        assert (status, input_path, path.exists()) == ("failed", None, False)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import secrets
+import unicodedata
 from dataclasses import dataclass
 
 from secai_gateway.security import _SECRET_PATTERNS, _SENSITIVE_IDENTIFIERS
@@ -24,25 +25,64 @@ class ProtectedText:
 
 _PLACEHOLDER_LIKE = re.compile(r"⟦[A-Za-z][A-Za-z0-9:]*⟧")
 _CREDENTIAL = re.compile(
-    r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
+    r"(?i)(?<![A-Za-z0-9_])(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
     r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+)")
 _IP = re.compile(r"(?<![A-Za-z0-9_.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![A-Za-z0-9_./])")
+_URL_START = re.compile(r"(?<![A-Za-z0-9_.-])(?:https?|ftp|ssh|file)://", re.I)
+_URL_STOP = frozenset("<>\"')")
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     _PLACEHOLDER_LIKE,
     re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
     re.compile(r"-----BEGIN[^\n]*-----[\s\S]*?-----END[^\n]*-----"),
-    re.compile(r"\b(?:https?|ftp|ssh|file)://[^\s<>\"')\]]+", re.I),
     # ASCII identifier boundaries let CJK/Cyrillic/Arabic prose touch a token
     # without admitting a substring of a longer ASCII filename or identifier.
     re.compile(r"(?<![A-Za-z0-9_.-])(?:CVE-\d{4}-\d{4,7}|CWE-\d{1,5})(?![A-Za-z0-9_.-])", re.I),
-    re.compile(r"(?<!\w)[A-Za-z]:\\[^\s\"']+|(?<![\w/])/(?:[\w.-]+/)+[\w.-]+"),
-    re.compile(r"\b[0-9a-fA-F]{16,}\b"),
-    re.compile(r"\b[A-Za-z][A-Za-z0-9_.+-]*[ /-]v?\d+(?:\.\d+){1,4}(?:[-+][\w.]+)?\b"),
+    re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\[A-Za-z0-9_.~$-]+"
+               r"(?:\\[A-Za-z0-9_.~$-]+)*(?![A-Za-z0-9_.-])|"
+               r"(?<![A-Za-z0-9_/])/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?![A-Za-z0-9_.-])"),
+    re.compile(r"(?<![A-Za-z0-9_])[0-9a-fA-F]{16,}(?![A-Za-z0-9_])"),
+    re.compile(r"(?<![A-Za-z0-9_.+-])[A-Za-z][A-Za-z0-9_.+-]*[ /-]v?\d+"
+               r"(?:\.\d+){1,4}(?:[-+][A-Za-z0-9_.]+)?(?![A-Za-z0-9_.+-])"),
     re.compile(r"(?m)(?:^|(?<=\n))\s*\$\s*[^\n]+"),
-    re.compile(r"\b(?:curl|wget|nmap|ssh|sudo|pip|npm|docker|kubectl)\s+(?:--?[\w-]+|[^\s]+)[^\n]*"),
-    *_SECRET_PATTERNS,
-    _SENSITIVE_IDENTIFIERS,
+    re.compile(r"(?<![A-Za-z0-9_])(?:curl|wget|nmap|ssh|sudo|pip|npm|docker|kubectl)\s+"
+               r"[A-Za-z0-9_./:@%?=&+~-]+(?:\s+[A-Za-z0-9_./:@%?=&+~-]+)*"),
+    *(re.compile(pattern.pattern, (pattern.flags & ~re.UNICODE) | re.ASCII)
+      for pattern in _SECRET_PATTERNS),
+    re.compile(_SENSITIVE_IDENTIFIERS.pattern,
+               (_SENSITIVE_IDENTIFIERS.flags & ~re.UNICODE) | re.ASCII),
 )
+
+
+def _url_spans(text: str) -> tuple[tuple[int, int], ...]:
+    spans: list[tuple[int, int]] = []
+    for match in _URL_START.finditer(text):
+        end = match.end()
+        unicode_body = False
+        bracket_depth = 0
+        while end < len(text):
+            char = text[end]
+            if char.isspace() or char in _URL_STOP:
+                break
+            if char == "[":
+                bracket_depth += 1
+            elif char == "]":
+                if not bracket_depth:
+                    break
+                bracket_depth -= 1
+            if ord(char) > 127:
+                if unicodedata.category(char)[0] in {"P", "C"}:
+                    break
+                # ASCII URL plus adjoining script prose terminates here. A
+                # Unicode host/path begins at an explicit URL separator.
+                if not unicode_body and text[end - 1] not in "/.@":
+                    break
+                unicode_body = True
+            end += 1
+        while end > match.end() and text[end - 1] in ".,;:!?":
+            end -= 1
+        if end > match.end():
+            spans.append((match.start(), end))
+    return tuple(spans)
 
 
 def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
@@ -56,6 +96,7 @@ def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
         candidates.append(match.span())
     for match in _CREDENTIAL.finditer(text):
         candidates.append(match.span(1))
+    candidates.extend(_url_spans(text))
     for pattern in _PATTERNS:
         candidates.extend(match.span() for match in pattern.finditer(text))
     if not candidates:
