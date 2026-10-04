@@ -6,7 +6,7 @@ import ipaddress
 import re
 
 from .technical_tokens import literal_spans
-from .types import CorrectedOcr, DocumentBlock, OcrEdit, OcrResult, ProcessingContext, WarningItem
+from .types import CorrectedOcr, DocumentBlock, OcrEdit, OcrResult, ProcessingContext, WarningItem, TranslationError
 
 _REASONS = {"spelling", "spacing", "punctuation"}
 _AMBIGUOUS_CVE = re.compile(r"(?i)\bCVE[- ]?[0-9OIl]{4}[- ]?[0-9OIl]{3,7}\b")
@@ -99,6 +99,10 @@ async def correct_ocr(result: OcrResult, *, context: ProcessingContext) -> Corre
         if len(output) > 64_000:
             raise ValueError("oversize proposal")
         return _validate(result, json.loads(output))
+    except TranslationError:
+        # A configured correction service outage remains a job failure. Only an
+        # invalid proposal falls back to raw OCR with a review warning.
+        raise
     except Exception:
         # No draft or exception text enters public result or logs.
         return _fallback(result, "OCR_CORRECTION_REJECTED")
