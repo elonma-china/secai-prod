@@ -183,6 +183,32 @@ async def test_spaced_target_separates_after_decomposed_latin_grapheme():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('first,second,expected', [
+    ('công-', 'nghệ', 'công-nghệ'),
+    ('công‐', 'nghệ', 'công‐nghệ'),
+    ('HTTP/', '2', 'HTTP/2'),
+    ('HTTP⁄', '2', 'HTTP⁄2'),
+    ('file_', 'name', 'file_name'),
+    ('l’', 'amour', 'l’amour'),
+    ('don’', 't', 'don’t'),
+    ('Xin’', 'chào', 'Xin’ chào'),
+    ('Xin—', 'chào', 'Xin— chào'),
+    ('-', 'mục', '- mục'),
+])
+async def test_spaced_target_distinguishes_word_joiners_from_sentence_punctuation(
+        first, second, expected):
+    class Sentences(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return (first, second, 'bạn')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=Sentences())
+    assert result[0].translated_text == expected + ' bạn'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('second', [', chào', '，chào', ')chào', '”chào'])
 async def test_spaced_target_does_not_insert_before_closing_punctuation(second):
     class Sentences(Context):
@@ -239,6 +265,34 @@ async def test_cjk_target_drops_space_after_cjk_comma_before_latin_word():
 
     result = await translate_blocks((block('a ' * 400),), 'vi', 'zh', context=Mixed())
     assert result[0].translated_text == '接口，API 接口 '
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target', ['zh', 'ja'])
+@pytest.mark.parametrize('second', ['，乙', '。乙', '；乙', '？乙', '、乙'])
+async def test_cjk_target_attaches_leading_fullwidth_closing_punctuation(target, second):
+    class Punctuation(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('甲', second, '接口')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('a ' * 400),), 'vi', target, context=Punctuation())
+    assert result[0].translated_text == '甲' + second + '接口 '
+
+
+@pytest.mark.asyncio
+async def test_cjk_target_keeps_space_before_leading_fullwidth_opening_punctuation():
+    class Punctuation(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('甲', '「乙', '接口')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('a ' * 400),), 'vi', 'zh', context=Punctuation())
+    assert result[0].translated_text == '甲 「乙接口 '
 
 
 @pytest.mark.asyncio
