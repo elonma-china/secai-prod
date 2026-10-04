@@ -1,0 +1,404 @@
+.............................F.......................................... [  7%]
+.................................FFFFsF................................. [ 14%]
+.................................+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289046070976) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F.............................................................FFF....... [ 24%]
+...................+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289030338240) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289046070976) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289030338240) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289046070976) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289030338240) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F..................................F...F....F......+++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+~~~~~~~~~~~~~~~~~~~~~ Stack of asyncio_0 (127289046070976) ~~~~~~~~~~~~~~~~~~~~~
+  File "/usr/lib/python3.12/threading.py", line 1030, in _bootstrap
+    self._bootstrap_inner()
+  File "/usr/lib/python3.12/threading.py", line 1073, in _bootstrap_inner
+    self.run()
+  File "/usr/lib/python3.12/threading.py", line 1010, in run
+    self._target(*self._args, **self._kwargs)
+  File "/usr/lib/python3.12/concurrent/futures/thread.py", line 89, in _worker
+    work_item = work_queue.get(block=True)
++++++++++++++++++++++++++++++++++++ Timeout ++++++++++++++++++++++++++++++++++++
+F....................................................................... [ 38%]
+........................................................................ [ 45%]
+........................................................................ [ 52%]
+........................................................................ [ 60%]
+........................................................................ [ 67%]
+........................................................................ [ 74%]
+........................................................................ [ 81%]
+........................................................................ [ 88%]
+........................................................................ [ 95%]
+..............................................                           [100%]
+=================================== FAILURES ===================================
+_______________________ test_bugbounty_root_and_arsenal ________________________
+tests/test_bughunt_phase0.py:201: in test_bugbounty_root_and_arsenal
+    assert root.is_dir(), root
+E   AssertionError: PosixPath('/home/ict/AIEngines/secai/claude-bug-bounty')
+E   assert False
+E    +  where False = is_dir()
+E    +    where is_dir = PosixPath('/home/ict/AIEngines/secai/claude-bug-bounty').is_dir
+________ test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref _________
+tests/test_chat_poc_drilldown_regression.py:89: in test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref
+    assert hits, "sanity: CVE-2021-44228 must have PoC hits in the real catalog"
+E   AssertionError: sanity: CVE-2021-44228 must have PoC hits in the real catalog
+E   assert []
+__________ test_uc2b_fetch_same_run_returns_real_grounded_source_code __________
+tests/test_chat_poc_drilldown_regression.py:107: in test_uc2b_fetch_same_run_returns_real_grounded_source_code
+    hit = next(h for h in hits if h["title"] == "log4j-scan")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   StopIteration
+___________ test_uc2c_ref_reused_in_a_different_turn_run_is_rejected ___________
+tests/test_chat_poc_drilldown_regression.py:123: in test_uc2c_ref_reused_in_a_different_turn_run_is_rejected
+    hit = next(h for h in hits if h["title"] == "log4j-scan")
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   StopIteration
+___________ test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref ___________
+tests/test_chat_poc_drilldown_regression.py:135: in test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref
+    hit2 = next(h for h in hits2 if h["title"] == "log4j-scan")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   StopIteration
+___________ test_uc4_fetch_budget_enforced_within_a_single_chat_run ____________
+tests/test_chat_poc_drilldown_regression.py:177: in test_uc4_fetch_budget_enforced_within_a_single_chat_run
+    ref = next(h for h in hits if h["title"] == "log4j-scan")["ref"]
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   StopIteration
+___________________ test_exploit_endpoint_consolidated_tier ____________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+___________ test_exploit_endpoint_populates_cwe_refs_from_cve_record ___________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+___________ test_exploit_endpoint_cwe_refs_empty_when_no_cve_record ____________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+_______________ test_exploit_stream_endpoint_populates_cwe_refs ________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+______________ test_exploit_offtopic_freetext_gated_to_not_found _______________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+_____________ test_exploit_freetext_at_threshold_still_tiers_real ______________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+________________ test_exploit_named_cve_bypasses_freetext_gate _________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+_________ test_exploit_vi_generic_hack_gated_even_with_a_passing_score _________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+____________ test_exploit_genuine_freetext_no_cve_still_tiers_real _____________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+___________________ test_legacy_contract_paths_and_profiles ____________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+------------------------------ Captured log call -------------------------------
+WARNING  secai_gateway.api.routes:routes.py:1076 input-sanitize FAIL-OPEN run_id=0dfd52760f994813b376d317348102f3 reason=head-missing unknown_rate=1.000 (20/20)
+WARNING  secai_gateway.api.routes:routes.py:1076 input-sanitize FAIL-OPEN run_id=152d3109d98342c2aa7fbabf0fcfe45f reason=head-missing unknown_rate=1.000 (21/21)
+___________________________ test_streaming_endpoints ___________________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+------------------------------ Captured log call -------------------------------
+WARNING  secai_gateway.api.routes:routes.py:1076 input-sanitize FAIL-OPEN run_id=33fcfac253ef45e88db5621172c0bbe8 reason=head-missing unknown_rate=1.000 (1/1)
+___________________ test_exploit_chitchat_returns_cve_guide ____________________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+__________ test_exploit_stream_section1_preview_arrives_before_final ___________
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:569: in runtest
+    super().runtest()
+../../../secai-translate-import-wt/.venv-import/lib/python3.12/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+/usr/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/asyncio/base_events.py:674: in run_until_complete
+    self.run_forever()
+/usr/lib/python3.12/asyncio/base_events.py:641: in run_forever
+    self._run_once()
+/usr/lib/python3.12/asyncio/base_events.py:1949: in _run_once
+    event_list = self._selector.select(timeout)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.12/selectors.py:468: in select
+    fd_event_list = self._selector.poll(timeout, max_ev)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>10.0s) from pytest-timeout.
+=============================== warnings summary ===============================
+tests/test_fidelity.py: 27 warnings
+  <unknown>:8: SyntaxWarning: invalid escape sequence '\]'
+
+tests/test_fidelity.py: 35 warnings
+  <unknown>:7: SyntaxWarning: invalid escape sequence '\]'
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal - Assert...
+FAILED tests/test_chat_poc_drilldown_regression.py::test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref
+FAILED tests/test_chat_poc_drilldown_regression.py::test_uc2b_fetch_same_run_returns_real_grounded_source_code
+FAILED tests/test_chat_poc_drilldown_regression.py::test_uc2c_ref_reused_in_a_different_turn_run_is_rejected
+FAILED tests/test_chat_poc_drilldown_regression.py::test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref
+FAILED tests/test_chat_poc_drilldown_regression.py::test_uc4_fetch_budget_enforced_within_a_single_chat_run
+FAILED tests/test_consolidate.py::test_exploit_endpoint_consolidated_tier - F...
+FAILED tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_populates_cwe_refs_from_cve_record
+FAILED tests/test_exploit_metadata_grounding.py::test_exploit_endpoint_cwe_refs_empty_when_no_cve_record
+FAILED tests/test_exploit_metadata_grounding.py::test_exploit_stream_endpoint_populates_cwe_refs
+FAILED tests/test_exploit_relevance_gate.py::test_exploit_offtopic_freetext_gated_to_not_found
+FAILED tests/test_exploit_relevance_gate.py::test_exploit_freetext_at_threshold_still_tiers_real
+FAILED tests/test_exploit_relevance_gate.py::test_exploit_named_cve_bypasses_freetext_gate
+FAILED tests/test_exploit_relevance_gate.py::test_exploit_vi_generic_hack_gated_even_with_a_passing_score
+FAILED tests/test_exploit_relevance_gate.py::test_exploit_genuine_freetext_no_cve_still_tiers_real
+FAILED tests/test_gateway.py::test_legacy_contract_paths_and_profiles - Faile...
+FAILED tests/test_gateway.py::test_streaming_endpoints - Failed: Timeout (>10...
+FAILED tests/test_gateway.py::test_exploit_chitchat_returns_cve_guide - Faile...
+FAILED tests/test_gateway.py::test_exploit_stream_section1_preview_arrives_before_final
+19 failed, 997 passed, 1 skipped, 62 warnings in 164.45s (0:02:44)
