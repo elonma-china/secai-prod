@@ -9,6 +9,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from linch.errors import ProviderError
+
 from .documents import extract_docx, extract_txt
 from .jobs import JobStore
 from .service import translate_blocks
@@ -39,35 +41,19 @@ class WorkerContext(ProcessingContext):
         if profile != "ocr_correction" or not self.settings.ocr_correction_supported or self.runner is None:
             raise TranslationError("INTERNAL_ERROR", "Unsupported transformation profile.")
         await self.checkpoint("translating" if profile == "translate_v2" else "correcting")
-        remaining = max(0.01, self.row["deadline"] - time.time())
         async with self.llm_gate:
-            for attempt in range(self.settings.llm_max_retries + 1):
+            retries = min(max(0, self.settings.llm_max_retries), 1)
+            for attempt in range(retries + 1):
                 try:
-                    call = asyncio.create_task(self.runner.complete(profile, prompt, None))
-
-                    async def watch_cancel():
-                        while True:
-                            await asyncio.sleep(0.5)
-                            state = await asyncio.to_thread(self.store.get, self.row["job_id"])
-                            if state["status"] != "running":
-                                return
-
-                    watcher = asyncio.create_task(watch_cancel())
-                    try:
-                        done, _ = await asyncio.wait({call, watcher},
-                            timeout=min(self.settings.llm_timeout_seconds, remaining),
-                            return_when=asyncio.FIRST_COMPLETED)
-                        if watcher in done:
-                            raise asyncio.CancelledError
-                        if call not in done:
-                            raise asyncio.TimeoutError
-                        return call.result()
-                    finally:
-                        call.cancel()
-                        watcher.cancel()
-                        await asyncio.gather(call, watcher, return_exceptions=True)
+                    return await self.run_bounded(
+                        self.runner.complete(profile, prompt, None),
+                        timeout=self.settings.llm_timeout_seconds)
                 except (asyncio.TimeoutError, OSError) as exc:
-                    if attempt >= self.settings.llm_max_retries:
+                    if attempt >= retries:
+                        raise TranslationError("TRANSLATION_UNAVAILABLE",
+                                               "Translation service is unavailable.") from exc
+                except ProviderError as exc:
+                    if not exc.retryable or attempt >= retries:
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
@@ -78,30 +64,44 @@ class WorkerContext(ProcessingContext):
         if remaining <= 0:
             raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
         async with self.llm_gate:
-            call = asyncio.create_task(TranslationAgent(self.settings).translate(
-                text, source_lang, target_lang, timeout_seconds=remaining))
-
-            async def watch_cancel():
-                while True:
-                    await asyncio.sleep(0.5)
-                    state = await asyncio.to_thread(self.store.get, self.row["job_id"])
-                    if state["status"] != "running":
-                        return
-
-            watcher = asyncio.create_task(watch_cancel())
             try:
-                done, _ = await asyncio.wait({call, watcher}, timeout=min(
-                    self.settings.specialist_timeout_seconds, remaining),
-                    return_when=asyncio.FIRST_COMPLETED)
-                if watcher in done:
-                    raise asyncio.CancelledError
-                if call not in done:
-                    raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.", retryable=True)
+                return await self.run_bounded(
+                    TranslationAgent(self.settings).translate(
+                        text, source_lang, target_lang, timeout_seconds=remaining),
+                    timeout=self.settings.specialist_timeout_seconds)
+            except asyncio.TimeoutError as exc:
+                raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.", retryable=True) from exc
+
+    async def run_bounded(self, operation: Any, *, timeout: float | None = None) -> Any:
+        remaining = self.row["deadline"] - time.time()
+        if remaining <= 0:
+            operation.close()
+            raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+        call = asyncio.create_task(operation)
+
+        async def watch_cancel() -> None:
+            while True:
+                await asyncio.sleep(0.5)
+                state = await asyncio.to_thread(self.store.get, self.row["job_id"])
+                if state["status"] != "running":
+                    return
+
+        watcher = asyncio.create_task(watch_cancel())
+        try:
+            done, _ = await asyncio.wait(
+                {call, watcher}, timeout=min(remaining, timeout) if timeout else remaining,
+                return_when=asyncio.FIRST_COMPLETED)
+            if watcher in done:
+                raise asyncio.CancelledError
+            if call in done:
                 return call.result()
-            finally:
-                call.cancel()
-                watcher.cancel()
-                await asyncio.gather(call, watcher, return_exceptions=True)
+            if time.time() >= self.row["deadline"]:
+                raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+            raise asyncio.TimeoutError
+        finally:
+            call.cancel()
+            watcher.cancel()
+            await asyncio.gather(call, watcher, return_exceptions=True)
 
 
 class Worker:
@@ -132,8 +132,9 @@ class Worker:
 
                 async with self.ocr_gate:
                     with TemporaryDirectory(prefix="secai-image-") as tmp:
-                        corrected = await ImageOcrPipeline(settings=self.settings).process(
-                            input_path, work_dir=Path(tmp), context=context)
+                        corrected = await context.run_bounded(
+                            ImageOcrPipeline(settings=self.settings).process(
+                                input_path, work_dir=Path(tmp), context=context))
                 blocks = corrected.blocks
                 warnings = corrected.warnings
                 ocr = {
@@ -207,10 +208,21 @@ async def main() -> None:
         raise RuntimeError("Translation v2 is disabled")
     from ..agent.runner import LinchRunner
 
-    runner = LinchRunner(settings.worker_db_path) if settings.ocr_correction_supported else None
+    runner = (LinchRunner(settings.worker_db_path, strict_transform_errors=True)
+              if settings.ocr_correction_supported else None)
     if runner is not None and runner.session_store.__class__.__name__ != "InMemorySessionStore":
         raise RuntimeError("Translation worker session store is not in memory")
+    if runner is not None:
+        await _disable_provider_retries(runner)
     await Worker(JobStore(settings), settings, runner).serve()
+
+
+async def _disable_provider_retries(runner: Any) -> None:
+    """Leave the worker's single retry budget at WorkerContext, not inside OpenAI SDK."""
+    runner.agent.max_retries = 0
+    provider = runner.agent.provider
+    client = await provider._get_client()
+    provider._client = client.with_options(max_retries=0)
 
 
 if __name__ == "__main__":

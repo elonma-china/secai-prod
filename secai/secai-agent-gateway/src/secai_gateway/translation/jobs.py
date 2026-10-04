@@ -27,6 +27,7 @@ class JobStore:
         self.artifact_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db_path.parent.chmod(0o700)
         self.artifact_dir.chmod(0o700)
+        self._enable_wal()
         with self._tx() as db:
             db.executescript("""
             CREATE TABLE IF NOT EXISTS jobs (
@@ -52,12 +53,26 @@ class JobStore:
             """)
         self.db_path.chmod(0o600)
 
+    def _enable_wal(self) -> None:
+        # A second API/worker process can open a new store while the first is
+        # switching a fresh database to WAL. Retry only that transient lock.
+        for attempt in range(20):
+            db = sqlite3.connect(self.db_path, timeout=30)
+            try:
+                db.execute("PRAGMA journal_mode=WAL")
+                return
+            except sqlite3.OperationalError as exc:
+                if ("locked" not in str(exc).lower() and "busy" not in str(exc).lower()) or attempt == 19:
+                    raise
+            finally:
+                db.close()
+            time.sleep(0.05)
+
     @contextmanager
     def _tx(self, rollback_paths: list[Path] | None = None) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self.db_path, timeout=30)
         db.row_factory = sqlite3.Row
         try:
-            db.execute("PRAGMA journal_mode=WAL")
             db.execute("BEGIN IMMEDIATE")
             yield db
             db.commit()
