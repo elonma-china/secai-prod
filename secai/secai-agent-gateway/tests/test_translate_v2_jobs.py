@@ -1,5 +1,6 @@
 from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import sqlite3
 
 import pytest
 
@@ -14,6 +15,59 @@ def _store(tmp_path):
     settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
                                    artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
     return JobStore(settings)
+
+
+def _admit_in_new_process(paths):
+    db_path, artifact_dir = paths
+    config = TranslationSettings(db_path=db_path, artifact_dir=artifact_dir, _env_file=None)
+    return JobStore(config).admit("file", b"same", ".txt", "en", "vi", "peer", "a" * 32)["job_id"]
+
+
+def test_store_startup_retries_transient_wal_lock(tmp_path, monkeypatch):
+    real_connect = sqlite3.connect
+    attempts = 0
+
+    class Connection:
+        def __init__(self, db):
+            self.db = db
+
+        def __setattr__(self, name, value):
+            if name == "db":
+                object.__setattr__(self, name, value)
+            else:
+                setattr(self.db, name, value)
+
+        def execute(self, sql, *args):
+            nonlocal attempts
+            if sql == "PRAGMA journal_mode=WAL":
+                attempts += 1
+                if attempts == 1:
+                    raise sqlite3.OperationalError("database is locked")
+            return self.db.execute(sql, *args)
+
+        def __getattr__(self, name):
+            return getattr(self.db, name)
+
+        def __enter__(self):
+            self.db.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.db.__exit__(*args)
+
+    monkeypatch.setattr(sqlite3, "connect", lambda *args, **kwargs: Connection(real_connect(*args, **kwargs)))
+    store = _store(tmp_path)
+    assert attempts >= 2
+    job = store.admit("file", b"hello", ".txt", "en", "vi", "peer", "a" * 32)
+    assert store.get(job["job_id"])["status"] == "queued"
+
+
+def test_two_new_processes_share_store_on_first_startup(tmp_path):
+    paths = str(tmp_path / "jobs.db"), str(tmp_path / "artifacts")
+    with ProcessPoolExecutor(max_workers=2) as pool:
+        ids = list(pool.map(_admit_in_new_process, [paths, paths]))
+    assert ids[0] == ids[1]
+    assert _store(tmp_path).get(ids[0])["status"] == "queued"
 
 
 def test_idempotency_atomic_conflict_and_replay(tmp_path):
