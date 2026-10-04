@@ -35,6 +35,7 @@ export default defineConfig({
           });
         },
       },
+      "/review-api": { target: gateway, changeOrigin: true },
       "/health": { target: gateway, changeOrigin: true },
       "/poc": { target: gateway, changeOrigin: true },
       "/projects": { target: gateway, changeOrigin: true },

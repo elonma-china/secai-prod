@@ -33,24 +33,6 @@ kết nối stream. Xem `vite.config.ts`.
 Muốn gọi thẳng một base URL khác (bỏ proxy): đặt `VITE_API_BASE` trong `.env` (khi đó gateway phải
 mở CORS cho origin của FE).
 
-## Dịch nhiều tệp/ảnh (translation v2)
-
-Tab dịch tệp dùng API job v2 riêng, không phụ thuộc khả năng dịch văn bản v3. Đặt
-`VITE_TRANSLATE_V2_FILES_ENABLED=true` để hiện tab; thêm
-`VITE_TRANSLATE_V2_IMAGES_ENABLED=true` để chọn PNG/JPG/JPEG. Hai cờ FE mặc định tắt;
-gateway cũng cần `TRANSLATE_V2_ENABLED=true`, và ảnh cần OCR v2 hoạt động.
-Đây là cờ build Vite, nên đổi giá trị cần build lại frontend.
-
-Mỗi lần chọn tối đa 20 tệp TXT/DOCX/DOC hoặc ảnh, từng tệp tối đa 10 MiB.
-Giao diện giữ tối đa hai job chưa kết thúc, gửi cách nhau ít nhất 12,5 giây,
-poll trạng thái cách nhau ít nhất 4 giây/job, và tuân theo `Retry-After`.
-ID job và khóa idempotency là bí mật truy cập; chỉ metadata/hàm băm tệp được giữ
-trong `sessionStorage` của tab, không lưu nội dung tệp hay bản dịch. Sau khi tải lại
-trang, job đã nhận được tiếp tục kiểm tra; tệp chưa gửi hoặc POST chưa rõ kết quả
-cần chọn lại đúng tệp để phát lại cùng khóa. Giao diện không thể hủy một POST
-chưa rõ máy chủ đã nhận cho tới khi khôi phục được ID job. Kết quả có thể tải
-dưới dạng TXT hoặc JSON; JSON giữ các trường OCR và cảnh báo từ API.
-
 ## Xử lý SSE
 
 Client parse frame `event: <name>\ndata: <json>` (xem `src/api.ts`), map các sự kiện:
@@ -82,3 +64,41 @@ src/
 npm run build         # tsc -b && vite build → dist/
 npm run preview
 ```
+
+## Báo cáo theo mẫu (MVP)
+
+Tab **Nền tảng AI → Báo cáo thông minh → Theo mẫu** được ẩn mặc định. Khi backend đã bật
+`REPORT_FEATURE_ENABLED` và cấu hình `REPORT_API_KEY`, chạy FE với:
+
+```bash
+VITE_REPORT_FEATURE_ENABLED=true npm run dev
+```
+
+Tab mới gọi riêng `/ai/v2/reports`; hai tab báo cáo cũ vẫn dùng API cũ. Người dùng nhập
+khóa báo cáo vào ô mật khẩu trên tab. Khóa chỉ giữ trong React state cho đến khi tải lại
+trang, không đặt trong `VITE_*`, URL hoặc localStorage. Đây là khóa chung của workspace,
+không phải tài khoản hay quyền sở hữu riêng của từng người.
+
+Tạo mẫu bằng form hoặc nhập `.docx`, `.md`, `.txt` tối đa 2 MiB. File nhập chỉ điền bản
+nháp để người dùng soát/sửa trước khi lưu. Có thể chọn mẫu đã lưu, sửa thành phiên bản
+mới, sinh báo cáo từ dữ liệu nguồn, mở báo cáo bằng ID và tạo bản sửa bằng prompt.
+UI hiển thị lịch sử bản sửa; backend kiểm tra phiên bản khi lưu/chỉnh để tránh ghi đè
+thay đổi đồng thời.
+
+## Dịch nhiều tệp/ảnh (translation v2)
+
+Tab dịch tệp dùng API job v2 riêng, không phụ thuộc khả năng dịch văn bản v3. Đặt
+`VITE_TRANSLATE_V2_FILES_ENABLED=true` để hiện tab; thêm
+`VITE_TRANSLATE_V2_IMAGES_ENABLED=true` để chọn PNG/JPG/JPEG. Hai cờ FE mặc định tắt;
+gateway cũng cần `TRANSLATE_V2_ENABLED=true`, và ảnh cần OCR v2 hoạt động.
+Đây là cờ build Vite, nên đổi giá trị cần build lại frontend.
+
+Mỗi lần chọn tối đa 20 tệp TXT/DOCX/DOC hoặc ảnh, từng tệp tối đa 10 MiB.
+Giao diện giữ tối đa hai job chưa kết thúc, gửi cách nhau ít nhất 12,5 giây,
+poll trạng thái cách nhau ít nhất 4 giây/job, và tuân theo `Retry-After`.
+ID job và khóa idempotency là bí mật truy cập; chỉ metadata/hàm băm tệp được giữ
+trong `sessionStorage` của tab, không lưu nội dung tệp hay bản dịch. Sau khi tải lại
+trang, job đã nhận được tiếp tục kiểm tra; tệp chưa gửi hoặc POST chưa rõ kết quả
+cần chọn lại đúng tệp để phát lại cùng khóa. Giao diện không thể hủy một POST
+chưa rõ máy chủ đã nhận cho tới khi khôi phục được ID job. Kết quả có thể tải
+dưới dạng TXT hoặc JSON; JSON giữ các trường OCR và cảnh báo từ API.
