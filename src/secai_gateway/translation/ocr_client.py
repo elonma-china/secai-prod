@@ -75,7 +75,8 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
     body = {"model": settings.ocr_model, "image_base64": encoded}
     timeout = httpx.Timeout(settings.ocr_timeout_seconds)
     async def request_with_retries() -> OcrResult:
-        for attempt in range(settings.ocr_max_retries + 1):
+        retries = min(max(0, settings.ocr_max_retries), 1)
+        for attempt in range(retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                     async with client.stream("POST", url, json=body, headers={
@@ -122,14 +123,14 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
             except TranslationError:
                 raise
             except httpx.HTTPStatusError as exc:
-                if exc.response.status_code not in {502, 503, 504} or attempt == settings.ocr_max_retries:
+                if exc.response.status_code not in {502, 503, 504} or attempt == retries:
                     raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable",
                                            retryable=exc.response.status_code in {502, 503, 504}) from exc
                 await asyncio.sleep(min(2 ** attempt, 2))
             except ValueError as exc:
                 raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response") from exc
             except httpx.TransportError as exc:
-                if attempt == settings.ocr_max_retries:
+                if attempt == retries:
                     raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True) from exc
                 await asyncio.sleep(min(2 ** attempt, 2))
         raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True)

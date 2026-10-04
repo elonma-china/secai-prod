@@ -45,17 +45,18 @@ class WorkerContext(ProcessingContext):
             raise TranslationError("INTERNAL_ERROR", "Unsupported transformation profile.")
         await self.checkpoint("translating" if profile == "translate_v2" else "correcting")
         async with self.llm_gate:
-            for attempt in range(self.settings.llm_max_retries + 1):
+            retries = min(max(0, self.settings.llm_max_retries), 1)
+            for attempt in range(retries + 1):
                 try:
                     return await self.run_bounded(
                         self.runner.complete(profile, prompt, None),
                         timeout=self.settings.llm_timeout_seconds)
                 except (asyncio.TimeoutError, OSError) as exc:
-                    if attempt >= self.settings.llm_max_retries:
+                    if attempt >= retries:
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
                 except ProviderError as exc:
-                    if not exc.retryable or attempt >= self.settings.llm_max_retries:
+                    if not exc.retryable or attempt >= retries:
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
