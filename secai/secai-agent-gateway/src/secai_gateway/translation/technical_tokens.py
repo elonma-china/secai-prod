@@ -27,9 +27,16 @@ _PLACEHOLDER_LIKE = re.compile(r"⟦[A-Za-z][A-Za-z0-9:]*⟧")
 _CREDENTIAL = re.compile(
     r"(?i)(?<![A-Za-z0-9_])(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
     r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+)")
-_IP = re.compile(r"(?<![A-Za-z0-9_.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?![A-Za-z0-9_./])")
+_IP = re.compile(r"(?<![A-Za-z0-9_.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?"
+                 r"(?![A-Za-z0-9_/]|\.[A-Za-z0-9])")
+_IPV6 = re.compile(r"(?<![A-Za-z0-9_.:%-])[0-9A-Fa-f:.]+"
+                   r"(?:%[A-Za-z0-9_.-]+)?(?:/\d{1,3})?"
+                   r"(?![A-Za-z0-9_:/%-]|\.[A-Za-z0-9])")
 _URL_START = re.compile(r"(?<![A-Za-z0-9_.-])(?:https?|ftp|ssh|file)://", re.I)
-_URL_STOP = frozenset("<>\"')")
+_URL_STOP = frozenset("<>\"'")
+_QUOTED_PATH = re.compile(
+    r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:\\|\\\\[A-Za-z0-9_.~-]+\\[A-Za-z0-9_.~-]+\\|"
+    r"/)[^\n]*?)(?P=quote)")
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     _PLACEHOLDER_LIKE,
     re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
@@ -37,9 +44,12 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
     # ASCII identifier boundaries let CJK/Cyrillic/Arabic prose touch a token
     # without admitting a substring of a longer ASCII filename or identifier.
     re.compile(r"(?<![A-Za-z0-9_.-])(?:CVE-\d{4}-\d{4,7}|CWE-\d{1,5})(?![A-Za-z0-9_.-])", re.I),
-    re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\[A-Za-z0-9_.~$-]+"
-               r"(?:\\[A-Za-z0-9_.~$-]+)*(?![A-Za-z0-9_.-])|"
-               r"(?<![A-Za-z0-9_/])/(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_.-]+(?![A-Za-z0-9_.-])"),
+    re.compile(r"(?<![A-Za-z0-9_])(?:[A-Za-z]:\\|"
+               r"\\\\[A-Za-z0-9_.~-]+\\[A-Za-z0-9_.~-]+\\)"
+               r"(?:[A-Za-z0-9_.~$-]+(?: [A-Za-z0-9_.~$-]+)*\\)*"
+               r"[A-Za-z0-9_.~$-]+(?![A-Za-z0-9_.-])|"
+               r"(?<![A-Za-z0-9_/])/(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*/)+"
+               r"[A-Za-z0-9_.-]+(?![A-Za-z0-9_.-])"),
     re.compile(r"(?<![A-Za-z0-9_])[0-9a-fA-F]{16,}(?![A-Za-z0-9_])"),
     re.compile(r"(?<![A-Za-z0-9_.+-])[A-Za-z][A-Za-z0-9_.+-]*[ /-]v?\d+"
                r"(?:\.\d+){1,4}(?:[-+][A-Za-z0-9_.]+)?(?![A-Za-z0-9_.+-])"),
@@ -59,10 +69,17 @@ def _url_spans(text: str) -> tuple[tuple[int, int], ...]:
         end = match.end()
         unicode_body = False
         bracket_depth = 0
+        paren_depth = 0
         while end < len(text):
             char = text[end]
             if char.isspace() or char in _URL_STOP:
                 break
+            if char == "(":
+                paren_depth += 1
+            elif char == ")":
+                if not paren_depth:
+                    break
+                paren_depth -= 1
             if char == "[":
                 bracket_depth += 1
             elif char == "]":
@@ -94,8 +111,23 @@ def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
         except ValueError:
             continue
         candidates.append(match.span())
+    for match in _IPV6.finditer(text):
+        token = match.group().rstrip(".,;")
+        if ":" not in token:
+            continue
+        while token:
+            try:
+                ipaddress.ip_network(token, strict=False)
+            except ValueError:
+                if token[-1] != ":":
+                    break
+                token = token[:-1]
+            else:
+                candidates.append((match.start(), match.start() + len(token)))
+                break
     for match in _CREDENTIAL.finditer(text):
         candidates.append(match.span(1))
+    candidates.extend(match.span("path") for match in _QUOTED_PATH.finditer(text))
     candidates.extend(_url_spans(text))
     for pattern in _PATTERNS:
         candidates.extend(match.span() for match in pattern.finditer(text))
