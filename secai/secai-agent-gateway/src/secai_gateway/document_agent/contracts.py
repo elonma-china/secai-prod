@@ -5,6 +5,8 @@ from dataclasses import asdict, dataclass, field
 from json import JSONEncoder
 from typing import Any, Protocol
 
+from fastapi.encoders import jsonable_encoder
+
 from .scope import DocumentScope
 
 
@@ -34,22 +36,19 @@ class OcrResult:
     needs_review: bool = False
 
     def public(self) -> dict[str, Any]:
-        return asdict(self)
+        return jsonable_encoder(self)
 
-    def public_size_exceeds(self, limit: int) -> bool:
-        """Bound the JSON payload before constructing the HTTP response."""
+    def bounded_public(self, limit: int) -> dict[str, Any] | None:
+        """Normalize once, then bound the exact object returned by HTTP."""
         if len(self.raw_text.encode("utf-8")) > limit or len(self.corrected_text.encode("utf-8")) > limit:
-            return True
+            return None
+        payload = self.public()
         total = 0
-        fields = {
-            "raw_text": self.raw_text, "corrected_text": self.corrected_text,
-            "edits": self.edits, "warnings": self.warnings, "needs_review": self.needs_review,
-        }
-        for piece in JSONEncoder(ensure_ascii=False, separators=(",", ":")).iterencode(fields):
+        for piece in JSONEncoder(ensure_ascii=False, allow_nan=False, separators=(",", ":")).iterencode(payload):
             total += len(piece.encode("utf-8"))
             if total > limit:
-                return True
-        return False
+                return None
+        return payload
 
 
 class OcrBackend(Protocol):

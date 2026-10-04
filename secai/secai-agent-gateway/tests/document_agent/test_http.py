@@ -1,6 +1,7 @@
 import asyncio
 import io
 import time
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 import httpx
@@ -8,6 +9,7 @@ import pytest
 from fastapi import FastAPI
 from linch.evals import ScriptedProvider, TextTurn, ToolUseTurn
 from PIL import Image
+from pydantic import BaseModel
 
 from secai_gateway.document_agent.contracts import ScopedTask
 from secai_gateway.document_agent.runner import DocumentRunner
@@ -156,6 +158,44 @@ def test_result_endpoint_rejects_oversized_ocr_before_response(tmp_path, monkeyp
     response = asyncio.run(run())
     assert response.status_code == 413
     assert 'private-id' not in response.text
+
+
+def test_result_endpoint_accepts_structured_dataclass_and_pydantic_edits(tmp_path):
+    from secai_gateway.document_agent.contracts import OcrResult
+
+    @dataclass(frozen=True)
+    class Edit:
+        before: str
+        after: str
+
+    class Warning(BaseModel):
+        code: str
+        message: str
+
+    class DoneBackend(Backend):
+        async def status(self, scope, handle):
+            return ScopedTask(handle, 'succeeded')
+        async def result(self, scope, handle):
+            return OcrResult('CVE-2026-1234', 'CVE-2026-1234', (Edit('teh', 'the'),), (Warning(code='OCR_REVIEW', message='Check'),), True)
+
+    store = DocumentScopeStore(tmp_path / 'scope.db')
+    grant = store.create('owner', time.time())
+    handle = store.bind_task(store.resolve(grant.context_token, time.time()), 'private-id')
+    runner = DocumentRunner(provider=ScriptedProvider([TextTurn('unused')]), model='scripted', budget=SimpleNamespace(check=lambda req, window: None))
+    app = create_document_app(FastAPI(), store, DoneBackend(), runner, SimpleNamespace(document_agent_enabled=True))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://test') as client:
+            return await client.get(f'/ai/v3/document-agent/tasks/{handle}/result', headers={'X-Document-Context': grant.context_token})
+
+    response = asyncio.run(run())
+    assert response.status_code == 200
+    assert response.json() == {
+        'raw_text': 'CVE-2026-1234', 'corrected_text': 'CVE-2026-1234',
+        'edits': [{'before': 'teh', 'after': 'the'}],
+        'warnings': [{'code': 'OCR_REVIEW', 'message': 'Check'}],
+        'needs_review': True,
+    }
 
 
 def test_retry_after_cancelled_admitted_turn_uses_same_durable_key(tmp_path):

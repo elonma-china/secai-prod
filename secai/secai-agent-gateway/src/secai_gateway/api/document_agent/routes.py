@@ -150,9 +150,10 @@ def build_router(scope_store: DocumentScopeStore, backend: OcrBackend, runner: D
         if state.status != "succeeded":
             raise _bad("RESULT_NOT_READY", 409)
         ocr = await backend.result(scope, task_handle)
-        if ocr.public_size_exceeds(MAX_OCR_RESULT_BYTES):
+        payload = ocr.bounded_public(MAX_OCR_RESULT_BYTES)
+        if payload is None:
             raise _bad("RESULT_TOO_LARGE", 413)
-        return ocr.public()
+        return JSONResponse(payload)
 
     @router.delete("/tasks/{task_handle}")
     async def cancel(request: Request, task_handle: str):

@@ -44,3 +44,13 @@ Final focused command, from gateway root:
 `PYTHONPATH=/tmp/secai-document-agent-test-deps:src HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GATEWAY_DB_PATH=/tmp/secai-doc-agent-tests-gw.db SESSION_DB_PATH=/tmp/secai-doc-agent-tests-sessions.db POC_CATALOG_DB=/tmp/secai-doc-agent-tests-poc.db POC_SOURCES_ROOT=/tmp/secai-doc-agent-tests-sources POC_ARTIFACT_STORE=/tmp/secai-doc-agent-tests-artifacts /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/document_agent`
 
 Final result: **30 passed in 4.58s**. `compileall -q` and `git diff --check` passed; `.linch/sessions.db` was absent. Full backend suite remains the integrated checkpoint's responsibility.
+
+## Independent review fix round 2
+
+The result-size gate now converts the OCR result once with FastAPI's `jsonable_encoder`, counts that exact JSON-safe payload, and passes the same payload to `JSONResponse`. This accepts dataclass edits and Pydantic warnings that the prior stdlib-only size check rejected. The existing 10 MiB limit and 413 response remain unchanged.
+
+Red test: `test_result_endpoint_accepts_structured_dataclass_and_pydantic_edits` failed with `TypeError: Object of type Edit is not JSON serializable`. After the fix, the focused command from gateway root:
+
+`PYTHONPATH=/tmp/secai-document-agent-test-deps:src HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 GATEWAY_DB_PATH=/tmp/secai-doc-agent-tests-gw.db SESSION_DB_PATH=/tmp/secai-doc-agent-tests-sessions.db POC_CATALOG_DB=/tmp/secai-doc-agent-tests-poc.db POC_SOURCES_ROOT=/tmp/secai-doc-agent-tests-sources POC_ARTIFACT_STORE=/tmp/secai-doc-agent-tests-artifacts /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/document_agent`
+
+Result: **31 passed in 4.78s**. `git diff --check` passed before staging. No model or network call.
