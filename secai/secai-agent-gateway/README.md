@@ -323,6 +323,10 @@ cases; it was not an unconditional full-suite pass. See the integration evidence
 
 ## Layout
 
+Root giữ cấu hình dự án, Docker entrypoint và hướng dẫn agent. Utility đặt trong
+[scripts/](scripts/README.md); mục lục tài liệu ở [docs/README.md](docs/README.md).
+`data/` và `logs/` là dữ liệu local ngoài Git; `secai-serving-vast/` có Git riêng.
+
 ```
 src/secai_gateway/
   config.py        # Settings (pydantic-settings) — all env in one place
@@ -344,7 +348,7 @@ System prompts live in `src/secai_gateway/prompts/` — edit the `.md` files (an
 
 ## Docs
 
-Full documentation lives under [`docs/`](docs/):
+Full documentation lives under [`docs/`](docs/); start with the [document index](docs/README.md):
 - `docs/api-guide.md`, `docs/poc-api-guide.md`, `docs/api-userguide-exploitDB.md`,
   `docs/session-project-api-guide.md` — API references.
 - `docs/exploit-advance-*.md`, `docs/poc-verify-architecture.md` — live-exploit/verify design.

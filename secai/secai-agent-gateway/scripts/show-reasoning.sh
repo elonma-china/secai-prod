@@ -10,16 +10,16 @@
 #   chuyện với CÙNG con model đó nhưng bật thinking để lộ mạch suy nghĩ, dùng demo.)
 #
 #  Dùng:
-#     ./show-reasoning.sh "9.11 và 9.9 số nào lớn hơn?"
-#     ./show-reasoning.sh --system "Bạn là chuyên gia bảo mật." "CVE-2021-44228 khai thác thế nào?"
-#     ./show-reasoning.sh --file prompt.txt         # đọc prompt từ file
-#     ./show-reasoning.sh -m 1200 -t 0.6 "..."      # max-tokens / temperature
-#     ./show-reasoning.sh --no-think "..."          # tắt suy luận (chỉ answer, để so sánh)
-#     ./show-reasoning.sh --no-color "..."          # bỏ màu (khi ghi ra file)
-#     echo "..." | ./show-reasoning.sh --file -      # prompt qua stdin
+#     ./scripts/show-reasoning.sh "9.11 và 9.9 số nào lớn hơn?"
+#     ./scripts/show-reasoning.sh --system "Bạn là chuyên gia bảo mật." "CVE-2021-44228 khai thác thế nào?"
+#     ./scripts/show-reasoning.sh --file prompt.txt         # đọc prompt từ file
+#     ./scripts/show-reasoning.sh -m 1200 -t 0.6 "..."      # max-tokens / temperature
+#     ./scripts/show-reasoning.sh --no-think "..."          # tắt suy luận (chỉ answer, để so sánh)
+#     ./scripts/show-reasoning.sh --no-color "..."          # bỏ màu (khi ghi ra file)
+#     echo "..." | ./scripts/show-reasoning.sh --file -      # prompt qua stdin
 # ═══════════════════════════════════════════════════════════════════════════════
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$ROOT/.venv/bin/python"; [ -x "$PY" ] || PY="$(command -v python3 || true)"
 [ -n "$PY" ] || { echo "[reasoning] [FAIL] không tìm thấy python (.venv/bin/python)" >&2; exit 1; }
 exec env SECAI_ROOT="$ROOT" "$PY" - "$@" <<'PYEOF'
@@ -37,7 +37,7 @@ def need(name):
 while i < len(a):
     x = a[i]
     if   x in ("-h","--help"):
-        import subprocess; subprocess.run(["sed","-n","2,27p", __file__ if os.path.exists(__file__) else os.environ["SECAI_ROOT"]+"/show-reasoning.sh"]); sys.exit(0)
+        import subprocess; subprocess.run(["sed","-n","2,27p", __file__ if os.path.exists(__file__) else os.environ["SECAI_ROOT"]+"/scripts/show-reasoning.sh"]); sys.exit(0)
     elif x == "--system":            system = need(x)
     elif x in ("-m","--max-tokens"): max_tokens = int(need(x))
     elif x in ("-t","--temp","--temperature"): temperature = float(need(x))

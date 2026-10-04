@@ -8,8 +8,8 @@ chứa giá trị đúng => ngữ cảnh còn nguyên (chưa bị nén/cắt) =>
 Dùng /ai/chat: lịch sử hội thoại được linch giữ trong Redis theo user_id, nên các
 lượt sau thấy được dữ kiện của lượt đầu.
 
-Chạy:  python3 check_effective_context.py [BASE_URL] [MAX_TOKENS]
-Ví dụ: python3 check_effective_context.py http://127.0.0.1:8131 20000
+Chạy:  python3 scripts/check_effective_context.py [BASE_URL] [MAX_TOKENS]
+Ví dụ: python3 scripts/check_effective_context.py http://127.0.0.1:8131 20000
 """
 import json, sys, time, urllib.request
 
