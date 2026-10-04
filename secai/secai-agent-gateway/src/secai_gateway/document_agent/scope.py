@@ -164,6 +164,19 @@ class DocumentScopeStore:
         if row[0] <= now:
             raise ExpiredContext("context expired")
 
+    @staticmethod
+    def _reap_expired(conn: sqlite3.Connection, now: float) -> int:
+        return conn.execute(
+            "DELETE FROM document_contexts WHERE expires_at + ? <= ?",
+            (CONTEXT_TOMBSTONE_SECONDS, now),
+        ).rowcount
+
+    def reap(self, now: float) -> int:
+        """Delete aged contexts and cascaded rows; call off-loop at startup and periodically."""
+        now = _finite_now(now)
+        with self._connection(write=True) as conn:
+            return self._reap_expired(conn, now)
+
     def create(self, peer: str, now: float) -> ContextGrant:
         """Issue a 32-byte CSPRNG token; persist only its SHA-256 digest."""
         now = _finite_now(now)
@@ -176,10 +189,7 @@ class DocumentScopeStore:
         if not math.isfinite(expires_at) or expires_at <= now:
             raise ValueError("context deadline must be finite and later than creation")
         with self._connection(write=True) as conn:
-            conn.execute(
-                "DELETE FROM document_contexts WHERE expires_at + ? <= ?",
-                (CONTEXT_TOMBSTONE_SECONDS, now),
-            )
+            self._reap_expired(conn, now)
             count, = conn.execute(
                 "SELECT count(*) FROM document_contexts WHERE peer = ? AND expires_at > ?", (peer, now)
             ).fetchone()

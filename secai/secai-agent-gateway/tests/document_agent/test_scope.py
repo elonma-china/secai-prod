@@ -22,6 +22,7 @@ from secai_gateway.document_agent.scope import (
     TurnResponseTooLarge,
 )
 from secai_gateway.document_agent.settings import (
+    CONTEXT_TOMBSTONE_SECONDS,
     CONTEXT_TTL_SECONDS,
     MAX_CONTEXTS_PER_PEER,
     MAX_TURN_RESPONSE_BYTES,
@@ -197,3 +198,27 @@ def test_expired_context_cannot_bind_or_start_new_turn(tmp_path):
         store.bind_task(stale, "job")
     with pytest.raises(ExpiredContext):
         store.begin_turn(stale, "a" * 32, "b" * 64, time.time())
+
+
+def test_reap_deletes_aged_context_with_task_and_response(tmp_path):
+    path = tmp_path / "scopes.sqlite3"
+    store = DocumentScopeStore(path)
+    now = time.time()
+    grant = store.create("192.0.2.10", now)
+    scope = store.resolve(grant.context_token, now)
+    store.bind_task(scope, "internal-job")
+    start = store.begin_turn(scope, "a" * 32, "b" * 64, now)
+    store.complete_turn(scope, "a" * 32, start.reservation, {"answer": "safe replay"}, now + 1)
+
+    before_reap = grant.expires_at + CONTEXT_TOMBSTONE_SECONDS - 0.001
+    assert store.reap(before_reap) == 0
+    with sqlite3.connect(path) as conn:
+        assert conn.execute("SELECT count(*) FROM document_contexts").fetchone()[0] == 1
+
+    assert DocumentScopeStore(path).reap(grant.expires_at + CONTEXT_TOMBSTONE_SECONDS) == 1
+    with sqlite3.connect(path) as conn:
+        counts = [conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+                  for table in ("document_contexts", "document_tasks", "document_turns")]
+    assert counts == [0, 0, 0]
+    with pytest.raises(InvalidContext):
+        store.resolve(grant.context_token, grant.expires_at + CONTEXT_TOMBSTONE_SECONDS)
