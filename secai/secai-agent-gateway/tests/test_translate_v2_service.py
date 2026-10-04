@@ -153,6 +153,67 @@ async def test_spaced_target_separates_sentence_outputs_without_source_spaces():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('first', ['Xin,', 'Xin;', 'Xin:', 'Xin)', 'Xin]',
+                                          'Xin"', 'Xin，', 'Xin；'])
+async def test_spaced_target_separates_after_punctuation(first):
+    class Sentences(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return (first, 'chào', 'bạn')[len(self.calls) - 1]
+
+    context = Sentences()
+    result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=context)
+    assert result[0].translated_text == first + ' chào bạn'
+
+
+@pytest.mark.asyncio
+async def test_spaced_target_does_not_insert_before_closing_punctuation():
+    class Sentences(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('Xin', ', chào', 'bạn')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('中' * 800),), 'zh', 'vi', context=Sentences())
+    assert result[0].translated_text == 'Xin, chào bạn'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('target', ['zh', 'ja'])
+@pytest.mark.parametrize('first', ['OpenAI', 'Café'])
+async def test_cjk_target_keeps_latin_word_space_at_chunk_seam(target, first):
+    class Mixed(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return (first, 'API', '接口')[len(self.calls) - 1]
+
+    context = Mixed()
+    result = await translate_blocks((block('a ' * 400),), 'vi', target, context=context)
+    assert len(context.calls) == 3
+    assert result[0].translated_text == first + ' API接口 '
+
+
+@pytest.mark.asyncio
+async def test_cjk_target_keeps_structural_tab_at_chunk_seam():
+    class Columns(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('甲', '乙')[len(self.calls) - 1]
+
+    context = Columns()
+    result = await translate_blocks((block('g' * 384 + '\tb'),), 'vi', 'zh', context=context)
+    assert len(context.calls) == 2
+    assert result[0].translated_text == '甲\t乙'
+
+
+@pytest.mark.asyncio
 async def test_spaced_target_keeps_literal_bytes_at_small_chunk_seams():
     class Short(Context):
         model_context_tokens = 1032
