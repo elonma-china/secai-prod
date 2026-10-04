@@ -480,3 +480,52 @@ def test_prompt_distinguishes_missing_evidence_and_record_scope(tmp_path, monkey
     assert 'không đồng nghĩa' in seen['system'].casefold()
     assert 'từng bản ghi' in seen['system'].casefold()
     assert 'tiêu đề' in seen['system'].casefold()
+
+
+def test_unknown_source_status_rejects_conclusive_pass_fail():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Kiểm soát CT-03 yêu cầu hồ sơ sao lưu. Hồ sơ: không có dữ liệu.'
+    for conclusion in ('CT-03 chưa đạt.', 'Trạng thái kiểm soát: Đạt.'):
+        with pytest.raises(HTTPException) as exc:
+            validate_report('## Kết luận\n' + conclusion, ['Kết luận'], source)
+        assert exc.value.status_code == 422
+    uncertain = '## Kết luận\nChưa thể xác nhận CT-03 đạt hay chưa đạt.'
+    assert validate_report(uncertain, ['Kết luận'], source) == uncertain
+    ordinary = '## Kết luận\nNhóm đã đạt được tiến bộ.'
+    assert validate_report(ordinary, ['Kết luận'], source) == ordinary
+
+
+def test_explicit_source_status_is_allowed():
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Kiểm soát CT-01 trạng thái đạt. Kiểm soát CT-02 trạng thái chưa đạt.'
+    report = '## Kết luận\nCT-01 đạt. CT-02 chưa đạt.'
+    assert validate_report(report, ['Kết luận'], source) == report
+
+
+def test_generation_retries_unsupported_status_and_uses_source_first_json(tmp_path, monkeypatch):
+    import json
+
+    c = client(tmp_path, monkeypatch)
+    saved = c.post('/ai/v2/reports/templates', json={**template(), 'sections': ['Kết luận']}, headers=auth()).json()
+    calls = []
+
+    async def generate(system, user, settings):
+        calls.append((system, user))
+        return ('## Kết luận\nCT-03 chưa đạt.' if len(calls) == 1
+                else '## Kết luận\nChưa thể xác nhận trạng thái CT-03.')
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    response = c.post('/ai/v2/reports/generate', headers=auth(), json={
+        'template_id': saved['id'], 'data': 'CT-03 yêu cầu hồ sơ. Hồ sơ: không có dữ liệu.'})
+    assert response.status_code == 200, response.text
+    assert len(calls) == 2
+    payload = json.loads(calls[0][1])
+    assert next(iter(payload)) == 'source_data'
+    assert payload['source_data'].startswith('CT-03')
+    assert 'untrusted_retrieved_content' not in calls[0][1]
+    assert 'chưa thể xác nhận' in calls[1][1].casefold()
+    assert 'Chưa thể xác nhận' in response.json()['content']
