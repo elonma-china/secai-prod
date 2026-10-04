@@ -47,7 +47,8 @@ def _word_joiner_at_seam(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
             if not char.isalpha():
                 break
             prefix += 1
-        return prefix <= 2 or (len(right) == 1 and right[0].isalpha())
+        first_word_is_suffix = (len(right) == 1 or not right[1].isalnum())
+        return right[0].isalpha() and (prefix <= 2 or first_word_is_suffix)
     return False
 
 
@@ -92,9 +93,8 @@ def _cjk_target_drops_source_space(previous: str, core: str) -> bool:
         return True
     if wide_closer(last):
         return True
-    # A fullwidth leading closer attaches only to a preceding CJK phrase.
-    return (wide_closer(first) and last.isalpha() and
-            unicodedata.east_asian_width(last) in {"W", "F"})
+    # Fullwidth leading punctuation attaches even after a Latin term.
+    return wide_closer(first)
 
 
 @lru_cache(maxsize=1)

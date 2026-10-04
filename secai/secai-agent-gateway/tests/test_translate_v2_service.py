@@ -191,7 +191,10 @@ async def test_spaced_target_separates_after_decomposed_latin_grapheme():
     ('file_', 'name', 'file_name'),
     ('l’', 'amour', 'l’amour'),
     ('don’', 't', 'don’t'),
+    ('don’', 't know', 'don’t know'),
+    ("don'", 't know', "don't know"),
     ('Xin’', 'chào', 'Xin’ chào'),
+    ('Xin’', 'chào tiếp', 'Xin’ chào tiếp'),
     ('Xin—', 'chào', 'Xin— chào'),
     ('-', 'mục', '- mục'),
 ])
@@ -280,6 +283,38 @@ async def test_cjk_target_attaches_leading_fullwidth_closing_punctuation(target,
 
     result = await translate_blocks((block('a ' * 400),), 'vi', target, context=Punctuation())
     assert result[0].translated_text == '甲' + second + '接口 '
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('first', ['OpenAI', 'Cafe\u0301', 'API2'])
+@pytest.mark.parametrize('target,second,third,suffix', [
+    ('zh', '，接口', '服务', '，接口服务 '),
+    ('ja', '、API', '仕様', '、API 仕様 '),
+])
+async def test_cjk_target_attaches_leading_fullwidth_punctuation_after_latin(
+        first, target, second, third, suffix):
+    class Punctuation(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return (first, second, third)[len(self.calls) - 1]
+
+    result = await translate_blocks((block('a ' * 400),), 'vi', target, context=Punctuation())
+    assert result[0].translated_text == first + suffix
+
+
+@pytest.mark.asyncio
+async def test_cjk_target_keeps_tab_before_leading_fullwidth_punctuation_after_latin():
+    class Punctuation(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append(text)
+            return ('OpenAI', '，接口')[len(self.calls) - 1]
+
+    result = await translate_blocks((block('g' * 384 + '\tb'),), 'vi', 'zh', context=Punctuation())
+    assert result[0].translated_text == 'OpenAI\t，接口'
 
 
 @pytest.mark.asyncio
