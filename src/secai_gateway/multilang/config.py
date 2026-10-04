@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Literal
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,11 +42,24 @@ class MultilangSettings(BaseSettings):
     context_tokens: int = Field(0, ge=0, le=131072)
     # Attested upper bound for serving chat-template role/special-token overhead.
     chat_template_overhead_tokens: int = Field(0, ge=0, le=4096)
+    backend: Literal["incumbent", "specialist"] = "incumbent"
+    specialist_base_url: str = ""
+    specialist_api_key: str = ""
+    specialist_model: str = ""
+    specialist_tokenizer_json: str = ""
+    specialist_tokenizer_sha256: str = ""
+    specialist_context_tokens: int = Field(0, ge=0, le=512)
+    specialist_chunk_input_tokens: int = Field(256, ge=1, le=512)
+    specialist_max_output_tokens: int = Field(256, ge=1, le=256)
+    specialist_timeout_seconds: int = Field(60, ge=1, le=120)
 
     @model_validator(mode="after")
     def valid_caps(self) -> "MultilangSettings":
         if self.chunk_input_tokens > self.max_source_tokens:
             raise ValueError("chunk input budget exceeds source budget")
+        if (self.backend == "specialist" and self.specialist_context_tokens
+                and self.specialist_chunk_input_tokens > self.specialist_context_tokens):
+            raise ValueError("specialist chunk budget exceeds context budget")
         return self
 
     def flag(self, code: str) -> bool:
@@ -58,10 +71,23 @@ def verified_counter(settings: MultilangSettings) -> Callable[[str], int] | None
     if not (settings.tokenizer_json and settings.tokenizer_sha256 and settings.context_tokens
             and settings.chat_template_overhead_tokens):
         return None
-    path = Path(settings.tokenizer_json)
+    return _pinned_counter(settings.tokenizer_json, settings.tokenizer_sha256)
+
+
+def verified_specialist_counter(settings: MultilangSettings) -> Callable[[str], int] | None:
+    """Count with the exact pinned specialist tokenizer, including its EOS postprocessor."""
+    if not settings.specialist_context_tokens:
+        return None
+    return _pinned_counter(settings.specialist_tokenizer_json, settings.specialist_tokenizer_sha256)
+
+
+def _pinned_counter(path_name: str, digest: str) -> Callable[[str], int] | None:
+    if not path_name or not digest:
+        return None
+    path = Path(path_name)
     try:
         raw = path.read_bytes()
-        if sha256(raw).hexdigest() != settings.tokenizer_sha256.lower():
+        if sha256(raw).hexdigest() != digest.lower():
             return None
         from tokenizers import Tokenizer
         tokenizer = Tokenizer.from_file(str(path))
