@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import tempfile
 import threading
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def _deskew(image: Image.Image) -> Image.Image:
     return image
 
 
-def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> PreparedImage:
+def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event,
+             own_dir: bool) -> PreparedImage:
+    output: Path | None = None
     try:
         if input_path.stat().st_size > _MAX_BYTES:
             raise TranslationError("UPLOAD_TOO_LARGE", "Image exceeds size limit")
@@ -64,10 +67,13 @@ def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> Pr
             if low > 45 and high - low < 190:
                 image = ImageEnhance.Contrast(image).enhance(1.35)
             fmt = "JPEG" if source.format == "JPEG" else "PNG"
-            output = work_dir / ("ocr-prepared.jpg" if fmt == "JPEG" else "ocr-prepared.png")
             if cancelled.is_set():
                 raise asyncio.CancelledError
-            image.save(output, format=fmt, exif=b"", quality=90 if fmt == "JPEG" else None)
+            with tempfile.NamedTemporaryFile(dir=work_dir, prefix="ocr-prepared-",
+                                             suffix=".jpg" if fmt == "JPEG" else ".png",
+                                             delete=False) as stream:
+                output = Path(stream.name)
+                image.save(stream, format=fmt, exif=b"", quality=90 if fmt == "JPEG" else None)
             if output.stat().st_size > _MAX_BYTES:
                 output.unlink(missing_ok=True)
                 raise TranslationError("IMAGE_TOO_LARGE", "Prepared image exceeds size limit")
@@ -79,21 +85,31 @@ def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> Pr
         raise TranslationError("CORRUPT_IMAGE", "Cannot decode image") from exc
     finally:
         if cancelled.is_set():
-            for name in ("ocr-prepared.jpg", "ocr-prepared.png"):
-                (work_dir / name).unlink(missing_ok=True)
-            try:
-                work_dir.rmdir()
-            except OSError:
-                pass
+            if output is not None:
+                output.unlink(missing_ok=True)
+            if own_dir:
+                try:
+                    work_dir.rmdir()
+                except OSError:
+                    pass
 
 
 async def preprocess_image(input_path: Path, *, work_dir: Path) -> PreparedImage:
     # The thread must never recreate a directory already removed by its
     # cancelling caller's TemporaryDirectory cleanup.
-    work_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        work_dir.mkdir(parents=True, mode=0o700)
+        own_dir = True
+    except FileExistsError:
+        own_dir = False
     cancelled = threading.Event()
     try:
-        return await asyncio.to_thread(_prepare, input_path, work_dir, cancelled)
+        return await asyncio.to_thread(_prepare, input_path, work_dir, cancelled, own_dir)
     except asyncio.CancelledError:
         cancelled.set()
+        if own_dir:
+            try:
+                work_dir.rmdir()
+            except OSError:
+                pass
         raise
