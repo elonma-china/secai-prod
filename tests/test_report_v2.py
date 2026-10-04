@@ -23,7 +23,8 @@ def client(tmp_path, monkeypatch, *, enabled=True, key='test-key'):
 
 
 async def fake_generate(system, user, settings):
-    return '# Báo cáo\n## Tóm tắt\nCVE-2026-1234\n## Kết luận\nCVE-2026-1234'
+    text = '# Báo cáo\n## Tóm tắt\nCVE-2026-1234\n## Kết luận\nCVE-2026-1234'
+    return text + ('\nĐã làm rõ nội dung' if 'Yêu cầu chỉnh sửa:' in user else '')
 
 
 def auth():
@@ -63,8 +64,14 @@ def test_template_generate_edit_revision_and_conflicts(tmp_path, monkeypatch):
     edited = c.post(f"/ai/v2/reports/{r['id']}/edit", json={'instruction': 'Viết rõ hơn', 'expected_revision': 1}, headers=auth())
     assert edited.status_code == 200, edited.text
     assert edited.json()['revision'] == 2
+    assert edited.json()['content'] != r['content']
+    assert 'Đã làm rõ nội dung' in edited.json()['content']
     assert c.post(f"/ai/v2/reports/{r['id']}/edit", json={'instruction': 'Sai phiên bản', 'expected_revision': 1}, headers=auth()).status_code == 409
-    assert [v['revision'] for v in c.get(f"/ai/v2/reports/{r['id']}/revisions", headers=auth()).json()] == [1, 2]
+    revisions = c.get(f"/ai/v2/reports/{r['id']}/revisions", headers=auth()).json()
+    assert [v['revision'] for v in revisions] == [1, 2]
+    assert revisions[0]['content'] == r['content']
+    assert revisions[1]['content'] == edited.json()['content']
+    assert revisions[1]['instruction'] == 'Viết rõ hơn'
 
 
 def test_import_preview_docx_and_unsafe_archive(tmp_path, monkeypatch):
@@ -209,3 +216,65 @@ def test_edit_preserves_other_critical_literals():
             validate_report('## Tóm tắt\nĐã chỉnh sửa', ['Tóm tắt'], identifier, previous)
         assert exc.value.status_code == 422
         assert identifier in validate_report(previous, ['Tóm tắt'], identifier, previous)
+
+
+def test_bad_key_precedes_bad_body(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    response = c.post('/ai/v2/reports/generate', content=b'{bad-json',
+                      headers={'Content-Type': 'application/json'})
+    assert response.status_code == 401
+    upload = c.post('/ai/v2/reports/templates/import', content=b'broken-form',
+                    headers={'Content-Type': 'multipart/form-data'})
+    assert upload.status_code == 401
+
+
+def test_generation_retries_one_invalid_draft(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    template_id = c.post('/ai/v2/reports/templates', json=template(), headers=auth()).json()['id']
+    calls = []
+
+    async def generate(system, user, settings):
+        calls.append(user)
+        if len(calls) == 1:
+            return '## Tóm tắt\nThiếu mục'
+        return '## Tóm tắt\nCVE-2026-1234\n## Kết luận\nCVE-2026-1234'
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    response = c.post('/ai/v2/reports/generate',
+                      json={'template_id': template_id, 'data': 'CVE-2026-1234'}, headers=auth())
+    assert response.status_code == 200
+    assert len(calls) == 2
+    assert 'Thiếu mục' not in response.json()['content']
+
+
+def test_edit_retries_one_invalid_draft(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    template_id = c.post('/ai/v2/reports/templates', json=template(), headers=auth()).json()['id']
+    report = c.post('/ai/v2/reports/generate',
+                    json={'template_id': template_id, 'data': 'CVE-2026-1234'}, headers=auth()).json()
+    calls = []
+
+    async def generate(system, user, settings):
+        calls.append(user)
+        if len(calls) == 1:
+            return '## Tóm tắt\nCVE-2026-1234'
+        return report['content'] + '\nĐã điều chỉnh'
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    response = c.post(f"/ai/v2/reports/{report['id']}/edit",
+                      json={'instruction': 'Làm rõ', 'expected_revision': 1}, headers=auth())
+    assert response.status_code == 200
+    assert len(calls) == 2
+    assert 'Đã điều chỉnh' in response.json()['content']
+
+
+def test_existing_revision_table_gains_instruction_column(tmp_path):
+    import sqlite3
+    from secai_gateway.report_v2 import store
+
+    path = str(tmp_path / 'old.db')
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE revisions (report_id TEXT, revision INTEGER, content TEXT, created_at TEXT, PRIMARY KEY(report_id,revision))')
+    store.list_templates(path)
+    with sqlite3.connect(path) as db:
+        assert 'instruction' in {row[1] for row in db.execute('PRAGMA table_info(revisions)')}
