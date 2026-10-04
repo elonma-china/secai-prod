@@ -5,6 +5,7 @@ import { getMultilangCapabilities, MultilangApiError } from "../api/multilang";
 import type { MultilangCapabilities } from "../api/multilang";
 import Markdown from "../components/Markdown";
 import MultilangTranslatePanel from "./MultilangTranslatePanel";
+import TranslateFileBatchPanel from "./TranslateFileBatchPanel";
 
 /** "Dịch văn bản" — gateway contract (see `api/messages.py::translate_langs`): the single
  * `language` field IS THE TARGET language ("dịch sang <language>"), not the source — the
@@ -25,6 +26,8 @@ const LANG_OPTS: { id: Lang; label: string }[] = [
 ];
 
 export default function TranslateScreen({ userId }: { userId: string }) {
+  const fileBatchEnabled = import.meta.env.VITE_TRANSLATE_V2_FILES_ENABLED === "true";
+  const imagesEnabled = fileBatchEnabled && import.meta.env.VITE_TRANSLATE_V2_IMAGES_ENABLED === "true";
   const [text, setText] = useState("");
   const [language, setLanguage] = useState<Lang>("vi");
   const [result, setResult] = useState("");
@@ -34,7 +37,7 @@ export default function TranslateScreen({ userId }: { userId: string }) {
   const [capabilities, setCapabilities] = useState<MultilangCapabilities | null>(null);
   const [capabilityState, setCapabilityState] = useState<"loading" | "ready" | "off" | "error">("loading");
   const [capabilityReload, setCapabilityReload] = useState(0);
-  const [mode, setMode] = useState<"legacy" | "multilang">("legacy");
+  const [mode, setMode] = useState<"legacy" | "multilang" | "files">("legacy");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -47,7 +50,7 @@ export default function TranslateScreen({ userId }: { userId: string }) {
       if (controller.signal.aborted) return;
       setCapabilities(null);
       setCapabilityState(failure instanceof MultilangApiError && failure.status === 404 ? "off" : "error");
-      setMode("legacy");
+      setMode((current) => current === "multilang" ? "legacy" : current);
     });
     return () => controller.abort();
   }, [capabilityReload]);
@@ -107,17 +110,18 @@ export default function TranslateScreen({ userId }: { userId: string }) {
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <div style={{ padding: "16px 26px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
         <h3 style={{ fontSize: 21 }}>Dịch thuật bảo mật</h3>
-        {capabilityState === "ready" && capabilities && (
+        {(capabilityState === "ready" && capabilities || fileBatchEnabled) && (
           <div className="multilang-mode-switch" role="group" aria-label="Chế độ dịch">
             <button className={"iasbtn ghost" + (mode === "legacy" ? " active" : "")} type="button" aria-pressed={mode === "legacy"} onClick={() => setMode("legacy")}>Dịch Việt–Anh</button>
-            <button className={"iasbtn ghost" + (mode === "multilang" ? " active" : "")} type="button" aria-pressed={mode === "multilang"} onClick={() => setMode("multilang")}>Mở dịch đa ngôn ngữ</button>
+            {capabilityState === "ready" && capabilities && <button className={"iasbtn ghost" + (mode === "multilang" ? " active" : "")} type="button" aria-pressed={mode === "multilang"} onClick={() => setMode("multilang")}>Mở dịch đa ngôn ngữ</button>}
+            {fileBatchEnabled && <button className={"iasbtn ghost" + (mode === "files" ? " active" : "")} type="button" aria-pressed={mode === "files"} onClick={() => setMode("files")}>Dịch tệp và ảnh</button>}
           </div>
         )}
         {capabilityState === "off" && <div className="multilang-mode-note">Dịch đa ngôn ngữ chưa được bật trên máy chủ.</div>}
         {capabilityState === "error" && <div className="multilang-mode-note" role="alert">Không tải được danh sách ngôn ngữ. <button className="iasbtn ghost" type="button" onClick={() => setCapabilityReload((n) => n + 1)}>Thử lại</button></div>}
       </div>
 
-      {mode === "multilang" && capabilities ? <div style={{ flex: 1, overflow: "auto" }}><MultilangTranslatePanel capabilities={capabilities} /></div> : <div style={{ flex: 1, overflow: "auto", padding: "24px 26px" }}>
+      {mode === "files" && fileBatchEnabled ? <div style={{ flex: 1, overflow: "auto" }}><TranslateFileBatchPanel imagesEnabled={imagesEnabled} /></div> : mode === "multilang" && capabilities ? <div style={{ flex: 1, overflow: "auto" }}><MultilangTranslatePanel capabilities={capabilities} /></div> : <div style={{ flex: 1, overflow: "auto", padding: "24px 26px" }}>
         {blocked && (
           <div className="banner-row" style={{ marginBottom: 16 }}>
             <div className="banner-422">
