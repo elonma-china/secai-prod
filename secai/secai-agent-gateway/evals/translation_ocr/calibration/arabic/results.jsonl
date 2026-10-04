@@ -1,0 +1,9 @@
+{"id": "cal-ar-1", "prompt": "standard", "reference": "عنوان الخادم 203.0.113.7 مرتبط بالثغرة CVE-2023-4911.", "raw_text": ".CVE-2023-4911 مرتبط بالثغرة 203.0.113.7 عنوان الخادم عنوان", "latency_seconds": 6.173}
+{"id": "cal-ar-2", "prompt": "standard", "reference": "تم رصد CVE-2022-22800 على 198.51.100.4.", "raw_text": ".198.51.100.4 علي CVE-2022-22800 تم رصد", "latency_seconds": 2.286}
+{"id": "cal-ar-3", "prompt": "standard", "reference": "لا تتأثر الخدمة بالثغرة CVE-2021-44228.", "raw_text": ".CVE-2021-44228 بالثغرة لا تناثر الخدمة بالثغرة", "latency_seconds": 2.353}
+{"id": "cal-ar-1", "prompt": "logical", "reference": "عنوان الخادم 203.0.113.7 مرتبط بالثغرة CVE-2023-4911.", "raw_text": ".CVE-2023-4911 مرتبط بالثغرة 203.0.113.7 عنوان الخادم عنوان.", "latency_seconds": 2.976}
+{"id": "cal-ar-2", "prompt": "logical", "reference": "تم رصد CVE-2022-22800 على 198.51.100.4.", "raw_text": ".198.51.100.4 على CVE-2022-22800 تم رصد", "latency_seconds": 2.414}
+{"id": "cal-ar-3", "prompt": "logical", "reference": "لا تتأثر الخدمة بالثغرة CVE-2021-44228.", "raw_text": ".CVE-2021-44228 بالثغرة الختار الخدمة لا تناثر", "latency_seconds": 2.338}
+{"id": "cal-ar-1", "prompt": "arabic", "reference": "عنوان الخادم 203.0.113.7 مرتبط بالثغرة CVE-2023-4911.", "raw_text": ".CVE-2023-4911 مرتبط بالثغرة 203.0.113.7 عنوان الخادم", "latency_seconds": 2.817}
+{"id": "cal-ar-2", "prompt": "arabic", "reference": "تم رصد CVE-2022-22800 على 198.51.100.4.", "raw_text": ".198.51.100.4 على CVE-2022-22800 تم رصد", "latency_seconds": 2.412}
+{"id": "cal-ar-3", "prompt": "arabic", "reference": "لا تتأثر الخدمة بالثغرة CVE-2021-44228.", "raw_text": ".CVE-2021-44228 بالثغرة الختار الخدمة لا تناثر", "latency_seconds": 2.278}

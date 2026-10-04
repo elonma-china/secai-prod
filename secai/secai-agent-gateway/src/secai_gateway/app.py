@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import sqlite3
 import time
 from contextlib import asynccontextmanager
+from contextlib import suppress
 
 import httpx
 from fastapi import FastAPI
@@ -18,6 +21,14 @@ from .state import FixedWindowRateLimiter
 # .warning()/.exception() ever reached the process's stderr via logging's last-resort handler.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class _TranslationV2AccessFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/ai/v2/translate/" not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(_TranslationV2AccessFilter())
 
 
 class GatewayState:
@@ -56,8 +67,28 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
             limits=httpx.Limits(max_keepalive_connections=32, keepalive_expiry=60.0),
         ) as client:
             state.http_client = client
-            yield
-            state.http_client = None
+            async def reap_translation_jobs() -> None:
+                store = app.state.translation_v2_store
+                # One-second checks bound orphaned running cancellations to
+                # 15 seconds even when the separate worker has stopped.
+                interval = min(max(0.1, app.state.translation_v2_settings.reaper_interval_seconds), 1)
+                while True:
+                    try:
+                        await asyncio.to_thread(store.reap)
+                    except (OSError, sqlite3.Error):
+                        logger.warning("Translation v2 artifact cleanup failed; retrying")
+                    await asyncio.sleep(interval)
+
+            reaper = (asyncio.create_task(reap_translation_jobs())
+                      if app.state.translation_v2_store is not None else None)
+            try:
+                yield
+            finally:
+                if reaper is not None:
+                    reaper.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await reaper
+                state.http_client = None
 
     app = FastAPI(
         title="SECAI Agent Gateway",
@@ -72,6 +103,18 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     register_routes(app, state)
     from .api import projects as _projects_router
     app.include_router(_projects_router.router)
+    from .api.translate_v2 import router as translation_v2_router
+    from .translation.settings import TranslationSettings
+    from .translation.jobs import JobStore
+    app.state.translation_v2_settings = TranslationSettings()
+    try:
+        app.state.translation_v2_store = (
+            JobStore(app.state.translation_v2_settings)
+            if app.state.translation_v2_settings.enabled else None
+        )
+    except (OSError, sqlite3.Error):
+        app.state.translation_v2_store = None
+    app.include_router(translation_v2_router)
     return app
 
 

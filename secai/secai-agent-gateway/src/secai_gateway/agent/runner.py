@@ -9,7 +9,7 @@ from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
-from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent
+from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent, ToolCallEndEvent
 from linch.sessions.sqlite import SqliteSessionStore
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
@@ -135,7 +135,7 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
     ``system_blocks``) are both preserved as-is.
     """
     parts: list[str] = []
-    if profile_name != "translate":
+    if profile_name not in {"translate", "translate_v2", "ocr_correction", "translation_orchestrator"}:
         parts.append(_date_line())
     if grounding_context:
         parts.append(grounding_context)
@@ -186,6 +186,14 @@ class LinchRunner:
             **build_poc_tools(self.poc, self.ledger, get_settings()),
             **build_bughunt_tools(),
         }
+        # This opt-in profile alone can delegate to the specialist. Legacy chat
+        # registries are unchanged even when the specialist is configured.
+        from ..translation.settings import TranslationSettings
+        translation_settings = TranslationSettings()
+        if (translation_settings.enabled and translation_settings.specialist_base_url
+                and translation_settings.specialist_api_key):
+            from ..translation.tool import build_translation_tool
+            self.tools["translation_specialist"] = build_translation_tool(translation_settings)
         # Conversation memory backend is config-selectable (SESSION_STORE_BACKEND):
         #   sqlite (default) — linch's own SqliteSessionStore, durable on local disk, no
         #     expiry. Fixes the old "24h TTL loses the thread on restart" behavior.
@@ -222,6 +230,8 @@ class LinchRunner:
 
     def _apply_profile(self, session: Any, profile_name: str, prompt: str = "",
                         *, grounding_context: str | None = None) -> None:
+        if profile_name == "translation_orchestrator" and "translation_specialist" not in self.tools:
+            raise RuntimeError("Translation specialist is unavailable")
         # Override both runnable registry and system context per session. The exploit tools
         # are absent from chat, rather than merely hidden from model instructions.
         profile = PROFILES[profile_name]
@@ -276,19 +286,34 @@ class LinchRunner:
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
                         *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
+        if (profile_name == "translation_orchestrator" and
+                not isinstance(self.session_store, InMemorySessionStore)):
+            raise RuntimeError("Translation orchestration requires in-memory sessions")
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self.agent.session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
             final = ""
+            delegated = None
             run_id = None
             # `prompt` is the caller's ORIGINAL, unwrapped text — date + any KB grounding
             # reach the model via session.meta["ephemeral_context"] (set just above), never
             # via this string, so linch persists exactly this clean prompt as the user turn.
             async for event in session.run(prompt):
                 run_id = session.active_run_id or run_id
+                if (profile_name == "translation_orchestrator" and
+                        isinstance(event, ToolCallEndEvent) and
+                        event.tool_name == "translation_specialist"):
+                    if event.is_error:
+                        raise RuntimeError("Translation specialist failed")
+                    delegated = (event.tool_result.content if event.tool_result is not None
+                                 else event.result)
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
+            if profile_name == "translation_orchestrator":
+                if not delegated:
+                    raise RuntimeError("Translation specialist was not called")
+                final = delegated
             if not final.strip() and profile_name in _SALVAGE_PROFILES:
                 # Loop exhausted its turns without a document → force one tool-less
                 # synthesis turn so the endpoint returns content, not a blank body.

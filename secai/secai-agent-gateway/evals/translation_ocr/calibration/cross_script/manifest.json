@@ -1,0 +1,69 @@
+{
+  "purpose": "cross-script prompt calibration, excluded from acceptance",
+  "provenance": "manually authored text; native review pending",
+  "images": [
+    {
+      "id": "cal-vi",
+      "language": "vi",
+      "image": "vi.png",
+      "text": "Bản vá đã được kiểm tra trên máy chủ.",
+      "sha256": "b4a492979245b45b304a82cd11cc2a16e8caa82ecd659f2299f819caed8a08b1"
+    },
+    {
+      "id": "cal-en",
+      "language": "en",
+      "image": "en.png",
+      "text": "The security patch is ready for review.",
+      "sha256": "d5e3e82798fca1b600ddfc83db4d7fb2d19c09d60ce1ea7b7963daf3c8b68b51"
+    },
+    {
+      "id": "cal-zh",
+      "language": "zh",
+      "image": "zh.png",
+      "text": "请检查最新的安全更新。",
+      "sha256": "4bdb03460cc295a608105b21658714533bd6dc4ba4c45da636146143da362735"
+    },
+    {
+      "id": "cal-ja",
+      "language": "ja",
+      "image": "ja.png",
+      "text": "安全更新を確認してください。",
+      "sha256": "075c0eebb73e495a29ad3a3a2e8367ce843c6608710bd40262bc83961a81d8c3"
+    },
+    {
+      "id": "cal-ko",
+      "language": "ko",
+      "image": "ko.png",
+      "text": "최신 보안 업데이트를 확인하세요.",
+      "sha256": "18882ac022780c431c174804b7de44938938480c16f8f08c98bab68e068094d6"
+    },
+    {
+      "id": "cal-fr",
+      "language": "fr",
+      "image": "fr.png",
+      "text": "La mise à jour de sécurité est prête.",
+      "sha256": "76ba63e06f1ec992cc4be9158429bd6aba8cdbb699e476ca595b1647c5ba6924"
+    },
+    {
+      "id": "cal-de",
+      "language": "de",
+      "image": "de.png",
+      "text": "Das Sicherheitsupdate ist bereit.",
+      "sha256": "05fa0c06be8238422c13de658428e651df5881bac19aa06dffa8c9c3fb300b56"
+    },
+    {
+      "id": "cal-es",
+      "language": "es",
+      "image": "es.png",
+      "text": "La actualización de seguridad está lista.",
+      "sha256": "a602c7cf9b7fd9645667550e1819dccab21c4376c64cd2ff83bd179e8774c050"
+    },
+    {
+      "id": "cal-ru",
+      "language": "ru",
+      "image": "ru.png",
+      "text": "Обновление безопасности готово.",
+      "sha256": "e72890114aae2542ecfc834cfd289e2784fbc2ed7c9101762d455969bc7d776c"
+    }
+  ]
+}
