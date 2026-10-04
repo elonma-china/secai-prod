@@ -4,7 +4,7 @@
 
 - File này áp dụng cho thư mục dự án và các thư mục con. Lệnh bên dưới chạy từ thư mục chứa file này, trừ khi ghi khác.
 - Gateway IAS dùng Python >= 3.10, FastAPI, Pydantic v2 và Linch; cung cấp chat, dịch, báo cáo, nghiên cứu PoC và SSE.
-- Gateway chạy trên CPU; LLM, embedding và reranker được gọi qua HTTP. Qdrant và Neo4j phục vụ RAG; SQLite/Redis lưu session.
+- Gateway chạy trên CPU; LLM, embedding, reranker, OCR và model dịch chuyên dụng được gọi qua HTTP. Qdrant và Neo4j phục vụ RAG; SQLite/Redis lưu session.
 - Git root có thể nằm ở thư mục cha và chứa nhiều dự án. Trước khi sửa, kiểm tra `git rev-parse --show-toplevel`, `git status --short --branch` và `git worktree list`.
 
 ## Bản đồ mã nguồn
@@ -17,7 +17,12 @@
 - `src/secai_gateway/retrieval/`: Qdrant, BM25, embedding, reranker và Neo4j.
 - `src/secai_gateway/poc/`, `bughunt/`: catalog/artifact PoC, prefetch, xác minh và workflow khai thác.
 - `src/secai_gateway/security.py`, `sanitize/`: redaction, lọc nội dung đầu vào/đầu ra và classifier.
-- `src/secai_gateway/state/`: session store, ledger và rate limiter.
+- `src/secai_gateway/state/`: session store, ledger và rate limiter; `review_store.py` lưu expert review.
+- `src/secai_gateway/report_v2/`: template, import mẫu, generate/edit và SQLite lưu report/revision.
+- `src/secai_gateway/api/translate_v2/`, `translation/`: job dịch file/ảnh và worker; không nhầm với đường dịch text legacy.
+- `src/secai_gateway/multilang/`, `api/multilang/`, `multilang_app.py`: v3 text translation, cấu hình `MULTILANG_*` và dispatcher ASGI.
+- `src/secai_gateway/api/reviews.py`, `review_auth.py`: expert review, campaign/assignment và quyền reviewer/admin.
+- `secai-serving-vast/`: repo Git riêng cho rental 1/2/4 GPU A100 80GB, installer và supervisor OCR/MT; đọc `CLAUDE.md` trước sửa serving.
 - `secai-fe-devspace/`: frontend React/TypeScript/Vite khi có trong checkout; đọc `package.json` và `src/api.ts` trước khi sửa contract.
 - `demo/`: giao diện showcase và KPI Studio; `kpi_bench/`, `evals/`: benchmark và đánh giá.
 - `tests/`: pytest; `docs/`: tài liệu API và bằng chứng nghiệm thu; `deploy/`: cấu hình triển khai.
@@ -44,6 +49,14 @@ python3 -m venv .venv
 - Báo cáo thống kê có `detail` dạng mảng được dựng bảng bằng code trong `api/messages.py`; giữ tương thích với `detail` dạng chuỗi cũ.
 - Không bỏ redaction, anti-XSS, admin API key, allowlist target, air-gap hoặc cổng bật/tắt thực thi để làm test pass. `/ai/exploit` phải phân biệt rõ artifact thật và nội dung tổng hợp, trạng thái chưa chạy và đã xác minh.
 - Đọc `CLAUDE.md` khi làm serving: dùng đúng model fine-tuned `DuyTa/sec-embedding` và `DuyTa/sec-rerank`; tên model request phải khớp serving. `/health` đơn lẻ không chứng minh embedding/reranker hoạt động.
+
+## Báo cáo, dịch và expert review
+
+- Report v2 bật qua `REPORT_FEATURE_ENABLED`, dùng `REPORT_API_KEY` và `REPORT_DB_PATH`; auth phải kiểm trước parse body. Generate/edit phải lưu report/revision, giữ expected revision để tránh ghi đè concurrent. Template cập nhật trong DB; không cần fine-tune lại chỉ để đổi mẫu.
+- Dịch file/ảnh dùng job và worker; giữ ownership, giới hạn upload, quota, polling và lưu kết quả. OCR/dịch chuyên dụng trên Vast dùng chung GPU lock; không tắt kiểm memory/cleanup để làm request pass.
+- Text đa ngôn ngữ dùng `secai_gateway.multilang_app:app`, `MULTILANG_ENABLED` và cờ từng cặp. `/ai/v3/translate/languages` là capability route; `/ai/v3/translate/openapi.json` là schema riêng, không nằm trong OpenAPI legacy.
+- Expert review dùng `/review-api`, `REVIEW_ENABLED`, `REVIEW_DB_PATH`, `REVIEW_CREDENTIALS_FILE`; giữ Bearer auth và quyền assignment/admin.
+- Devspace build bật `VITE_REPORT_FEATURE_ENABLED`, `VITE_TRANSLATE_V2_FILES_ENABLED`, `VITE_TRANSLATE_V2_IMAGES_ENABLED`. Static proxy có upstream report/translation riêng; kiểm cả backend trực tiếp và qua frontend khi đổi routing.
 
 ## Kiểm chứng
 
@@ -72,6 +85,8 @@ npm run build
 - Không commit `.env`, khóa/token, dữ liệu session, log, backup, cache, build output hay kết quả eval phát sinh, trừ artifact đã được yêu cầu rõ và kiểm tra nội dung.
 - Giữ phạm vi commit/merge theo yêu cầu hiện tại. Khi được yêu cầu merge: cập nhật remote, kiểm tra worktree đích, kiểm tra conflict và test kết quả merge; không force-push hoặc reset lịch sử để xử lý lỗi.
 - Đọc `deploy/README.md` trước thao tác Docker. Stack ở `deploy/` có thể dùng chung tên container/volume với stack đang chạy; `up`, `down`, `restart` có thể tác động production. Chỉ thực hiện khi tác vụ đã bao gồm triển khai.
+- Full-feature rollout: đọc `deploy/all-features/README.md`; giữ service entrypoint, private env và persistent volume. Pin immutable image, snapshot profile và kiểm lock/ownership trước thao tác, không chạy `down -v`.
+- Dọn env: chỉ xoá backup cũ đã xác định không còn dùng; giữ `.env`, `.env.local`, `.env.pentest`, cấu hình deployment đang tham chiếu và các `.env.example`. Không đưa nội dung secret vào log/diff/commit.
 - Không đổi dataset/bằng chứng nghiệm thu hoặc số liệu benchmark để hợp thức hóa kết quả.
 
 ## Khi có phiên nodeterm
