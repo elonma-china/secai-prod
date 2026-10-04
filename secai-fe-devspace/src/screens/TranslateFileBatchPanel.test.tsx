@@ -175,6 +175,92 @@ describe("user-facing v2 file batch", () => {
     expect(screen.getByText(/Chưa rõ máy chủ đã nhận/)).toBeTruthy();
   });
 
+  it("replays the same unknown POST key after 429, reload and matching-file reselection", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    const posts: RequestInit[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      if (init.method === "POST") {
+        posts.push(init);
+        if (posts.length === 1) throw new TypeError("disconnect");
+        if (posts.length === 2) return new Response("", { status: 429, headers: { "Retry-After": "20" } });
+        return ok({ ...job(0), target_lang: "en" }, 202);
+      }
+      return ok({ ...job(0), target_lang: "en" });
+    }));
+    const { unmount } = render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["same"], "a.txt"), new File(["later"], "b.txt")] } });
+    await waitFor(() => expect(screen.getByText(/Chưa rõ máy chủ đã nhận/)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText("Chọn lại tệp a.txt"), { target: { files: [new File(["same"], "a.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(13_000); });
+    expect(posts).toHaveLength(2);
+    await waitFor(() => expect(screen.getByText("HTTP 429")).toBeTruthy());
+    unmount();
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn lại tệp a.txt"), { target: { files: [new File(["same"], "a.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(21_000); });
+    expect(posts).toHaveLength(3);
+    expect((posts[2].headers as Record<string, string>)["Idempotency-Key"]).toBe((posts[0].headers as Record<string, string>)["Idempotency-Key"]);
+    expect(screen.queryByText(/Chưa rõ máy chủ đã nhận/)).toBeNull();
+  });
+
+  it("releases a persisted active job when GET confirms JOB_EXPIRED and admits the next file", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    let posts = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      if (init.method === "POST") { posts += 1; return ok({ ...job(posts - 1), target_lang: "en" }, 202); }
+      if (url.includes(ids[0])) return new Response(JSON.stringify({ error: { code: "JOB_EXPIRED" } }), { status: 410 });
+      return ok({ ...job(1), target_lang: "en" });
+    }));
+    const first = render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["one"], "a.txt")] } });
+    await waitFor(() => expect(first.container.textContent).toContain("queued · queued"));
+    first.unmount();
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["two"], "b.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(18_000); });
+    expect(posts).toBe(2);
+    expect(screen.getByText("JOB_EXPIRED")).toBeTruthy();
+  });
+
+  it("releases a persisted succeeded job when its result has expired", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    sessionStorage.setItem("secai.translate.v2.file.batch.v1", JSON.stringify({ rows: [{
+      id: "a".repeat(32), key: "b".repeat(32), hash: "c".repeat(64), name: "old.txt", size: 3, extension: ".txt",
+      kind: "file", source: "vi", target: "en", phase: "succeeded", jobId: ids[0], job: { ...job(0, "succeeded"), target_lang: "en" },
+    }], nextUploadAt: 0 }));
+    let posts = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      if (init.method === "POST") { posts += 1; return ok({ ...job(1), target_lang: "en" }, 202); }
+      if (url.includes(ids[0])) return new Response(JSON.stringify({ error: { code: "JOB_EXPIRED" } }), { status: 410 });
+      return ok({ ...job(1), target_lang: "en" });
+    }));
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["new"], "new.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(posts).toBe(1);
+    expect(screen.getByText("JOB_EXPIRED")).toBeTruthy();
+  });
+
+  it("releases a persisted cancelling job when DELETE confirms JOB_EXPIRED", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    sessionStorage.setItem("secai.translate.v2.file.batch.v1", JSON.stringify({ rows: [{
+      id: "a".repeat(32), key: "b".repeat(32), hash: "c".repeat(64), name: "old.txt", size: 3, extension: ".txt",
+      kind: "file", source: "vi", target: "en", phase: "active", jobId: ids[0], cancelRequested: true,
+      job: { ...job(0, "cancelling"), target_lang: "en" },
+    }], nextUploadAt: 0 }));
+    let posts = 0;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      if (init.method === "POST") { posts += 1; return ok({ ...job(1), target_lang: "en" }, 202); }
+      if (url.includes(ids[0])) return new Response(JSON.stringify({ error: { code: "JOB_EXPIRED" } }), { status: 410 });
+      return ok({ ...job(1), target_lang: "en" });
+    }));
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["new"], "new.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(posts).toBe(1);
+    expect(screen.getByText("JOB_EXPIRED")).toBeTruthy();
+  });
+
   it("shows translated image text, OCR evidence and warnings without rendering markup", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
     const fetch = vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
