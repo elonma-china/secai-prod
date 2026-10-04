@@ -1,5 +1,7 @@
 """Offline safety checks for the isolated Q4 GPU diagnostic launcher."""
 
+import json
+
 import pytest
 
 from evals.multilang import gpu_specialist_server as gpu
@@ -50,6 +52,7 @@ def test_pinned_server_command_forces_full_offload_and_correct_eog():
     assert command[command.index("--fit") + 1] == "off"
     assert command[command.index("--parallel") + 1] == "1"
     assert command[command.index("--ctx-size") + 1] == "2048"
+    assert command[command.index("--verbosity") + 1] == "4"
     assert gpu.EOG_OVERRIDE in command
     assert "tokenizer.ggml.eos_token_id=int:127960" in gpu.EOG_OVERRIDE
     assert "tokenizer.ggml.eot_token_id=int:127967" in gpu.EOG_OVERRIDE
@@ -73,3 +76,32 @@ def test_listener_pid_proves_container_child_owns_loopback_port(monkeypatch):
         'LISTEN 0 128 0.0.0.0:18767 0.0.0.0:* users:(("llama-server",pid=123,fd=4))'])
     with pytest.raises(RuntimeError, match="unexpected_server_listener"):
         gpu.listener_pid()
+
+
+def test_cleanup_failure_poisons_even_if_gpu_sample_fails(tmp_path, monkeypatch):
+    class Process:
+        pid = 123
+
+        def poll(self):
+            return None
+
+    run_dir = tmp_path / "evidence" / "gpu-run-test"
+    run_dir.mkdir(parents=True)
+    poisoned = tmp_path / "poisoned-cleanup.json"
+    monkeypatch.setattr(gpu, "POISONED", poisoned)
+    monkeypatch.setattr(gpu, "_stop_child", lambda _p: (_ for _ in ()).throw(OSError("stop failed")))
+    monkeypatch.setattr(gpu, "gpu_snapshot", lambda: (_ for _ in ()).throw(OSError("sample failed")))
+    monkeypatch.setattr(gpu.time, "sleep", lambda _seconds: None)
+    summary = gpu.cleanup_child(Process(), run_dir, "safety_stop", 5190, 1291011)
+    assert not summary["clean_exit_attested"]
+    assert summary["final_gpu"] is None
+    assert json.loads(poisoned.read_text())["clean_exit_attested"] is False
+    assert json.loads((run_dir / "summary.json").read_text())["clean_exit_attested"] is False
+
+
+def test_incomplete_prior_run_blocks_admission(tmp_path, monkeypatch):
+    monkeypatch.setattr(gpu, "BASE", tmp_path)
+    monkeypatch.setattr(gpu, "POISONED", tmp_path / "poisoned-cleanup.json")
+    (tmp_path / "evidence" / "gpu-run-crashed").mkdir(parents=True)
+    with pytest.raises(RuntimeError, match="prior_gpu_cleanup_not_proven"):
+        gpu.check_only()
