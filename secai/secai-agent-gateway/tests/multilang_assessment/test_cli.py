@@ -141,6 +141,7 @@ def test_live_model_only_uses_mocked_endpoint_and_records_pinned_evidence(tmp_pa
         "mode": "model-only", "model_id": "DuyTa/Cyber-F1-AWQ",
         "model_revision": REVISION, "endpoint": endpoint,
         "decoding": decoding_data, "prompt_hash": prompt_hash,
+        "chat_template_kwargs": {"enable_thinking": False},
     }, sort_keys=True, separators=(",", ":"))
     config_hash = hashlib.sha256(config_data.encode()).hexdigest()
 

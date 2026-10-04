@@ -249,6 +249,7 @@ def _request_spec(
         payload = {
             "model": MODEL_ID,
             "stream": False,
+            "chat_template_kwargs": {"enable_thinking": False},
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": sample["source"]},
@@ -411,12 +412,15 @@ def main(argv: list[str] | None = None) -> int:
     else:
         system_prompt, decoding = "", {}
     prompt_hash = hashlib.sha256(system_prompt.encode()).hexdigest()
-    config_payload = json.dumps({
+    config_fields = {
         "mode": parsed.mode, "model_id": MODEL_ID,
         "model_revision": inventory["model_revision"],
         "endpoint": inventory["endpoint"], "decoding": decoding,
         "prompt_hash": prompt_hash,
-    }, sort_keys=True, separators=(",", ":"))
+    }
+    if parsed.mode == "model-only":
+        config_fields["chat_template_kwargs"] = {"enable_thinking": False}
+    config_payload = json.dumps(config_fields, sort_keys=True, separators=(",", ":"))
     config_hash = hashlib.sha256(config_payload.encode()).hexdigest()
     if parsed.split == "TEST" and (
         lease.get("sealed_test_hash") != summary.data_hash or

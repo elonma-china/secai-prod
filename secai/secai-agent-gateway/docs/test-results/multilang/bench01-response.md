@@ -1,0 +1,7 @@
+# BENCH01 — model-only chat template parity
+
+Date: 2026-10-04. Base: integration `4d348ab142df9d09c0ffc1c182d376f9289e6e2f`. This is a new benchmark-correctness patch, not a reopening or reset of the completed assessment review counter.
+
+The accepted gateway provider sends `chat_template_kwargs: {"enable_thinking": false}` to the incumbent DuyTa model. The assessment model-only runner previously omitted that fixed field, so a live response could consume its output budget in thinking and be unlike the accepted provider's request. Model-only now sends exactly that fixed field and includes it in the frozen config hash. CLI decoding cannot replace it with `true` or add arbitrary tool/request fields. API modes' config payload remains unchanged. Prompt text and temperature/top_p/max_tokens/seed are still explicit inputs bound to the run config hash; a benchmark must archive their exact values and hashes before inference. Old and new model-only result hashes must not be mixed in one comparison.
+
+Regression was red before the patch (`KeyError: chat_template_kwargs` in the mocked payload assertion) and green after it. Focused no-tool tests and the full assessment suite pass: `/tmp/secai-multilang-final-env/bin/python -m pytest -q -p no:cacheprovider tests/multilang_assessment` — **153 passed**. `compileall` and `git diff --check` passed. No model inference, GPU or service change was made by this patch. Independent review is required before treating a formal live comparison as configured correctly.

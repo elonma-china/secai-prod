@@ -138,6 +138,7 @@ def test_model_only_payload_uses_frozen_model_and_no_tools():
         assert body["model"] == "DuyTa/Cyber-F1-AWQ"
         assert body["stream"] is False
         assert "tools" not in body
+        assert body["chat_template_kwargs"] == {"enable_thinking": False}
         assert [m["role"] for m in body["messages"]] == ["system", "user"]
         return httpx.Response(200, json={
             "model": "DuyTa/Cyber-F1-AWQ",
@@ -249,6 +250,7 @@ def test_model_response_rejects_multiple_choices_with_hidden_tool_message():
 @pytest.mark.parametrize("extra", [
     {"model": "Other/Model"}, {"tools": [{"type": "function"}]},
     {"messages": [{"role": "user", "content": "replace"}]}, {"stream": True},
+    {"chat_template_kwargs": {"enable_thinking": True}},
 ])
 def test_decoding_cannot_override_fixed_no_tool_payload(extra):
     decoding = {"temperature": 0.0, "top_p": 1.0, "max_tokens": 64, **extra}
