@@ -219,6 +219,19 @@ class LinchRunner:
             tools=empty_tools(*self.tools.values()), session_store=self.session_store,
             run_store=self.run_store, ledger=self.ledger,
         )
+        self._translation_agent: Any | None = None
+
+    def _agent_for(self, profile_name: str) -> Any:
+        if profile_name != "translate_v2":
+            return self.agent
+        if self._translation_agent is None:
+            provider, model = build_llm_provider(temperature_override=0.0)
+            self._translation_agent = make_gateway_agent(
+                model=model, provider=provider,
+                tools=empty_tools(*self.tools.values()), session_store=self.session_store,
+                run_store=self.run_store, ledger=self.ledger,
+            )
+        return self._translation_agent
 
     def _apply_profile(self, session: Any, profile_name: str, prompt: str = "",
                         *, grounding_context: str | None = None) -> None:
@@ -278,7 +291,7 @@ class LinchRunner:
                         *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
-            session = await self.agent.session(id=session_id, meta={"profile": profile.name})
+            session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
             final = ""
             run_id = None
@@ -325,7 +338,7 @@ class LinchRunner:
         the enforcement boundary is identical whether streaming or not."""
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
-            session = await self.agent.session(id=session_id, meta={"profile": profile.name})
+            session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
