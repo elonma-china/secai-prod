@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -72,13 +73,24 @@ def main() -> int:
                   "import main; asyncio.run(main())"]
     api_cmd = [sys.executable, "-m", "uvicorn", "secai_gateway.app:app",
                "--host", "127.0.0.1", "--port", str(args.port)]
-    processes = [subprocess.Popen(api_cmd, cwd=root, env=settings),
-                 subprocess.Popen(worker_cmd, cwd=root, env=settings)]
-    print(f"Local translation v2 API: http://127.0.0.1:{args.port} ; store: {store}", flush=True)
+    processes: list[subprocess.Popen] = []
+    stopping = False
+
+    def stop_on_term(signum, frame):
+        nonlocal stopping
+        stopping = True
+
+    previous_term = signal.signal(signal.SIGTERM, stop_on_term)
     try:
-        while all(process.poll() is None for process in processes):
+        processes.append(subprocess.Popen(api_cmd, cwd=root, env=settings))
+        if not stopping:
+            processes.append(subprocess.Popen(worker_cmd, cwd=root, env=settings))
+        if len(processes) == 2:
+            print(f"Local translation v2 API: http://127.0.0.1:{args.port} ; store: {store}", flush=True)
+        while not stopping and len(processes) == 2 and all(process.poll() is None for process in processes):
             time.sleep(0.5)
-        return next(process.returncode for process in processes if process.returncode is not None)
+        return 0 if stopping else next(
+            (process.returncode for process in processes if process.returncode is not None), 1)
     except KeyboardInterrupt:
         return 0
     finally:
@@ -91,6 +103,7 @@ def main() -> int:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
+        signal.signal(signal.SIGTERM, previous_term)
 
 
 if __name__ == "__main__":
