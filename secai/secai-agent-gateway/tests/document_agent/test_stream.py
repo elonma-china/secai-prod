@@ -17,7 +17,7 @@ class Backend:
 
 
 def test_text_turn_stream_has_safe_token_and_same_final_as_replay(tmp_path):
-    runner = DocumentRunner(provider=ScriptedProvider([TextTurn("Xin chào")]), model="scripted")
+    runner = DocumentRunner(provider=ScriptedProvider([TextTurn("Xin chào")]), model="scripted", budget=SimpleNamespace(check=lambda req, window: None))
     app = create_document_app(FastAPI(), DocumentScopeStore(tmp_path / "scope.db"), Backend(), runner, SimpleNamespace(document_agent_enabled=True))
 
     async def run():
