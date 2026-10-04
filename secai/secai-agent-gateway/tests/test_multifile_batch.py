@@ -68,8 +68,8 @@ async def test_eighteen_directions_mixed_files_have_bounded_jobs_and_real_output
             result = await run_batch(client, entries, tmp_path / "manifest.json", tmp_path / "out",
                                      max_inflight=2, upload_interval=0, poll_interval=0.01,
                                      job_timeout=30)
-        assert result == {"succeeded": 18, "failed": 0, "cancelled": 0,
-                          "interrupted": 0, "pending": 0}
+        assert result["succeeded"] == result["total"] == 18
+        assert result["failed"] == result["unfinished"] == 0
         assert active_high <= 2
         saved = json.loads((tmp_path / "manifest.json").read_text())
         assert len(saved["entries"]) == 18
@@ -114,8 +114,8 @@ async def test_resume_replays_saved_key_and_failed_file_does_not_stop_other_file
         result = await run_batch(client, None, manifest, tmp_path / "out", max_inflight=2,
                                  upload_interval=0, poll_interval=0.01, job_timeout=10)
         await task
-    assert result == {"succeeded": 1, "failed": 1, "cancelled": 0,
-                      "interrupted": 0, "pending": 0}
+    assert result["succeeded"] == result["failed"] == 1
+    assert result["total"] == 2 and result["unfinished"] == 0
     saved = json.loads(manifest.read_text())
     assert saved["entries"][0]["job_id"] == accepted.json()["job_id"]
     assert (tmp_path / "out" / saved["entries"][0]["output_txt"]).read_text() == "Hello"
@@ -433,3 +433,76 @@ async def test_post_503_is_retryable_on_resume_with_same_key(tmp_path, monkeypat
                                  upload_interval=0, poll_interval=0.01, job_timeout=10)
         await task
     assert counts["succeeded"] == 1
+
+
+@pytest.mark.parametrize("body,content_type", [
+    (b"<html>upstream unavailable</html>", "text/html"),
+    (b"", "text/plain"),
+])
+@pytest.mark.asyncio
+async def test_non_json_post_503_preserves_key_and_halts_admission(tmp_path, body, content_type):
+    entries = []
+    for index in range(3):
+        source = tmp_path / f"{index}.txt"
+        source.write_text("Hello")
+        entries.append(BatchEntry(source, "en", "vi"))
+    posts = []
+
+    async def unavailable(request):
+        posts.append(request.headers["Idempotency-Key"])
+        return httpx.Response(503, content=body, headers={"content-type": content_type})
+
+    manifest = tmp_path / "manifest.json"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable), base_url="http://test") as client:
+        counts = await run_batch(client, entries, manifest, tmp_path / "out",
+                                 max_inflight=1, upload_interval=0, poll_interval=0.01, job_timeout=5)
+    rows = json.loads(manifest.read_text())["entries"]
+    assert len(posts) == 1
+    assert counts["interrupted"] == 1 and counts["pending"] == 2
+    assert counts["failed"] == 0 and counts["total"] == counts["unfinished"] == 3
+    assert rows[0]["status"] == "interrupted" and rows[0]["error_code"] == "HTTP_503"
+    assert rows[0]["key"] == posts[0]
+
+
+@pytest.mark.asyncio
+async def test_halted_known_jobs_remain_visible_in_complete_summary(tmp_path):
+    from evals.multilang.multifile_batch import create_manifest
+    entries = []
+    for index in range(3):
+        source = tmp_path / f"{index}.txt"
+        source.write_text("Hello")
+        entries.append(BatchEntry(source, "en", "vi"))
+    manifest = tmp_path / "manifest.json"
+    saved = create_manifest(entries, manifest)
+    for index, row in enumerate(saved["entries"]):
+        row.update(job_id=f"{index + 1:032x}", status="queued")
+    manifest.write_text(json.dumps(saved))
+
+    async def unavailable(request):
+        return httpx.Response(503, content=b"", headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable), base_url="http://test") as client:
+        counts = await run_batch(client, None, manifest, tmp_path / "out",
+                                 max_inflight=1, upload_interval=0, poll_interval=0.01, job_timeout=5)
+    assert counts["total"] == counts["unfinished"] == 3
+    assert counts["interrupted"] == 1 and counts["queued"] == 2
+    assert sum(counts[key] for key in ("succeeded", "failed", "cancelled", "interrupted",
+                                       "pending", "queued", "running", "cancelling", "other")) == 3
+
+
+def test_cli_exits_nonzero_for_unfinished_known_jobs(tmp_path, monkeypatch):
+    from evals.multilang import multifile_batch
+    import sys
+
+    async def unfinished(*args, **kwargs):
+        return {"succeeded": 0, "failed": 0, "cancelled": 0, "interrupted": 0,
+                "pending": 0, "queued": 2, "running": 0, "cancelling": 0,
+                "other": 0, "total": 2, "unfinished": 2}
+
+    monkeypatch.setattr(multifile_batch, "run_batch", unfinished)
+    monkeypatch.setattr(sys, "argv", ["multifile_batch", "resume", "--base-url", "http://test",
+                                  "--manifest", str(tmp_path / "manifest.json"),
+                                  "--output-dir", str(tmp_path / "out")])
+    with pytest.raises(SystemExit) as exc:
+        multifile_batch.main()
+    assert exc.value.code == 1

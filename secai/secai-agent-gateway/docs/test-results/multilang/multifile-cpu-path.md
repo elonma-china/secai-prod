@@ -94,7 +94,7 @@ by the separate quality review, so its output cannot qualify this path.
 
 - `PYTHONPATH=src:. /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_multifile_batch.py tests/test_translate_v2_job_access.py tests/test_translate_v2_jobs.py tests/test_translate_v2_worker.py tests/test_translate_v2_documents.py`
   with `POC_CATALOG_DB=/tmp/secai-multifile-test-poc.db SESSION_STORE_BACKEND=memory REDIS_URL=''`:
-  54 passed after the recovery patch. The batch tests process mixed TXT/DOCX through actual ASGI routes and
+  58 passed after the second review patch. The batch tests process mixed TXT/DOCX through actual ASGI routes and
   JobStore/Worker for all 18 directions, observes at most two active jobs, checks
   output files, replay after an accepted POST loses every response, one-file
   failure, cancellation of ambiguous and unsubmitted files, lock contention,
@@ -123,3 +123,13 @@ remain terminal per-file failures. The batch command exits nonzero while any
 work is pending, interrupted or failed. These changes address the reported
 locations around manifest preflight, scheduling, and POST response handling;
 independent re-review is still required.
+
+Round 2 also found that an HTML/empty 503 body could throw during error-code
+parsing after the HTTP status had already been classified, changing an
+interrupted upload to a failed one and allowing further admissions. The client
+now classifies 5xx before optional bounded body parsing; invalid bodies get
+`HTTP_503` and the admission halt remains in force. The returned summary now
+counts queued/running/cancelling/other entries, reports `total` and
+`unfinished`, and exits nonzero if unfinished work remains. Regressions cover
+both non-JSON 503 bodies and a halted queue of saved job IDs. Independent
+re-review of this second patch remains required.
