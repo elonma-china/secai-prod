@@ -134,6 +134,30 @@ describe("user-facing v2 file batch", () => {
     expect((posts[1].headers as Record<string, string>)["Idempotency-Key"]).toBe((posts[0].headers as Record<string, string>)["Idempotency-Key"]);
   });
 
+  it("selects and reselects the same file on insecure LAN HTTP without crypto.subtle", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    vi.stubGlobal("crypto", { getRandomValues: webcrypto.getRandomValues.bind(webcrypto), subtle: undefined });
+    vi.stubGlobal("isSecureContext", false);
+    const posts: RequestInit[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      if (init.method === "POST") {
+        posts.push(init);
+        if (posts.length === 1) throw new TypeError("disconnect");
+        return ok({ ...job(0), target_lang: "en" }, 202);
+      }
+      return ok({ ...job(0), target_lang: "en" });
+    }));
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["Tiếng Việt 😀"], "a.txt")] } });
+    await waitFor(() => expect(screen.getByText(/Chưa rõ máy chủ đã nhận/)).toBeTruthy());
+    const row = JSON.parse(sessionStorage.getItem("secai.translate.v2.file.batch.v1") ?? "null").rows[0];
+    expect(row.hash).toBe("bd7b4426e12470860f7738247d3c13ffd9c85ae403acd5c2252b9ac26a3c4dd5");
+    fireEvent.change(screen.getByLabelText("Chọn lại tệp a.txt"), { target: { files: [new File(["Tiếng Việt 😀"], "a.txt")] } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(13_000); });
+    expect(posts).toHaveLength(2);
+    expect((posts[1].headers as Record<string, string>)["Idempotency-Key"]).toBe((posts[0].headers as Record<string, string>)["Idempotency-Key"]);
+  });
+
   it("does not admit another file while replay of an uncertain POST is still unresolved", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
     let resolveReplay!: (response: Response) => void;
