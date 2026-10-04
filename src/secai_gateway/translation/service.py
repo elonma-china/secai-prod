@@ -33,11 +33,30 @@ def _boundary_graphemes(text: str) -> tuple[str, ...]:
     return tuple(bases)
 
 
+def _word_joiner_at_seam(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
+    if len(left) < 2 or not left[-2].isalnum():
+        return False
+    last = left[-1]
+    name = unicodedata.name(last, "")
+    if (unicodedata.category(last) == "Pc" or "HYPHEN" in name or
+            "SOLIDUS" in name or "SLASH" in name):
+        return True
+    if "APOSTROPHE" in name or "SINGLE QUOTATION MARK" in name:
+        prefix = 0
+        for char in reversed(left[:-1]):
+            if not char.isalpha():
+                break
+            prefix += 1
+        return prefix <= 2 or (len(right) == 1 and right[0].isalpha())
+    return False
+
+
 def _spaced_target_needs_separator(previous: str, core: str) -> bool:
+    right = _boundary_graphemes(core)
     if core.startswith("⟦"):
         right_word = True
     else:
-        right_word = _boundary_graphemes(core)[0].isalnum()
+        right_word = right[0].isalnum()
     if not right_word:
         return False
     if previous.endswith("⟧"):
@@ -48,6 +67,8 @@ def _spaced_target_needs_separator(previous: str, core: str) -> bool:
     if last.isalnum():
         return True
     if category in {"Ps", "Pi"} or unicodedata.name(last, "").startswith("INVERTED "):
+        return False
+    if _word_joiner_at_seam(left, right):
         return False
     if category.startswith("P"):
         # Straight quotes can open or close; an empty quoted span opens.
@@ -61,13 +82,19 @@ def _cjk_target_drops_source_space(previous: str, core: str) -> bool:
         return False
     left, right = _boundary_graphemes(previous), _boundary_graphemes(core)
     last, first = left[-1], right[0]
+    def wide_closer(char: str) -> bool:
+        category = unicodedata.category(char)
+        return (category.startswith("P") and category not in {"Ps", "Pi"} and
+                unicodedata.east_asian_width(char) in {"W", "F"})
+
     if (last.isalpha() and first.isalpha() and
             all(unicodedata.east_asian_width(char) in {"W", "F"} for char in (last, first))):
         return True
-    # A fullwidth closing mark belongs to the preceding CJK phrase.
-    return (unicodedata.category(last).startswith("P") and
-            unicodedata.east_asian_width(last) in {"W", "F"} and
-            unicodedata.category(last) not in {"Ps", "Pi"})
+    if wide_closer(last):
+        return True
+    # A fullwidth leading closer attaches only to a preceding CJK phrase.
+    return (wide_closer(first) and last.isalpha() and
+            unicodedata.east_asian_width(last) in {"W", "F"})
 
 
 @lru_cache(maxsize=1)
