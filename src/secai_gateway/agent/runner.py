@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from linch import InMemoryRunStore, InMemorySessionStore
 from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent
+from linch.errors import ProviderError
 from linch.sessions.sqlite import SqliteSessionStore
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
@@ -165,7 +166,8 @@ class CompletionRunner(Protocol):
 class LinchRunner:
     """Profile-bound Linch runner. The session override is the enforcement boundary."""
 
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(self, database_path: str | Path, *, strict_transform_errors: bool = False) -> None:
+        self.strict_transform_errors = strict_transform_errors
         root = Path(database_path).parent
         root.mkdir(parents=True, exist_ok=True)
         self.ledger = SqliteLedger(database_path)
@@ -287,6 +289,13 @@ class LinchRunner:
             # via this string, so linch persists exactly this clean prompt as the user turn.
             async for event in session.run(prompt):
                 run_id = session.active_run_id or run_id
+                if (self.strict_transform_errors and profile_name in {"translate_v2", "ocr_correction"}
+                        and isinstance(event, ErrorEvent)):
+                    error = event.error or {}
+                    status = error.get("status")
+                    raise ProviderError("Transformation service unavailable",
+                                        status=status if isinstance(status, int) else None,
+                                        retryable=error.get("retryable") is True)
                 if isinstance(event, ResultEvent):
                     final = event.final_text or ""
             if not final.strip() and profile_name in _SALVAGE_PROFILES:
