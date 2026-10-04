@@ -39,11 +39,21 @@ def _literal_value(match: re.Match) -> str:
 
 
 def preserve_other_sections(content: str, previous: str, sections: list[str], instruction: str) -> str:
-    named = [section for section in sections if section.casefold() in instruction.casefold()]
-    kept = {section for section in named if re.search(
-        r'(?:giữ nguyên|không sửa)\s+(?:(?:phần|mục)\s+)?' + re.escape(section) + r'(?=$|[.,;:!?\s])',
-        instruction, re.I)}
-    editable = [section for section in named if section not in kept]
+    mentions = []
+    occupied = []
+    for section in sorted(sections, key=len, reverse=True):
+        pattern = r'(?<!\w)' + re.escape(section) + r'(?!\w)'
+        for match in re.finditer(pattern, instruction, re.I):
+            if not any(match.start() < end and start < match.end() for start, end in occupied):
+                mentions.append((section, match.start()))
+                occupied.append((match.start(), match.end()))
+    kept = set()
+    for section, start in mentions:
+        prefix = instruction[max(0, start - 35):start]
+        if re.search(r'(?:giữ nguyên|không sửa|đừng thay đổi|đừng sửa)\s+(?:(?:phần|mục)\s+)?$',
+                     prefix, re.I):
+            kept.add(section)
+    editable = [section for section, _ in mentions if section not in kept]
     if len(editable) != 1:
         return content
 
@@ -82,6 +92,16 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
             cursor = found.index(section, cursor) + 1
         except ValueError as exc:
             raise HTTPException(422, 'Report is missing a required section or section order') from exc
+    # One document title before the first section is fine; a new peer-level section is not.
+    headings = list(_HEADING.finditer(content))
+    required_matches = [match for match in headings if re.sub(r'\s+', ' ', match.group(1)).casefold() in required]
+    if required_matches:
+        level = min(len(re.match(r'^\s*(#+)', match.group(0)).group(1)) for match in required_matches)
+        first = required_matches[0].start()
+        if any(match.start() > first and len(re.match(r'^\s*(#+)', match.group(0)).group(1)) <= level
+               and re.sub(r'\s+', ' ', match.group(1)).casefold() not in required
+               for match in headings):
+            raise HTTPException(422, 'Report contains a section outside the template')
     # Ignore required heading labels: the template may contain an ordinal or year not in source facts.
     body = _HEADING.sub(lambda match: '' if re.sub(r'\s+', ' ', match.group(1)).casefold() in required else match.group(0), content)
     allowed = {_literal_value(match) for match in _LITERAL.finditer(source)}
