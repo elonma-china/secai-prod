@@ -1,5 +1,14 @@
 # Report feature — log
 
+## 2026-10-04 — Explicit user MVP override
+
+- User: ship quickest functional version, improve gradually; test sufficiently, >=70% content quality, review and report; do not over-perfect.
+- ASTRA A recorded revised MVP criteria `1f0d611`, preserving previous full-scope documents as historical.
+- Dispatched backend and frontend SOL in separate base-main worktrees; legacy baseline runs concurrently under Warden.
+- Reduced deliverable to core template/create/import/generate/edit functionality. Advanced features/evaluation campaigns deferred transparently.
+- Dedicated report key is proposed for internal-only MVP to avoid handing UI the existing admin/exec credential. No claims of tenant isolation.
+- Thread cap prevented a fresh FE agent; reused finished preflight SOL as FE coder. Independent reviewer context must remain fresh.
+
 ## 2026-10-04 — Both template authoring paths confirmed
 
 - User confirmed form authoring and upload import. DOCX/MD/TXT imported as draft, reviewed before publish.
