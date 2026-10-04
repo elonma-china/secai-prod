@@ -42,38 +42,48 @@ class WorkerContext(ProcessingContext):
         if profile not in {"translate_v2", "ocr_correction"}:
             raise TranslationError("INTERNAL_ERROR", "Unsupported transformation profile.")
         await self.checkpoint("translating" if profile == "translate_v2" else "correcting")
-        remaining = max(0.01, self.row["deadline"] - time.time())
         async with self.llm_gate:
             for attempt in range(self.settings.llm_max_retries + 1):
                 try:
-                    call = asyncio.create_task(self.runner.complete(profile, prompt, None))
-
-                    async def watch_cancel():
-                        while True:
-                            await asyncio.sleep(0.5)
-                            state = await asyncio.to_thread(self.store.get, self.row["job_id"])
-                            if state["status"] != "running":
-                                return
-
-                    watcher = asyncio.create_task(watch_cancel())
-                    try:
-                        done, _ = await asyncio.wait({call, watcher},
-                            timeout=min(self.settings.llm_timeout_seconds, remaining),
-                            return_when=asyncio.FIRST_COMPLETED)
-                        if watcher in done:
-                            raise asyncio.CancelledError
-                        if call not in done:
-                            raise asyncio.TimeoutError
-                        return call.result()
-                    finally:
-                        call.cancel()
-                        watcher.cancel()
-                        await asyncio.gather(call, watcher, return_exceptions=True)
+                    return await self.run_bounded(
+                        self.runner.complete(profile, prompt, None),
+                        timeout=self.settings.llm_timeout_seconds)
                 except (asyncio.TimeoutError, OSError) as exc:
                     if attempt >= self.settings.llm_max_retries:
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
+
+    async def run_bounded(self, operation: Any, *, timeout: float | None = None) -> Any:
+        remaining = self.row["deadline"] - time.time()
+        if remaining <= 0:
+            operation.close()
+            raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+        call = asyncio.create_task(operation)
+
+        async def watch_cancel() -> None:
+            while True:
+                await asyncio.sleep(0.5)
+                state = await asyncio.to_thread(self.store.get, self.row["job_id"])
+                if state["status"] != "running":
+                    return
+
+        watcher = asyncio.create_task(watch_cancel())
+        try:
+            done, _ = await asyncio.wait(
+                {call, watcher}, timeout=min(remaining, timeout) if timeout else remaining,
+                return_when=asyncio.FIRST_COMPLETED)
+            if watcher in done:
+                raise asyncio.CancelledError
+            if call in done:
+                return call.result()
+            if time.time() >= self.row["deadline"]:
+                raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+            raise asyncio.TimeoutError
+        finally:
+            call.cancel()
+            watcher.cancel()
+            await asyncio.gather(call, watcher, return_exceptions=True)
 
 
 class Worker:
@@ -104,8 +114,9 @@ class Worker:
 
                 async with self.ocr_gate:
                     with TemporaryDirectory(prefix="secai-image-") as tmp:
-                        corrected = await ImageOcrPipeline(settings=self.settings).process(
-                            input_path, work_dir=Path(tmp), context=context)
+                        corrected = await context.run_bounded(
+                            ImageOcrPipeline(settings=self.settings).process(
+                                input_path, work_dir=Path(tmp), context=context))
                 blocks = corrected.blocks
                 warnings = corrected.warnings
                 ocr = {

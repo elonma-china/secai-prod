@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 import pytest
 
@@ -77,3 +78,62 @@ async def test_auto_non_vi_cross_pair_fails_after_admission(tmp_path):
     row = store.get(job["job_id"])
     assert row["status"] == "failed"
     assert row["error_code"] == "UNSUPPORTED_LANGUAGE_PAIR"
+
+
+@pytest.mark.asyncio
+async def test_llm_retries_stop_at_job_deadline(tmp_path):
+    from secai_gateway.translation.worker import WorkerContext
+    from secai_gateway.translation.types import TranslationError
+
+    class SlowRunner:
+        async def complete(self, profile, prompt, session_id=None):
+            await asyncio.sleep(1)
+            return "late", {}
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   llm_timeout_seconds=0.12, llm_max_retries=3, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"Hello", ".txt", "en", "vi", "127.0.0.1", None)
+    row = store.claim()
+    row["deadline"] = time.time() + 0.19
+    context = WorkerContext(store, settings, SlowRunner(), row, asyncio.Semaphore(1))
+    start = time.monotonic()
+    with pytest.raises(TranslationError) as error:
+        await context.complete("translate_v2", "Hello")
+    assert error.value.code == "PROCESSING_TIMEOUT"
+    assert time.monotonic() - start < 0.32
+
+
+@pytest.mark.asyncio
+async def test_running_cancel_aborts_ocr_before_remote_completion(tmp_path, monkeypatch):
+    from secai_gateway.translation.ocr_client import ImageOcrPipeline
+    from secai_gateway.translation.worker import Worker
+
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def slow_ocr(self, input_path, *, work_dir, context):
+        started.set()
+        try:
+            await asyncio.sleep(100)
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    monkeypatch.setattr(ImageOcrPipeline, "process", slow_ocr)
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("image", b"image", ".png", "en", "vi", "127.0.0.1", None)
+    work = asyncio.create_task(Worker(store, settings, EchoRunner()).run_once())
+    await asyncio.wait_for(started.wait(), 2)
+    store.cancel(job["job_id"])
+    await asyncio.sleep(1.1)
+    stopped = work.done()
+    if not stopped:
+        work.cancel()
+    await asyncio.gather(work, return_exceptions=True)
+    assert stopped, "cancelled OCR should stop without an external task timeout"
+    assert cancelled.is_set()
+    assert store.get(job["job_id"])["status"] == "cancelled"

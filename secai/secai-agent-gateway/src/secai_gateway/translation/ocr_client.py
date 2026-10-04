@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import ipaddress
+import json
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -75,21 +76,34 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
     for attempt in range(settings.ocr_max_retries + 1):
         try:
             async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                response = await client.post(url, json=body, headers={
-                    "Authorization": f"Bearer {settings.ocr_api_key}"})
-            if response.status_code in {502, 503, 504} and attempt < settings.ocr_max_retries:
-                await asyncio.sleep(min(2 ** attempt, 2))
-                continue
-            response.raise_for_status()
-            if len(response.content) > _MAX_RESPONSE:
-                raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
-            result = _parse_response(response.json())
-            if response.json()["model"] != settings.ocr_model:
+                async with client.stream("POST", url, json=body, headers={
+                    "Authorization": f"Bearer {settings.ocr_api_key}"}) as response:
+                    if response.status_code in {502, 503, 504}:
+                        raise httpx.HTTPStatusError("OCR temporarily unavailable",
+                                                    request=response.request, response=response)
+                    response.raise_for_status()
+                    chunks = []
+                    size = 0
+                    async for chunk in response.aiter_raw():
+                        size += len(chunk)
+                        if size > _MAX_RESPONSE:
+                            raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
+                        chunks.append(chunk)
+            payload = json.loads(b"".join(chunks))
+            result = _parse_response(payload)
+            if payload["model"] != settings.ocr_model:
                 raise TranslationError("OCR_UNAVAILABLE", "OCR model mismatch")
             return result
         except TranslationError:
             raise
-        except (httpx.HTTPError, ValueError) as exc:
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in {502, 503, 504} or attempt == settings.ocr_max_retries:
+                raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable",
+                                       retryable=exc.response.status_code in {502, 503, 504}) from exc
+            await asyncio.sleep(min(2 ** attempt, 2))
+        except ValueError as exc:
+            raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response") from exc
+        except httpx.TransportError as exc:
             if attempt == settings.ocr_max_retries:
                 raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True) from exc
             await asyncio.sleep(min(2 ** attempt, 2))
