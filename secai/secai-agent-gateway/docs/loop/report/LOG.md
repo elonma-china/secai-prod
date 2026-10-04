@@ -56,3 +56,7 @@
 ## 2026-10-04 — Final targeted fixes and preserved remeasurement
 
 Integrated `54cd3ad`; scoped review PASS; integrated report/session61PASS. Full regression incomplete. Frozen original12+supplemental6 measured on actual model across preserved fix01/02/03 runs. Final run18reports/36revisions verified in SQLite and backup. Independent offline LLM final verdictFAIL: original compliance generation62.50%, supplemental incident edit68.75%, known facts still reported unavailable. Combined80.56% does not hide failing groups. All code fixes landed only on integration/report-feature; no main merge/push/deploy. Final evidence and saved reports linked in STATE.md and `/home/ict/secai-report-evidence/INDEX.md`.
+
+## 2026-10-04 — Source-first drafting, factual checks, measured MVP pass
+
+Final integrated product f4d8ba2;73focusedtestsPASS, independentcodePASS39tests. Frozen live06 + finalguard exact offlineAPI replay;18reports/36revisions retained with backups. Independent offlineLLM judge06 PASS: generation88.89%,edit90.28%,minimumgroup75%; frozenhardcriteriaPASS. Fullsuite remains incomplete with6knownexternalfixturefailures. See STATE currenthandoff and durable evidenceINDEX. All earlier failed verdicts, scores, drafts and acceptanceaudit05 preserved. No main merge/push/deploy.

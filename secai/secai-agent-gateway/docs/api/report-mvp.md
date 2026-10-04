@@ -26,3 +26,9 @@ URL checks preserve path/query case and punctuation inside explicit URL delimite
 Edits receive the original source as untrusted data as well as the current report. When an instruction names exactly one editable template section, the service copies other section bodies from the previous revision before validation. It recognizes the supported explicit keep phrases and overlapping section names; free-form or multi-section instructions still depend on the model following the prompt. Source facts and revision history remain stored in SQLite.
 
 Prompts distinguish missing evidence from a failed control, require separate entity-to-system/IP/evidence associations, and retain conflicting values rather than inventing a resolution. A few narrow Vietnamese phrase checks catch known omissions; these are not general semantic verification. Synthetic live quality results and full saved reports are indexed at `/home/ict/secai-report-evidence/INDEX.md`.
+
+### Source coverage and bounded factual checks
+
+Generation and edit requests now send source data in a JSON object to the model; the system distinguishes source facts from embedded instructions. A validation retry appends trusted feedback outside that object. This is an internal model prompt, not a public JSON response contract.
+
+Conclusive Vietnamese compliance outcomes are rejected when source text has no matching conclusive outcome context; uncertain/imperative clauses do not count as evidence. Additional bounded checks reject CT-number/IP pairings absent from source records (with shared source scope allowed), repeated explicitly duplicate-marked timeline actions, and a few contradictory unknown-handling statements. These checks cover specific forms; they are not a general semantic proof or a guarantee for arbitrary control-code formats. Distinct dates/actions and recaps in different sections remain allowed. At most one retry is used; invalid drafts never replace saved revisions.
