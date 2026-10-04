@@ -52,3 +52,7 @@
 - Durable run: `/home/ict/secai-report-evidence/report-mvp-883634a-01/`; `reports/INDEX.md`, `reports.db`, `reports.db.backup`, `results.json`, `manifest.json`, `judgement.json`, `quality-summary.md`. Do not delete as temporary output.
 - Detailed judgement: `../../reports/report-mvp-quality-judgement.md`; run evidence: `../../reports/report-mvp-live-quality-evidence.md`.
 - Small synthetic single-run sample; no customer acceptance, hash coverage or near-context long-input claim. Earlier pending sections below are historical.
+
+## 2026-10-04 — Final targeted fixes and preserved remeasurement
+
+Integrated `54cd3ad`; scoped review PASS; integrated report/session61PASS. Full regression incomplete. Frozen original12+supplemental6 measured on actual model across preserved fix01/02/03 runs. Final run18reports/36revisions verified in SQLite and backup. Independent offline LLM final verdictFAIL: original compliance generation62.50%, supplemental incident edit68.75%, known facts still reported unavailable. Combined80.56% does not hide failing groups. All code fixes landed only on integration/report-feature; no main merge/push/deploy. Final evidence and saved reports linked in STATE.md and `/home/ict/secai-report-evidence/INDEX.md`.

@@ -1,6 +1,16 @@
 # Report feature — execution state
 
-## Stage
+## Current handoff — quality fixes completed, quality gate still FAIL
+
+2026-10-04: integrated product `54cd3ad` contains the reviewed URL comparison, prompt grounding, scoped section edits and structure fixes. 61 report/session tests PASS on the integrated tree; independent code review PASS for scoped fixes (review commit `446c634`). Full suite remains incomplete; see `../../test-results/report-quality-fixes.md`.
+
+Final frozen live run `report-mvp-quality-fix-03` used the identical original12 plus supplemental6 and actual DuyTa/Cyber-F1-AWQ. All18 generations/edits accepted and persisted, 18 reports/36 revisions; root independently verified content equality and DB/backup integrity. All earlier run artifacts are retained.
+
+Independent offline LLM judgment (not human): original scan93.75%/96.88%, incident81.25%/81.25%, compliance62.50%/75.00% (generation/edit). Supplemental incident edits68.75%. Combined18 scores80.56%/80.56% do not override failing groups. No invented critical identifiers/numbers or cross-entity IP issue observed in final run, but known facts are still incorrectly labelled unavailable. Overall quality FAIL; no claim of full acceptance or deployment. Full report: `../../reports/report-mvp-quality-final-judgement.md`. Durable full reports and scores: `/home/ict/secai-report-evidence/INDEX.md`.
+
+Remaining measured issues: preserve all supplied facts in relevant sections, distinguish known handling from unknown handling, follow shortening/rewrite instructions. Do not remove failed runs or relax rubric to claim pass. Feature remains opt-in/default OFF; no main merge/push/deployment.
+
+## Historical stage
 
 2026-10-04: MVP IMPLEMENTATION + INDEPENDENT REVIEW + ISOLATED INTEGRATION COMPLETE. Live content quality measured on 12 synthetic cases: FAIL for compliance under the per-template 70% threshold and factual hard gate. Latest user scope prioritizes quick usable functionality, sufficient tests and no perfectionism. User-authorized synthetic inference completed using existing DuyTa/Cyber-F1-AWQ serving; no rental or deployment performed.
 
