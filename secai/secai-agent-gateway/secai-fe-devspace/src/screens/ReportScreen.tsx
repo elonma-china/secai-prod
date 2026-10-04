@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BarChart3, CalendarRange, ClipboardList, Download, FileText, ShieldX, Sparkles } from "lucide-react";
 import { ApiError, reportStream, statisticalReport } from "../api";
 import Markdown from "../components/Markdown";
+import ReportMvpPanel from "./ReportMvpPanel";
 
 /** "Báo cáo thông minh" — Tạo báo cáo (free text → markdown, streamed) / Thống kê kỳ (structured
  * JSON → report_title/summary/detail, one-shot). Field-name notes from
@@ -11,7 +12,8 @@ import Markdown from "../components/Markdown";
  * field server-side; we resolve the picked period into concrete `from_date`/`to_date` +
  * a short Vietnamese `message` client-side so the prompt the model sees is meaningful. */
 
-type Tab = "create" | "stats";
+type Tab = "create" | "stats" | "templates";
+const REPORT_MVP_ENABLED = import.meta.env.VITE_REPORT_FEATURE_ENABLED === "true";
 type Period = "week" | "month" | "quarter";
 
 const PERIOD_OPTS: { id: Period; label: string }[] = [
@@ -186,6 +188,11 @@ export default function ReportScreen({ userId }: { userId: string }) {
           <div className={"opt" + (tab === "stats" ? " on" : "")} onClick={() => setTab("stats")}>
             Thống kê kỳ
           </div>
+          {REPORT_MVP_ENABLED && (
+            <div className={"opt" + (tab === "templates" ? " on" : "")} onClick={() => setTab("templates")}>
+              Theo mẫu
+            </div>
+          )}
         </div>
       </div>
 
@@ -351,6 +358,7 @@ export default function ReportScreen({ userId }: { userId: string }) {
             </div>
           </>
         )}
+        {REPORT_MVP_ENABLED && <div hidden={tab !== "templates"}><ReportMvpPanel /></div>}
       </div>
     </div>
   );
