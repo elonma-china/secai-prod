@@ -1,0 +1,1159 @@
+{
+  "version": 2,
+  "images": [
+    {
+      "id": "a01",
+      "image": "images/01.png",
+      "sha256": "59e591a0a2051b5e2502287502e315b7efe525e36adc4ea5c219740f0187a471",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Báo cáo kiểm tra hệ thống",
+      "tokens": []
+    },
+    {
+      "id": "a02",
+      "image": "images/02.png",
+      "sha256": "d0319f1e6c8bf619060f1ed61e28c426afbd8e112f2313cfb55d95cfa998dc30",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Máy chủ đã được cập nhật an toàn",
+      "tokens": []
+    },
+    {
+      "id": "a03",
+      "image": "images/03.png",
+      "sha256": "d423e82dfd463798d76e896a5506c8ada1c427e555bffa8dd69e0b9461d7b24a",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Kết nối mạng ổn định",
+      "tokens": []
+    },
+    {
+      "id": "a04",
+      "image": "images/04.png",
+      "sha256": "6f0a6246eb3d92ed9851ca7f4b617865722511aa0927b9dae4930e338195af1f",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Dữ liệu khách hàng được mã hóa",
+      "tokens": []
+    },
+    {
+      "id": "a05",
+      "image": "images/05.png",
+      "sha256": "8d70e6dc1843f11a143318866276baf0b47da84a915ddb934fd5150f42d32c2f",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Quản trị viên xác nhận kết quả",
+      "tokens": []
+    },
+    {
+      "id": "a06",
+      "image": "images/06.png",
+      "sha256": "b38e881d06b5d0545a1fa9520b4bbfff82b619ca13305a7a5338acea5f187336",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Tường lửa đã chặn truy cập",
+      "tokens": []
+    },
+    {
+      "id": "a07",
+      "image": "images/07.png",
+      "sha256": "6f1c8439d4842e93a080f631d42707517da6b20a125daad28a291a2ed3d6caaa",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Phiên đăng nhập cần xác minh",
+      "tokens": []
+    },
+    {
+      "id": "a08",
+      "image": "images/08.png",
+      "sha256": "4b527d229c7964c01e7bd9bb94800c742e581c44bd5df54f1c052d217da2be57",
+      "category": "clear_vi",
+      "language": "vi",
+      "technical": false,
+      "text": "Bản vá bảo mật đã triển khai",
+      "tokens": []
+    },
+    {
+      "id": "a09",
+      "image": "images/09.png",
+      "sha256": "f60e2e5d6e328f4a55246f2d13a8901dfaec5a8c57faceacb2c70e02ea302a42",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "Security review completed successfully",
+      "tokens": []
+    },
+    {
+      "id": "a10",
+      "image": "images/10.png",
+      "sha256": "f7b1411f307a42118e542e63fa2721ffb39440b39fe261ec1b6d7c8bf00c7b73",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "The server remains available today",
+      "tokens": []
+    },
+    {
+      "id": "a11",
+      "image": "images/11.png",
+      "sha256": "06e537805cd57422821b922c282d63fe97ac0b801cadb231295275a91559e607",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "All backups passed integrity checks",
+      "tokens": []
+    },
+    {
+      "id": "a12",
+      "image": "images/12.png",
+      "sha256": "9fed95347bfbe80313d5d0217f132897f0c4c566b5be6069f4b8df7bb2efac2a",
+      "category": "clear_en",
+      "language": "en",
+      "technical": false,
+      "text": "Incident response follows the runbook",
+      "tokens": []
+    },
+    {
+      "id": "a13",
+      "image": "images/13.png",
+      "sha256": "8511e46cadc318bb1440d2b1a3f0d091349acb604c67cd5f1d23f40cb6d827c0",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1200 192.0.0.1/24\nCVE-2024-1201 192.0.0.2/24\nCVE-2024-1202 192.0.0.3/24\nCVE-2024-1203 192.0.0.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1200"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.0.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1201"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.0.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1202"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.0.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1203"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.0.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a14",
+      "image": "images/14.png",
+      "sha256": "aee057cb0d051fc57ec420add755c2f45ae5192f972eadd0e0b584044f32d924",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1204 192.0.1.1/24\nCVE-2024-1205 192.0.1.2/24\nCVE-2024-1206 192.0.1.3/24\nCVE-2024-1207 192.0.1.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1204"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.1.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1205"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.1.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1206"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.1.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1207"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.1.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a15",
+      "image": "images/15.png",
+      "sha256": "37367994c5a6ad907bb5c75862496b4843c34ccae4abe49c13a5e8781dd65389",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1208 192.0.2.1/24\nCVE-2024-1209 192.0.2.2/24\nCVE-2024-1210 192.0.2.3/24\nCVE-2024-1211 192.0.2.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1208"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.2.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1209"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.2.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1210"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.2.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1211"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.2.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a16",
+      "image": "images/16.png",
+      "sha256": "b3a2515cf2780a895930cb26dc74548bdef8ba1912534e306642befe19bb384c",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1212 192.0.3.1/24\nCVE-2024-1213 192.0.3.2/24\nCVE-2024-1214 192.0.3.3/24\nCVE-2024-1215 192.0.3.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1212"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.3.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1213"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.3.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1214"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.3.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1215"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.3.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a17",
+      "image": "images/17.png",
+      "sha256": "10369d9c8d8ef6d81caa24177778822cce1aae01831759ef2e8200eec9d12c6b",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1216 192.0.4.1/24\nCVE-2024-1217 192.0.4.2/24\nCVE-2024-1218 192.0.4.3/24\nCVE-2024-1219 192.0.4.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1216"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.4.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1217"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.4.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1218"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.4.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1219"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.4.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a18",
+      "image": "images/18.png",
+      "sha256": "a20e8e69362413872b61ae1d3b10db4b4e9466e411c01a3946235b617a44316d",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1220 192.0.5.1/24\nCVE-2024-1221 192.0.5.2/24\nCVE-2024-1222 192.0.5.3/24\nCVE-2024-1223 192.0.5.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1220"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.5.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1221"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.5.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1222"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.5.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1223"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.5.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a19",
+      "image": "images/19.png",
+      "sha256": "6fb9b6da4490d28edc6cc666aae70ef86592833831ecd236b84773665c4ab49c",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1224 192.0.6.1/24\nCVE-2024-1225 192.0.6.2/24\nCVE-2024-1226 192.0.6.3/24\nCVE-2024-1227 192.0.6.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1224"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.6.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1225"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.6.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1226"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.6.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1227"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.6.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a20",
+      "image": "images/20.png",
+      "sha256": "6b121dc39ece5e445c50853d602f5e0d59253ce4e4b0bf0d2a23f4b5c2f6d49b",
+      "category": "technical",
+      "language": "en",
+      "technical": true,
+      "text": "CVE-2024-1228 192.0.7.1/24\nCVE-2024-1229 192.0.7.2/24\nCVE-2024-1230 192.0.7.3/24\nCVE-2024-1231 192.0.7.4/24",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 0,
+          "end": 13,
+          "text": "CVE-2024-1228"
+        },
+        {
+          "kind": "ip",
+          "start": 14,
+          "end": 26,
+          "text": "192.0.7.1/24"
+        },
+        {
+          "kind": "cve",
+          "start": 27,
+          "end": 40,
+          "text": "CVE-2024-1229"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 53,
+          "text": "192.0.7.2/24"
+        },
+        {
+          "kind": "cve",
+          "start": 54,
+          "end": 67,
+          "text": "CVE-2024-1230"
+        },
+        {
+          "kind": "ip",
+          "start": 68,
+          "end": 80,
+          "text": "192.0.7.3/24"
+        },
+        {
+          "kind": "cve",
+          "start": 81,
+          "end": 94,
+          "text": "CVE-2024-1231"
+        },
+        {
+          "kind": "ip",
+          "start": 95,
+          "end": 107,
+          "text": "192.0.7.4/24"
+        }
+      ]
+    },
+    {
+      "id": "a21",
+      "image": "images/21.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a22",
+      "image": "images/22.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a23",
+      "image": "images/23.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a24",
+      "image": "images/24.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a25",
+      "image": "images/25.png",
+      "sha256": "d4b67d38d133d0d8cde5bc7f13d2c0758406d54a6ad74dc583446448e090d32a",
+      "category": "phone",
+      "language": "en",
+      "technical": false,
+      "text": "The photographed page remains readable",
+      "tokens": []
+    },
+    {
+      "id": "a26",
+      "image": "images/26.png",
+      "sha256": "09504ea6fb537b3a6d8dba922d522ad920c78f422b0cc803667cb1d28d7e2dc6",
+      "category": "phone",
+      "language": "vi",
+      "technical": false,
+      "text": "Ảnh chụp màn hình nghiêng cần được đọc đầy đủ",
+      "tokens": []
+    },
+    {
+      "id": "a27",
+      "image": "images/27.png",
+      "sha256": "2a799c0ff9e42ac381d1d7de96b6dec80899f4f81c853354f7947134c356adf5",
+      "category": "low_contrast",
+      "language": "en",
+      "technical": false,
+      "text": "Low contrast document text remains intact",
+      "tokens": []
+    },
+    {
+      "id": "a28",
+      "image": "images/28.png",
+      "sha256": "a0fc2623987dbe729179ac68d1c8f4cdca781059d916a5af4736aa83baeebfe6",
+      "category": "low_contrast",
+      "language": "vi",
+      "technical": false,
+      "text": "Văn bản mờ vẫn cần giữ nguyên dấu",
+      "tokens": []
+    },
+    {
+      "id": "a29",
+      "image": "images/29.png",
+      "sha256": "2a799c0ff9e42ac381d1d7de96b6dec80899f4f81c853354f7947134c356adf5",
+      "category": "low_contrast",
+      "language": "en",
+      "technical": false,
+      "text": "Low contrast document text remains intact",
+      "tokens": []
+    },
+    {
+      "id": "a30",
+      "image": "images/30.png",
+      "sha256": "a0fc2623987dbe729179ac68d1c8f4cdca781059d916a5af4736aa83baeebfe6",
+      "category": "low_contrast",
+      "language": "vi",
+      "technical": false,
+      "text": "Văn bản mờ vẫn cần giữ nguyên dấu",
+      "tokens": []
+    },
+    {
+      "id": "a31",
+      "image": "images/31.png",
+      "sha256": "e825592aaf227d97ec54de719169059ad819e3dd02b7cdc45011595e988dc530",
+      "category": "clear",
+      "language": "zh",
+      "technical": false,
+      "text": "系统安全检查已经完成。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a32",
+      "image": "images/32.png",
+      "sha256": "a0c18df38bbaada8c5724de45ec7248790ba1a7689199f21caa408c44dad56e3",
+      "category": "clear",
+      "language": "zh",
+      "technical": false,
+      "text": "服务器正在正常运行。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a33",
+      "image": "images/33.png",
+      "sha256": "e3c66a22565ad73d69951ec7071f66ac027c373aa53d758b7e74c46371f1e6fc",
+      "category": "skew",
+      "language": "zh",
+      "technical": false,
+      "text": "請確認網路連線正常。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a34",
+      "image": "images/34.png",
+      "sha256": "1db692573b2c3e29075671853a51beea235e0ab6afebdaaac2bf7df698b98897",
+      "category": "technical",
+      "language": "zh",
+      "technical": true,
+      "text": "漏洞 CVE-2024-3011 位於 192.0.2.11。",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 3,
+          "end": 16,
+          "text": "CVE-2024-3011"
+        },
+        {
+          "kind": "ip",
+          "start": 20,
+          "end": 30,
+          "text": "192.0.2.11"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a35",
+      "image": "images/35.png",
+      "sha256": "6442ce37b412e3f6b030ed9680334b126740f095e125a16f37c93ee2e3703843",
+      "category": "clear",
+      "language": "ja",
+      "technical": false,
+      "text": "システムの安全確認が完了しました。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a36",
+      "image": "images/36.png",
+      "sha256": "815521073fc3002f2f12cf27073b7f43f587adb239627e9fa3326ac31aed76fb",
+      "category": "clear",
+      "language": "ja",
+      "technical": false,
+      "text": "サーバーは正常に動作しています。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a37",
+      "image": "images/37.png",
+      "sha256": "8caef60b84a07fa0ef5ce34ff9a0b1b00529f9d418b22ad395216c5209d2dc65",
+      "category": "skew",
+      "language": "ja",
+      "technical": false,
+      "text": "ネットワーク接続を確認してください。",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a38",
+      "image": "images/38.png",
+      "sha256": "d41413be3578ad43192c59b0f403b2b4e5335348f7ace8f5cf3c2b8eed13eb0b",
+      "category": "technical",
+      "language": "ja",
+      "technical": true,
+      "text": "脆弱性 CVE-2024-3012 は 192.0.2.12 にあります。",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 4,
+          "end": 17,
+          "text": "CVE-2024-3012"
+        },
+        {
+          "kind": "ip",
+          "start": 20,
+          "end": 30,
+          "text": "192.0.2.12"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a39",
+      "image": "images/39.png",
+      "sha256": "1256f71adc907e10e9f81992678eeb7955f504f0faf6cbcfb22627f860b49e17",
+      "category": "clear",
+      "language": "ko",
+      "technical": false,
+      "text": "시스템 보안 점검이 완료되었습니다.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a40",
+      "image": "images/40.png",
+      "sha256": "72a6ade871fb6abf9cb5a3d0f94c93b7ed2fe30115358ec9ea72c4c872e4c7be",
+      "category": "clear",
+      "language": "ko",
+      "technical": false,
+      "text": "서버가 정상적으로 작동하고 있습니다.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a41",
+      "image": "images/41.png",
+      "sha256": "fe3f8ae11457fd6e8b3dca9910fabc55948a280f74504e339054f377dbd7265c",
+      "category": "skew",
+      "language": "ko",
+      "technical": false,
+      "text": "네트워크 연결을 확인하세요.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a42",
+      "image": "images/42.png",
+      "sha256": "d56cd297a433f4679b9540e3dbde69f4f8858017ab889a4ff27dcd3c83f0d49a",
+      "category": "technical",
+      "language": "ko",
+      "technical": true,
+      "text": "취약점 CVE-2024-3013 은 192.0.2.13 에 있습니다.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 4,
+          "end": 17,
+          "text": "CVE-2024-3013"
+        },
+        {
+          "kind": "ip",
+          "start": 20,
+          "end": 30,
+          "text": "192.0.2.13"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a43",
+      "image": "images/43.png",
+      "sha256": "b3d79fffe7af266989759dfe2c5af03c0458b833e75b1058e1e559acba1d4e62",
+      "category": "clear",
+      "language": "fr",
+      "technical": false,
+      "text": "Le contrôle de sécurité est terminé.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a44",
+      "image": "images/44.png",
+      "sha256": "96887c9ac32760357226e7f14d20e60690c23f4a2c6b56322de3dabb768c19a3",
+      "category": "clear",
+      "language": "fr",
+      "technical": false,
+      "text": "Le serveur fonctionne normalement.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a45",
+      "image": "images/45.png",
+      "sha256": "c63166fcf5fd512ec46cf3eb824734a07694d84999bca7b943c2893e45a75f6d",
+      "category": "skew",
+      "language": "fr",
+      "technical": false,
+      "text": "Veuillez vérifier la connexion réseau.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a46",
+      "image": "images/46.png",
+      "sha256": "ab4426c52f2874d5fd78d821c5d87c390a35f3b16a0db06d2046f57a22217a94",
+      "category": "technical",
+      "language": "fr",
+      "technical": true,
+      "text": "La faille CVE-2024-3014 concerne 192.0.2.14.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 10,
+          "end": 23,
+          "text": "CVE-2024-3014"
+        },
+        {
+          "kind": "ip",
+          "start": 33,
+          "end": 43,
+          "text": "192.0.2.14"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a47",
+      "image": "images/47.png",
+      "sha256": "0e5adf8d0aefc1bfe98ee3988cd062834a376bf571239a43033b13dc303522cf",
+      "category": "clear",
+      "language": "de",
+      "technical": false,
+      "text": "Die Sicherheitsprüfung ist abgeschlossen.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a48",
+      "image": "images/48.png",
+      "sha256": "1cc0a5d5cdcf2edd0c6d6af7116f02545955c37a7189ad8053010724373cc01e",
+      "category": "clear",
+      "language": "de",
+      "technical": false,
+      "text": "Der Server funktioniert normal.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a49",
+      "image": "images/49.png",
+      "sha256": "a594c99f234a587535002779008547a3752305974d96de59744b473d5913e067",
+      "category": "skew",
+      "language": "de",
+      "technical": false,
+      "text": "Bitte prüfen Sie die Netzwerkverbindung.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a50",
+      "image": "images/50.png",
+      "sha256": "72c17354babe88a006bf80fe630012736c7623416901221cca9e11c99aa07e1f",
+      "category": "technical",
+      "language": "de",
+      "technical": true,
+      "text": "Die Schwachstelle CVE-2024-3015 betrifft 192.0.2.15.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 18,
+          "end": 31,
+          "text": "CVE-2024-3015"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 51,
+          "text": "192.0.2.15"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a51",
+      "image": "images/51.png",
+      "sha256": "01e211d74020de55781a66616de5aa4e2f3521b414aebe0643c4b9da78b3c2ef",
+      "category": "clear",
+      "language": "es",
+      "technical": false,
+      "text": "La revisión de seguridad ha terminado.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a52",
+      "image": "images/52.png",
+      "sha256": "0f4bf8d1301c856292ba9295e63a728c2f78a3ac58a82fd8d98633ba5d3f4f6a",
+      "category": "clear",
+      "language": "es",
+      "technical": false,
+      "text": "El servidor funciona con normalidad.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a53",
+      "image": "images/53.png",
+      "sha256": "8dde4dc49adff81fee420b8e7bcf7e3409a2e2488443ba15125001d595a1dab6",
+      "category": "skew",
+      "language": "es",
+      "technical": false,
+      "text": "Compruebe la conexión de red.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a54",
+      "image": "images/54.png",
+      "sha256": "64e8180c4d8e9b3a78bb4dfe98d4326f150838ccc53ba290fd79307277198745",
+      "category": "technical",
+      "language": "es",
+      "technical": true,
+      "text": "La vulnerabilidad CVE-2024-3016 afecta a 192.0.2.16.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 18,
+          "end": 31,
+          "text": "CVE-2024-3016"
+        },
+        {
+          "kind": "ip",
+          "start": 41,
+          "end": 51,
+          "text": "192.0.2.16"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a55",
+      "image": "images/55.png",
+      "sha256": "90562bc5b0e0553bf20e487992bbd0f1d90d4b1bb258a9ea1d9bec3844c09698",
+      "category": "clear",
+      "language": "ru",
+      "technical": false,
+      "text": "Проверка безопасности системы завершена.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a56",
+      "image": "images/56.png",
+      "sha256": "c2b49e87d47c6cd1ec591ad084113d1324eab969a35e5c61611b0065070f60f9",
+      "category": "clear",
+      "language": "ru",
+      "technical": false,
+      "text": "Сервер работает нормально.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a57",
+      "image": "images/57.png",
+      "sha256": "d2eab02f086cd5431051d7ef0f848a624936c0912110c2eab298e620af0e5fef",
+      "category": "skew",
+      "language": "ru",
+      "technical": false,
+      "text": "Проверьте сетевое подключение.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a58",
+      "image": "images/58.png",
+      "sha256": "5701e9ba33e007c4096fa25662cbadfed2789901cd10816cb8a9a0ed0af31b7b",
+      "category": "technical",
+      "language": "ru",
+      "technical": true,
+      "text": "Уязвимость CVE-2024-3017 затрагивает 192.0.2.17.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 11,
+          "end": 24,
+          "text": "CVE-2024-3017"
+        },
+        {
+          "kind": "ip",
+          "start": 37,
+          "end": 47,
+          "text": "192.0.2.17"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a59",
+      "image": "images/59.png",
+      "sha256": "b16a5608c5de4f523138f2e1fd9d95b291973d8c5a69f5f05321327113fe7dc9",
+      "category": "clear",
+      "language": "ar",
+      "technical": false,
+      "text": "اكتمل فحص أمان النظام.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a60",
+      "image": "images/60.png",
+      "sha256": "6149c048945bd3ee53d4623f05e28f03b45dc61e053df42e5102717166e52429",
+      "category": "clear",
+      "language": "ar",
+      "technical": false,
+      "text": "يعمل الخادم بشكل طبيعي.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a61",
+      "image": "images/61.png",
+      "sha256": "5e0a9e8b425f83fc8170d60c414e5fe9255bce64978acee56c9c165480f5034f",
+      "category": "skew",
+      "language": "ar",
+      "technical": false,
+      "text": "يرجى التحقق من اتصال الشبكة.",
+      "tokens": [],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    },
+    {
+      "id": "a62",
+      "image": "images/62.png",
+      "sha256": "334ef680eb38a06ef5fd8b86f41002c29b7382c17734f10da98f5182c321d36e",
+      "category": "technical",
+      "language": "ar",
+      "technical": true,
+      "text": "الثغرة CVE-2024-3018 تخص 192.0.2.18.",
+      "tokens": [
+        {
+          "kind": "cve",
+          "start": 7,
+          "end": 20,
+          "text": "CVE-2024-3018"
+        },
+        {
+          "kind": "ip",
+          "start": 25,
+          "end": 35,
+          "text": "192.0.2.18"
+        }
+      ],
+      "provenance": "manually authored source; render by Pillow/RAQM; native review pending"
+    }
+  ],
+  "negatives": [
+    {
+      "image": "images/blank.png",
+      "expected_code": "NO_TEXT_DETECTED"
+    }
+  ]
+}

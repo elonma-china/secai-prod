@@ -56,6 +56,12 @@ translate:
   base: false
   max_turns: 2
 
+ocr_correction:
+  prompt: ocr_correction.md
+  tools: []
+  base: false
+  max_turns: 2
+
 translate_v2:
   prompt: translate_v2.md
   tools: []
