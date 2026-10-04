@@ -210,3 +210,21 @@ def test_generated_balanced_uri_groups_keep_every_suffix():
                 assert [source[a:b] for a, b in literal_spans(source)] == [literal]
                 protected = protect_literals(source)
                 assert restore_literals(protected.text, protected) == source
+
+
+@pytest.mark.parametrize("source", [
+    "nearly 1.5 million herbivores", "About 2.5 million visitors",
+    "approximately 3.14 km", "roughly 4.0 percent",
+    "around 5.6 billion", "almost 7.8 years",
+])
+def test_quantity_modifiers_are_not_mistaken_for_software_versions(source):
+    assert literal_spans(source) == ()
+
+
+@pytest.mark.parametrize("literal", [
+    "nginx 1.24", "OpenSSL 3.0.0", "Python 3.11", "package/1.2",
+    "nearly v1.5",  # An explicit version marker is still technical.
+])
+def test_generic_lowercase_and_marked_software_versions_remain_protected(literal):
+    source = f"Run {literal} now"
+    assert [source[a:b] for a, b in literal_spans(source)] == [literal]

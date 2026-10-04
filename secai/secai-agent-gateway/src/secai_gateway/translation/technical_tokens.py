@@ -37,6 +37,14 @@ _URL_STOP = frozenset("<>\"'")
 _QUOTED_PATH = re.compile(
     r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:\\|\\\\[A-Za-z0-9_.~-]+\\[A-Za-z0-9_.~-]+\\|"
     r"/)[^\n]*?)(?P=quote)")
+# A bare dotted number after a quantity adverb is a measurement, not a
+# product/version pair ("nearly 1.5 million"). An explicit v marker still
+# denotes a version, and all other product names remain open-ended.
+_QUANTITY_ADVERBS = frozenset({"about", "almost", "approximately", "around", "nearly", "roughly"})
+_VERSION = re.compile(
+    r"(?<![A-Za-z0-9_.+-])(?P<product>[A-Za-z][A-Za-z0-9_.+-]*)[ /-]"
+    r"(?P<marker>v?)(?:\d+)(?:\.\d+){1,4}(?:[-+][A-Za-z0-9_.]+)?"
+    r"(?![A-Za-z0-9_.+-])")
 _PATTERNS: tuple[re.Pattern[str], ...] = (
     _PLACEHOLDER_LIKE,
     re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
@@ -51,8 +59,6 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
                r"(?<![A-Za-z0-9_/])/(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*/)+"
                r"[A-Za-z0-9_.-]+(?![A-Za-z0-9_.-])"),
     re.compile(r"(?<![A-Za-z0-9_])[0-9a-fA-F]{16,}(?![A-Za-z0-9_])"),
-    re.compile(r"(?<![A-Za-z0-9_.+-])[A-Za-z][A-Za-z0-9_.+-]*[ /-]v?\d+"
-               r"(?:\.\d+){1,4}(?:[-+][A-Za-z0-9_.]+)?(?![A-Za-z0-9_.+-])"),
     re.compile(r"(?m)(?:^|(?<=\n))\s*\$\s*[^\n]+"),
     re.compile(r"(?<![A-Za-z0-9_])(?:curl|wget|nmap|ssh|sudo|pip|npm|docker|kubectl)\s+"
                r"[A-Za-z0-9_./:@%?=&+~-]+(?:\s+[A-Za-z0-9_./:@%?=&+~-]+)*"),
@@ -129,6 +135,10 @@ def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
         candidates.append(match.span(1))
     candidates.extend(match.span("path") for match in _QUOTED_PATH.finditer(text))
     candidates.extend(_url_spans(text))
+    for match in _VERSION.finditer(text):
+        if not match.group("marker") and match.group("product").casefold() in _QUANTITY_ADVERBS:
+            continue
+        candidates.append(match.span())
     for pattern in _PATTERNS:
         candidates.extend(match.span() for match in pattern.finditer(text))
     if not candidates:

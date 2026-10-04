@@ -372,3 +372,25 @@ async def test_new_technical_literal_rejected():
     with pytest.raises(TranslationError) as exc:
         await translate_blocks((block('Hello'),), 'en', 'vi', context=Invent())
     assert exc.value.code == 'TOKEN_INTEGRITY_FAILED'
+
+
+@pytest.mark.asyncio
+async def test_decimal_comma_translation_does_not_invent_software_version():
+    source = ('Hàng năm vào tháng Mười, gần 1,5 triệu động vật ăn cỏ tiến về phía '
+              'đồng bằng phía Nam, băng qua Sông Mara, từ những ngon đồi phía Bắc '
+              'để đón những cơn mưa.')
+    output = ('Every year in October, nearly 1.5 million herbivores migrate toward '
+              'the southern plains, crossing the Mara River from the northern hills '
+              'to reach the rains.')
+
+    class DecimalTranslation(Context):
+        model_context_tokens = 4096
+
+        async def translate(self, text, source_lang, target_lang):
+            self.calls.append((text, source_lang, target_lang))
+            return output
+
+    context = DecimalTranslation()
+    result = await translate_blocks((block(source),), 'vi', 'en', context=context)
+    assert result[0].translated_text == output
+    assert len(context.calls) == 1
