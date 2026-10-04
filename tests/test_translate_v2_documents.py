@@ -1,6 +1,8 @@
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
+import shutil
+import subprocess
 
 import pytest
 
@@ -83,6 +85,64 @@ def test_docx_rejects_external_relationship(tmp_path):
     with pytest.raises(TranslationError) as e:
         extract_docx(out, _settings())
     assert e.value.code == "UNSAFE_DOCUMENT"
+
+
+@pytest.mark.asyncio
+async def test_encrypted_docx_fails_with_unsafe_document_in_extractor_and_worker(tmp_path, monkeypatch):
+    from docx import Document
+    import httpx
+    from secai_gateway.app import create_app
+    from secai_gateway.translation.documents import extract_docx
+    from secai_gateway.translation.jobs import JobStore
+    from secai_gateway.translation.worker import Worker
+
+    if shutil.which("zip") is None:
+        pytest.skip("zip utility unavailable for encrypted fixture")
+    source = tmp_path / "plain.docx"
+    document = Document()
+    document.add_paragraph("Private text")
+    document.save(source)
+    parts = tmp_path / "parts"
+    parts.mkdir()
+    with ZipFile(source) as archive:
+        archive.extractall(parts)
+    encrypted = tmp_path / "encrypted.docx"
+    subprocess.run(["zip", "-q", "-P", "synthetic-only", "-r", str(encrypted), "."],
+                   cwd=parts, check=True)
+
+    config = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                 artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
+    with pytest.raises(TranslationError) as error:
+        extract_docx(encrypted, config)
+    assert error.value.code == "UNSAFE_DOCUMENT"
+
+    class NoModel:
+        async def complete(self, *args, **kwargs):
+            raise AssertionError("encrypted input must not reach the model")
+
+    store = JobStore(config)
+    job = store.admit("file", encrypted.read_bytes(), ".docx", "en", "vi", "peer", None)
+    assert await Worker(store, config, NoModel()).run_once()
+    row = store.get(job["job_id"])
+    assert (row["status"], row["error_code"]) == ("failed", "UNSAFE_DOCUMENT")
+
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "api-jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "api-artifacts"))
+    app = create_app(NoModel())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.post("/ai/v2/translate/files",
+                                     files={"file": ("encrypted.docx", encrypted.read_bytes())},
+                                     data={"source_lang": "en", "target_lang": "vi"})
+        assert response.status_code == 202
+        admitted = response.json()
+        assert await Worker(app.state.translation_v2_store, app.state.translation_v2_settings,
+                            NoModel()).run_once()
+        status = await client.get(admitted["status_url"])
+        assert (status.status_code, status.json()["status"], status.json()["error"]["code"]) == (
+            200, "failed", "UNSAFE_DOCUMENT")
+        result = await client.get(admitted["result_url"])
+        assert (result.status_code, result.json()["error"]["code"]) == (409, "JOB_FAILED")
 
 
 def test_docx_section_headers_follow_effective_section(tmp_path):

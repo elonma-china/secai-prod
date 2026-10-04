@@ -101,6 +101,8 @@ def _safe_zip(path: Path, settings: TranslationSettings) -> dict[str, bytes]:
         result: dict[str, bytes] = {}
         for item in entries:
             name = item.filename
+            if item.flag_bits & 0x1:
+                raise TranslationError("UNSAFE_DOCUMENT", "Encrypted document parts are unsupported.")
             if (name.startswith("/") or "\\" in name or "\x00" in name
                     or any(part in {"", ".", ".."} for part in name.rstrip("/").split("/"))
                     or (item.external_attr >> 16) & 0o170000 == 0o120000):

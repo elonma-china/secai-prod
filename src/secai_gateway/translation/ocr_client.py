@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import base64
 import ipaddress
+import json
+import zlib
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -72,28 +74,72 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
     encoded = base64.b64encode(await asyncio.to_thread(image.path.read_bytes)).decode("ascii")
     body = {"model": settings.ocr_model, "image_base64": encoded}
     timeout = httpx.Timeout(settings.ocr_timeout_seconds)
-    for attempt in range(settings.ocr_max_retries + 1):
-        try:
-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                response = await client.post(url, json=body, headers={
-                    "Authorization": f"Bearer {settings.ocr_api_key}"})
-            if response.status_code in {502, 503, 504} and attempt < settings.ocr_max_retries:
+    async def request_with_retries() -> OcrResult:
+        retries = min(max(0, settings.ocr_max_retries), 1)
+        for attempt in range(retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+                    async with client.stream("POST", url, json=body, headers={
+                        "Authorization": f"Bearer {settings.ocr_api_key}",
+                        "Accept-Encoding": "gzip, identity"}) as response:
+                        if response.status_code in {502, 503, 504}:
+                            raise httpx.HTTPStatusError("OCR temporarily unavailable",
+                                                        request=response.request, response=response)
+                        response.raise_for_status()
+                        encoding = response.headers.get("Content-Encoding", "identity").lower()
+                        if encoding not in {"identity", "gzip"}:
+                            raise TranslationError("OCR_UNAVAILABLE", "Unsupported OCR response encoding")
+                        decoder = zlib.decompressobj(16 + zlib.MAX_WBITS) if encoding == "gzip" else None
+                        chunks = []
+                        wire_size = decoded_size = 0
+                        async for chunk in response.aiter_raw():
+                            wire_size += len(chunk)
+                            if wire_size > _MAX_RESPONSE:
+                                raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
+                            try:
+                                part = decoder.decompress(chunk, _MAX_RESPONSE - decoded_size + 1) if decoder else chunk
+                            except zlib.error as exc:
+                                raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response") from exc
+                            decoded_size += len(part)
+                            if decoded_size > _MAX_RESPONSE or (decoder and decoder.unconsumed_tail):
+                                raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
+                            chunks.append(part)
+                        if decoder:
+                            try:
+                                tail = decoder.flush(_MAX_RESPONSE - decoded_size + 1)
+                            except zlib.error as exc:
+                                raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response") from exc
+                            decoded_size += len(tail)
+                            if decoded_size > _MAX_RESPONSE:
+                                raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
+                            if not decoder.eof or decoder.unused_data:
+                                raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response")
+                            chunks.append(tail)
+                payload = json.loads(b"".join(chunks))
+                result = _parse_response(payload)
+                if payload["model"] != settings.ocr_model:
+                    raise TranslationError("OCR_UNAVAILABLE", "OCR model mismatch")
+                return result
+            except TranslationError:
+                raise
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in {502, 503, 504} or attempt == retries:
+                    raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable",
+                                           retryable=exc.response.status_code in {502, 503, 504}) from exc
                 await asyncio.sleep(min(2 ** attempt, 2))
-                continue
-            response.raise_for_status()
-            if len(response.content) > _MAX_RESPONSE:
-                raise TranslationError("OCR_UNAVAILABLE", "OCR response exceeds limit")
-            result = _parse_response(response.json())
-            if response.json()["model"] != settings.ocr_model:
-                raise TranslationError("OCR_UNAVAILABLE", "OCR model mismatch")
-            return result
-        except TranslationError:
-            raise
-        except (httpx.HTTPError, ValueError) as exc:
-            if attempt == settings.ocr_max_retries:
-                raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True) from exc
-            await asyncio.sleep(min(2 ** attempt, 2))
-    raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True)
+            except ValueError as exc:
+                raise TranslationError("OCR_UNAVAILABLE", "Invalid OCR response") from exc
+            except httpx.TransportError as exc:
+                if attempt == retries:
+                    raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True) from exc
+                await asyncio.sleep(min(2 ** attempt, 2))
+        raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable", retryable=True)
+
+    try:
+        # HTTP read timeout is idle-based; this bounds the whole request and retry sequence.
+        return await asyncio.wait_for(request_with_retries(), settings.ocr_timeout_seconds)
+    except asyncio.TimeoutError as exc:
+        raise TranslationError("OCR_UNAVAILABLE", "OCR service timed out", retryable=True) from exc
 
 
 class ImageOcrPipeline:
