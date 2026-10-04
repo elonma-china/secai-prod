@@ -207,7 +207,6 @@ async def main() -> None:
         raise RuntimeError("Translation v2 is disabled")
     from ..agent.runner import LinchRunner
 
-    TranslationAgent(settings)  # fail startup before claiming work if specialist is absent
     runner = LinchRunner(settings.worker_db_path) if settings.ocr_correction_supported else None
     if runner is not None and runner.session_store.__class__.__name__ != "InMemorySessionStore":
         raise RuntimeError("Translation worker session store is not in memory")
