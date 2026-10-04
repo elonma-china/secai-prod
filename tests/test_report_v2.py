@@ -278,3 +278,112 @@ def test_existing_revision_table_gains_instruction_column(tmp_path):
     store.list_templates(path)
     with sqlite3.connect(path) as db:
         assert 'instruction' in {row[1] for row in db.execute('PRAGMA table_info(revisions)')}
+
+
+def test_url_terminal_prose_punctuation_not_part_of_fact():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Bằng chứng: https://example.test/scan/a?run=1.'
+    old = '## Bằng chứng\nhttps://example.test/scan/a?run=1.'
+    changed_punctuation = '## Bằng chứng\nhttps://example.test/scan/a?run=1'
+    assert validate_report(old, ['Bằng chứng'], source) == old
+    assert validate_report(changed_punctuation, ['Bằng chứng'], source, old) == changed_punctuation
+    for changed in ('https://evil.test/scan/a?run=1',
+                    'https://example.test/scan/b?run=1',
+                    'https://example.test/scan/a?run=2'):
+        with pytest.raises(HTTPException) as exc:
+            validate_report(f'## Bằng chứng\n{changed}', ['Bằng chứng'], source)
+        assert exc.value.status_code == 422
+
+
+def test_edit_single_named_section_keeps_untouched_observation(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    sections = ['Mốc thời gian', 'Ảnh hưởng', 'Xử lý']
+    saved = c.post('/ai/v2/reports/templates',
+                   json={**template(), 'sections': sections}, headers=auth()).json()
+    original = ('# Sự cố\n## Mốc thời gian\n09:10 phát hiện. 09:25 cô lập.\n'
+                '## Ảnh hưởng\n1 tài khoản thử nghiệm; chưa thấy mất dữ liệu.\n'
+                '## Xử lý\nĐã cô lập phiên.')
+
+    async def initial(system, user, settings):
+        return original
+
+    monkeypatch.setattr(api, 'generate_text', initial)
+    report = c.post('/ai/v2/reports/generate', json={'template_id': saved['id'],
+        'data': '09:10 phát hiện, 09:25 cô lập. 1 tài khoản thử nghiệm; chưa thấy mất dữ liệu. Đã cô lập phiên.'},
+        headers=auth()).json()
+
+    async def edited(system, user, settings):
+        return ('# Sự cố\n## Mốc thời gian\n09:10 phát hiện; 09:25 cô lập.\n'
+                '## Ảnh hưởng\n1 tài khoản thử nghiệm.\n## Xử lý\nChưa có thông tin.')
+
+    monkeypatch.setattr(api, 'generate_text', edited)
+    response = c.post(f"/ai/v2/reports/{report['id']}/edit", headers=auth(),
+                      json={'instruction': 'Rút ngắn phần Mốc thời gian.', 'expected_revision': 1})
+    assert response.status_code == 200, response.text
+    content = response.json()['content']
+    assert '09:10 phát hiện; 09:25 cô lập.' in content
+    assert 'chưa thấy mất dữ liệu' in content
+    assert 'Đã cô lập phiên.' in content
+    assert 'Chưa có thông tin.' not in content
+
+
+def test_generation_prompt_sets_entity_and_evidence_boundaries(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    saved = c.post('/ai/v2/reports/templates', json={**template(), 'sections': ['Phạm vi', 'Bằng chứng']}, headers=auth()).json()
+    seen = {}
+
+    async def generate(system, user, settings):
+        seen['system'] = system
+        return '## Phạm vi\nCT-04: DB-LAB-3 (203.0.113.33).\n## Bằng chứng\nCT-05: Chưa có thông tin.'
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    response = c.post('/ai/v2/reports/generate', headers=auth(), json={
+        'template_id': saved['id'],
+        'data': 'CT-04 áp dụng cho DB-LAB-3 (203.0.113.33). CT-05 không có hệ thống xác định.'})
+    assert response.status_code == 200, response.text
+    assert 'CT-04' in response.json()['content']
+    assert 'CT-05' in response.json()['content']
+    assert 'không gán' in seen['system'].casefold() or 'không chuyển' in seen['system'].casefold()
+
+
+def test_conflicting_source_counts_cannot_be_collapsed_to_missing():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Báo cáo A ghi 2 tài khoản, báo cáo B ghi 3 tài khoản; chưa đối soát.'
+    with pytest.raises(HTTPException) as exc:
+        validate_report('## Ảnh hưởng\nChưa có thông tin về số tài khoản.', ['Ảnh hưởng'], source)
+    assert exc.value.status_code == 422
+    valid = '## Ảnh hưởng\nBáo cáo A ghi 2 tài khoản, báo cáo B ghi 3 tài khoản; chưa đối soát.'
+    assert validate_report(valid, ['Ảnh hưởng'], source) == valid
+
+
+def test_edit_cannot_erase_no_data_loss_observation():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Ảnh hưởng: 1 tài khoản; chưa thấy mất dữ liệu.'
+    previous = '## Ảnh hưởng\n1 tài khoản; chưa thấy mất dữ liệu.'
+    with pytest.raises(HTTPException) as exc:
+        validate_report('## Ảnh hưởng\n1 tài khoản.', ['Ảnh hưởng'], source, previous)
+    assert exc.value.status_code == 422
+    candidate = '## Ảnh hưởng\n1 tài khoản; không ghi nhận mất dữ liệu.'
+    assert validate_report(candidate, ['Ảnh hưởng'], source, previous) == candidate
+
+
+def test_recorded_action_cannot_be_reported_as_missing():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = 'Sự cố lúc 08:20, đã chặn phiên đăng nhập. Không có thời điểm phát hiện.'
+    with pytest.raises(HTTPException) as exc:
+        validate_report('## Xử lý\nChưa có thông tin.', ['Xử lý'], source)
+    assert exc.value.status_code == 422
+    valid = '## Xử lý\nĐã chặn phiên đăng nhập.'
+    assert validate_report(valid, ['Xử lý'], source) == valid
