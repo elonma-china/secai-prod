@@ -426,3 +426,57 @@ def test_explicit_keep_section_overrides_second_section_mention():
     assert '## Xử lý\nĐã chặn phiên.' in result
     assert 'Chưa có thông tin.' not in result
     assert validate_report(result, sections, '09:10 phát hiện. Đã chặn phiên.') == result
+
+
+def test_overlapping_section_names_select_longest_explicit_target():
+    from secai_gateway.report_v2.validation import preserve_other_sections
+
+    sections = ['Phạm vi', 'Tổng quan phạm vi']
+    previous = '## Phạm vi\nA.\n## Tổng quan phạm vi\nB.'
+    proposed = '## Phạm vi\nC.\n## Tổng quan phạm vi\nD.'
+    result = preserve_other_sections(proposed, previous, sections, 'Chỉ sửa Tổng quan phạm vi.')
+    assert '## Phạm vi\nA.' in result
+    assert '## Tổng quan phạm vi\nD.' in result
+
+
+def test_explicit_do_not_change_section_is_preserved():
+    from secai_gateway.report_v2.validation import preserve_other_sections
+
+    sections = ['Mốc thời gian', 'Xử lý']
+    previous = '## Mốc thời gian\nA.\n## Xử lý\nB.'
+    proposed = '## Mốc thời gian\nC.\n## Xử lý\nD.'
+    result = preserve_other_sections(proposed, previous, sections,
+                                     'Chỉ sửa Mốc thời gian, đừng thay đổi Xử lý.')
+    assert '## Mốc thời gian\nC.' in result
+    assert '## Xử lý\nB.' in result
+
+
+def test_extra_heading_after_template_sections_rejected():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    content = '# Báo cáo\n## Tóm tắt\nNội dung.\n## Kết luận\nĐã xong.\n## Dữ kiện bổ sung\nVăn bản.'
+    with pytest.raises(HTTPException) as exc:
+        validate_report(content, ['Tóm tắt', 'Kết luận'], 'Nội dung. Đã xong. Văn bản.')
+    assert exc.value.status_code == 422
+    valid = '# Báo cáo\n## Tóm tắt\nNội dung.\n## Kết luận\nĐã xong.'
+    assert validate_report(valid, ['Tóm tắt', 'Kết luận'], 'Nội dung. Đã xong.') == valid
+
+
+def test_prompt_distinguishes_missing_evidence_and_record_scope(tmp_path, monkeypatch):
+    c = client(tmp_path, monkeypatch)
+    saved = c.post('/ai/v2/reports/templates', json={**template(), 'sections': ['Phạm vi', 'Bằng chứng', 'Kết luận']}, headers=auth()).json()
+    seen = {}
+
+    async def generate(system, user, settings):
+        seen['system'] = system
+        return '## Phạm vi\nAPP-LAB-2.\n## Bằng chứng\nCT-03: thiếu hồ sơ.\n## Kết luận\nChưa thể xác nhận trạng thái.'
+
+    monkeypatch.setattr(api, 'generate_text', generate)
+    result = c.post('/ai/v2/reports/generate', headers=auth(), json={'template_id': saved['id'],
+        'data': 'APP-LAB-2. CT-03 yêu cầu hồ sơ. Hồ sơ: không có dữ liệu.'})
+    assert result.status_code == 200, result.text
+    assert 'không đồng nghĩa' in seen['system'].casefold()
+    assert 'từng bản ghi' in seen['system'].casefold()
+    assert 'tiêu đề' in seen['system'].casefold()
