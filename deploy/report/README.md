@@ -2,6 +2,20 @@
 
 This independent Compose project serves only the report router on loopback port 18183. Devspace forwards `/ai/v2/reports` and its descendants to this port. The shared gateway on 8131 belongs to other feature deployments and is outside this project.
 
+For the static Devspace server, set `REPORT_GATEWAY_PROXY=http://127.0.0.1:18183`
+or put that URL in the local `secai-fe-devspace/.report-upstream` file. Only the
+exact `/ai/v2/reports` path and its descendants use this upstream. File translation,
+OCR, multilingual translation and expert review continue through `VITE_GATEWAY_PROXY`
+(default `http://127.0.0.1:8131`). Without a separate report upstream all routes use
+the shared gateway. Keep API credentials out of the upstream URL/file.
+
+For an isolated translation/OCR stack, `TRANSLATION_GATEWAY_PROXY` or the local
+`secai-fe-devspace/.translation-upstream` file selects the backend for both
+`/ai/v2/translate` and `/ai/v3/translate` prefixes. The current shared Devspace
+uses `http://127.0.0.1:18185`, whose worker has OCR and multilingual translation
+configured. Existing direct gateway clients and their persisted jobs retain
+their original endpoint and storage.
+
 Build reproducibly from the gateway root:
 
 ```sh

@@ -74,6 +74,7 @@ async def test_only_translate_v2_uses_dedicated_agent(monkeypatch):
     monkeypatch.setattr(module, "build_llm_provider", build_provider)
     monkeypatch.setattr(module, "make_gateway_agent", lambda **kwargs: Agent("translate_v2"))
     scoped = module.LinchRunner.__new__(module.LinchRunner)
+    scoped.strict_transform_errors = False
     scoped.agent = Agent("legacy")
     scoped._translation_agent = None
     scoped._session_locks = {}

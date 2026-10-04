@@ -519,6 +519,8 @@ async def test_mixed_documents_and_images_use_own_routes_and_preserve_ocr_result
     monkeypatch.setenv("TRANSLATE_V2_OCR_ENABLED", "true")
     monkeypatch.setenv("TRANSLATE_V2_OCR_BASE_URL", "http://127.0.0.1:1")
     monkeypatch.setenv("TRANSLATE_V2_UPLOAD_RATE_PER_MINUTE", "100")
+    # Fast polling here tests mixed-file routing, not the separately tested quota.
+    monkeypatch.setenv("TRANSLATE_V2_LOOKUP_RATE_PER_MINUTE", "1000")
 
     async def fake_ocr(self, input_path, *, work_dir, context):
         block = DocumentBlock(id="b000001", kind="ocr_text", order=0,
