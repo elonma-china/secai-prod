@@ -1,5 +1,5 @@
 """Bounded file API smoke. Uses only generated, non-sensitive fixture data."""
-import io,json,sys,time,urllib.request,urllib.error,uuid,zipfile
+import io,json,pathlib,sys,time,urllib.request,urllib.error,uuid,zipfile
 base=sys.argv[1]
 def request(path,data=None,headers=None):
  try:r=urllib.request.urlopen(urllib.request.Request(base+path,data=data,headers=headers or {}),timeout=10)
@@ -23,6 +23,20 @@ def completed(name,content,target='en'):
  print(name,target,'succeeded',repr(result['translated_text']),flush=True)
 assert request('/health')[0]==200
 status,schema=request('/openapi.json');assert status==200
+baseline=pathlib.Path(__file__).with_name('openapi-before.json')
+if baseline.exists():
+ previous=json.loads(baseline.read_text())
+ for path,contract in previous['paths'].items():
+  actual=schema['paths'].get(path)
+  # FastAPI picks a set-iteration method for multi-method operation IDs;
+  # method availability, parameters, request/response schemas remain exact.
+  if len(contract)>1 and actual:
+   contract={k:{a:b for a,b in v.items() if a!='operationId'} for k,v in contract.items()}
+   actual={k:{a:b for a,b in v.items() if a!='operationId'} for k,v in actual.items()}
+  assert actual==contract,('Legacy route contract changed',path)
+ print('All baseline route contracts preserved',flush=True)
+ assert request('/review-api/campaigns')[0]==401
+ print('Review authentication remains enforced401',flush=True)
 for path in ['/ai/chat','/ai/translate','/sessions/{sid}/chat','/ai/v2/translate/files']:
  assert path in schema['paths'],path
 completed('smoke.txt',b'Hello world. This is a translation test.')
