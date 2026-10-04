@@ -200,6 +200,9 @@ class Settings(BaseSettings):
     tool_timeout_ms: int = 30000
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
+    report_feature_enabled: bool = False
+    report_api_key: str = ""
+    report_db_path: str = "./data/reports.db"
     gateway_db_path: str = "./data/gateway.db"
     redis_url: str = ""
     admin_api_key: str = ""

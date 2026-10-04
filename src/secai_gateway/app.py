@@ -72,6 +72,9 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     register_routes(app, state)
     from .api import projects as _projects_router
     app.include_router(_projects_router.router)
+    if state.settings.report_feature_enabled:
+        from .report_v2.api import router as report_v2_router
+        app.include_router(report_v2_router)
     return app
 
 
