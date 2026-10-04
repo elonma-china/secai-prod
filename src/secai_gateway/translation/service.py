@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import unicodedata
 from functools import lru_cache
 
 from lingua import Language, LanguageDetectorBuilder
@@ -20,6 +21,10 @@ _LANGUAGES = {
     "ar": Language.ARABIC,
 }
 _LANGUAGE_CODES = {language: code for code, language in _LANGUAGES.items()}
+
+
+def _latin_word_char(char: str) -> bool:
+    return char.isdigit() or unicodedata.name(char, "").startswith("LATIN ")
 
 
 @lru_cache(maxsize=1)
@@ -172,12 +177,15 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                         seam = pending_whitespace
                         if previous:
                             if target_lang in {"zh", "ja"}:
-                                if ("\n" not in seam and "\r" not in seam and
-                                        not previous.endswith("⟧") and not core.startswith("⟦")):
+                                if (seam and all(char == " " for char in seam) and
+                                        not previous.endswith("⟧") and not core.startswith("⟦") and
+                                        not (_latin_word_char(previous[-1]) and
+                                             _latin_word_char(core[0]))):
                                     seam = ""
                             elif not seam:
                                 left_word = (previous[-1].isalnum() or previous.endswith("⟧") or
-                                             previous[-1] in ".!?。！？")
+                                             previous[-1] in ".,;:!?،؛。！？，；：\"" or
+                                             unicodedata.category(previous[-1]) in {"Pe", "Pf"})
                                 right_word = core[0].isalnum() or core.startswith("⟦")
                                 if left_word and right_word:
                                     seam = " "
