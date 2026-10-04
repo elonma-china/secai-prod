@@ -3,6 +3,7 @@ import {
   cancelTranslationJob, getTranslationJob, getTranslationResult, submitTranslationFile, TranslateV2Error,
 } from "../api/translateV2";
 import type { V2Job, V2Kind, V2Lang, V2Result, V2Source } from "../api/translateV2";
+import { sha256File } from "./fileFingerprint";
 import "../styles/translateFileBatch.css";
 
 const STORAGE = "secai.translate.v2.file.batch.v1";
@@ -28,16 +29,6 @@ type Row = {
 
 function randomHex(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function fingerprint(file: File): Promise<string> {
-  const bytes = await new Promise<ArrayBuffer>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(new Error("Không đọc được tệp."));
-    reader.readAsArrayBuffer(file);
-  });
-  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function supported(file: File, imagesEnabled: boolean): V2Kind | null {
@@ -247,7 +238,7 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
           setNotice(`${file.name}: chỉ nhận TXT/DOCX/DOC${imagesEnabled ? "/PNG/JPG" : ""}, mỗi tệp tối đa 10 MiB và không rỗng.`);
           continue;
         }
-        const hash = await fingerprint(file);
+        const hash = await sha256File(file);
         const row: Row = { id: randomHex(), name: file.name, size: file.size,
           extension: file.name.toLowerCase().match(/\.[^.]+$/)?.[0] ?? "", hash, key: randomHex(),
           kind, source, target, phase: "waiting" };
@@ -266,7 +257,7 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
     const row = rowsRef.current.find((item) => item.id === id);
     if (!row || (row.phase !== "uncertain" && row.phase !== "needs_file")) return;
     try {
-      const hash = await fingerprint(file);
+      const hash = await sha256File(file);
       if (hash !== row.hash || file.size !== row.size || file.name.toLowerCase().match(/\.[^.]+$/)?.[0] !== row.extension) {
         change(id, { error: "Tệp đã thay đổi; hãy chọn đúng tệp gốc." });
         return;
