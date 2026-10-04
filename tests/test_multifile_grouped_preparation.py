@@ -171,3 +171,26 @@ def test_changed_frozen_corpus_or_mapping_digest_rejected(tmp_path):
     with pytest.raises(ValueError, match="approved frozen manifest digest"):
         map_results(mapping_path, tmp_path / "missing-batch.json", tmp_path,
                     tmp_path / "candidate.jsonl", expected_manifest_sha256=expected)
+
+
+def test_preparation_parses_the_exact_bytes_that_were_approved(tmp_path, monkeypatch):
+    from evals.multilang import prepare_multifile_dev_grouped as grouped
+
+    frozen = tmp_path / "frozen.jsonl"
+    _frozen_fixture(frozen)
+    original_bytes = frozen.read_bytes()
+    approved_hash = hashlib.sha256(original_bytes).hexdigest()
+    real_parse = grouped._manifest_rows
+
+    def change_path_before_parse(snapshot):
+        frozen.write_bytes(original_bytes.replace(b"Source sentence 00", b"SOURCE CHANGED AFTER HASH"))
+        return real_parse(snapshot)
+
+    monkeypatch.setattr(grouped, "_manifest_rows", change_path_before_parse)
+    _, mapping_path = grouped.prepare_grouped(
+        frozen, tmp_path / "prepared", expected_manifest_sha256=approved_hash)
+    mapping = json.loads(mapping_path.read_text())
+    first = mapping["files"][0]
+    blocks = extract_docx(Path(first["path"]), TranslationSettings()).blocks
+    assert blocks[0].text.startswith("Source sentence 00")
+    assert mapping["manifest_sha256"] == approved_hash
