@@ -19,8 +19,10 @@ Run from this repository root using the isolated environment. The frozen DEV
 manifest is identified by SHA-256
 `ad1e0fd7f8068da49bee2255e64a8019ec5a2a840b0347e9403153c612a0f64e`.
 The command creates 18 DOCX files with 30 distinct aligned source groups in
-each direction and an exact block-to-sample mapping. Keep the work directory
-private: it will later contain capability job IDs and translated text.
+each direction, an exact block-to-sample mapping, and a private batch manifest
+that seals the DOCX byte digests **before** any model request. Keep the work
+directory private: it will later contain capability job IDs and translated
+text. Do not edit or regenerate the prepared inputs after sealing.
 
 ```sh
 umask 077
@@ -43,6 +45,17 @@ export TRANSFORMERS_OFFLINE=1
 "$DIAG_PYTHON" -m deploy.mt_cpu_service.diagnostic prepare \
   --dev-manifest /home/ict/secai-multilang-benchmark-corpus/dev/flores101-dev-sample60-manifest.jsonl \
   --work-dir "$DIAG_WORK"
+```
+
+If the DOCX files were prepared by an earlier harness version that did not
+create `private-batch-manifest.json`, use the offline `seal` action once. It
+re-extracts and hashes all 30 source blocks in all 18 DOCX against the frozen
+mapping before recording their current byte digests. It rejects altered
+source paragraphs; never regenerate a mutated document merely to make the
+benchmark pass.
+
+```sh
+"$DIAG_PYTHON" -m deploy.mt_cpu_service.diagnostic seal --work-dir "$DIAG_WORK"
 ```
 
 ## Staging process profile (only after the CPU slot is released)
@@ -137,7 +150,9 @@ health response alone is not a translation-quality result.
 
 The live action has an explicit `--allow-live` gate. It uses loopback HTTP,
 disables proxy environment variables and redirects, admits no more than two
-jobs at once, and records idempotency keys in a private manifest. Keep the
+jobs at once, and rechecks **all** prepared source blocks and sealed DOCX
+digests before creating an HTTP client. The batch rechecks each digest again
+before upload. Its idempotency keys are already in the private manifest. Keep the
 gateway and worker running until all jobs are terminal. The batch timeout is
 7500 seconds per file, just above the server's 7200-second job deadline.
 
@@ -146,7 +161,8 @@ gateway and worker running until all jobs are terminal. The batch timeout is
   --work-dir "$DIAG_WORK" --base-url http://127.0.0.1:18181 --allow-live
 ```
 
-If interrupted, use `resume` with the same work directory and base URL. Use
+If interrupted, use `resume` with the same work directory, unchanged input
+files, and base URL. Use
 `cancel` only when deliberately abandoning the remaining jobs. Once all 18
 jobs have succeeded, export exactly 540 **actual API result blocks**:
 
@@ -195,7 +211,9 @@ the gateway process without echoing it or putting it in argv. Four public-DEV
 probes plus one synthetic CVE/IP literal probe run sequentially through the
 exact v3 API and save responses in the private work directory. They test the
 real masked/prompted route, not file translation quality. No other v3
-language flags are needed for these probes.
+language flags are needed for these probes. The smoke command first reruns
+the grouped mapper's proof of 18 successful jobs and all 540 result blocks;
+it refuses to send even the first v3 request while that batch is incomplete.
 
 ```sh
 "$DIAG_PYTHON" -m deploy.mt_cpu_service.diagnostic v3-smoke \
