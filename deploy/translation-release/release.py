@@ -29,8 +29,12 @@ def verify_profiles(root):
                 assert not cfg.get("volumes") and not cfg.get("ports")
             else:
                 assert set(cfg.get("volumes", [])) == allowed_mounts, "unexpected mounts"
-                assert cfg.get("networks") == ["secai-net"] and not cfg.get("network_mode")
-                assert cfg.get("ports", []) == (["18185:8131"] if service == "gateway" else [])
+                assert cfg.get("network_mode") == "host" and not cfg.get("networks") and not cfg.get("ports")
+                command = cfg["command"]
+                if service == "gateway":
+                    assert command == ["uvicorn", "secai_gateway.app:app" if profile == "rollback" else "secai_gateway.multilang_app:app", "--host", "0.0.0.0", "--port", "18185"]
+                else:
+                    assert command == ["python", "-m", "secai_gateway.translation.worker"]
 
 
 def compose(root, profile, *args):
