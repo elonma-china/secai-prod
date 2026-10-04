@@ -1,6 +1,16 @@
 # Report feature — execution state
 
-## Current handoff — quality fixes completed, quality gate still FAIL
+## Current handoff — measured MVP threshold PASS (2026-10-04)
+
+- Final integrated product `f4d8ba2`, branch `integration/report-feature`; source-first JSON, narrow unsupported-outcome/CT-IP/duplicate/action checks and scoped revision preservation. No main merge, push or deployment; feature remains default OFF.
+- Final integrated report/session tests: **73 passed**. Independent code review: **PASS for reviewed scope**, reviewer report tests39/39; commit `a9fa0fe`. Full regression NOT PASS: bounded prior run104passed/1skip/6known external fixture failures. See `../../test-results/report-quality-iteration-06.md`.
+- Frozen live06: original12 + supplemental6 unchanged; DuyTa/Cyber-F1-AWQ;18/18 generation +18/18 edit accepted,39attempts,18reports/36revisions and3rejected drafts retained. Live code `3c53d42`; final negation guard was tested by exact full-router offline replay on `ed8925f`, with all prompts/status/content/counts identical and no model calls. Integrated source files match final replay.
+- Independent offline LLM judgement: **PASS** under frozen rubric. Combined generation128/144=88.89%; edits130/144=90.28%. Every original/supplemental template/operation ≥70% (minimum75%). Required structure, critical identifier/numeric grounding and revision persistence pass on this dataset.
+- Remaining soft defects: some noisy log text retained, unclear planned-action wording, missing contextual date/ID or vague recommendations. No human review/customer acceptance/population accuracy claim. Repeated tuning on this small synthetic corpus limits generalization.
+- Durable latest results: `/home/ict/secai-report-evidence/report-mvp-quality-fix-06/`; all historical runs and original judge verdicts retained in `/home/ict/secai-report-evidence/INDEX.md`. Rubric audit05 saved separately, no scores overwritten.
+- Final judgement `../../reports/report-mvp-quality-06-judgement.md`; live/replay evidence `../../reports/report-mvp-live-quality-fix-06-evidence.md` and `../../reports/report-mvp-live-quality-fix-06-replay.md`.
+
+## Historical handoff — earlier quality fixes
 
 2026-10-04: integrated product `54cd3ad` contains the reviewed URL comparison, prompt grounding, scoped section edits and structure fixes. 61 report/session tests PASS on the integrated tree; independent code review PASS for scoped fixes (review commit `446c634`). Full suite remains incomplete; see `../../test-results/report-quality-fixes.md`.
 
