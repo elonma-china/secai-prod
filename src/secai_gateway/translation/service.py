@@ -23,8 +23,51 @@ _LANGUAGES = {
 _LANGUAGE_CODES = {language: code for code, language in _LANGUAGES.items()}
 
 
-def _latin_word_char(char: str) -> bool:
-    return char.isdigit() or unicodedata.name(char, "").startswith("LATIN ")
+def _boundary_graphemes(text: str) -> tuple[str, ...]:
+    """Return normalized base characters so combining marks stay with their letters."""
+    bases = []
+    for grapheme in regex.findall(r"\X", text):
+        normalized = unicodedata.normalize("NFC", grapheme)
+        bases.append(next((char for char in normalized
+                           if not unicodedata.category(char).startswith("M")), normalized[0]))
+    return tuple(bases)
+
+
+def _spaced_target_needs_separator(previous: str, core: str) -> bool:
+    if core.startswith("⟦"):
+        right_word = True
+    else:
+        right_word = _boundary_graphemes(core)[0].isalnum()
+    if not right_word:
+        return False
+    if previous.endswith("⟧"):
+        return True
+    left = _boundary_graphemes(previous)
+    last = left[-1]
+    category = unicodedata.category(last)
+    if last.isalnum():
+        return True
+    if category in {"Ps", "Pi"} or unicodedata.name(last, "").startswith("INVERTED "):
+        return False
+    if category.startswith("P"):
+        # Straight quotes can open or close; an empty quoted span opens.
+        return last not in {'"', "'"} or any(char.isalnum() for char in left[:-1])
+    return False
+
+
+def _cjk_target_drops_source_space(previous: str, core: str) -> bool:
+    """Remove only a plain-space seam with clear CJK typography on both sides."""
+    if previous.endswith("⟧") or core.startswith("⟦"):
+        return False
+    left, right = _boundary_graphemes(previous), _boundary_graphemes(core)
+    last, first = left[-1], right[0]
+    if (last.isalpha() and first.isalpha() and
+            all(unicodedata.east_asian_width(char) in {"W", "F"} for char in (last, first))):
+        return True
+    # A fullwidth closing mark belongs to the preceding CJK phrase.
+    return (unicodedata.category(last).startswith("P") and
+            unicodedata.east_asian_width(last) in {"W", "F"} and
+            unicodedata.category(last) not in {"Ps", "Pi"})
 
 
 @lru_cache(maxsize=1)
@@ -178,16 +221,10 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                         if previous:
                             if target_lang in {"zh", "ja"}:
                                 if (seam and all(char == " " for char in seam) and
-                                        not previous.endswith("⟧") and not core.startswith("⟦") and
-                                        not (_latin_word_char(previous[-1]) and
-                                             _latin_word_char(core[0]))):
+                                        _cjk_target_drops_source_space(previous, core)):
                                     seam = ""
                             elif not seam:
-                                left_word = (previous[-1].isalnum() or previous.endswith("⟧") or
-                                             previous[-1] in ".,;:!?،؛。！？，；：\"" or
-                                             unicodedata.category(previous[-1]) in {"Pe", "Pf"})
-                                right_word = core[0].isalnum() or core.startswith("⟦")
-                                if left_word and right_word:
+                                if _spaced_target_needs_separator(previous, core):
                                     seam = " "
                         joined.extend((seam, core))
                         pending_whitespace = trailing
