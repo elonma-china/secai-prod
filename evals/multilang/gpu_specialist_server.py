@@ -158,7 +158,8 @@ def server_command() -> list[str]:
             "--port", str(PORT), "--threads", "4", "--threads-batch", "4",
             "--parallel", "1", "--ctx-size", "2048", "--batch-size", "512",
             "--ubatch-size", "256", "--n-gpu-layers", "99", "--fit", "off",
-            "--override-kv", EOG_OVERRIDE, "--no-webui", "--alias", MODEL_ALIAS]
+            "--override-kv", EOG_OVERRIDE, "--verbosity", "4",
+            "--no-webui", "--alias", MODEL_ALIAS]
 
 
 def listener_pid() -> int | None:
@@ -177,6 +178,15 @@ def listener_pid() -> int | None:
 def check_only() -> dict:
     if POISONED.exists():
         raise RuntimeError("prior_gpu_cleanup_not_proven")
+    # A crash or disk-full failure may prevent the poison marker from being
+    # written. An unfinished evidence directory is itself a durable veto.
+    for run_dir in (BASE / "evidence").glob("gpu-run-*"):
+        try:
+            summary = json.loads((run_dir / "summary.json").read_text())
+        except (OSError, ValueError):
+            raise RuntimeError("prior_gpu_cleanup_not_proven") from None
+        if summary.get("clean_exit_attested") is not True:
+            raise RuntimeError("prior_gpu_cleanup_not_proven")
     artifacts = verify_artifacts()
     resources = host_resources()
     snapshot = gpu_snapshot()
@@ -208,6 +218,54 @@ def _stop_child(process: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait(timeout=10)
+
+
+def _write_durable(path: Path, data: dict) -> None:
+    with path.open("w", encoding="utf-8") as stream:
+        stream.write(json.dumps(data, sort_keys=True) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def cleanup_child(process: subprocess.Popen, run_dir: Path, reason: str,
+                  peak: int, owner_host_pid: int | None) -> dict:
+    """Reap our process group; persist a veto unless cleanup is proven."""
+    cleanup_errors = []
+    try:
+        _stop_child(process)
+    except Exception as error:
+        cleanup_errors.append(f"child_stop:{type(error).__name__}:{error}")
+    snapshot = None
+    observed_clean = False
+    for _ in range(30):
+        try:
+            snapshot = gpu_snapshot()
+            if (set(snapshot["processes_mib"]) == EXPECTED_INCUMBENTS and
+                    snapshot["free_mib"] >= PRELOAD_FREE_MIB):
+                observed_clean = True
+                break
+        except Exception as error:
+            cleanup_errors.append(f"gpu_sample:{type(error).__name__}:{error}")
+        time.sleep(1)
+    clean = observed_clean and not cleanup_errors and process.poll() is not None
+    summary = {"reason": reason, "peak_owned_mib": peak,
+               "clean_exit_attested": clean,
+               "cleanup_errors": cleanup_errors[:3],
+               "owner_container_pid": process.pid,
+               "owner_gpu_host_pid": owner_host_pid,
+               "final_gpu": snapshot}
+    try:
+        _write_durable(run_dir / "summary.json", summary)
+    except Exception:
+        # An incomplete run directory itself blocks every later admission.
+        summary["clean_exit_attested"] = False
+        try:
+            _write_durable(POISONED, summary)
+        finally:
+            raise
+    if not clean:
+        _write_durable(POISONED, summary)
+    return summary
 
 
 def _arm_parent_death(parent_pid: int) -> None:
@@ -292,25 +350,9 @@ def serve() -> None:
                 reason = f"safety_stop:{type(error).__name__}:{error}"
                 raise
             finally:
-                _stop_child(process)
-                clean = False
-                for _ in range(30):
-                    snapshot = gpu_snapshot()
-                    if (set(snapshot["processes_mib"]) == EXPECTED_INCUMBENTS and
-                            snapshot["free_mib"] >= PRELOAD_FREE_MIB):
-                        clean = True
-                        break
-                    time.sleep(1)
-                summary = {"reason": reason, "peak_owned_mib": peak,
-                           "clean_exit_attested": clean,
-                           "owner_container_pid": process.pid,
-                           "owner_gpu_host_pid": owner_host_pid,
-                           "final_gpu": snapshot}
-                (run_dir / "summary.json").write_text(json.dumps(summary, sort_keys=True)+"\n")
-                if not clean:
-                    POISONED.write_text(json.dumps(summary, sort_keys=True)+"\n")
+                summary = cleanup_child(process, run_dir, reason, peak, owner_host_pid)
                 print(json.dumps({"event": "complete", **summary}), flush=True)
-                if not clean:
+                if not summary["clean_exit_attested"]:
                     raise RuntimeError("gpu_cleanup_not_proven; future admission poisoned")
 
 
