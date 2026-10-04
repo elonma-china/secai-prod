@@ -56,7 +56,7 @@ Prefix `/ai/v3/document-agent`, dispatched only by the new composition; disabled
 
 HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/body access logging for this new prefix must be disabled/redacted before staging.
 
-### Task1: Scoped context and idempotent handle binding (independent CPU work)
+### Task 1: Scoped context and idempotent handle binding (independent CPU work)
 
 **Files:** new document_agent/scope.py, settings.py, tests/document_agent/test_scope.py.
 
@@ -67,7 +67,7 @@ HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/
 - [ ] Implement the interfaces and finite settings. Thread blocking SQLite operations off the request event loop. Bound turn-response storage and expire it with context.
 - [ ] Run targeted tests and `git diff --check`; obtain fresh independent review, then commit only these files.
 
-### Task2: OCR-only internal job, preserving the accepted lifecycle
+### Task 2: OCR-only internal job, preserving the accepted lifecycle
 
 **Dependency:** accepted file/OCR snapshot; root resolves composition conflicts without changing either contract. Single shared queue/worker, no second OCR queue service.
 
@@ -81,7 +81,7 @@ HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/
 - [ ] Branch the worker after CorrectedOcr: internal result schema `{schema_version:1,result_type:'ocr',ocr:...}`; skip translation. Unknown job kinds fail explicitly. A deployment check must ensure all workers support this kind before enabling new ingress.
 - [ ] Test timeout, cancellation, restart/reclaim, stale generations, expiry/tombstone, cleanup failure, queue fairness and no capability leakage; run accepted lifecycle regression tests. Preserve inherited failures rather than suppressing them. Review independently and commit.
 
-### Task3: DuyTa tool adapter and bounded document runner
+### Task 3: DuyTa tool adapter and bounded document runner
 
 **Files:** document_agent/tools.py, runner.py; prompts/document_ocr.md and additive profiles.yaml entry; tests/document_agent/test_tools.py, test_runner.py.
 
@@ -93,7 +93,7 @@ HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/
 - [ ] Test source-text instruction injection, model selecting an unregistered tool, cancellation and side-effect retry. Test shared stage scheduling without holding an OCR reservation while requesting DuyTa correction; respect the existing OCR worker's ownership of model resources. Do not claim local semaphores coordinate remote/other processes; cross-worker live release remains an integration prerequisite.
 - [ ] Run targeted tests, fresh independent review, commit.
 
-### Task4: Additive HTTP composition and safe JSON/SSE
+### Task 4: Additive HTTP composition and safe JSON/SSE
 
 **Files:** api/document_agent/routes.py, schemas.py; document_app.py; tests/document_agent/test_http.py, test_stream.py.
 
@@ -104,7 +104,7 @@ HTTP path handles are scoped identifiers, not the v2 bearer capability. Headers/
 - [ ] Test with actual Linch scripted-provider events: secret canaries absent from JSON, every SSE event, session/run stores and logs; raw private job IDs never reach model payload. Check result size limits before serialization and that all sync disk/SQLite work is off-loop.
 - [ ] Test flagsOFF/missingOCR startup and legacy `/ai/chat`, `/sessions/{sid}/chat`, JSON/SSE, v2files/images and v3translation contracts. Run full backend suite against the same dependency baseline and compare case IDs/failures; independently review and commit.
 
-### Task5: Integration, live routing and quality evidence
+### Task 5: Integration, live routing and quality evidence
 
 **Files:** docs/api/document-agent.md; docs/test-results/document-agent/; exact shared-code changes only after accepted owner integration.
 
