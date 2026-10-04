@@ -3,6 +3,7 @@ import { BarChart3, CalendarRange, ClipboardList, Download, FileText, Maximize2,
 import { ApiError, reportStream, statisticalReport } from "../api";
 import Markdown from "../components/Markdown";
 import ReportMvpPanel from "./ReportMvpPanel";
+import ReportTemplatePanel from "./review/ReportTemplatePanel";
 
 /** "Báo cáo thông minh" — Tạo báo cáo (free text → markdown, streamed) / Thống kê kỳ (structured
  * JSON → report_title/summary/detail, one-shot). Field-name notes from
@@ -12,7 +13,7 @@ import ReportMvpPanel from "./ReportMvpPanel";
  * field server-side; we resolve the picked period into concrete `from_date`/`to_date` +
  * a short Vietnamese `message` client-side so the prompt the model sees is meaningful. */
 
-type Tab = "create" | "stats" | "templates";
+type Tab = "create" | "stats" | "templates" | "review-template";
 const REPORT_MVP_ENABLED = import.meta.env.VITE_REPORT_FEATURE_ENABLED === "true";
 type Period = "week" | "month" | "quarter";
 
@@ -207,6 +208,7 @@ export default function ReportScreen({ userId }: { userId: string }) {
               Theo mẫu
             </button>
           )}
+          <button type="button" className={"opt" + (tab === "review-template" ? " on" : "")} aria-pressed={tab === "review-template"} onClick={() => setTab("review-template")}>Template bằng prompt</button>
         </div>
         <button className="iasbtn ghost report-expand" type="button" aria-pressed={expanded}
           onClick={() => setExpanded((value) => !value)} title={expanded ? "Thu gọn (Esc)" : "Mở toàn màn hình"}>
@@ -215,7 +217,7 @@ export default function ReportScreen({ userId }: { userId: string }) {
         </button>
       </div>
 
-      <div className={`report-screen-body${tab === "templates" ? " report-screen-body-templates" : ""}`}>
+      <div className={`report-screen-body${tab === "templates" || tab === "review-template" ? " report-screen-body-templates" : ""}`}>
         {tab === "create" && (
           <>
             {blocked && (
@@ -378,6 +380,7 @@ export default function ReportScreen({ userId }: { userId: string }) {
           </>
         )}
         {REPORT_MVP_ENABLED && <div className="report-template-tab" hidden={tab !== "templates"}><ReportMvpPanel /></div>}
+        <div className="report-template-tab" hidden={tab !== "review-template"}><ReportTemplatePanel logs={logsText} onLogsChange={setLogsText} /></div>
       </div>
     </div>
   );

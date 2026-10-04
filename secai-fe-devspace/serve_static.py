@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parent / "dist"
 GATEWAY = os.environ.get("VITE_GATEWAY_PROXY", "http://127.0.0.1:8131")
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
-PROXY_PREFIXES = ("/ai", "/health", "/poc", "/projects", "/sessions", "/admin")
+PROXY_PREFIXES = ("/ai", "/health", "/poc", "/projects", "/sessions", "/admin", "/review-api")
 HOP_BY_HOP = {
     "connection",
     "keep-alive",
@@ -48,6 +48,9 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch()
 
     def do_POST(self) -> None:  # noqa: N802
+        self._dispatch()
+
+    def do_PUT(self) -> None:  # noqa: N802
         self._dispatch()
 
     def do_PATCH(self) -> None:  # noqa: N802
