@@ -1,0 +1,28 @@
+# Multilang integration, security and release — frozen criteria v1
+
+2026-10-03, **CRITERIA_READY; independent validation NOT RUN**. [Contract](../api/multilang-contract.md), [assessment](multilang-assessment.md), [core](multilang-core.md), [FE](multilang-fe.md), [adapter](multilang-adapter.md). User code-now cho phép implementation/CPU tests flags OFF; không chứng nhận quality, main merge hoặc production deployment.
+
+| ID | Gate và bằng chứng bắt buộc |
+|---|---|
+| INT-01 | Exact base/main/file/OCR/multilang SHA+config/dependencies trong mọi report; snapshot API/behavior legacy flagsOFF/ON, en↔vi JSON/SSE/chat/session owner giữ nguyên. Không sửa old shared files để vượt test. |
+| INT-02 | Mỗi cycle refresh overlap map cả file+OCR gồm owner-reported WIP; merge-tree với main/file/OCR, ghi conflicts. Cây ghép thực sự trong disposable worktree main+multilang+file+OCR; không merge WIP vào feature hay sửa task của người khác. Text merge sạch không chứng minh runtime. |
+| INT-03 | Baseline và after dùng cùng isolated env/import path/data guards; full backend suite + imported file/OCR tests + multilang. Exact failure/skip IDs và missing dependency/environment evidence. No new failures; inherited fail không thành overall PASS và phải nêu release limitation. Không deselect lỗi để xanh. |
+| INT-04 | Composition new middleware/lifespan/resources/CORS/rate độc lập, legacy/file/OCR startup/job lifecycle giữ. Flags defaultOFF, aliases/header/body tamper không bypass; both-direction OFF khi một chiều fail. Rollback test active/queued requests và restart. |
+| INT-05 | Reviewer khác coder theo từng criterion và full diff; tester độc lập30×18×3+sealed TEST; vanguard context độc lập viết plan trước run, chỉ tests/report. Findings nguyên văn qua điều phối. |
+| INT-06 | Astra B mới review exact integrated SHA, chạy relevant replays sau SHA thay; FE real backend smoke và baseline preservation. Main merge sau user xác nhận; deploy/enablement quyết định riêng. |
+| SEC-01 | Multilingual injection zh/ja/ko/ru/ar/vi/mixed/hidden: no tool action, no prompt/glossary leak, no network action từ input. Payload no-tools verified, không chỉ prompt wording. |
+| SEC-02 | Unicode bidi/homoglyph/NFC/NFD/ZWJ/ZWNJ/malformed/control/tokenizer stress; reject dangerous controls theo contract, giữ legitimate joining và literals; FE copy bytes/code points và safe display. |
+| SEC-03 | Anonymous stateless v3 không auth/token/roles/owned object IDs; invalid/expired token, role/owner/IDOR tests ở v3 **N/A với contract này làm evidence**, không PASS. Legacy sessions/projects ownership vẫn test như cũ; file/OCR capability convention giữ. Request user_id/model/flags/endpoint extras reject400; Authorization không cấp quyền bật feature. |
+| SEC-04 | OWASP SQL/command/template injection, HTML/XSS, SSRF, CORS/security headers/error disclosure/mass assignment. Text URL không fetch; provider destination không do request điều khiển. Pure text nonexecuted inputs phải xử lý như data, không thêm sanitizer phá CJK. |
+| SEC-05 | Input bytes/codepoints/tokens/context/chunks/retries/global admission/concurrency/rate/deadline/disconnect budgets thật; no hidden SDK retries; trusted peer IP vs spoofed forwarding; multiworker quota giới hạn được ghi đúng. Không tuyên bố process semaphore là cluster-global. |
+| SEC-06 | Canary raw text/secrets/drafts/system/glossary scan logs/session/ledger/access/error/tool traces; không persist nội dung mới. Data/egress purpose và provider destination được pin; không query arbitrary URL; benchmark data public/anonymized. Errors không stack trace/input echo. |
+| SEC-07 | Dependency/model/adapter checksum/license/safe format và scans phù hợp; báo scanner version/results, findings unresolved. Scanner chưa chạy không ghi sạch; inherited vulnerability feature làm reachable vẫn applicable. |
+| SEC-08 | Concurrent languages/request isolation, nth-chunk fail, retry/order/protected integrity, timeout/disconnect, flag snapshot races; repeated POST có thể inference lại nhưng không tạo job/history. Metadata attempts đúng; atomic no partial. |
+| SEC-09 | Missing optional-model deps + flagsOFF startup, 404 new routes, old routes/schema/SSE/file jobs giữ; master/per-lang rollback và composed full regression. Không tự mở en↔vi/newlangs trong v2 file/OCR. |
+| REL-01 | 16 new directions đạt70% rubric từng direction/round, off-target≤2%, entity100%; en↔vi within frozen baseline margin; pending perf/cost thresholds và evaluator coverage đã giải quyết; security0 Critical/High unresolved. Medium fix hoặc user written acceptance; Low recorded. Mọi hướng yếu giữOFF, không beta ngầm. |
+| DOC-01 | API docs/examples đúng actual contract: vi→zh, ja→vi, vi→ar với CVE/IP; examples minh họa ghi rõ chưa live. Config/rollback/identity/errors/limits/known gaps rõ, no secrets/private machine path. |
+| OPS-01 | Max5 fix/review/task, max3 vanguard returns; same defect2 claimed-fix lần→đổi approach; count không giảm2 cycles→pause task+báo root. STATE/LOG multilang do root sở hữu; budgets không tự tăng/reset. |
+
+Feedback format bắt buộc: `ID | criterion/test | evidence | severity | suggested fix`. Status PASS/FAIL/BLOCKED/NOT RUN/N/A có lý do. Một mandatory criterion fail thì gate FAIL; thiếu evidence thì BLOCKED/NOT RUN. Native review optional không được dùng để bỏ adjudication cần thiết. Code/test scaffold có thể checkpoint khi quality live bị resource-blocked; không đổi thành release PASS.
+
+Traceability: spec§2→AS01/02/07/08+CORE01/02; §3→CORE03/09/10+FE01..06; §4→INT01..04+AS03; §6→OPS01+INT05/06; §7→AS01..11+AD01..05; §8 review/test/security/integration/docs→INT03..06+SEC01..09+DOC01; production disposition→REL01. Latest user overrides70%/DuyTa/max3 auxiliary sequential supersede source spec nơi có khác biệt.

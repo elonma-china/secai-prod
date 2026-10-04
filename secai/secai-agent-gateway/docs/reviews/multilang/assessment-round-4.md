@@ -1,0 +1,9 @@
+**Round 4 verdict: CHANGES REQUESTED** for detached HEAD `8e53a00a8adf710dd630196de8341a2585e5d97a` against `bf06bc4311a8c2487abce8bf7612c04025eb9d56`.
+
+**Residual R01 — Medium · AS-05:** [run.py:284](/home/ict/secai-multilang-review-assessment4-wt/secai/secai-agent-gateway/evals/multilang/run.py:284) rejects choice-level `tool_calls` and `function_call`, but accepts a non-null choice-level `tool_call_id`. In a local mocked HTTP 200 response with one assistant choice, `content: "Bonjour"`, `finish_reason: "stop"` and `tool_call_id: "call_42"`, `_parse_response` returned `"Bonjour"` as validated output. Add `tool_call_id` to the choice-level rejection check and cover it with a regression test.
+
+The other four round 3 findings are closed in the reviewed code: the shared ledger lock spans the run across distinct leases; hard gates require 30 distinct sources and three complete rounds; signed phase and full request count are checked; and output creation uses the pinned parent descriptor. Independent local checks confirmed cross-process lock contention, output staying in the pinned directory after an ancestor symlink swap, and hard-gate results of `PASS` for 30×3 versus `BLOCKED` for 29 sources, two rounds, or a missing final result.
+
+**Verification:** `PYTHONPATH="$PWD" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 TMPDIR=/tmp /tmp/secai-multilang-final-env/bin/python -m pytest -q -p no:cacheprovider --basetemp=/tmp/secai-assessment4-pytest tests/multilang_assessment` — **97 passed**. `git diff --check` passed; the checkout is clean. Focused repros used `/tmp` and mocked responses. No network, GPU, live model, or source edits were used.
+
+This is a **code review verdict**, not a quality or release approval. Real corpus, qualified review, live runs and release evidence remain **BLOCKED / NOT RUN**.

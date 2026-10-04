@@ -1,0 +1,11 @@
+FROM ubuntu:24.04@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60
+
+ENV DEBIAN_FRONTEND=noninteractive HOME=/tmp
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libreoffice-writer \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY convert.sh /usr/local/bin/convert-doc
+RUN chmod 0755 /usr/local/bin/convert-doc
+USER 65534:65534
+ENTRYPOINT ["/usr/local/bin/convert-doc"]

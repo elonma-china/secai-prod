@@ -1,0 +1,11 @@
+.file-batch { padding: 22px 26px; overflow: auto; color: var(--text); }
+.file-batch-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; margin: 20px 0; }
+.file-batch-controls label, .file-batch-row label { display: grid; gap: 6px; font-size: 13px; }
+.file-batch-controls select, .file-batch-controls input, .file-batch-row input { max-width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--text); }
+.file-batch-list { display: grid; gap: 12px; padding: 0; list-style: none; }
+.file-batch-row { border: 1px solid var(--line); border-radius: 8px; padding: 14px; min-width: 0; }
+.file-batch-row-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.file-batch-row-head strong { overflow-wrap: anywhere; }
+.file-batch-row-head span { color: var(--muted2); }
+.file-batch-result, .file-batch-row pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 350px; overflow: auto; background: var(--bg); padding: 12px; border-radius: 6px; }
+.file-batch-downloads { display: flex; flex-wrap: wrap; gap: 8px; }
