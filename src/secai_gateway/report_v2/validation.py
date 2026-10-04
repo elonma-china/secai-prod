@@ -8,6 +8,12 @@ from fastapi import HTTPException
 from ..security import neutralize_active_content
 
 _HEADING = re.compile(r'^\s{0,3}#{1,6}\s+(?:\d+[.)]\s+)?(.+?)\s*#*\s*$', re.M)
+_CRITICAL = re.compile(
+    r'\bCVE-\d{4}-\d{3,7}\b'
+    r'|\b(?:\d{1,3}\.){3}\d{1,3}\b'
+    r'|https?://[^\s<>)\]]+'
+    r'|\b[a-fA-F0-9]{32,64}\b', re.I,
+)
 _LITERAL = re.compile(
     r'\bCVE-\d{4}-\d{3,7}\b'
     r'|\b(?:\d{1,3}\.){3}\d{1,3}\b'
@@ -17,7 +23,7 @@ _LITERAL = re.compile(
 )
 
 
-def validate_report(content: str, sections: list[str], source: str) -> str:
+def validate_report(content: str, sections: list[str], source: str, previous: str = "") -> str:
     if not content.strip() or len(content) > 40000:
         raise HTTPException(422, 'Model output is empty or too long')
     found = [re.sub(r'\s+', ' ', match.group(1)).casefold() for match in _HEADING.finditer(content)]
@@ -34,4 +40,8 @@ def validate_report(content: str, sections: list[str], source: str) -> str:
     for match in _LITERAL.finditer(body):
         if match.group(0).casefold() not in allowed:
             raise HTTPException(422, 'Report contains an unverified identifier or number')
+    prior_literals = {match.group(0).casefold() for match in _CRITICAL.finditer(previous)}
+    current_literals = {match.group(0).casefold() for match in _CRITICAL.finditer(content)}
+    if not prior_literals.issubset(current_literals):
+        raise HTTPException(422, 'Report edit removed a critical identifier')
     return neutralize_active_content(content.strip())

@@ -158,7 +158,7 @@ async def edit_report(report_id: str, body: EditRequest, settings: Settings = De
     user = (f"Yêu cầu chỉnh sửa: {instruction}\nBáo cáo hiện tại:\n"
             f"{wrap_untrusted_content(previous['content'], source='current_report')}")
     content = validate_report(await generate_text(system, user, settings),
-                              previous['template_sections'], previous['source_data'])
+                              previous['template_sections'], previous['source_data'], previous['content'])
     status, report = await asyncio.to_thread(store.edit_report, settings.report_db_path,
                                              report_id, content, body.expected_revision)
     if status != 'ok':

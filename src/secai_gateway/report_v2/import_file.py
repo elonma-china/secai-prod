@@ -35,7 +35,7 @@ def _docx_text(raw: bytes) -> str:
                 if line.strip():
                     paragraphs.append(line)
             return '\n'.join(paragraphs)
-    except (BadZipFile, KeyError, ElementTree.ParseError, ValueError) as exc:
+    except (BadZipFile, KeyError, ElementTree.ParseError, ValueError, RuntimeError, NotImplementedError) as exc:
         raise HTTPException(422, f'Invalid DOCX: {exc}') from exc
 
 
