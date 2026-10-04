@@ -631,3 +631,40 @@ def test_confirmed_isolation_time_cannot_be_called_unknown_treatment():
     with pytest.raises(HTTPException) as exc:
         validate_report(content, ['Mốc thời gian', 'Xử lý'], source)
     assert exc.value.status_code == 422
+
+
+def test_control_specific_ip_cannot_be_unqualified_scope():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = ('CT-04 hệ thống DB-LAB-3 (203.0.113.33): có bằng chứng. '
+              'CT-05: thiếu bằng chứng.')
+    scope = ('## Phạm vi\n- Hệ thống DB-LAB-3 (203.0.113.33).\n'
+             '- Tổng số kiểm soát duy nhất: 2.\n## Bằng chứng\nCT-04 và CT-05.')
+    with pytest.raises(HTTPException) as exc:
+        validate_report(scope, ['Phạm vi', 'Bằng chứng'], source + ' Tổng số kiểm soát duy nhất: 2.')
+    assert exc.value.status_code == 422
+
+    qualified = scope.replace('Hệ thống DB-LAB-3', 'CT-04: hệ thống DB-LAB-3')
+    assert validate_report(qualified, ['Phạm vi', 'Bằng chứng'], source + ' Tổng số kiểm soát duy nhất: 2.') == qualified
+    global_scope = 'Phạm vi chung: DB-LAB-3 (203.0.113.33). ' + source
+    assert validate_report(scope, ['Phạm vi', 'Bằng chứng'], global_scope + ' Tổng số kiểm soát duy nhất: 2.') == scope
+
+
+def test_confirmed_action_cannot_be_replaced_with_bare_uncertainty():
+    import pytest
+    from fastapi import HTTPException
+    from secai_gateway.report_v2.validation import validate_report
+
+    source = ('Nhật ký A ghi 2 tài khoản; nhật ký B ghi 3 tài khoản; chưa có đối soát; '
+              'thời điểm cô lập đã xác nhận là 2099-06-03 14:30.')
+    content = ('## Mốc thời gian\n- Thời điểm cô lập: 2099-06-03 14:30.\n'
+               '## Xử lý\n- Chưa thể xác nhận.')
+    with pytest.raises(HTTPException) as exc:
+        validate_report(content, ['Mốc thời gian', 'Xử lý'], source)
+    assert exc.value.status_code == 422
+    assert 'cô lập' in str(exc.value.detail)
+
+    recorded = content.replace('- Chưa thể xác nhận.', '- Đã cô lập lúc 2099-06-03 14:30.')
+    assert validate_report(recorded, ['Mốc thời gian', 'Xử lý'], source) == recorded
