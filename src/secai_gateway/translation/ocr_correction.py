@@ -99,6 +99,6 @@ async def correct_ocr(result: OcrResult, *, context: ProcessingContext) -> Corre
         if len(output) > 64_000:
             raise ValueError("oversize proposal")
         return _validate(result, json.loads(output))
-    except Exception:
+    except (ValueError, TypeError):
         # No draft or exception text enters public result or logs.
         return _fallback(result, "OCR_CORRECTION_REJECTED")

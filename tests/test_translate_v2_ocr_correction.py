@@ -4,7 +4,7 @@ import pytest
 
 from secai_gateway.translation.ocr_correction import correct_ocr
 from secai_gateway.translation.ocr_correction import _has_ambiguous_technical
-from secai_gateway.translation.types import DocumentBlock, OcrResult
+from secai_gateway.translation.types import DocumentBlock, OcrResult, TranslationError
 
 
 class Context:
@@ -54,3 +54,14 @@ async def test_invalid_proposal_falls_back(proposal):
     assert output.corrected_text == source.raw_text
     assert output.needs_review
     assert output.warnings[-1].code == "OCR_CORRECTION_REJECTED"
+
+
+@pytest.mark.asyncio
+async def test_correction_provider_outage_fails_job_instead_of_accepting_raw_text():
+    class UnavailableContext:
+        async def complete(self, profile, prompt):
+            raise TranslationError("TRANSLATION_UNAVAILABLE", "Provider unavailable")
+
+    with pytest.raises(TranslationError) as error:
+        await correct_ocr(result("The server is unavailable."), context=UnavailableContext())
+    assert error.value.code == "TRANSLATION_UNAVAILABLE"
