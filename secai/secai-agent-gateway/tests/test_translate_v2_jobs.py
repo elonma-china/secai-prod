@@ -5,6 +5,7 @@ import pytest
 
 from secai_gateway.translation.settings import TranslationSettings
 from secai_gateway.translation.types import TranslationError
+from secai_gateway.translation.jobs import JobStore
 
 
 def _store(tmp_path):
@@ -130,6 +131,10 @@ def test_offline_worker_queued_deadline_releases_quota_and_expires_artifact(tmp_
     assert (failed["status"], failed["stage"], failed["error_code"]) == (
         "failed", "done", "PROCESSING_TIMEOUT")
     assert failed["expires"] == 112
+    assert not path.exists()
+    cleaned = store.get(first["job_id"], now=102)
+    assert cleaned["input_path"] is None
+    assert cleaned["input_bytes"] == 0
     second = store.admit("file", b"next", ".txt", "en", "vi", "peer", None, now=102)
     assert second["status"] == "queued"
 
@@ -140,6 +145,116 @@ def test_offline_worker_queued_deadline_releases_quota_and_expires_artifact(tmp_
     assert exc.value.code == "JOB_EXPIRED"
     store.reap(now=112)
     assert not path.exists()
+
+
+def test_all_terminal_paths_release_input_without_worker_reap(tmp_path):
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   storage_quota_bytes=12, max_active_per_ip=4,
+                                   artifact_cleanup_seconds=1, _env_file=None)
+    store = JobStore(settings)
+
+    queued = store.admit("file", b"123456789012", ".txt", "en", "vi", "peer", None, now=100)
+    queued_path = Path(queued["input_path"])
+    store.cancel(queued["job_id"], now=100)
+    assert not queued_path.exists()
+    assert store.admit("file", b"123456789012", ".txt", "en", "vi", "peer", None,
+                       now=101)["status"] == "queued"
+
+    running = store.claim(now=101)
+    running_path = Path(running["input_path"])
+    assert store.finish(running["job_id"], running["generation"],
+                        result={"translated_text": "ok"}, now=102)
+    assert not running_path.exists()
+    assert store.get(running["job_id"], now=102)["input_bytes"] == 0
+
+    cancelling = store.admit("file", b"123456789012", ".txt", "en", "vi", "peer", None, now=103)
+    claim = store.claim(now=103)
+    cancelling_path = Path(cancelling["input_path"])
+    store.cancel(cancelling["job_id"], now=103)
+    assert store.finish(cancelling["job_id"], claim["generation"], now=104) is False
+    assert not cancelling_path.exists()
+    assert store.admit("file", b"123456789012", ".txt", "en", "vi", "peer", None,
+                       now=105)["status"] == "queued"
+
+
+def test_failed_unlink_keeps_storage_charged_until_retry(tmp_path, monkeypatch):
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   storage_quota_bytes=4, artifact_cleanup_seconds=1,
+                                   _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"abcd", ".txt", "en", "vi", "peer", None, now=100)
+    path = Path(job["input_path"])
+    original_unlink = Path.unlink
+
+    def unavailable(self, *args, **kwargs):
+        if self == path:
+            raise OSError("temporary disk failure")
+        return original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", unavailable)
+    assert store.cancel(job["job_id"], now=100)["status"] == "cancelled"
+    assert store.get(job["job_id"], now=100)["input_bytes"] == 4
+    with pytest.raises(TranslationError) as exc:
+        store.admit("file", b"e", ".txt", "en", "vi", "peer", None, now=101)
+    assert exc.value.code == "STORAGE_UNAVAILABLE"
+    monkeypatch.setattr(Path, "unlink", original_unlink)
+    store.reap(now=102)
+    assert not path.exists()
+    assert store.admit("file", b"e", ".txt", "en", "vi", "peer", None,
+                       now=102)["status"] == "queued"
+
+
+def test_lookup_rollback_cannot_delete_active_input(tmp_path):
+    import sqlite3
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   job_deadline_seconds=1, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"abcd", ".txt", "en", "vi", "peer", None, now=100)
+    path = Path(job["input_path"])
+    with pytest.raises(TranslationError) as exc:
+        store.get("0" * 32, now=102)
+    assert exc.value.code == "JOB_NOT_FOUND"
+    with sqlite3.connect(store.db_path) as db:
+        assert db.execute("SELECT status FROM jobs WHERE id=?", (job["job_id"],)).fetchone()[0] == "queued"
+    assert path.read_bytes() == b"abcd"
+
+
+def test_postcommit_cleanup_retries_after_interrupted_delete(tmp_path, monkeypatch):
+    import sqlite3
+
+    store = _store(tmp_path)
+    job = store.admit("file", b"abcd", ".txt", "en", "vi", "peer", None, now=100)
+    path = Path(job["input_path"])
+    cleanup = store._cleanup_inputs
+    monkeypatch.setattr(store, "_cleanup_inputs", lambda: None)
+    store.cancel(job["job_id"], now=100)
+    with sqlite3.connect(store.db_path) as db:
+        assert db.execute("SELECT status FROM jobs WHERE id=?", (job["job_id"],)).fetchone()[0] == "cancelled"
+    assert path.exists()
+    monkeypatch.setattr(store, "_cleanup_inputs", cleanup)
+    assert store.get(job["job_id"], now=100)["status"] == "cancelled"
+    assert not path.exists()
+    with sqlite3.connect(store.db_path) as db:
+        assert db.execute("SELECT input_path,input_bytes FROM jobs WHERE id=?",
+                          (job["job_id"],)).fetchone() == (None, 0)
+
+
+def test_offline_running_cancellation_terminalizes_before_lease_expiry(tmp_path):
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   lease_seconds=60, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"abcd", ".txt", "en", "vi", "peer", None, now=100)
+    claim = store.claim(now=100)
+    assert store.cancel(job["job_id"], now=101)["status"] == "cancelling"
+    assert store.get(job["job_id"], now=113)["status"] == "cancelling"
+    assert store.get(job["job_id"], now=114)["status"] == "cancelled"
+    assert store.finish(job["job_id"], claim["generation"], result={"bad": True},
+                        now=115) is False
 
 
 def test_stalled_running_job_deadline_fences_worker_and_releases_ip(tmp_path):

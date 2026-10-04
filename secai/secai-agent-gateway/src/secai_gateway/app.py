@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sqlite3
 import time
 from contextlib import asynccontextmanager
+from contextlib import suppress
 
 import httpx
 from fastapi import FastAPI
@@ -65,8 +67,28 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
             limits=httpx.Limits(max_keepalive_connections=32, keepalive_expiry=60.0),
         ) as client:
             state.http_client = client
-            yield
-            state.http_client = None
+            async def reap_translation_jobs() -> None:
+                store = app.state.translation_v2_store
+                # One-second checks bound orphaned running cancellations to
+                # 15 seconds even when the separate worker has stopped.
+                interval = min(max(0.1, app.state.translation_v2_settings.reaper_interval_seconds), 1)
+                while True:
+                    try:
+                        await asyncio.to_thread(store.reap)
+                    except (OSError, sqlite3.Error):
+                        logger.warning("Translation v2 artifact cleanup failed; retrying")
+                    await asyncio.sleep(interval)
+
+            reaper = (asyncio.create_task(reap_translation_jobs())
+                      if app.state.translation_v2_store is not None else None)
+            try:
+                yield
+            finally:
+                if reaper is not None:
+                    reaper.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await reaper
+                state.http_client = None
 
     app = FastAPI(
         title="SECAI Agent Gateway",

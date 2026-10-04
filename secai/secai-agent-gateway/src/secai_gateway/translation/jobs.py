@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -13,6 +14,8 @@ from typing import Any, Iterator
 
 from .settings import TranslationSettings
 from .types import TranslationError
+
+logger = logging.getLogger(__name__)
 
 
 class JobStore:
@@ -65,6 +68,31 @@ class JobStore:
             raise
         finally:
             db.close()
+        # Filesystem unlink is irreversible. Run it only after the terminal
+        # state has committed, so a later exception cannot strand an active
+        # job with a missing input file.
+        self._cleanup_inputs()
+
+    def _cleanup_inputs(self) -> None:
+        try:
+            with sqlite3.connect(self.db_path, timeout=30) as db:
+                db.row_factory = sqlite3.Row
+                db.execute("BEGIN IMMEDIATE")
+                rows = db.execute("SELECT id,input_path FROM jobs WHERE status IN "
+                                  "('succeeded','failed','cancelled') AND input_path IS NOT NULL").fetchall()
+                for row in rows:
+                    path = Path(row["input_path"])
+                    if path != self.artifact_dir / row["id"]:
+                        logger.warning("Translation v2 input path is outside its artifact slot")
+                        continue
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        # Keep the byte charge and retry on the next operation.
+                        continue
+                    db.execute("UPDATE jobs SET input_path=NULL,input_bytes=0 WHERE id=?", (row["id"],))
+        except sqlite3.Error:
+            logger.warning("Translation v2 input cleanup database update failed; retrying")
 
     @staticmethod
     def _row(row: sqlite3.Row) -> dict[str, Any]:
@@ -76,8 +104,9 @@ class JobStore:
         # Reads and admissions run this even when no worker is alive. The job's
         # deadline includes its queue wait, and terminalization releases IP quota.
         overdue = db.execute("SELECT id,status FROM jobs WHERE status IN "
-                             "('queued','running','cancelling') AND deadline<=?",
-                             (now,)).fetchall()
+                             "('queued','running','cancelling') AND "
+                             "(deadline<=? OR (status='cancelling' AND updated+13<=?))",
+                             (now, now)).fetchall()
         for row in overdue:
             if row["status"] == "cancelling":
                 self._terminal(db, row["id"], "cancelled", now)
@@ -125,6 +154,7 @@ class JobStore:
             raise TranslationError("EMPTY_FILE", "File is empty.")
         if len(payload) > self.settings.max_upload_bytes:
             raise TranslationError("FILE_TOO_LARGE", "File is too large.")
+        self.reap(now=now)
         fingerprint = hashlib.sha256(payload + b"\0" + source_lang.encode() + b"\0"
                                      + target_lang.encode() + b"\0" + extension.lower().encode()).hexdigest()
         key_hash = hashlib.sha256(key.encode()).hexdigest() if key else None
@@ -188,10 +218,9 @@ class JobStore:
         now = time.time() if now is None else now
         with self._tx() as db:
             self._expire_overdue_jobs(db, now)
-            db.execute("UPDATE jobs SET status='cancelled',stage='done',updated=?,expires=?,"
-                       "tombstone_until=?,ip=NULL WHERE status='cancelling' AND lease_until<?",
-                       (now, now + self.settings.result_ttl_seconds,
-                        now + self.settings.result_ttl_seconds + self.settings.tombstone_ttl_seconds, now))
+            for cancelled in db.execute("SELECT id FROM jobs WHERE status='cancelling' "
+                                        "AND lease_until<?", (now,)).fetchall():
+                self._terminal(db, cancelled["id"], "cancelled", now)
             running = db.execute("SELECT count(*) FROM jobs WHERE status='running' AND lease_until>=?",
                                  (now,)).fetchone()[0]
             if running >= self.settings.max_running_jobs:
@@ -270,19 +299,10 @@ class JobStore:
         now = time.time() if now is None else now
         with self._tx() as db:
             self._expire_overdue_jobs(db, now)
-            rows = db.execute("SELECT id,input_path FROM jobs WHERE status IN "
-                              "('succeeded','failed','cancelled') AND "
-                              "updated+?<=? AND input_path IS NOT NULL",
-                              (self.settings.artifact_cleanup_seconds, now)).fetchall()
-            for row in rows:
-                Path(row["input_path"]).unlink(missing_ok=True)
-                db.execute("UPDATE jobs SET input_path=NULL,input_bytes=0 WHERE id=?", (row["id"],))
             expired = db.execute("SELECT id,status,expires,tombstone_until,input_path FROM jobs "
-                                 "WHERE expires IS NOT NULL AND expires<=?",
+                                 "WHERE expires IS NOT NULL AND expires<=? AND input_path IS NULL",
                                  (now,)).fetchall()
             for row in expired:
-                if row["input_path"]:
-                    Path(row["input_path"]).unlink(missing_ok=True)
                 db.execute("INSERT OR REPLACE INTO tombstones VALUES (?,?,?,?)",
                            (row["id"], row["status"], row["expires"], row["tombstone_until"]))
                 db.execute("DELETE FROM jobs WHERE id=?", (row["id"],))

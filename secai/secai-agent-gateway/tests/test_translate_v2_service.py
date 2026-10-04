@@ -75,6 +75,30 @@ async def test_translation_rejects_new_technical_literal():
     assert e.value.code == "TOKEN_INTEGRITY_FAILED"
 
 
+@pytest.mark.parametrize("source", [
+    "中https://example.com/a中", "نصhttps://example.com/aنص",
+    "текстhttps://example.com/aслово",
+])
+@pytest.mark.asyncio
+async def test_script_adjacent_url_never_reaches_provider_and_mutation_fails(source):
+    from secai_gateway.translation.service import translate_blocks
+
+    class Mutating(Context):
+        async def complete(self, profile, prompt):
+            self.prompts.append(prompt)
+            # A provider trying to insert a replacement URL cannot pass the
+            # source occurrence comparison after placeholders are restored.
+            return source_from_prompt(prompt) + " https://evil.test/b", {}
+
+    block = DocumentBlock(id="b000001", kind="paragraph", order=0, text=source, metadata={})
+    context = Mutating()
+    with pytest.raises(TranslationError) as exc:
+        await translate_blocks((block,), "zh", "vi", context=context)
+    assert exc.value.code == "TOKEN_INTEGRITY_FAILED"
+    assert len(context.prompts) == 2
+    assert all("https://example.com/a" not in prompt for prompt in context.prompts)
+
+
 @pytest.mark.parametrize("source,target", [("vi", "zh"), ("vi", "ja"), ("vi", "ko"),
                                             ("vi", "fr"), ("vi", "de"), ("vi", "es"),
                                             ("vi", "ru"), ("vi", "ar"), ("ar", "vi")])
