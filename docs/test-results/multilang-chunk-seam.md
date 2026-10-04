@@ -1,0 +1,11 @@
+# Translation chunk seam repair (diagnostic branch)
+
+Date: 2026-10-04. This follow-up is separate from diagnostic merge `a48c174`; it changes only `translation/service.py` and its service tests. It is not a model-quality result or production rollout.
+
+The file pipeline splits a long block under the configured model-context cap. A provider that trims each chunk erased source spaces at seams: on the reproduced `Xin chào thế giới. ` × 100 input with a 4,096-token context, five chunks produced 396 words from 400. The new output-level regressions were red on this defect before the fix.
+
+The assembler now saves exact source whitespace at each chunk edge and combines it with stripped provider content. It preserves block-edge whitespace and explicit line breaks. At an otherwise empty seam, space-delimited targets receive one space between word/placeholder outputs, including after sentence punctuation; Chinese and Japanese targets omit source horizontal seam spaces. Existing whitespace next to protected technical placeholders remains at Chinese/Japanese seams, and no separator is written inside a placeholder. Blank-whitespace chunks bypass the provider. The chunker, 4,096-token configuration, limits, retry budget and literal integrity checks are unchanged.
+
+Service regressions cover source spaces, indentation/newlines, CVE/URL placeholders, Chinese/Japanese to Vietnamese, Vietnamese to Chinese/Japanese, a sentence-ending period, and a protected URL at a one-character chunk limit. The constructed context returns deterministic chunk outputs; these tests establish assembly behavior only. Large sentences still require separate model calls when they exceed the context budget, so semantic continuity across those calls is not proven here.
+
+Verification: `POC_CATALOG_DB=/tmp/secai-multilang-diag-poc.sqlite3 PYTHONPATH=src /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_translate_v2_service.py`: **18 passed**. The 21-module translation v2/multifile/integration command used in the merge report: **350 passed in 67.36 s**. Full repository `python -m pytest -q`: **exit 1, 1,455 passed, 7 failed, 1 skipped, 64 warnings in 571.62 s**. The seven failing node IDs are the same missing external Bughunt/PoC fixture cases itemized in the diagnostic merge report; none is a translation test. This is not a clean full-suite pass.
