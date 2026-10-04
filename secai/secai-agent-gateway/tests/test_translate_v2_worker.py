@@ -197,6 +197,29 @@ async def test_worker_exhausted_retryable_provider_error_has_safe_code(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_worker_retry_count_cannot_exceed_contract_when_configured_higher(tmp_path):
+    from secai_gateway.translation.worker import Worker
+
+    class DisconnectedRunner:
+        def __init__(self):
+            self.calls = 0
+
+        async def complete(self, profile, prompt, session_id=None):
+            self.calls += 1
+            raise ProviderError("disconnected", retryable=True)
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   llm_max_retries=3, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit("file", b"Hello", ".txt", "en", "vi", "127.0.0.1", None)
+    runner = DisconnectedRunner()
+    assert await Worker(store, settings, runner).run_once()
+    assert runner.calls == 2
+    assert store.get(job["job_id"])["error_code"] == "TRANSLATION_UNAVAILABLE"
+
+
+@pytest.mark.asyncio
 async def test_worker_provider_disables_sdk_retries_on_actual_wire():
     import httpx2
     from openai import AsyncOpenAI, InternalServerError

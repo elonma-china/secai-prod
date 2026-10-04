@@ -102,3 +102,32 @@ async def test_gzip_ocr_response_is_decoded_with_decoded_size_cap(tmp_path, monk
     body[0] = gzip.compress(b"x" * (2 * 1024 * 1024 + 1))
     with pytest.raises(TranslationError, match="exceeds limit"):
         await recognize_image(image, settings=settings)
+
+
+@pytest.mark.asyncio
+async def test_ocr_retry_count_cannot_exceed_contract_when_configured_higher(tmp_path, monkeypatch):
+    from secai_gateway.translation import ocr_client
+    from secai_gateway.translation.types import PreparedImage
+
+    calls = 0
+
+    def unavailable(request):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(503)
+
+    transport = httpx.MockTransport(unavailable)
+    real_client = httpx.AsyncClient
+    real_sleep = asyncio.sleep
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
+    monkeypatch.setattr(ocr_client.asyncio, "sleep", lambda seconds: real_sleep(0))
+    path = tmp_path / "image.png"
+    path.write_bytes(b"test")
+    image = PreparedImage(path=path, media_type="image/png", width=1, height=1)
+    settings = TranslationSettings(ocr_enabled=True, ocr_api_key="secret", ocr_model="test",
+                                   ocr_base_url="http://127.0.0.1:18083", ocr_max_retries=3,
+                                   _env_file=None)
+    with pytest.raises(TranslationError) as error:
+        await ocr_client.recognize_image(image, settings=settings)
+    assert error.value.code == "OCR_UNAVAILABLE"
+    assert calls == 2
