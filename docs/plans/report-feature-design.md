@@ -1,5 +1,7 @@
 # Report templates and editable reports — design draft
 
+**Latest scope override:** user requested fastest usable MVP, sufficient tests, 70% content quality, independent review and no perfectionism. `../criteria/report-mvp.md` and the backend `../api/report-mvp.md` contract take precedence over the full design below. Ship form/file template creation, SQLite persistence, generation, prompt editing and revision history behind a dedicated report key/default-off flag. Defer full publication workflow, original-upload storage, comprehensive audit, tenancy, adapters and long benchmark gates. This document retains the longer-term direction, not a checklist blocking the MVP.
+
 Status: local design, not implementation or release approval. Governing scope is `report-feature-user-spec.txt`, plus user confirmations: database storage; UI template creation by BOTH form and import; prompt-based editing of generated reports.
 
 ## User workflows
