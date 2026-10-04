@@ -183,3 +183,10 @@ async def test_file_job_captures_real_specialist_wire(tmp_path, monkeypatch):
     assert 'CVE-2024-12345' in result['result_json']
     assert len(seen) == 1 and seen[0]['source_lang'] == 'en' and seen[0]['target_lang'] == 'vi'
     assert 'CVE-2024-12345' not in seen[0]['text']
+
+
+def test_private_plain_http_requires_loopback():
+    with pytest.raises(TranslationError) as exc:
+        TranslationAgent(TranslationSettings(specialist_base_url='http://10.0.0.4:18404',
+                                             specialist_api_key='test-secret', _env_file=None))
+    assert exc.value.code == 'TRANSLATION_UNAVAILABLE'

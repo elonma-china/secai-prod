@@ -24,7 +24,9 @@ class TranslationAgent:
                 parsed.hostname and ipaddress.ip_address(parsed.hostname).is_private)
         except ValueError:
             private = parsed.hostname == "localhost"
+        loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
         if (not private or parsed.scheme not in {"http", "https"} or
+                (parsed.scheme == "http" and not loopback) or
                 parsed.username or parsed.password or parsed.query or parsed.fragment or
                 parsed.path not in {"", "/"} or not settings.specialist_api_key or
                 not settings.specialist_model):
