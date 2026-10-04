@@ -19,6 +19,9 @@ import ChatSidebar from "./chat/ChatSidebar";
 import ChatThread from "./chat/ChatThread";
 import { foldPhase, rowsToItems, upsertTool, type ThreadItem } from "./chat/threadItems";
 
+import { getReviewIdentity, setLiveReviewEnabled, useReviewIdentity } from "../reviewIdentity";
+import LiveReviewWidget, { type LiveReviewTurn } from "./review/LiveReviewWidget";
+
 type Editing = { kind: "project" | "session"; id: string; value: string } | null;
 
 function byActivityDesc(a: SessionSummary, b: SessionSummary): number {
@@ -65,6 +68,8 @@ function writeSavedView(userId: string, view: ChatView) {
 }
 
 export default function ChatbotScreen({ userId, health }: { userId: string; health: HealthStatus | null }) {
+  const reviewIdentity = useReviewIdentity();
+  const [liveReviewTurn, setLiveReviewTurn] = useState<LiveReviewTurn | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -93,6 +98,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   // restoreSession's own fallback and readSavedView's userId-scoped key.
   useEffect(() => {
     let alive = true;
+    setLiveReviewTurn(null);
     setProjects([]);
     setSessions([]);
     setExpanded(new Set());
@@ -139,6 +145,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
    * and get stuck on. Writing at the point of intent instead ties the localStorage write to the
    * same synchronous call as the state update, so no render/effect ordering can race it. */
   function openView(v: ChatView) {
+    setLiveReviewTurn(null);
     setView(v);
     writeSavedView(userId, v);
   }
@@ -442,6 +449,12 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       ]);
       scrollToBottom();
 
+      let publicAnswer = "";
+      let completedAnswer: string | null = null;
+      let streamFailed = false;
+      const reviewContext = (justCreated ? [] : items).flatMap(item => item.kind === "user" || (item.kind === "assistant" && !item.streaming && !item.error) ? [{role: item.kind === "user" ? "user" : "assistant", content: item.text}] : []).filter(message => message.content.trim());
+      reviewContext.push({role: "user", content: text});
+      setLiveReviewTurn(null);
       try {
         await chatStream(
           sid,
@@ -449,6 +462,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           userId,
           {
             onToken: (delta) => {
+              publicAnswer += delta;
               patchAssistant(aid, (m) => ({ text: m.text + delta, regenerating: false }));
               scrollToBottom();
             },
@@ -456,21 +470,24 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
             // answer on purpose — don't just blank the buffer back to the plain empty placeholder
             // (looked like a glitch); flag it so the thread can show a meaningful "đang tra cứu
             // lại…" indicator until the next token/final lands.
-            onRegenerate: () => patchAssistant(aid, () => ({ text: "", regenerating: true })),
+            onRegenerate: () => { publicAnswer = ""; patchAssistant(aid, () => ({ text: "", regenerating: true })); },
             onToolCall: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
             onToolResult: (t) => patchAssistant(aid, (m) => ({ tools: upsertTool(m.tools, t) })),
             onPhase: (p) => patchAssistant(aid, (m) => ({ phases: foldPhase(m.phases, p) })),
-            onError: (msg) => patchAssistant(aid, () => ({ error: msg })),
-            onFinal: (payload) =>
+            onError: (msg) => { streamFailed = true; patchAssistant(aid, () => ({ error: msg })); },
+            onFinal: (payload) => {
+              completedAnswer = String(payload.content ?? payload.answer ?? publicAnswer);
               patchAssistant(aid, (m) => ({
                 text: String(payload.content ?? payload.answer ?? m.text),
                 streaming: false,
                 regenerating: false,
                 runId: (payload.metadata?.run_id as string | undefined) ?? undefined,
-              })),
+              }));
+            },
           },
           ac.signal,
         );
+        if (!ac.signal.aborted && !streamFailed && completedAnswer && getReviewIdentity()?.liveEnabled) setLiveReviewTurn({id: aid, prompt_messages: reviewContext, answer: completedAnswer, source_group: sid});
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
           aborted = true;
@@ -563,6 +580,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       <div className="chat-topbar">
         <h3>{breadcrumb()}</h3>
         <StatusChips health={health} />
+        {reviewIdentity && <label className="review-check review-live-toggle"><input type="checkbox" checked={reviewIdentity.liveEnabled} onChange={e => setLiveReviewEnabled(e.target.checked)}/>Nhận lời mời đánh giá A/B</label>}
       </div>
 
       <div className={"chat-body" + (railCollapsed ? " rail-collapsed" : "")}>
@@ -615,6 +633,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           onCopy={copyText}
           onRegenerate={regenerateFrom}
           onSuggestion={setInput}
+          reviewWidget={<LiveReviewWidget turn={liveReviewTurn}/>}
         />
       </div>
     </div>

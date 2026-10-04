@@ -23,13 +23,15 @@ import TranslateScreen from "./screens/TranslateScreen";
 import ExploitScreen from "./screens/ExploitScreen";
 import ReportScreen from "./screens/ReportScreen";
 import ModelsScreen from "./screens/ModelsScreen";
+import ReviewScreen from "./screens/ReviewScreen";
 
-/** The 5 "Nền tảng AI" screens — the only routable/functional entries in the sidebar. */
+/** The functional "Nền tảng AI" screens — the only routable/functional entries in the sidebar. */
 const AI_ITEMS: { id: AiScreenId; label: string }[] = [
   { id: "translate", label: "Dịch văn bản" },
   { id: "chat", label: "Trợ lý ảo ATTT" },
   { id: "exploit", label: "Sinh mã khai thác" },
   { id: "report", label: "Báo cáo thông minh" },
+  { id: "review", label: "Đánh giá A/B" },
   { id: "models", label: "Quản lý huấn luyện, triển khai" },
 ];
 
@@ -131,7 +133,7 @@ export default function App() {
             </div>
             <div style={{ padding: "2px 0 6px" }}>
               {AI_ITEMS.map((it) => (
-                <div key={it.id} className={"iassub" + (screen === it.id ? " on" : "")} onClick={() => setScreen(it.id)}>
+                <div key={it.id} role="button" tabIndex={0} aria-current={screen === it.id ? "page" : undefined} className={"iassub" + (screen === it.id ? " on" : "")} onClick={() => setScreen(it.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") {e.preventDefault(); setScreen(it.id);} }}>
                   <span className="dot" />
                   {it.label}
                 </div>
@@ -157,6 +159,7 @@ export default function App() {
           {screen === "translate" && <TranslateScreen userId={userId} />}
           {screen === "exploit" && <ExploitScreen userId={userId} />}
           {screen === "report" && <ReportScreen userId={userId} />}
+          {screen === "review" && <ReviewScreen />}
           {screen === "models" && <ModelsScreen userId={userId} />}
         </main>
       </div>

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False,
     )
+
+    # Expert review is opt-in and uses a separate immutable SQLite ledger.
+    review_enabled: bool = False
+    review_db_path: str = "data/reviews.db"
+    review_credentials_file: str = ""
+    review_live_sample_rate: float = Field(default=0.1,ge=0,le=1)
+    review_live_cooldown_seconds: float = Field(default=600,ge=0)
+    review_live_timeout_seconds: float = Field(default=45,gt=0,le=120)
 
     # ── Air-gap master switch (default ON) ─────────────────────────────────────
     # When true, the gateway must make NO outbound request to the public internet. This

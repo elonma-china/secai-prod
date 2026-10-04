@@ -26,6 +26,13 @@ class GatewayState:
 
     def __init__(self, runner: CompletionRunner | None = None, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
+        self.review_credentials = {}
+        self.review_store = None
+        if self.settings.review_enabled:
+            from .api.review_auth import load_credentials
+            from .state.review_store import ReviewStore
+            self.review_credentials = load_credentials(self.settings.review_credentials_file)
+            self.review_store = ReviewStore(self.settings.review_db_path)
         self.runner = runner or LinchRunner(self.settings.gateway_db_path)
         self.rate_limiter = FixedWindowRateLimiter()
         self.started_at = time.monotonic()
@@ -71,10 +78,15 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
     if state.settings.report_feature_enabled:
         from .report_v2.api import router as report_v2_router
         app.include_router(report_v2_router)
+    if state.settings.review_enabled:
+        app.state.gateway = state
     configure_middleware(app, state)
     register_routes(app, state)
     from .api import projects as _projects_router
     app.include_router(_projects_router.router)
+    if state.settings.review_enabled:
+        from .api.reviews import router as review_router
+        app.include_router(review_router)
     return app
 
 
