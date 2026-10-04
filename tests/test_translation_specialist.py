@@ -190,3 +190,23 @@ def test_private_plain_http_requires_loopback():
         TranslationAgent(TranslationSettings(specialist_base_url='http://10.0.0.4:18404',
                                              specialist_api_key='test-secret', _env_file=None))
     assert exc.value.code == 'TRANSLATION_UNAVAILABLE'
+
+@pytest.mark.asyncio
+async def test_unsupported_ocr_correction_keeps_raw_blocks(tmp_path, monkeypatch):
+    from secai_gateway.translation import ocr_client
+    from secai_gateway.translation.types import OcrResult, PreparedImage
+    image = tmp_path / 'image.png'
+    image.write_bytes(b'fixture')
+    async def prepare(input_path, *, work_dir):
+        return PreparedImage(path=image, media_type='image/png', width=1, height=1)
+    async def recognize(prepared, *, settings):
+        return OcrResult(blocks=(block('Raw CVE-2024-12345'),),
+                         raw_text='Raw CVE-2024-12345')
+    monkeypatch.setattr(ocr_client, 'preprocess_image', prepare)
+    monkeypatch.setattr(ocr_client, 'recognize_image', recognize)
+    result = await ocr_client.ImageOcrPipeline(settings=TranslationSettings(
+        ocr_correction_supported=False, _env_file=None)).process(
+            image, work_dir=tmp_path, context=Context())
+    assert result.blocks[0].text == result.raw_text == result.corrected_text
+    assert result.edits == () and result.needs_review
+    assert [item.code for item in result.warnings] == ['OCR_CORRECTION_REJECTED']
