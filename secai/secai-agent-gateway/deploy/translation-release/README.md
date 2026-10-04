@@ -19,6 +19,6 @@ python3 release.py rollback --state-dir /home/ict/secai-translation-docker-relea
 python3 release.py status --state-dir /home/ict/secai-translation-docker-release
 ```
 
-The host's user service `secai-translation-vast-tunnel.service` reconnects private transport automatically. It binds only the existing Docker bridge IP, not a public host listener. GPU serving and model loading stay on Vast.
+The host's user service `secai-translation-vast-tunnel.service` reconnects private transport automatically and binds host loopback. These CPU containers use host networking, with gateway port 18185 and frontend port 5179 explicitly checked before deployment. This preserves the translation adapters' requirement that plain HTTP specialist transport be loopback. GPU serving and model loading stay on Vast.
 
 The existing shared Devspace/gateway are not switched by this release. Integrating into those shared endpoints requires combining the other agents' final releases first. Supported and smoke-tested translation inputs are TXT, DOCX and PNG/JPEG OCR. Legacy DOC additionally requires the existing sandboxed converter; this Docker worker does not mount the host Docker socket.
