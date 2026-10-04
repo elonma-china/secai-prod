@@ -15,7 +15,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Awaitable, Callable, Protocol, TypeVar
+from typing import Awaitable, Callable, Literal, Protocol, TypeVar
 
 from .coordinator import GpuBudget, GpuSample, StageFailure
 
@@ -38,6 +38,8 @@ class PinnedCommand:
     sha256: str
     artifacts: tuple[tuple[Path, str], ...]
     environment: dict[str, str] = field(default_factory=dict)
+    stdio: Literal["null", "pipes", "log"] = "null"
+    log_path: Path | None = None
 
     def attest(self) -> None:
         if (not self.binary.is_absolute() or not self.binary.is_file() or
@@ -121,14 +123,29 @@ class GpuStageOwner:
 
     def _spawn(self, command: PinnedCommand) -> subprocess.Popen:
         assert self._fd is not None
-        return subprocess.Popen(
-            [sys.executable, str(_CHILD_SUPERVISOR), str(os.getpid()),
-             str(command.binary), *command.args],
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, close_fds=True, pass_fds=(self._fd,),
-            env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C",
-                 **command.environment},
-        )
+        if command.stdio == "log":
+            if command.log_path is None or not command.log_path.is_absolute():
+                raise StageFailure("ARTIFACT", pre_admission=True)
+            command.log_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            log_fd = os.open(command.log_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                             0o600)
+        else:
+            log_fd = None
+        try:
+            return subprocess.Popen(
+                [sys.executable, str(_CHILD_SUPERVISOR), str(os.getpid()),
+                 str(command.binary), *command.args],
+                stdin=subprocess.PIPE if command.stdio == "pipes" else subprocess.DEVNULL,
+                stdout=(subprocess.PIPE if command.stdio == "pipes" else
+                        log_fd if log_fd is not None else subprocess.DEVNULL),
+                stderr=log_fd if log_fd is not None else subprocess.DEVNULL,
+                close_fds=True, pass_fds=(self._fd,),
+                env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LC_ALL": "C",
+                     **command.environment},
+            )
+        finally:
+            if log_fd is not None:
+                os.close(log_fd)
 
     async def _cleanup(self, child: subprocess.Popen) -> None:
         try:
@@ -162,7 +179,7 @@ class GpuStageOwner:
 
     async def run(self, command: PinnedCommand,
                   work: Callable[[subprocess.Popen, asyncio.Event, float], Awaitable[T]],
-                  prove_owner: Callable[[subprocess.Popen, int], Awaitable[bool]],
+                  prove_owner: Callable[[subprocess.Popen, int], Awaitable[bool | None]],
                   *, deadline: float, cancel: asyncio.Event) -> T:
         if self._fd is None or self.poisoned:
             raise StageFailure("POISONED", pre_admission=True)
@@ -196,9 +213,10 @@ class GpuStageOwner:
                             # nvidia-smi may report a host PID while Popen has
                             # a container PID. An independent stage-specific
                             # proof must bind the model child to that GPU PID.
-                            if not await prove_owner(child, owner_host_pid):
+                            verdict = await prove_owner(child, owner_host_pid)
+                            if verdict is False:
                                 raise StageFailure("GPU_OWNER", poison=True)
-                            seen_owner = True
+                            seen_owner = verdict is True
                     if task.done():
                         result = await task
                         break
