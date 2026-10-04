@@ -12,6 +12,8 @@ and `pip check` in the candidate. Assemble a private build directory with only
 `report_runtime.py` from `deploy/report/runtime.py`. Copy this Dockerfile there:
 
 ```sh
+VITE_REPORT_FEATURE_ENABLED=true VITE_TRANSLATE_V2_FILES_ENABLED=true \
+  VITE_TRANSLATE_V2_IMAGES_ENABLED=true npm run build # from secai-fe-devspace
 docker build --build-arg GATEWAY_IMAGE=<immutable-gateway-image> \
   --build-arg SOURCE_REVISION=<main-commit> \
   -t secai-agent-gateway:all-features-<main-commit> <private-build-directory>

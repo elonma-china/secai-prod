@@ -74,3 +74,10 @@ tests/test_translate_v2_sampling.py`: **26 passed**. Run chức năng rộng cu�
 deselect đúng 7 test thiếu fixture ngoài checkout; danh sách node ID ở
 `/tmp/secai-allfeatures-excluded.json`, log và JUnit ở
 `/tmp/secai-allfeatures-functional.log` và `/tmp/secai-allfeatures-functional.xml`.
+
+Kết quả run chức năng cuối: **1719 passed, 1 skipped, 7 deselected**, 541.83 s.
+Đây là run đã loại fixture ngoài checkout, không gọi là full-suite PASS.
+Sau khi đối chiếu/giải quyết merge proxy: **81 regression tests passed**; frontend
+build bật cả `VITE_REPORT_FEATURE_ENABLED`, `VITE_TRANSLATE_V2_FILES_ENABLED` và
+`VITE_TRANSLATE_V2_IMAGES_ENABLED`. Image candidate import đủ năm nhóm module và
+`pip check` không có dependency lỗi.
