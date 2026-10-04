@@ -10,6 +10,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import secrets
 import time
 from dataclasses import dataclass
@@ -36,6 +37,21 @@ class BatchEntry:
 
 class BatchError(Exception):
     pass
+
+
+def _response_error_code(response: httpx.Response) -> str:
+    """An upstream error body is optional and may be HTML, empty or oversized."""
+    fallback = f"HTTP_{response.status_code}"
+    if len(response.content) > 4096:
+        return fallback
+    try:
+        payload = response.json()
+    except (ValueError, UnicodeError):
+        return fallback
+    if not isinstance(payload, dict) or not isinstance(payload.get("error"), dict):
+        return fallback
+    code = payload["error"].get("code")
+    return code if isinstance(code, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", code) else fallback
 
 
 @contextmanager
@@ -226,10 +242,11 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
                             data={"source_lang": row["source_lang"], "target_lang": row["target_lang"]},
                             headers={"Idempotency-Key": row["key"]})
                 if response.status_code != 202:
-                    row["status"] = "interrupted" if response.status_code >= 500 else "failed"
-                    row["error_code"] = response.json().get("error", {}).get("code", "HTTP_ERROR")
-                    if row["status"] == "interrupted":
+                    retryable = response.status_code >= 500 or response.status_code == 429
+                    row["status"] = "interrupted" if retryable else "failed"
+                    if retryable:
                         halt_admissions.set()
+                    row["error_code"] = _response_error_code(response)
                     await save()
                     return
                 row["job_id"] = response.json()["job_id"]
@@ -240,7 +257,7 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
                 response = await _request(client, "GET", f"/ai/v2/translate/jobs/{job_id}", deadline)
                 if response.status_code in {404, 410}:
                     row["status"] = "failed"
-                    row["error_code"] = response.json().get("error", {}).get("code", "JOB_NOT_FOUND")
+                    row["error_code"] = _response_error_code(response)
                     await save()
                     return
                 if response.status_code != 200:
@@ -261,7 +278,7 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
                 _atomic_text(output_dir / f"{stem}.txt", result["translated_text"])
                 row["output_json"], row["output_txt"] = f"{stem}.json", f"{stem}.txt"
             else:
-                row["error_code"] = response.json().get("error", {}).get("code") if status == "failed" else "JOB_CANCELLED"
+                row["error_code"] = _response_error_code(response) if status == "failed" else "JOB_CANCELLED"
             await save()
         except (BatchError, ValueError, KeyError, OSError, json.JSONDecodeError) as exc:
             # A POST may have committed even if its response was lost. The
@@ -301,13 +318,17 @@ async def _run_batch_locked(client: httpx.AsyncClient, entries: Sequence[BatchEn
         if halt_admissions.is_set():
             break
         await run_group(group)
-    return {
-        "succeeded": sum(row.get("status") == "succeeded" for row in data["entries"]),
-        "failed": sum(row.get("status") == "failed" for row in data["entries"]),
-        "cancelled": sum(row.get("status") == "cancelled" for row in data["entries"]),
-        "interrupted": sum(row.get("status") in {"interrupted", "uploading"} for row in data["entries"]),
-        "pending": sum(row.get("status") == "pending" for row in data["entries"]),
-    }
+    buckets = ("succeeded", "failed", "cancelled", "interrupted", "pending",
+               "queued", "running", "cancelling", "other")
+    summary = dict.fromkeys(buckets, 0)
+    for row in data["entries"]:
+        status = row.get("status")
+        bucket = "interrupted" if status == "uploading" else status
+        summary[bucket if bucket in summary else "other"] += 1
+    summary["total"] = len(data["entries"])
+    summary["unfinished"] = sum(summary[key] for key in
+                                ("interrupted", "pending", "queued", "running", "cancelling", "other"))
+    return summary
 
 
 async def run_batch(client: httpx.AsyncClient, entries: Sequence[BatchEntry] | None,
@@ -450,7 +471,7 @@ def main() -> None:
     print(json.dumps(result, sort_keys=True))
     if args.action == "cancel" and result["unresolved"]:
         raise SystemExit(1)
-    if args.action != "cancel" and any(result[key] for key in ("failed", "interrupted", "pending")):
+    if args.action != "cancel" and (result["failed"] or result["unfinished"]):
         raise SystemExit(1)
 
 
