@@ -19,7 +19,7 @@ _NO_DATA_LOSS = re.compile(r'(?:chưa|không)[^\n.]{0,40}mất dữ liệu', re.
 _RECORDED_ACTION = re.compile(
     r'(?:chặn|cô lập) phiên|đổi mật khẩu|thời điểm cô lập (?:đã )?xác nhận|đã cô lập', re.I,
 )
-_UNKNOWN = re.compile(r'chưa có (?:thông tin|dữ liệu)', re.I)
+_UNKNOWN = re.compile(r'chưa có (?:thông tin|dữ liệu)|chưa thể xác nhận|chưa xác định', re.I)
 _CONTROL_ID = re.compile(r'\bCT-\d+\b', re.I)
 _IP_ADDRESS = re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
 _DUPLICATE_MARKER = re.compile(r'\bduplicate\b|trùng lặp|bản ghi lặp', re.I)
@@ -59,8 +59,10 @@ def _unsupported_control_ip_pair(content: str, source: str) -> bool:
     factual_source = re.sub(r'(?ms)^```.*?^```', '', source)
     shared_ips: set[str] = set()
     pairs: set[tuple[str, str]] = set()
+    source_controls: set[str] = set()
     for clause in re.split(r'\.\s+|[;\n]', factual_source):
         controls = {match.group(0).casefold() for match in _CONTROL_ID.finditer(clause)}
+        source_controls.update(controls)
         ips = {match.group(0) for match in _IP_ADDRESS.finditer(clause)}
         if not controls:
             shared_ips.update(ips)
@@ -71,6 +73,16 @@ def _unsupported_control_ip_pair(content: str, source: str) -> bool:
         if any(ip not in shared_ips and (control, ip) not in pairs
                for control in controls for ip in ips):
             return True
+    # In a multi-control report, a record-only IP shown alone under scope implies a shared scope.
+    scope = re.search(r'^#{1,6}\s+Phạm vi\s*$([\s\S]*?)(?=^#{1,6}\s+|\Z)', content, re.I | re.M)
+    if scope and len(source_controls) > 1:
+        for clause in re.split(r'\.\s+|[;\n]', scope.group(1)):
+            if _CONTROL_ID.search(clause):
+                continue
+            for match in _IP_ADDRESS.finditer(clause):
+                ip = match.group(0)
+                if ip not in shared_ips and {control for control, value in pairs if value == ip} != source_controls:
+                    return True
     return False
 
 
@@ -185,7 +197,7 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
     current_literals = {_literal_value(match) for match in _CRITICAL.finditer(content)}
     if not prior_literals.issubset(current_literals):
         raise HTTPException(422, 'Report edit removed a critical identifier')
-    if _unsupported_control_ip_pair(body, source):
+    if _unsupported_control_ip_pair(content, source):
         raise HTTPException(422, 'Report associates a control with an IP from another source record')
     if _repeated_duplicate_event(content, source):
         raise HTTPException(422, 'Report repeats a source-marked duplicate event as a second action')
@@ -197,7 +209,8 @@ def validate_report(content: str, sections: list[str], source: str, previous: st
     if _RECORDED_ACTION.search(source):
         treatment = re.search(r'^#{1,6}\s+Xử lý\s*$([\s\S]*?)(?=^#{1,6}\s+|\Z)', content, re.I | re.M)
         if treatment and _UNKNOWN.search(treatment.group(1)) and not _RECORDED_ACTION.search(treatment.group(1)):
-            raise HTTPException(422, 'Recorded action cannot be reported as missing')
+            action = _RECORDED_ACTION.search(source).group(0)
+            raise HTTPException(422, f'Mục Xử lý phải nêu hành động nguồn đã xác nhận ({action}); không ghi chung là chưa rõ')
     if previous and _NO_DATA_LOSS.search(source) and _NO_DATA_LOSS.search(previous) and not _NO_DATA_LOSS.search(content):
         raise HTTPException(422, 'Report edit removed the no-data-loss observation')
     return neutralize_active_content(content.strip())
