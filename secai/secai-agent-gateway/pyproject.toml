@@ -11,6 +11,7 @@ dependencies = [
   "fastapi>=0.110",
   "uvicorn[standard]>=0.27",
   "httpx>=0.27",
+  "python-multipart>=0.0.9",
   # Pin <2: linch 2.0.0 (2026-09) bắt custom hook khai `resume_policy_id` cho "durable runs"
   # → gãy các hook của gateway (ToolCallBudgetHook…) làm chat/exploit 503. 1.2.x không có ràng
   # buộc này. Dockerfile pip-install từ pyproject (không dùng uv.lock) nên PHẢI pin ở đây.
