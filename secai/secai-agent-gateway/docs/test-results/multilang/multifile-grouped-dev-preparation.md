@@ -47,21 +47,26 @@ without producing a partial candidate file. This export is not a quality score.
 
 The approved frozen manifest is pinned in the command with SHA-256
 `ad1e0fd7f8068da49bee2255e64a8019ec5a2a840b0347e9403153c612a0f64e`.
-Both preparation and result mapping reject a different digest. Only the Python
-test fixture supplies its own expected digest; the CLI has no override.
+Both preparation and result mapping reject a different digest. Preparation
+parses the exact byte snapshot it hashed, so a change to the manifest path
+between approval and parsing cannot change the DOCX source while retaining the
+approved digest. Only the Python test fixture supplies its own expected digest;
+the CLI has no override.
 It yielded 18 DOCX files with 30 verified extracted blocks apiece at
-`/tmp/secai-multifile-grouped-dev-r2`; no model or API call was made.
+`/tmp/secai-multifile-grouped-dev-r3`; no model or API call was made.
 
 Checks: `PYTHONPATH=src:. /tmp/secai-multilang-final-env/bin/python -m pytest -q tests/test_multifile_grouped_preparation.py`
 with `POC_CATALOG_DB=/tmp/secai-multifile-test-poc.db SESSION_STORE_BACKEND=memory REDIS_URL=''`:
-**10 passed** after the independent review repair. The local CLI preparation
+**11 passed** after the second independent review repair, including an
+interposed manifest change between hash and parse. The local CLI preparation
 command above also completed. The environment variables in the example make
 the standalone command reproducible without a writable `/srv/exploitdb`.
 The
 real-file quality gate remains at least 22 acceptable translations out of 30
 in **each** of 18 directions under independent review. Completion of file jobs
 alone does not pass that gate. The separate review of batch client commit
-`4edf83f` found recovery/bounding defects. Batch repair `dafa3fc` and the
-grouped repair still require independent re-review before live use. The mapping
+`4edf83f` found recovery/bounding defects. Batch repairs `dafa3fc` and
+`9dc5de2` were independently re-reviewed; the grouped snapshot repair still
+requires independent re-review before live use. The mapping
 is local evidence binding, not cryptographic proof of model origin; collection
 of real API result files must remain trusted.

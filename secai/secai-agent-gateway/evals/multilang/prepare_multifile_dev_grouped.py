@@ -38,31 +38,30 @@ def _private_write(path: Path, value: str) -> None:
         raise
 
 
-def _manifest_rows(path: Path) -> tuple[list[str], dict[tuple[str, str], dict[str, Any]]]:
+def _manifest_rows(snapshot: bytes) -> tuple[list[str], dict[tuple[str, str], dict[str, Any]]]:
     groups = []
     seen_groups = set()
     rows: dict[tuple[str, str], dict[str, Any]] = {}
     sample_ids = set()
-    with path.open(encoding="utf-8") as source:
-        for line in source:
-            row = json.loads(line)
-            group, direction = row["aligned_item_id"], row["direction"]
-            if (row["split"] != "DEV" or direction not in _DIRECTION_SET
-                    or not isinstance(group, str) or not group
-                    or not isinstance(row["source"], str) or not row["source"].strip()
-                    or not isinstance(row["source_group"], str) or not row["source_group"]
-                    or not isinstance(row["id"], str) or not row["id"]):
-                raise ValueError("invalid frozen DEV row")
-            if group not in seen_groups:
-                groups.append(group)
-                seen_groups.add(group)
-            key = (group, direction)
-            if key in rows or row["id"] in sample_ids:
-                raise ValueError("duplicate DEV row or sample ID")
-            rows[key] = row
-            sample_ids.add(row["id"])
-            if len(rows) > 60 * len(DIRECTIONS):
-                raise ValueError("frozen DEV manifest exceeds 60 groups")
+    for line in snapshot.decode("utf-8").splitlines():
+        row = json.loads(line)
+        group, direction = row["aligned_item_id"], row["direction"]
+        if (row["split"] != "DEV" or direction not in _DIRECTION_SET
+                or not isinstance(group, str) or not group
+                or not isinstance(row["source"], str) or not row["source"].strip()
+                or not isinstance(row["source_group"], str) or not row["source_group"]
+                or not isinstance(row["id"], str) or not row["id"]):
+            raise ValueError("invalid frozen DEV row")
+        if group not in seen_groups:
+            groups.append(group)
+            seen_groups.add(group)
+        key = (group, direction)
+        if key in rows or row["id"] in sample_ids:
+            raise ValueError("duplicate DEV row or sample ID")
+        rows[key] = row
+        sample_ids.add(row["id"])
+        if len(rows) > 60 * len(DIRECTIONS):
+            raise ValueError("frozen DEV manifest exceeds 60 groups")
     if len(groups) != 60 or len(rows) != 60 * len(DIRECTIONS):
         raise ValueError("frozen DEV manifest must have 60 complete groups")
     for group in groups:
@@ -74,12 +73,13 @@ def _manifest_rows(path: Path) -> tuple[list[str], dict[tuple[str, str], dict[st
 def prepare_grouped(manifest: Path, output_dir: Path, *,
                     expected_manifest_sha256: str = APPROVED_DEV_SHA256) -> tuple[Path, Path]:
     """Create 18 DOCX inputs, a batch plan, and exact block/sample mapping."""
-    manifest_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    snapshot = manifest.read_bytes()
+    manifest_sha256 = hashlib.sha256(snapshot).hexdigest()
     if manifest_sha256 != expected_manifest_sha256:
         raise ValueError("approved frozen manifest digest does not match")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("output directory must be empty")
-    groups, rows = _manifest_rows(manifest)
+    groups, rows = _manifest_rows(snapshot)
     selected = groups[:30]
     settings = TranslationSettings()
     output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
