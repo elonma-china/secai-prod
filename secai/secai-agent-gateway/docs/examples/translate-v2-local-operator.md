@@ -15,6 +15,8 @@ python scripts/run_translate_v2_local.py \
 
 The launcher binds `127.0.0.1:18089`, creates the store with mode 0700, and sets in-memory sessions and no Redis for its children. Stop its PID with SIGTERM or press Ctrl-C; it terminates both child processes. Use an unused port and private store path for each isolated run. Do not put provider credentials on the command line or in a tracked file.
 
+If another process holds the SQLite database locked during first startup, WAL initialization retries a finite 20 times. With the configured 30-second SQLite waits, persistent contention can delay startup for roughly 10 minutes before an error; check that no other owner is holding the private store rather than repeatedly launching more workers.
+
 The tested public path is multipart admission followed by job polling and result lookup. For example, in a separate shell, use a file you are authorized to send to the configured provider:
 
 ```sh
