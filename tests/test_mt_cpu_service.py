@@ -5,6 +5,10 @@ import asyncio
 import fcntl
 import hashlib
 import json
+import os
+import select
+import signal
+import socket
 import subprocess
 import struct
 import sys
@@ -16,7 +20,7 @@ import pytest
 
 from deploy.mt_cpu_service.service import (
     CANDIDATES, Candidate, OwnedLlamaServer, ServiceSettings, TranslationRuntime,
-    attest_artifacts, create_app, ServiceFailure,
+    attest_artifacts, create_app, ServiceFailure, _owns_listen_port,
 )
 
 
@@ -199,12 +203,15 @@ async def test_cancelled_waiter_does_not_reap_active_generation(tmp_path):
                                                    disconnected=disconnected))
     await asyncio.sleep(.01)
     disconnected.set()
+    done, _ = await asyncio.wait({second}, timeout=.15)
+    assert done, "disconnected waiter held the only queue position"
+    assert runtime.waiting == 0
     assert backend.reaped == 0
-    backend.release.set()
-    assert await first == "Bản dịch"
     with pytest.raises(ServiceFailure) as exc:
         await second
     assert exc.value.status == 503
+    backend.release.set()
+    assert await first == "Bản dịch"
     assert backend.reaped == 0
     assert backend.start_calls == 0
 
@@ -406,6 +413,74 @@ async def test_dead_child_proof_survives_http_client_close_error(tmp_path):
         if child.poll() is None:
             child.kill()
             child.wait(timeout=3)
+
+
+def test_listener_proof_is_owned_socket_inode():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        assert _owns_listen_port(os.getpid(), port)
+        assert not _owns_listen_port(os.getpid(), port + 1)
+
+
+@pytest.mark.parametrize("ignore_term", [True, False])
+def test_abrupt_parent_death_retains_lock_until_child_death(tmp_path, ignore_term):
+    """Tiny Python process only: never launches llama-server or loads weights."""
+    helper = Path(__file__).parents[1] / "deploy" / "mt_cpu_service" / "child_supervisor.py"
+    lock = tmp_path / "owner.lock"
+    ready = tmp_path / "ready"
+    child_code = (
+        "import pathlib,signal,time;"
+        + ("signal.signal(signal.SIGTERM,signal.SIG_IGN);" if ignore_term else "")
+        + f"pathlib.Path({str(ready)!r}).write_text('ready');time.sleep(30)"
+    )
+    parent_code = (
+        "import fcntl,os,pathlib,subprocess,sys,time;"
+        + f"f=open({str(lock)!r},'a+b');fcntl.flock(f,fcntl.LOCK_EX);"
+        + f"p=subprocess.Popen([sys.executable,{str(helper)!r},str(os.getpid()),"
+        + "sys.executable,'-c',"
+        + repr(child_code) + "],pass_fds=(f.fileno(),),close_fds=True);"
+        + f"r=pathlib.Path({str(ready)!r});"
+        + "\nwhile not r.exists():\n time.sleep(.01)\n"
+        + "print(p.pid,flush=True);time.sleep(30)"
+    )
+    parent = subprocess.Popen([sys.executable, "-c", parent_code], stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True)
+    child_pid = None
+    try:
+        readable, _, _ = select.select([parent.stdout], [], [], 4)
+        assert readable, "tiny child did not become ready"
+        child_pid = int(parent.stdout.readline())
+        parent.kill()
+        parent.wait(timeout=3)
+        probe = lock.open("a+b")
+        try:
+            if ignore_term:
+                os.kill(child_pid, 0)  # Still alive after parent SIGKILL.
+                with pytest.raises(BlockingIOError):
+                    fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            else:
+                end = time.monotonic() + 3
+                while time.monotonic() < end:
+                    try:
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                        break
+                    except BlockingIOError:
+                        time.sleep(.02)
+                else:
+                    pytest.fail("PDEATHSIG did not terminate tiny child")
+        finally:
+            probe.close()
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+            parent.wait(timeout=3)
+        if child_pid is not None:
+            try:
+                os.kill(child_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 @pytest.mark.asyncio
