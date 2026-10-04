@@ -9,6 +9,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+from linch.errors import ProviderError
+
 from ..config import get_settings
 from .documents import extract_docx, extract_txt
 from .jobs import JobStore
@@ -50,6 +52,10 @@ class WorkerContext(ProcessingContext):
                         timeout=self.settings.llm_timeout_seconds)
                 except (asyncio.TimeoutError, OSError) as exc:
                     if attempt >= self.settings.llm_max_retries:
+                        raise TranslationError("TRANSLATION_UNAVAILABLE",
+                                               "Translation service is unavailable.") from exc
+                except ProviderError as exc:
+                    if not exc.retryable or attempt >= self.settings.llm_max_retries:
                         raise TranslationError("TRANSLATION_UNAVAILABLE",
                                                "Translation service is unavailable.") from exc
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
@@ -190,7 +196,16 @@ async def main() -> None:
         raise RuntimeError("Translation v2 is disabled")
     from ..agent.runner import LinchRunner
 
-    runner = LinchRunner(settings.worker_db_path)
+    runner = LinchRunner(settings.worker_db_path, strict_transform_errors=True)
     if runner.session_store.__class__.__name__ != "InMemorySessionStore":
         raise RuntimeError("Translation worker session store is not in memory")
+    await _disable_provider_retries(runner)
     await Worker(JobStore(settings), settings, runner).serve()
+
+
+async def _disable_provider_retries(runner: Any) -> None:
+    """Leave the worker's single retry budget at WorkerContext, not inside OpenAI SDK."""
+    runner.agent.max_retries = 0
+    provider = runner.agent.provider
+    client = await provider._get_client()
+    provider._client = client.with_options(max_retries=0)
