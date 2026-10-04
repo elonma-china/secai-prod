@@ -23,6 +23,7 @@ _OTHER = ("en", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar")
 DIRECTIONS = tuple([f"vi>{language}" for language in _OTHER] +
                    [f"{language}>vi" for language in _OTHER])
 _DIRECTION_SET = frozenset(DIRECTIONS)
+APPROVED_DEV_SHA256 = "ad1e0fd7f8068da49bee2255e64a8019ec5a2a840b0347e9403153c612a0f64e"
 
 
 def _private_write(path: Path, value: str) -> None:
@@ -70,8 +71,12 @@ def _manifest_rows(path: Path) -> tuple[list[str], dict[tuple[str, str], dict[st
     return groups, rows
 
 
-def prepare_grouped(manifest: Path, output_dir: Path) -> tuple[Path, Path]:
+def prepare_grouped(manifest: Path, output_dir: Path, *,
+                    expected_manifest_sha256: str = APPROVED_DEV_SHA256) -> tuple[Path, Path]:
     """Create 18 DOCX inputs, a batch plan, and exact block/sample mapping."""
+    manifest_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    if manifest_sha256 != expected_manifest_sha256:
+        raise ValueError("approved frozen manifest digest does not match")
     if output_dir.exists() and any(output_dir.iterdir()):
         raise ValueError("output directory must be empty")
     groups, rows = _manifest_rows(manifest)
@@ -115,33 +120,82 @@ def prepare_grouped(manifest: Path, output_dir: Path) -> tuple[Path, Path]:
     mapping_path = output_dir / "sample-block-map.json"
     _private_write(plan_path, "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in plan))
     mapping = {"schema": "translate-v2-grouped-dev-v1",
-               "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+               "manifest_sha256": manifest_sha256,
                "selected_groups": selected, "files": files}
     _private_write(mapping_path, json.dumps(mapping, ensure_ascii=False, indent=2) + "\n")
     return plan_path, mapping_path
 
 
 def map_results(mapping_path: Path, batch_manifest: Path, results_dir: Path,
-                output: Path) -> dict[str, int]:
+                output: Path, *,
+                expected_manifest_sha256: str = APPROVED_DEV_SHA256) -> dict[str, int]:
     """Verify every actual result block before exporting 540 candidate rows."""
     mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-    batch = json.loads(batch_manifest.read_text(encoding="utf-8"))
     if mapping.get("schema") != "translate-v2-grouped-dev-v1":
         raise ValueError("invalid grouped mapping")
-    by_path = {str(Path(row["path"]).resolve()): row for row in batch["entries"]}
-    if len(by_path) != 18 or len(mapping["files"]) != 18:
+    if mapping.get("manifest_sha256") != expected_manifest_sha256:
+        raise ValueError("approved frozen manifest digest does not match")
+    files = mapping.get("files")
+    selected = mapping.get("selected_groups")
+    if (not isinstance(files, list) or len(files) != 18
+            or not isinstance(selected, list) or len(selected) != 30
+            or len(set(selected)) != 30
+            or {file["direction"] for file in files} != _DIRECTION_SET):
+        raise ValueError("invalid grouped mapping inventory")
+    mapped_paths = [file["path"] for file in files]
+    if (len(set(mapped_paths)) != 18
+            or any(str(Path(path).resolve()) != path for path in mapped_paths)):
+        raise ValueError("invalid grouped mapping paths")
+    for file in files:
+        source_lang, target_lang = file["direction"].split(">")
+        if (file["source_lang"] != ("zh" if source_lang == "zh-Hans" else source_lang)
+                or file["target_lang"] != ("zh" if target_lang == "zh-Hans" else target_lang)):
+            raise ValueError("invalid grouped language mapping")
+        blocks = file.get("blocks")
+        if (not isinstance(blocks, list) or len(blocks) != 30
+                or [block["aligned_item_id"] for block in blocks] != selected
+                or len({block["sample_id"] for block in blocks}) != 30
+                or len({block["source_group"] for block in blocks}) != 30
+                or any(block["index"] != index or block["block_id"] != f"b{index + 1:06d}"
+                       for index, block in enumerate(blocks))):
+            raise ValueError("invalid grouped block inventory")
+    batch = json.loads(batch_manifest.read_text(encoding="utf-8"))
+    entries = batch.get("entries")
+    if not isinstance(entries, list) or len(entries) != 18:
         raise ValueError("expected exactly 18 completed file jobs")
+    canonical_paths = [str(Path(row["path"]).resolve()) for row in entries]
+    if (len(set(canonical_paths)) != 18 or set(canonical_paths) != set(mapped_paths)
+            or any(row.get("status") != "succeeded" for row in entries)
+            or len({row.get("job_id") for row in entries}) != 18
+            or any(not isinstance(row.get("job_id"), str)
+                   or len(row["job_id"]) != 32
+                   or any(c not in "0123456789abcdef" for c in row["job_id"])
+                   for row in entries)):
+        raise ValueError("batch entries do not match exactly 18 succeeded jobs")
+    by_path = dict(zip(canonical_paths, entries))
     candidates = []
     counts: collections.Counter[str] = collections.Counter()
-    for file in mapping["files"]:
+    for file in files:
         job = by_path.get(file["path"])
-        if job is None or job["status"] != "succeeded" or not job.get("output_json"):
+        if job is None or not job.get("output_json"):
             raise ValueError("missing successful grouped file job")
-        result = json.loads((results_dir / job["output_json"]).read_text(encoding="utf-8"))
+        name = job["output_json"]
+        if not isinstance(name, str) or Path(name).name != name:
+            raise ValueError("invalid result filename")
+        result = json.loads((results_dir / name).read_text(encoding="utf-8"))
+        if (result.get("job_id") != job["job_id"] or result.get("status") != "succeeded"
+                or result.get("kind") != "file"
+                or result.get("source_lang") != file["source_lang"]
+                or result.get("target_lang") != file["target_lang"]):
+            raise ValueError("result envelope mismatch")
         if len(result["blocks"]) != len(file["blocks"]) or len(result["blocks"]) != 30:
             raise ValueError("result must contain 30 blocks")
+        if result.get("translated_text") != "\n".join(
+                block["translated_text"] for block in result["blocks"]):
+            raise ValueError("result text does not match blocks")
         for expected, actual in zip(file["blocks"], result["blocks"]):
             if (actual["id"] != expected["block_id"] or actual["order"] != expected["index"]
+                    or actual.get("kind") != "paragraph"
                     or hashlib.sha256(actual["source_text"].encode()).hexdigest()
                     != expected["source_sha256"]):
                 raise ValueError("source block mismatch")
