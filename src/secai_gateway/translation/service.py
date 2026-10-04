@@ -42,13 +42,40 @@ def _word_joiner_at_seam(left: tuple[str, ...], right: tuple[str, ...]) -> bool:
             "SOLIDUS" in name or "SLASH" in name):
         return True
     if "APOSTROPHE" in name or "SINGLE QUOTATION MARK" in name:
-        prefix = 0
+        # An apostrophe inside a word is not a quotation delimiter. A final
+        # matching delimiter, however, must not consume the next word.
+        quote_depth = 0
+        straight_quotes = 0
+        for index, char in enumerate(left):
+            interior = (0 < index < len(left) - 1 and left[index - 1].isalpha()
+                        and left[index + 1].isalpha())
+            if char == "‘":
+                quote_depth += 1
+            elif char == "’" and quote_depth and not interior:
+                quote_depth -= 1
+                if index == len(left) - 1:
+                    return False
+            elif char == "'" and not interior:
+                straight_quotes += 1
+        if last == "'" and straight_quotes >= 2 and straight_quotes % 2 == 0:
+            return False
+        prefix = []
         for char in reversed(left[:-1]):
             if not char.isalpha():
                 break
-            prefix += 1
-        first_word_is_suffix = (len(right) == 1 or not right[1].isalnum())
-        return right[0].isalpha() and (prefix <= 2 or first_word_is_suffix)
+            prefix.append(char)
+        suffix = []
+        for char in right:
+            if not char.isalpha():
+                break
+            suffix.append(char)
+        stem = "".join(reversed(prefix)).casefold()
+        ending = "".join(suffix).casefold()
+        # French elisions and English contractions are bounded forms; an
+        # arbitrary one-letter word after a quote is not an apostrophe suffix.
+        return bool(ending) and (stem in {"l", "d", "j", "m", "t", "s", "c", "n", "qu"}
+                                 or (ending in {"s", "d", "m", "re", "ve", "ll"})
+                                 or (ending == "t" and stem.endswith("n")))
     return False
 
 
