@@ -15,6 +15,7 @@ import os
 import re
 import struct
 import subprocess
+import sys
 import time
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
@@ -48,6 +49,29 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError("duplicate JSON member")
         result[key] = value
     return result
+
+
+def _owns_listen_port(pid: int, port: int) -> bool:
+    """Prove that the owned PID has the IPv4 loopback LISTEN socket inode."""
+    try:
+        sockets = set()
+        for fd in Path(f"/proc/{pid}/fd").iterdir():
+            try:
+                link = os.readlink(fd)
+            except OSError:
+                continue
+            if link.startswith("socket:[") and link.endswith("]"):
+                sockets.add(link[8:-1])
+        with Path("/proc/net/tcp").open(encoding="ascii") as handle:
+            next(handle)
+            for line in handle:
+                columns = line.split()
+                if (len(columns) > 9 and columns[1] == f"0100007F:{port:04X}"
+                        and columns[3] == "0A" and columns[9] in sockets):
+                    return True
+    except (OSError, ValueError, StopIteration):
+        pass
+    return False
 
 
 @dataclass(frozen=True)
@@ -293,8 +317,11 @@ class OwnedLlamaServer:
                 self.client = httpx.AsyncClient(
                     base_url=f"http://127.0.0.1:{self.settings.server_port}",
                     trust_env=False, follow_redirects=False)
-            self.proc = subprocess.Popen(self.command(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                         stderr=subprocess.DEVNULL, close_fds=True,
+            supervisor = Path(__file__).with_name("child_supervisor.py")
+            self.proc = subprocess.Popen([sys.executable, str(supervisor), str(os.getpid()),
+                                          *self.command()], stdin=subprocess.DEVNULL,
+                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                         close_fds=True, pass_fds=(self.lock_file.fileno(),),
                                          env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"),
                                               "LC_ALL": "C", "CUDA_VISIBLE_DEVICES": ""})
             while time.monotonic() < ready_deadline:
@@ -303,7 +330,8 @@ class OwnedLlamaServer:
                 try:
                     response = await self.client.get("/health", timeout=min(1, ready_deadline - time.monotonic()), headers={
                         "Authorization": f"Bearer {self.settings.token}"})
-                    if response.status_code == 200:
+                    if (response.status_code == 200 and self.proc.poll() is None
+                            and _owns_listen_port(self.proc.pid, self.settings.server_port)):
                         self.live = True
                         return
                 except httpx.HTTPError:
@@ -444,12 +472,28 @@ class TranslationRuntime:
             self.waiting += 1
         acquired = False
         remote_started = False
+        slot_wait = asyncio.create_task(self.slot.acquire())
+        disconnect_wait = (asyncio.create_task(disconnected.wait())
+                           if disconnected is not None else None)
         try:
-            await asyncio.wait_for(self.slot.acquire(), timeout=max(0, deadline - time.monotonic()))
-            acquired = True
-        except asyncio.TimeoutError:
-            raise ServiceFailure(504, "TIMEOUT") from None
+            pending = {slot_wait} | ({disconnect_wait} if disconnect_wait else set())
+            done, _ = await asyncio.wait(pending, timeout=max(0, deadline - time.monotonic()),
+                                          return_when=asyncio.FIRST_COMPLETED)
+            if disconnected is not None and disconnected.is_set():
+                raise ServiceFailure(503, "DISCONNECTED")
+            if slot_wait not in done or time.monotonic() >= deadline:
+                raise ServiceFailure(504, "TIMEOUT")
+            acquired = slot_wait.result()
         finally:
+            if not slot_wait.done():
+                slot_wait.cancel()
+                with suppress(asyncio.CancelledError):
+                    await slot_wait
+            elif not acquired and not slot_wait.cancelled() and slot_wait.exception() is None:
+                # It may have acquired the lock concurrently with a disconnect.
+                self.slot.release()
+            if disconnect_wait is not None:
+                disconnect_wait.cancel()
             async with self.admission:
                 self.waiting -= 1
         try:

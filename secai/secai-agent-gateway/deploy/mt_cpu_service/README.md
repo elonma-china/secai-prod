@@ -53,6 +53,11 @@ spawning only its own `llama-server`. The pinned binary is llama.cpp commit
 `e8253f2a2ad34cc36b4a2b874a6bf19c45ba867b89223e8a627f1ca0083db7b7`.
 The candidate allowlist pins both model hashes and revisions in `service.py`.
 Keep the lock file on a local filesystem shared by all attempted instances.
+The pinned child inherits the lock descriptor, and a small Linux exec helper
+sets a race-checked parent-death signal before launching it. If the sidecar
+parent dies abruptly, the old child keeps the lock until it exits; another
+sidecar cannot spawn a competing model. Startup accepts `/health` only after
+the owned PID is proved to hold the expected loopback listening socket.
 
 For 7B, the original GGUF has `eos_token_id=3`, but token 3 represents a
 literal dollar sign in the pinned model. The official base configuration uses
@@ -69,8 +74,9 @@ The child is fixed to `--n-gpu-layers 0`, one generation slot, context 4096,
 at most 1024 actual formatted prompt tokens, and at most 512 generated tokens.
 The 105-second request deadline includes body receipt, queueing, tokenization,
 and completion, including any needed child restart. At most one request may
-wait behind the active generation. A request that times out while queued does
-not terminate the active request's child.
+wait behind the active generation. A queued request that disconnects or times
+out immediately frees its waiting place without terminating the active
+request's child.
 The sidecar terminates and waits for **its own** child after a timeout,
 disconnect, or uncertain upstream state. If it cannot prove the child exited,
 it keeps the generation reservation poisoned and refuses further requests.
