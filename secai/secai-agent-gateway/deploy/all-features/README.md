@@ -55,3 +55,5 @@ availability, stable worker processes and actual inference smoke. `/health` alon
 does not establish model or OCR readiness. Keep smoke source synthetic and preserve
 report outputs. Model identities, GPU ownership and memory cleanup are checked on
 the existing Vast instance independently of the Docker rollout.
+
+Devspace reports now connect automatically: the browser sends `X-Report-Workspace: shared`, and the static proxy loads the workspace key from private `REPORT_KEY_FILE` (host default `.report-api-key.local`). Docker mounts `/run/devspace/report-api.key` read-only. This uses the existing configured Tailnet/loopback connection guard; the Cloudflare loopback shortcut is explicitly enabled for internal shared-admin Devspace. The backend still requires `X-API-Key`. Never bake the key into the image or frontend bundle. Frontend grid/preview rollout and rollback profiles: `/home/ict/secai-releases/translation-file-preview-20261005`.

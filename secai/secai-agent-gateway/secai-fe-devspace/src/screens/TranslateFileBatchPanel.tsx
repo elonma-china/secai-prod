@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, LoaderCircle, AlertCircle, XCircle } from "lucide-react";
 import {
   cancelTranslationJob, getTranslationJob, getTranslationResult, submitTranslationFile, TranslateV2Error,
 } from "../api/translateV2";
-import type { V2Job, V2Kind, V2Lang, V2Result, V2Source } from "../api/translateV2";
+import type { V2Job, V2Kind, V2Lang, V2Result, V2Source, V2Warning } from "../api/translateV2";
 import { sha256File } from "./fileFingerprint";
 import "../styles/translateFileBatch.css";
 
 const STORAGE = "secai.translate.v2.file.batch.v1";
 const MAX_FILES = 5;
+const PAGE_SIZE = 4;
 // Keep older sessions readable so lowering the upload limit does not lose their job IDs.
 const MAX_RESTORED_FILES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
@@ -72,6 +74,32 @@ function terminal(phase: string): boolean {
   return phase === "succeeded" || phase === "failed" || phase === "cancelled" || phase === "unavailable";
 }
 
+function statusLabel(row: Row): string {
+  if (row.phase === "uncertain" || (row.phase === "needs_file" && row.unknownAcceptance)) return "Chưa rõ máy chủ đã nhận; chọn lại đúng tệp để kiểm tra bằng khóa cũ.";
+  const labels: Record<Phase, string> = {
+    waiting: "Đang chờ gửi", posting: "Đang tải lên", retry: "Đang chờ thử lại", uncertain: "Chưa xác định trạng thái",
+    needs_file: "Chưa gửi; cần chọn lại tệp.", active: row.job?.status === "cancelling" ? "Đang hủy" : "Đang xử lý", succeeded: "Dịch hoàn tất", failed: "Dịch thất bại",
+    cancelled: "Đã hủy", unavailable: "Kết quả không còn khả dụng",
+  };
+  return labels[row.phase];
+}
+
+function previewWarnings(row: Row): V2Warning[] {
+  const seen = new Set<string>();
+  return [...(row.job?.warnings ?? []), ...(row.result?.warnings ?? [])].filter((warning) => {
+    const key = JSON.stringify([warning.code, warning.message, warning.block_id]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function warningLabel(warning: V2Warning): string {
+  return warning.code === "OCR_CORRECTION_REJECTED"
+    ? "Bản dịch sử dụng văn bản nhận dạng từ ảnh; vui lòng đối chiếu nếu ảnh mờ hoặc có ký tự khó đọc."
+    : `${warning.code} — ${warning.message}`;
+}
+
 function definitiveMissing(error: unknown): error is TranslateV2Error {
   return error instanceof TranslateV2Error &&
     ((error.status === 410 && error.code === "JOB_EXPIRED") ||
@@ -96,6 +124,8 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
   const [source, setSource] = useState<V2Lang>("vi");
   const [target, setTarget] = useState<V2Lang>("en");
   const [notice, setNotice] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const [hashing, setHashing] = useState(false);
   const busyRef = useRef(false);
   const mountedRef = useRef(true);
@@ -286,6 +316,10 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
 
   const targets = source === "vi" ? LANGS.filter((item) => item.code !== "vi")
     : LANGS.filter((item) => item.code === "vi");
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const visibleRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const selected = rows.find((row) => row.id === selectedId);
+  const warnings = selected ? previewWarnings(selected) : [];
   const accept = imagesEnabled ? ".txt,.docx,.doc,.png,.jpg,.jpeg" : ".txt,.docx,.doc";
   return (
     <section className="file-batch">
@@ -312,16 +346,27 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
       </div>
       {notice && <p role="alert">{notice}</p>}
       {rows.some((row) => row.phase === "needs_file") && <p>Trang đã tải lại: chọn lại các tệp chưa gửi. Job đã nhận sẽ tiếp tục được kiểm tra.</p>}
-      <ol className="file-batch-list">
-        {rows.map((row) => (
-          <li className="file-batch-row" key={row.id}>
+      <div className="file-batch-workspace">
+      <div className="file-batch-library">
+      <p>{rows.length} tệp trong phiên</p>
+      <ol className="file-batch-list" aria-label="Danh sách tệp dịch">
+        {visibleRows.map((row) => (
+          <li className={`file-batch-row${row.id === selectedId ? " selected" : ""}`} key={row.id}>
             <div className="file-batch-row-head">
               <strong>{row.name}</strong>
               <span>{row.source} → {row.target} · {row.kind === "image" ? "Ảnh OCR" : "Tài liệu"}</span>
             </div>
-            <p role="status">{row.phase === "uncertain" || (row.phase === "needs_file" && row.unknownAcceptance) ? "Chưa rõ máy chủ đã nhận; chọn lại đúng tệp để kiểm tra bằng khóa cũ." :
-              row.phase === "needs_file" ? "Chưa gửi; cần chọn lại tệp." :
-              row.job ? `${row.job.status} · ${row.job.stage} · ${row.job.progress.completed}/${row.job.progress.total ?? "?"} đoạn` : row.phase}</p>
+            <p role="status" className="file-batch-status">
+              {row.phase === "succeeded" ? <CheckCircle2 aria-label="Đã hoàn tất" className="file-batch-done" size={18} />
+                : row.phase === "cancelled" ? <XCircle aria-hidden="true" size={18} />
+                : ["failed", "unavailable", "uncertain", "needs_file"].includes(row.phase) ? <AlertCircle aria-hidden="true" size={18} />
+                : <LoaderCircle aria-label="Đang dịch" className="file-batch-spinner" size={18} />}
+              <span>{statusLabel(row)}{row.phase === "active" && row.job?.progress.total != null
+                ? ` · ${row.job.progress.completed}/${row.job.progress.total} đoạn` : ""}</span>
+            </p>
+            {row.phase === "succeeded" && <button type="button" className="iasbtn ghost"
+              aria-label={`Xem trước ${row.name}`} aria-pressed={row.id === selectedId}
+              onClick={() => setSelectedId(row.id)}>Xem trước</button>}
             {row.error && <p role="alert">{row.error}</p>}
             {(row.phase === "uncertain" || row.phase === "needs_file") &&
               <label>Chọn lại tệp {row.name}<input type="file" accept={row.extension} onChange={(event) => {
@@ -330,22 +375,40 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
             {!terminal(row.phase) && row.phase !== "uncertain" && row.phase !== "posting" && !row.unknownAcceptance &&
               <button type="button" className="iasbtn ghost" onClick={() => cancel(row)} disabled={!!row.cancelRequested}
                 aria-label={`Hủy ${row.name}`}>Hủy</button>}
-            {row.job?.warnings.map((warning, index) => <p key={index}>Cảnh báo: {warning.code} — {warning.message}</p>)}
-            {row.result && <>
-              <pre className="file-batch-result" dir={row.target === "ar" ? "rtl" : "auto"}>{row.result.translated_text}</pre>
-              {row.result.warnings.map((warning, index) => <p key={index}>Cảnh báo: {warning.code} — {warning.message}</p>)}
-              {row.result.ocr && <details><summary>Văn bản OCR {row.result.ocr.needs_review ? "· cần kiểm tra" : ""}</summary>
-                <h4>Bản gốc</h4><pre>{row.result.ocr.raw_text}</pre>
-                <h4>Đã sửa</h4><pre>{row.result.ocr.corrected_text}</pre>
-              </details>}
-              <div className="file-batch-downloads">
-                <button type="button" className="iasbtn ghost" onClick={() => download(`${row.name}.translated.txt`, row.result!.translated_text, "text/plain;charset=utf-8")}>Tải TXT</button>
-                <button type="button" className="iasbtn ghost" onClick={() => download(`${row.name}.translated.json`, JSON.stringify(row.result, null, 2), "application/json")}>Tải JSON</button>
-              </div>
-            </>}
+
           </li>
         ))}
       </ol>
+      {pages > 1 && <nav className="file-batch-pagination" aria-label="Phân trang tệp dịch">
+        <button type="button" className="iasbtn ghost" disabled={page === 1} onClick={() => setPage(page - 1)}>Trang trước</button>
+        <span aria-live="polite">Trang {page}/{pages}</span>
+        <button type="button" className="iasbtn ghost" disabled={page === pages} onClick={() => setPage(page + 1)}>Trang sau</button>
+      </nav>}
+      </div>
+      <aside className="file-batch-preview" aria-label="Xem trước bản dịch">
+        {!selected ? <p className="file-batch-placeholder">Chọn “Xem trước” trên tệp đã dịch để xem kết quả tại đây.</p> : <>
+          <h3>{selected.name}</h3>
+          {selected.phase === "unavailable" ? <p>Kết quả đã hết hạn hoặc không còn trên máy chủ.</p>
+            : !selected.result ? <p role="status"><LoaderCircle className="file-batch-spinner" aria-hidden="true" size={18} /> Đang tải kết quả…</p>
+            : <>
+              <pre className="file-batch-result" dir={selected.target === "ar" ? "rtl" : "auto"}>{selected.result.translated_text}</pre>
+              <div className="file-batch-downloads">
+                <button type="button" className="iasbtn ghost" onClick={() => download(`${selected.name}.translated.txt`, selected.result!.translated_text, "text/plain;charset=utf-8")}>Tải TXT</button>
+                <button type="button" className="iasbtn ghost" onClick={() => download(`${selected.name}.translated.json`, JSON.stringify(selected.result, null, 2), "application/json")}>Tải JSON</button>
+              </div>
+              {(warnings.length > 0 || selected.result.ocr) && <details className="file-batch-details"><summary>Chi tiết nhận dạng và cảnh báo</summary>
+                {warnings.map((warning, index) => <p key={index}>{warningLabel(warning)}</p>)}
+                {selected.result.ocr && <>
+                  <h4>Văn bản nhận dạng từ ảnh {selected.result.ocr.needs_review ? "· cần kiểm tra" : ""}</h4><pre>{selected.result.ocr.raw_text}</pre>
+                  {selected.result.ocr.edits.length > 0 && selected.result.ocr.corrected_text !== selected.result.ocr.raw_text && <>
+                    <h4>Văn bản sau hiệu chỉnh</h4><pre>{selected.result.ocr.corrected_text}</pre>
+                  </>}
+                </>}
+              </details>}
+            </>}
+        </>}
+      </aside>
+      </div>
     </section>
   );
 }

@@ -64,7 +64,7 @@ describe("user-facing v2 file batch", () => {
     }));
     sessionStorage.setItem("secai.translate.v2.file.batch.v1", JSON.stringify({ rows }));
     const { container } = render(<TranslateFileBatchPanel imagesEnabled />);
-    expect(container.querySelectorAll(".file-batch-row")).toHaveLength(6);
+    expect(container.querySelectorAll(".file-batch-row")).toHaveLength(4);
     expect((screen.getByLabelText("Chọn nhiều tệp cần dịch") as HTMLInputElement).disabled).toBe(true);
     expect(JSON.parse(sessionStorage.getItem("secai.translate.v2.file.batch.v1")!).rows.map((row: { jobId: string }) => row.jobId))
       .toEqual(rows.map((row) => row.jobId));
@@ -150,7 +150,7 @@ describe("user-facing v2 file batch", () => {
     await waitFor(() => expect(screen.getByText("UNSUPPORTED_FILE_TYPE")).toBeTruthy());
     await act(async () => { await vi.advanceTimersByTimeAsync(13_000); });
     expect(posts).toBe(2);
-    expect(screen.getByText(/queued · queued/)).toBeTruthy();
+    expect(screen.getByText(/Đang xử lý/)).toBeTruthy();
   });
 
   it("holds admission after uncertain POST, requires the same file for replay, and resumes after refresh", async () => {
@@ -279,7 +279,7 @@ describe("user-facing v2 file batch", () => {
     }));
     const first = render(<TranslateFileBatchPanel imagesEnabled />);
     fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["one"], "a.txt")] } });
-    await waitFor(() => expect(first.container.textContent).toContain("queued · queued"));
+    await waitFor(() => expect(first.container.textContent).toContain("Đang xử lý"));
     first.unmount();
     render(<TranslateFileBatchPanel imagesEnabled />);
     fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["two"], "b.txt")] } });
@@ -340,11 +340,13 @@ describe("user-facing v2 file batch", () => {
     fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["png"], "a.png")] } });
     await waitFor(() => expect(fetch.mock.calls.some(([, init]) => init.method === "POST")).toBe(true));
     await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
+    expect(screen.queryByText("مرحبا <script>alert(1)</script>")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Xem trước a.png" }));
     expect(screen.getByText("مرحبا <script>alert(1)</script>")).toBeTruthy();
     expect(container.querySelector("script")).toBeNull();
     expect(container.querySelector(".file-batch-result")?.getAttribute("dir")).toBe("rtl");
     expect(screen.getByText("RAW")).toBeTruthy();
-    expect(screen.getByText("CORRECTED")).toBeTruthy();
+    expect(screen.queryByText("CORRECTED")).toBeNull();
     expect(screen.getByText(/cần kiểm tra/)).toBeTruthy();
     expect(screen.getByText(/AMBIGUOUS_TECHNICAL_TOKEN/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Tải TXT" })).toBeTruthy();
@@ -369,11 +371,11 @@ describe("user-facing v2 file batch", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Ngôn ngữ nguồn của tệp" }), { target: { value: "vi" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Ngôn ngữ đích của tệp" }), { target: { value: "ar" } });
     fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["png"], "a.png"), new File(["two"], "b.txt"), new File(["three"], "c.txt")] } });
-    await waitFor(() => expect(container.textContent).toContain("queued · queued"));
+    await waitFor(() => expect(container.textContent).toContain("Đang xử lý"));
     fireEvent.click(screen.getByRole("button", { name: "Hủy a.png" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
     await waitFor(() => expect(fetch.mock.calls.some(([, init]) => init.method === "DELETE")).toBe(true));
-    expect(container.textContent).toContain("cancelling");
+    expect(container.textContent).toContain("Đang hủy");
     await act(async () => { await vi.advanceTimersByTimeAsync(50_000); });
     expect(posts).toBe(2);
     expect(container.textContent).toContain("c.txt");
@@ -396,11 +398,67 @@ describe("user-facing v2 file batch", () => {
     vi.stubGlobal("fetch", fetch);
     const { container } = render(<TranslateFileBatchPanel imagesEnabled />);
     fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["one"], "a.txt")] } });
-    await waitFor(() => expect(container.textContent).toContain("queued · queued"));
+    await waitFor(() => expect(container.textContent).toContain("Đang xử lý"));
     fireEvent.click(screen.getByRole("button", { name: "Hủy a.txt" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
     expect(deletes).toBe(1);
     expect(gets).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Xem trước a.txt" }));
     expect(screen.getByRole("button", { name: "Tải JSON" })).toBeTruthy();
   });
+  it("changes the loading icon to done before result fetch completes and opens preview on demand", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    let complete = false;
+    let resolveResult!: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string, init: RequestInit) => {
+      if (init.method === "POST") return ok({ ...job(0), target_lang: "en" }, 202);
+      if (url.endsWith("/result")) return new Promise<Response>((resolve) => { resolveResult = resolve; });
+      return ok({ ...job(0, complete ? "succeeded" : "running"), target_lang: "en" });
+    }));
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: [new File(["one"], "a.txt")] } });
+    await waitFor(() => expect(screen.getByLabelText("Đang dịch")).toBeTruthy());
+    complete = true;
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(screen.getByLabelText("Đã hoàn tất")).toBeTruthy();
+    expect(screen.queryByLabelText("Đang dịch")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Xem trước a.txt" }));
+    expect(screen.getByText("Đang tải kết quả…")).toBeTruthy();
+    await act(async () => { resolveResult(ok({ ...answer(0), target_lang: "en" })); });
+    expect(screen.getByText("مرحبا <script>alert(1)</script>")).toBeTruthy();
+  });
+
+  it("paginates five restored jobs, preserves selected preview and deduplicates OCR warnings", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "Date"] });
+    const warning = { code: "OCR_CORRECTION_REJECTED", message: "Automatic OCR correction is unavailable; review raw text.", block_id: null };
+    const stored = Array.from({ length: 5 }, (_, n) => ({
+      id: n.toString(16).repeat(32), key: n.toString(16).repeat(32), hash: "a".repeat(64), name: `file-${n}.png`, size: 4,
+      extension: ".png", kind: "image", source: "vi", target: "zh", phase: "succeeded", jobId: n.toString(16).repeat(32),
+      job: { ...job(0, "succeeded", "image"), job_id: n.toString(16).repeat(32), warnings: [warning] },
+    }));
+    sessionStorage.setItem("secai.translate.v2.file.batch.v1", JSON.stringify({ rows: stored }));
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async (url: string) => {
+      const id = url.split("/").at(-2)!;
+      return ok({ ...answer(0, "image"), job_id: id, translated_text: `Translation ${id[0]}`, warnings: [warning],
+        ocr: { raw_text: "RAW", corrected_text: "RAW", edits: [], needs_review: true } });
+    }));
+    const { container } = render(<TranslateFileBatchPanel imagesEnabled />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(6_000); });
+    expect(container.querySelectorAll(".file-batch-row")).toHaveLength(4);
+    expect(screen.queryByRole("button", { name: "Xem trước file-4.png" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Xem trước file-0.png" }));
+    expect(screen.getByText("Translation 0")).toBeTruthy();
+    expect(screen.getAllByText(/Bản dịch sử dụng văn bản nhận dạng từ ảnh/)).toHaveLength(1);
+    expect(screen.queryByText("Văn bản sau hiệu chỉnh")).toBeNull();
+    expect(screen.getAllByText("RAW")).toHaveLength(1);
+    expect(container.querySelector(".file-batch-details")?.hasAttribute("open")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Trang sau" }));
+    expect(container.querySelectorAll(".file-batch-row")).toHaveLength(1);
+    expect(screen.getByText("Trang 2/2")).toBeTruthy();
+    expect(screen.getByText("Translation 0")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Xem trước file-4.png" }));
+    expect(screen.getByText("Translation 4")).toBeTruthy();
+    expect(screen.queryByText("Translation 0")).toBeNull();
+  });
+
 });
