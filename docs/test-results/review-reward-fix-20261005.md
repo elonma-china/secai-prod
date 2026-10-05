@@ -1,6 +1,6 @@
 # Sửa và kiểm thử Devspace Reward feedback — 2026-10-05
 
-Đã sửa mã nguồn và kiểm thử trên môi trường QA riêng. Chưa commit hoặc triển khai backend production.
+Đã sửa mã nguồn và kiểm thử trên môi trường QA riêng. Đây là bằng chứng tại bước QA; commit và triển khai sau đó được ghi trong [báo cáo triển khai](review-reward-deploy-20261005.md).
 
 ## Thay đổi
 
