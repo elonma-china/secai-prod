@@ -204,9 +204,9 @@ export default function MultilangTranslatePanel({ capabilities }: { capabilities
           </div>
           {metadata && <>
             <p role="status">Dịch hoàn tất.</p>
-            {warnings.length > 0 && <p className="multilang-warnings">Hệ thống chưa có bộ kiểm tra ngôn ngữ tự động đủ tin cậy; bạn có thể kiểm tra lại bản dịch.</p>}
             <details className="multilang-metadata">
               <summary>Chi tiết bản dịch</summary>
+              {warnings.length > 0 && <p className="multilang-warnings">Hệ thống chưa có bộ kiểm tra ngôn ngữ tự động đủ tin cậy; bạn có thể kiểm tra lại bản dịch.</p>}
               {warnings.map((warning) => <p key={warning}>{warningText(warning)}</p>)}
               <p>Mã yêu cầu: {metadata.request_id} · {metadata.chunks} đoạn · {metadata.attempts} lượt tạo</p>
             </details>
