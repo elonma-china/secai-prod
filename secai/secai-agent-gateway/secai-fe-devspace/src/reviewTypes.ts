@@ -1,4 +1,4 @@
-export type Decision = "left" | "right" | "tie" | "both_bad" | "insufficient_context";
+export type Decision = "left" | "right" | "tie" | "both_bad" | "insufficient_context" | "skip";
 export type ErrorTag = "incorrect_fact" | "unsupported_claim" | "incomplete" | "irrelevant" | "unsafe" | "other";
 export interface Actor { actor_id: string; role: "admin" | "reviewer" }
 export interface Page<T> { items: T[]; total: number; offset: number; limit: number }
@@ -13,5 +13,5 @@ export interface ReviewItem { id: string; external_id: string; prompt_messages: 
 export interface AdminJudgment { id: string; assignment_id: string; reviewer_id: string; decision: Decision; winning_candidate_id: string | null; candidate_error_tags: Record<string, ErrorTag[]>; comment: string }
 export interface ItemJudgments { item_id: string; judgments: AdminJudgment[]; adjudication: Adjudication | null }
 export interface ReviewStats { items: number; assignments: number; submitted: number; pending_adjudication: number; adjudicated: number; disagreements: number; multi_reviewed_items: number }
-export const DECISIONS: [Decision, string][] = [["left", "A tốt hơn"], ["right", "B tốt hơn"], ["tie", "Hai câu trả lời ngang nhau"], ["both_bad", "Cả hai đều không đạt"], ["insufficient_context", "Thiếu ngữ cảnh để đánh giá"]];
+export const DECISIONS: [Decision, string][] = [["left", "A tốt hơn"], ["right", "B tốt hơn"], ["tie", "Hai câu trả lời ngang nhau"], ["both_bad", "Cả hai đều không đạt"], ["insufficient_context", "Thiếu ngữ cảnh để đánh giá"], ["skip", "Bỏ qua"]];
 export const ERROR_TAGS: [ErrorTag, string][] = [["incorrect_fact", "Sai kỹ thuật / dữ kiện"], ["unsupported_claim", "Khẳng định thiếu bằng chứng"], ["incomplete", "Thiếu ý"], ["irrelevant", "Không phù hợp câu hỏi"], ["unsafe", "Không an toàn"], ["other", "Lỗi khác"]];

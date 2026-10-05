@@ -4,7 +4,7 @@ import json
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Decision = Literal['left', 'right', 'tie', 'both_bad', 'insufficient_context']
+Decision = Literal['left', 'right', 'tie', 'both_bad', 'insufficient_context', 'skip']
 ErrorTag = Literal['incorrect_fact', 'unsupported_claim', 'incomplete', 'irrelevant', 'unsafe', 'other']
 RUBRIC = 'Ưu tiên đúng kỹ thuật và có bằng chứng; sau đó đủ ý và phù hợp câu hỏi. Không chọn chỉ vì câu trả lời dài. Phân biệt không có bằng chứng với đã xác minh sai.'
 
@@ -83,7 +83,7 @@ class JudgmentInput(Input):
         return self
 
 class AdjudicationInput(Input):
-    outcome: Literal['winner', 'tie', 'both_bad', 'insufficient_context']
+    outcome: Literal['winner', 'tie', 'both_bad', 'insufficient_context', 'skip']
     winning_candidate_id: str | None = Field(default=None, max_length=200)
     reason: str = Field(min_length=1, max_length=4000)
     @model_validator(mode='after')
