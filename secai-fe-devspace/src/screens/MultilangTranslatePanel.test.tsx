@@ -129,6 +129,7 @@ describe("multilang translation panel", () => {
     const details = screen.getByText("Chi tiết bản dịch").closest("details");
     expect(details).not.toBeNull();
     expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.contains(screen.getByText("Hệ thống chưa có bộ kiểm tra ngôn ngữ tự động đủ tin cậy; bạn có thể kiểm tra lại bản dịch."))).toBe(true);
     const sourceWarning = screen.getByText("Ngôn ngữ nguồn do người dùng chọn; hệ thống chưa xác minh tự động.");
     const targetWarning = screen.getByText("Hệ thống chưa xác minh tự động ngôn ngữ của kết quả dịch.");
     const metadata = screen.getByText("Mã yêu cầu: req-1 · 1 đoạn · 1 lượt tạo");
