@@ -3,9 +3,10 @@ import pytest
 from test_review_auth import client, ADMIN, REVIEW, OTHER
 from test_review_store import pair
 
-def prepared(client, reviewers=('expert',)):
+def prepared(client, reviewers=('expert',), source_group='unknown'):
     cid = client.post('/review-api/campaigns',headers=ADMIN,json={'title':'Pilot'}).json()['id']
-    assert client.post(f'/review-api/campaigns/{cid}/imports',headers=ADMIN,content=pair().model_dump_json()).json() == {'imported':1,'skipped':0}
+    assert client.post(f'/review-api/campaigns/{cid}/imports',headers=ADMIN,
+                      content=pair().model_copy(update={'source_group':source_group}).model_dump_json()).json() == {'imported':1,'skipped':0}
     item = client.get(f'/review-api/campaigns/{cid}/items',headers=ADMIN).json()['items'][0]
     assignments = client.post(f'/review-api/items/{item["id"]}/assignments',headers=ADMIN,json={'reviewer_ids':list(reviewers)}).json()['items']
     return cid,item,assignments

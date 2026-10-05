@@ -129,7 +129,7 @@ def build_export(snapshot,format):
         records.append({'item_id':item['id'],'prompt':item['prompt_messages'],'chosen':chosen['text'],'rejected':rejected['text'],'rubric_version':snapshot['campaign']['rubric_version'],'adjudication_id':approval['id'],'source_group':item['source_group']})
     name = format+'.jsonl'
     body = ''.join(json.dumps(r,ensure_ascii=False,sort_keys=True)+'\n' for r in records).encode('utf-8')
-    manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}
+    manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'campaign_title':snapshot['campaign']['title'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}
     output = io.BytesIO()
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(name,body)
@@ -228,4 +228,6 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
 
 # Template assistance shares review identity only; no existing IAS report route changes.
 from .review_templates import router as template_router
+from .review_reward import router as reward_router
+router.include_router(reward_router)
 router.include_router(template_router)
