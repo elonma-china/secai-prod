@@ -33,6 +33,14 @@ export interface ReportRevision {
   created_at: string;
 }
 
+export type ReportExportFormat = "txt" | "docx" | "pdf";
+
+const EXPORT_MIME: Record<ReportExportFormat, string> = {
+  txt: "text/plain",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf: "application/pdf",
+};
+
 export class ReportApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -80,6 +88,26 @@ function json(method: string, body: unknown): RequestInit {
 }
 
 export const reportMvpApi = {
+  exportReport: async (key: string, id: string, format: ReportExportFormat, revision: number) => {
+    const headers = new Headers();
+    if (key) headers.set("X-API-Key", key);
+    else headers.set("X-Report-Workspace", "shared");
+    const query = new URLSearchParams({ format, revision: String(revision) });
+    const response = await fetch(`${BASE}${PREFIX}/${encodeURIComponent(id)}/export?${query}`, { headers });
+    if (!response.ok) {
+      let body: unknown;
+      try { body = await response.json(); } catch { body = null; }
+      throw new ReportApiError(response.status, errorMessage(body, response.statusText || "Không thể xuất báo cáo."));
+    }
+    const mime = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+    if (mime !== EXPORT_MIME[format]) {
+      throw new ReportApiError(502, "Máy chủ trả về định dạng tệp không hợp lệ.");
+    }
+    const blob = await response.blob();
+    if (!blob.size) throw new ReportApiError(502, "Máy chủ trả về tệp rỗng.");
+    const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 80);
+    return { blob, filename: `report-${safeId}-v${revision}.${format}` };
+  },
   listTemplates: (key: string = "") => request<ReportTemplate[]>(key, "/templates"),
   createTemplate: (key: string, body: ReportTemplateInput) =>
     request<ReportTemplate>(key, "/templates", json("POST", body)),

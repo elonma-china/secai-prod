@@ -13,7 +13,7 @@
 | Đầu ra | JSON hoặc SSE | JSON chứa Markdown, không có SSE |
 | Xác thực endpoint | Không yêu cầu report API key | Bắt buộc `X-API-Key` |
 
-Template mới có hiệu lực trong DB, không cần huấn luyện lại model để đổi mẫu. Chưa có endpoint xuất Word/PDF.
+Template mới có hiệu lực trong DB, không cần huấn luyện lại model để đổi mẫu. Có endpoint xuất TXT, Word và PDF từ báo cáo đã lưu.
 
 Ví dụ gọi trực tiếp trên server hiện tại:
 
@@ -156,3 +156,17 @@ V2 thường trả `{"detail":"..."}`; lỗi schema có `detail` dạng mảng.
 Validator kiểm cấu trúc mục và một số dữ kiện như IP/CVE/URL/số liệu; chưa bảo đảm mọi ý nghĩa đúng. Cần chuyên gia đọc lại trước khi sử dụng chính thức. Khi edit trả `422`, báo cáo đã lưu vẫn giữ nguyên.
 
 Chi tiết: [contract report v2](report-mvp.md). API cũ và v2 cùng tồn tại; tích hợp template/chỉnh sửa/lịch sử nên dùng v2.
+
+## Xuất báo cáo đã lưu
+
+`GET /ai/v2/reports/{report_id}/export?format=txt|docx|pdf&revision=N` trả file tải về. Bỏ `revision` để xuất bản hiện tại; truyền số revision để lấy đúng bản đang xem. Backend trực tiếp vẫn cần `X-API-Key`; Devspace cấp khóa qua proxy.
+
+```sh
+curl -fS "$BASE/ai/v2/reports/$REPORT_ID/export?format=docx&revision=2" \
+  -H "X-API-Key: $REPORT_API_KEY" -o bao-cao-v2.docx
+# Đổi format thành txt hoặc pdf và đổi đuôi file tương ứng.
+```
+
+TXT là văn bản UTF-8; Word và PDF giữ tiêu đề, danh sách và bảng cơ bản. Không tạo lại nội dung bằng model khi xuất. Trên tab “Theo mẫu”, dùng **Tải TXT**, **Tải Word**, **Tải PDF** cho bản hiện tại hoặc bản sửa đang xem.
+
+Giới hạn bản đầu: định dạng đậm/nghiêng trong đoạn được chuyển thành chữ thường; bảng có quá nhiều cột có thể chật. Không nhúng ảnh từ URL hoặc tải tài nguyên ngoài khi xuất.

@@ -7,6 +7,7 @@ import {
   type ReportRevision,
   type ReportTemplate,
   type ReportTemplateInput,
+  type ReportExportFormat,
 } from "../reportMvpApi";
 import "./reportMvp.css";
 
@@ -180,6 +181,25 @@ export default function ReportMvpPanel() {
     });
   }
 
+  async function exportReport(format: ReportExportFormat) {
+    if (!report) return;
+    const revision = previewRevision ?? report.revision;
+    await run(`export-${format}`, async () => {
+      const { blob, filename } = await reportMvpApi.exportReport("", report.id, format, revision);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      try { link.click(); } finally {
+        link.remove();
+        // Give the browser time to start consuming the attachment before releasing it.
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      setNotice(`Đã tải báo cáo bản ${revision} (${format.toUpperCase()}).`);
+    });
+  }
+
   return (
     <div className="report-mvp">
       <div className="iascard report-mvp-card report-mvp-connection">
@@ -270,6 +290,13 @@ export default function ReportMvpPanel() {
                 onClick={() => setPreviewRevision(item.revision)}>Bản {item.revision} · {timeLabel(item.created_at)}</button>)}
           </div>
           {previewRevision !== null && <p className="report-mvp-muted">Đang xem bản cũ. Yêu cầu chỉnh sửa luôn áp dụng trên bản hiện tại.</p>}
+          <div className="report-mvp-row" aria-label="Xuất báo cáo">
+            {([['txt', 'Tải TXT'], ['docx', 'Tải Word'], ['pdf', 'Tải PDF']] as const).map(([format, label]) =>
+              <button className="iasbtn ghost" type="button" key={format} disabled={!!busy}
+                onClick={() => void exportReport(format)}>
+                {busy === `export-${format}` ? "Đang xuất…" : label}
+              </button>)}
+          </div>
           <div className="report-mvp-preview"><Markdown>{preview || "Không có dữ liệu."}</Markdown></div>
           <label className="report-mvp-field"><span>Yêu cầu chỉnh sửa bằng prompt</span>
             <textarea className="iasin" rows={3} value={instruction} onChange={(event) => setInstruction(event.target.value)}

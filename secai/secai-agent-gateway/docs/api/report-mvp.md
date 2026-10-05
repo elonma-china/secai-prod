@@ -12,6 +12,7 @@ The existing IAS report endpoints remain unchanged. This is an opt-in internal A
 | GET | `/{report_id}` | — | Current report |
 | POST | `/{report_id}/edit` | `{"instruction":"...","expected_revision":1}` | Updated report (409 if stale) |
 | GET | `/{report_id}/revisions` | — | Array of `{revision,content,created_at,instruction}` (`instruction` is empty for revision 1) |
+| GET | `/{report_id}/export` | Query `format=txt|docx|pdf`, optional positive `revision` | Attachment from saved content; current revision by default |
 
 `TemplateFields` is `{name, description?, sections: string[], instructions?, example?}`. Saved templates also have `id`, `version`, `created_at`, and `updated_at`. Reports are `{id, template_id, template_version, revision, content, created_at}`. `content` is Markdown. Inputs are capped at 2 MiB per import, 40,000 characters per template example, 20,000 characters per report data field, and 4,000 characters per edit instruction. DOCX with macro/binary parts, excessive extracted data, or XML DTD is rejected. Sensitive identifiers and secrets detected by the gateway's public-input guard are rejected.
 
@@ -36,3 +37,5 @@ Conclusive Vietnamese compliance outcomes are rejected when source text has no m
 ### Template formatting and edit scope
 
 Section matching normalizes optional numeric prefixes (such as `1. Tóm tắt`) consistently for validation and scoped edits. Markdown ordered-list markers are excluded from numeric fact checks in both source and report; numbers inside list items remain checked. Source facts inside fenced code blocks retain their control/IP associations. Explicit Vietnamese whole-report edit requests (such as `Rút ngắn toàn bộ báo cáo, kể cả phần Tóm tắt`) are not narrowed to the named example section; negated global requests do not enable that override. These remain bounded text checks, not a general instruction parser.
+
+Exports do not run a model or mutate reports/revisions. TXT is UTF-8 plain text; DOCX and PDF support basic headings, paragraphs/lists, code and tables. PDF embeds DejaVu Sans for Vietnamese and requires the regular/bold fonts in the runtime. Missing report/revision returns 404, invalid format/revision 422, unavailable renderer 503; auth is checked first. Devspace supplies the workspace key at its server proxy and downloads the exact revision currently being viewed. Inline emphasis is flattened, remote images are never fetched, and very wide tables may be cramped.
