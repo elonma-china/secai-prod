@@ -29,6 +29,8 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 
 ## Triển khai và kiểm chứng hiện tại
 
+- [Luồng đánh giá → huấn luyện Qwen3-1.7B thật → API chấm điểm (dataset QA)](test-results/reward-qwen3-17b-real-flow-20261006.md).
+
 - [Xuất báo cáo TXT/DOCX/PDF và kiểm chứng](test-results/report-export-20261005.md).
 
 - [Grid dịch tệp, preview và báo cáo vào thẳng workspace](test-results/file-preview-report-workspace-20261005.md).
