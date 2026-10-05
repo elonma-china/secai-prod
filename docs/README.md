@@ -23,6 +23,7 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 - Dịch file/ảnh: [contract v2](api/translate-v2-contract.md), [chạy local](examples/translate-v2-local-operator.md), [worker Docker](../deploy/file-ocr/README.md).
 - Đa ngôn ngữ: [contract v3](api/multilang-contract.md), [operator](api/multilang-translate.md), [triển khai](../deploy/multilang/README.md).
 - Expert review: [API](api/review-mvp.md), [operator](review-operator-guide.md).
+- Reward Qwen3-1.7B: [chuẩn bị dữ liệu, huấn luyện, đánh giá và dịch vụ chấm điểm](reward-qwen-operator.md).
 - Chat/session: [API chung](api-guide.md), [project/session](session-project-api-guide.md).
 - PoC: [API](poc-api-guide.md), [verify](poc-verify-architecture.md).
 

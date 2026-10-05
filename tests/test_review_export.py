@@ -45,3 +45,25 @@ def test_raw_retains_non_winners_and_preference_excludes_unapproved(client):
         assert len(lines)==count
         if fmt=='raw':
             assert {json.loads(line)['judgments'][0]['decision'] for line in lines if json.loads(line)['judgments']}=={'tie','both_bad','insufficient_context'}
+
+
+def test_actual_approved_exports_feed_reward_loader(client,tmp_path):
+    from secai_gateway.reward.dataset import load_exports
+    cid,item,assignments=prepared(client,source_group='technical-synthetic-conversation')
+    assignment=assignments[0]
+    assert client.put(f'/review-api/assignments/{assignment["id"]}/judgment',headers=REVIEW,
+                      json={'decision':'left','comment':'Expert verified answer'}).status_code==200
+    assert client.put(f'/review-api/items/{item["id"]}/adjudication',headers=ADMIN,
+        json={'outcome':'winner','winning_candidate_id':assignment['left_candidate_id'],
+              'reason':'Expert assessment verified'}).status_code==200
+    paths={}
+    for kind in ['preference','raw']:
+        response=client.get(f'/review-api/campaigns/{cid}/export?format={kind}',headers=ADMIN)
+        assert response.status_code==200
+        paths[kind]=tmp_path/(kind+'.zip');paths[kind].write_bytes(response.content)
+    rows,provenance=load_exports(paths['preference'],paths['raw'],purpose='production',
+                                 expert_ids={'expert'},campaign_ids={cid})
+    assert len(rows)==1 and rows[0]['item_id']==item['id']
+    assert provenance['campaign_id']==cid
+    with zipfile.ZipFile(paths['preference']) as archive:
+        assert json.loads(archive.read('manifest.json'))['campaign_title']=='Pilot'
