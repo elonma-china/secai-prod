@@ -1,4 +1,4 @@
-/** API mới cho báo cáo theo mẫu. Khóa chỉ được giữ trong state của màn hình. */
+/** API báo cáo: Devspace dùng kết nối workspace do proxy máy chủ xác thực. */
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || "";
 const PREFIX = "/ai/v2/reports";
@@ -59,7 +59,8 @@ function errorMessage(body: unknown, fallback: string): string {
 
 async function request<T>(key: string, path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  headers.set("X-API-Key", key);
+  if (key) headers.set("X-API-Key", key);
+  else headers.set("X-Report-Workspace", "shared");
   const response = await fetch(`${BASE}${PREFIX}${path}`, { ...options, headers });
   const raw = await response.text();
   let body: unknown;
@@ -79,7 +80,7 @@ function json(method: string, body: unknown): RequestInit {
 }
 
 export const reportMvpApi = {
-  listTemplates: (key: string) => request<ReportTemplate[]>(key, "/templates"),
+  listTemplates: (key: string = "") => request<ReportTemplate[]>(key, "/templates"),
   createTemplate: (key: string, body: ReportTemplateInput) =>
     request<ReportTemplate>(key, "/templates", json("POST", body)),
   importTemplate: (key: string, file: File) => {

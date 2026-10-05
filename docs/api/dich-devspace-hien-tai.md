@@ -50,6 +50,8 @@ Ghép `chunk.delta` để hiển thị; **chỉ `final` xác nhận thành công
 | GET | `/ai/v2/translate/jobs/{job_id}/result` | Lấy kết quả đã lưu |
 | DELETE | `/ai/v2/translate/jobs/{job_id}` | Yêu cầu hủy job chưa hoàn tất |
 
+Devspace hiển thị các tệp bằng grid có phân trang (4 tệp/trang). Biểu tượng loading chuyển thành hoàn tất khi job thành công; bấm **Xem trước** để xem bản dịch, tải kết quả và đối chiếu OCR trong khung bên cạnh.
+
 Mỗi POST nhận **một tệp**. Devspace giới hạn **5 tệp mỗi phiên**; tối đa 2 job đang chờ/chạy theo giới hạn admission hiện tại. Upload tối đa 10 MiB; không nhận PDF.
 
 ```sh

@@ -21,6 +21,7 @@ REPORT_UPSTREAM_FILE = Path(__file__).resolve().parent / ".report-upstream"
 REPORT_GATEWAY = os.environ.get("REPORT_GATEWAY_PROXY", REPORT_UPSTREAM_FILE.read_text().strip() if REPORT_UPSTREAM_FILE.exists() else GATEWAY)
 TRANSLATION_UPSTREAM_FILE = Path(__file__).resolve().parent / ".translation-upstream"
 TRANSLATION_GATEWAY = os.environ.get("TRANSLATION_GATEWAY_PROXY", TRANSLATION_UPSTREAM_FILE.read_text().strip() if TRANSLATION_UPSTREAM_FILE.exists() else GATEWAY)
+REPORT_KEY_FILE = Path(os.environ.get("REPORT_KEY_FILE", str(Path(__file__).resolve().parent / ".report-api-key.local")))
 REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
 REVIEW_ALLOW_LOOPBACK = os.environ.get("DEVSPACE_REVIEW_ALLOW_LOOPBACK", "false").lower() == "true"
 REVIEW_LOOPBACK_FILE = Path(__file__).resolve().parent / ".review-loopback.local"
@@ -73,6 +74,14 @@ def _review_connection(peer: str, local: str) -> bool:
         return ipaddress.ip_address(peer).is_loopback and ipaddress.ip_address(local).is_loopback
     except ValueError:
         return False
+
+
+def _report_key() -> str | None:
+    try:
+        value = REPORT_KEY_FILE.read_text(encoding="utf-8").strip()
+        return value if value and "\n" not in value and "\r" not in value else None
+    except (OSError, UnicodeError):
+        return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -129,6 +138,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _proxy(self) -> None:
         path = urlsplit(self.path).path
+        is_report = path == "/ai/v2/reports" or path.startswith("/ai/v2/reports/")
+        report_workspace = self.headers.get("X-Report-Workspace") if is_report else None
+        if report_workspace is not None:
+            if report_workspace != "shared":
+                self.send_error(400, "Unsupported report workspace")
+                return
+            if not _review_connection(self.client_address[0], self.connection.getsockname()[0]):
+                self.send_error(403, "Devspace report access requires a configured connection")
+                return
+            report_key = _report_key()
+            if report_key is None:
+                self.send_error(503, "Devspace report access is not configured")
+                return
         review_role = self.headers.get("X-Review-Role") if path == "/review-api" or path.startswith("/review-api/") else None
         if review_role is not None:
             if not _review_connection(self.client_address[0], self.connection.getsockname()[0]):
@@ -138,7 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             if review_token is None:
                 self.send_error(503, "Devspace review access is not configured")
                 return
-        target = REPORT_GATEWAY if path == "/ai/v2/reports" or path.startswith("/ai/v2/reports/") else GATEWAY
+        target = REPORT_GATEWAY if is_report else GATEWAY
         if any(path == prefix or path.startswith(prefix + "/")
                for prefix in ("/ai/v2/translate", "/ai/v3/translate")):
             target = TRANSLATION_GATEWAY
@@ -154,8 +176,12 @@ class Handler(BaseHTTPRequestHandler):
         headers = {
             k: v
             for k, v in self.headers.items()
-            if k.lower() not in {"host", "content-length", "connection", "accept-encoding", "x-review-role"}
+            if k.lower() not in {"host", "content-length", "connection", "accept-encoding", "x-review-role", "x-report-workspace"}
         }
+        if report_workspace is not None:
+            # Replace any caller key, including differently cased header names.
+            headers = {k: v for k, v in headers.items() if k.lower() != "x-api-key"}
+            headers["X-API-Key"] = report_key
         if review_role is not None:
             headers["Authorization"] = f"Bearer {review_token}"
         headers["Host"] = f"{host}:{port}"

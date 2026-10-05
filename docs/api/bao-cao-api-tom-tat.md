@@ -63,7 +63,7 @@ Muốn stream, dùng endpoint `/stream` tương ứng và `curl -N`. Đọc even
 
 ## 3. API template và báo cáo v2
 
-Prefix: `/ai/v2/reports`. Mọi request cần `X-API-Key: <REPORT_API_KEY>`. Server phải bật `REPORT_FEATURE_ENABLED=true`. Key cấp quyền với toàn bộ template/báo cáo của workspace, chưa phân quyền theo từng người dùng.
+Prefix: `/ai/v2/reports`. Request trực tiếp tới backend cần `X-API-Key: <REPORT_API_KEY>`. Devspace nội bộ tự kết nối workspace qua proxy, không có ô nhập khóa; proxy đọc khóa private trên server và thêm header khi gọi backend. Server phải bật `REPORT_FEATURE_ENABLED=true`. Key cấp quyền với toàn bộ template/báo cáo của workspace, chưa phân quyền theo từng người dùng.
 
 | Method | Đường dẫn sau prefix | Chức năng |
 |---|---|---|

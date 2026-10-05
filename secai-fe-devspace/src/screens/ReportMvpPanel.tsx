@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Markdown from "../components/Markdown";
 import {
   reportMvpApi,
@@ -20,11 +20,11 @@ const EMPTY_DRAFT: ReportTemplateInput = {
 
 function describeError(error: unknown): string {
   if (error instanceof ReportApiError) {
-    if (error.status === 401) return "Khóa API không hợp lệ. Hãy nhập lại khóa báo cáo.";
+    if (error.status === 401) return "Kết nối kho báo cáo của workspace chưa được cấu hình đúng trên máy chủ.";
     if (error.status === 404) return `Không tìm thấy tài nguyên hoặc tính năng báo cáo chưa bật. ${error.message}`;
     if (error.status === 409) return "Dữ liệu đã được cập nhật ở nơi khác. Tải lại mẫu hoặc báo cáo rồi thử lại.";
     if (error.status === 502) return "Dịch vụ tạo báo cáo đang gián đoạn. Vui lòng thử lại sau.";
-    if (error.status === 503) return "Tính năng báo cáo chưa được cấu hình trên máy chủ.";
+    if (error.status === 503) return "Kết nối kho báo cáo của workspace chưa được cấu hình trên máy chủ.";
     return `Lỗi ${error.status}: ${error.message}`;
   }
   return error instanceof Error ? error.message : "Không thể kết nối máy chủ.";
@@ -36,7 +36,6 @@ function timeLabel(value: string): string {
 }
 
 export default function ReportMvpPanel() {
-  const [apiKey, setApiKey] = useState("");
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [draft, setDraft] = useState<ReportTemplateInput>(EMPTY_DRAFT);
@@ -75,19 +74,12 @@ export default function ReportMvpPanel() {
     }
   }
 
-  function changeKey(value: string) {
-    setApiKey(value);
-    setTemplates([]);
-    setSelectedTemplateId("");
-    setEditing(null);
-    setReport(null);
-    setRevisions([]);
-    setError("");
-    setNotice("");
-  }
+  useEffect(() => {
+    void run("load", async () => reloadTemplates());
+  }, []);
 
   async function reloadTemplates(preferredId?: string) {
-    const next = await reportMvpApi.listTemplates(apiKey.trim());
+    const next = await reportMvpApi.listTemplates("");
     setTemplates(next);
     setSelectedTemplateId((current) => {
       const id = preferredId || current;
@@ -124,7 +116,7 @@ export default function ReportMvpPanel() {
       return;
     }
     await run("import", async () => {
-      const imported = await reportMvpApi.importTemplate(apiKey.trim(), file);
+      const imported = await reportMvpApi.importTemplate("", file);
       setEditing(null);
       setDraftFromTemplate(imported);
       setNotice("Đã trích xuất bản nháp. Kiểm tra và chỉnh nội dung trước khi lưu mẫu.");
@@ -139,8 +131,8 @@ export default function ReportMvpPanel() {
     }
     await run("save", async () => {
       const saved = editing
-        ? await reportMvpApi.updateTemplate(apiKey.trim(), editing.id, fields, editing.version)
-        : await reportMvpApi.createTemplate(apiKey.trim(), fields);
+        ? await reportMvpApi.updateTemplate("", editing.id, fields, editing.version)
+        : await reportMvpApi.createTemplate("", fields);
       await reloadTemplates(saved.id);
       setEditing(saved);
       setDraftFromTemplate(saved);
@@ -153,7 +145,7 @@ export default function ReportMvpPanel() {
     setReport(value);
     setReportIdInput(value.id);
     setPreviewRevision(null);
-    setRevisions(await reportMvpApi.listRevisions(apiKey.trim(), value.id));
+    setRevisions(await reportMvpApi.listRevisions("", value.id));
   }
 
   async function generate() {
@@ -162,7 +154,7 @@ export default function ReportMvpPanel() {
       return;
     }
     await run("generate", async () => {
-      const value = await reportMvpApi.generate(apiKey.trim(), selectedTemplateId, sourceData.trim());
+      const value = await reportMvpApi.generate("", selectedTemplateId, sourceData.trim());
       await showReport(value);
       setNotice("Báo cáo đã được tạo và lưu.");
     });
@@ -171,7 +163,7 @@ export default function ReportMvpPanel() {
   async function openReport() {
     if (!reportIdInput.trim()) return;
     await run("open", async () => {
-      await showReport(await reportMvpApi.getReport(apiKey.trim(), reportIdInput.trim()));
+      await showReport(await reportMvpApi.getReport("", reportIdInput.trim()));
     });
   }
 
@@ -181,7 +173,7 @@ export default function ReportMvpPanel() {
       return;
     }
     await run("edit", async () => {
-      const value = await reportMvpApi.editReport(apiKey.trim(), report.id, instruction.trim(), report.revision);
+      const value = await reportMvpApi.editReport("", report.id, instruction.trim(), report.revision);
       await showReport(value);
       setInstruction("");
       setNotice(`Đã lưu bản sửa thứ ${value.revision}.`);
@@ -191,17 +183,11 @@ export default function ReportMvpPanel() {
   return (
     <div className="report-mvp">
       <div className="iascard report-mvp-card report-mvp-connection">
-        <h4>Kết nối kho báo cáo</h4>
-        <p className="report-mvp-muted">Nhập khóa báo cáo của workspace. Khóa chỉ giữ trong bộ nhớ trang này, không lưu vào trình duyệt.</p>
+        <h4>Kho báo cáo</h4>
         <div className="report-mvp-row">
-          <label className="report-mvp-field report-mvp-grow">
-            <span>Khóa API báo cáo</span>
-            <input className="iasin" type="password" autoComplete="off" value={apiKey} disabled={!!busy}
-              onChange={(event) => changeKey(event.target.value)} placeholder="Nhập khóa REPORT_API_KEY" />
-          </label>
-          <button className="iasbtn" type="button" disabled={!apiKey.trim() || !!busy}
+          <button className="iasbtn ghost" type="button" disabled={!!busy}
             onClick={() => run("load", async () => reloadTemplates())}>
-            {busy === "load" ? "Đang tải…" : "Tải danh sách mẫu"}
+            {busy === "load" ? "Đang tải…" : "Tải lại danh sách mẫu"}
           </button>
         </div>
       </div>
@@ -241,10 +227,10 @@ export default function ReportMvpPanel() {
         <div className="report-mvp-row">
           <label className="report-mvp-upload">
             Nhập Word / Markdown / TXT
-            <input type="file" accept=".docx,.md,.txt" disabled={!apiKey.trim() || !!busy}
+            <input type="file" accept=".docx,.md,.txt" disabled={!!busy}
               onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void importFile(file); }} />
           </label>
-          <button className="iasbtn" type="button" disabled={!apiKey.trim() || !!busy} onClick={saveTemplate}>
+          <button className="iasbtn" type="button" disabled={!!busy} onClick={saveTemplate}>
             {busy === "save" ? "Đang lưu…" : editing ? `Lưu phiên bản mới (v${editing.version + 1})` : "Lưu mẫu mới"}
           </button>
         </div>
@@ -259,7 +245,7 @@ export default function ReportMvpPanel() {
           <textarea className="iasin" rows={8} value={sourceData} onChange={(event) => setSourceData(event.target.value)}
             placeholder="Dán dữ liệu, log hoặc kết quả quét dùng làm căn cứ cho báo cáo…" />
         </label>
-        <button className="iasbtn" type="button" disabled={!apiKey.trim() || !selectedTemplateId || !sourceData.trim() || !!busy} onClick={generate}>
+        <button className="iasbtn" type="button" disabled={!selectedTemplateId || !sourceData.trim() || !!busy} onClick={generate}>
           {busy === "generate" ? "Đang tạo báo cáo…" : "Tạo báo cáo"}
         </button>
       </div>
@@ -271,7 +257,7 @@ export default function ReportMvpPanel() {
           <label className="report-mvp-field report-mvp-grow"><span>ID báo cáo đã lưu</span>
             <input className="iasin" value={reportIdInput} onChange={(event) => setReportIdInput(event.target.value)} placeholder="Dán ID để mở lại báo cáo" />
           </label>
-          <button className="iasbtn ghost" type="button" disabled={!apiKey.trim() || !reportIdInput.trim() || !!busy} onClick={openReport}>
+          <button className="iasbtn ghost" type="button" disabled={!reportIdInput.trim() || !!busy} onClick={openReport}>
             {busy === "open" ? "Đang mở…" : "Mở báo cáo"}
           </button>
         </div>

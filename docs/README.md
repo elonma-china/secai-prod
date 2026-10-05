@@ -28,6 +28,8 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 
 ## Triển khai và kiểm chứng hiện tại
 
+- [Grid dịch tệp, preview và báo cáo vào thẳng workspace](test-results/file-preview-report-workspace-20261005.md).
+
 - [Dịch v3 stream và cập nhật Devspace 05/10](test-results/translation-v3-stream-devspace-20261005.md).
 
 - [Full-feature image và routing Devspace](../deploy/all-features/README.md).
