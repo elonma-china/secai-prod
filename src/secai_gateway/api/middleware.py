@@ -38,6 +38,10 @@ def route_limit(path: str) -> int:
         # AFTER the chat-route check above so /sessions/{sid}/chat[/stream] still gets 150,
         # not 120.
         return 120
+    if path.startswith("/review-api/") and path != "/review-api/live-pairs" and not path.startswith("/review-api/report-templates/"):
+        # Review CRUD shares the Devspace proxy IP and refreshes after each vote.
+        # Keep model-backed live/template routes at their existing limit.
+        return 120
     if path == "/ai/exploit" or path == "/ai/exploit/run":
         return 20
     if path == "/admin/refresh-models":
@@ -53,7 +57,8 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
         # DELETE/PATCH added for the Project/Session CRUD surface (api/projects.py) — without
         # them the browser's CORS preflight (OPTIONS) rejects those verbs before the request
         # ever reaches the route.
-        allow_methods=["POST", "GET", "DELETE", "PATCH"], allow_headers=["Content-Type", "X-API-Key"],
+        allow_methods=["POST", "GET", "PUT", "DELETE", "PATCH"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
     )
 
     @app.middleware("http")

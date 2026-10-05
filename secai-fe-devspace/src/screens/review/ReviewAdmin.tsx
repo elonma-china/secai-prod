@@ -4,7 +4,7 @@ import { reviewError } from "../../reviewApi";
 import type { ReviewApi } from "../../reviewApi";
 import { DECISIONS } from "../../reviewTypes";
 import type { Actor, Campaign, ItemJudgments, ReviewItem, ReviewStats } from "../../reviewTypes";
-export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; campaign: Campaign; onChange: () => void}) {
+export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; campaign: Campaign; onChange: (campaign: Campaign) => void}) {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [reviewers, setReviewers] = useState<Actor[]>([]);
   const [stats, setStats] = useState<ReviewStats | null>(null);
@@ -23,9 +23,10 @@ export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; 
   const closed = campaign.state === "closed";
   async function load() {
     setLoading(true); setError("");
-    try { const [rows, people, summary] = await Promise.all([api.items(campaign.id, disagreement), api.reviewers(), api.stats(campaign.id)]); setItems(rows); setReviewers(people); setStats(summary); }
-    catch (e) { setError(reviewError(e)); } finally { setLoading(false); }
+    try { const [rows, summary] = await Promise.all([api.items(campaign.id, disagreement), api.stats(campaign.id)]); setItems(rows); setStats(summary); }
+    catch (e) { setStats(null); setError(reviewError(e)); } finally { setLoading(false); }
   }
+  useEffect(() => { let alive = true; api.reviewers().then(rows => {if (alive) setReviewers(rows);}).catch(e => {if (alive) setError(reviewError(e));}); return () => {alive = false;}; }, [api]);
   useEffect(() => { void load(); }, [api, campaign.id, disagreement]);
   async function inspect(item: ReviewItem) {
     setSelected(item); setJudgments(null); setAssignees([]); setOutcome(""); setReason(""); setError(""); setBusy(true);
@@ -33,14 +34,14 @@ export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; 
   }
   async function action(work: () => Promise<unknown>, message: string, refresh = true) {
     setBusy(true); setError(""); setNotice("");
-    try { await work(); if (message) setNotice(message); if (refresh) {await load(); if (selected) {setJudgments(await api.judgments(selected.id));} onChange();} }
+    try { await work(); if (message) setNotice(message); if (refresh) {await load(); if (selected) {setJudgments(await api.judgments(selected.id));}} }
     catch (e) {setError(reviewError(e));} finally {setBusy(false);}
   }
   const current = selected ? items.find(i => i.id === selected.id) || selected : null;
   const adjudication = judgments?.adjudication || current?.adjudication;
   const canAdjudicate = current && current.assignment_count > 0 && current.assignment_count === current.submitted_count && !adjudication && !closed;
   return <section>
-    <div className="review-toolbar"><h3>Quản trị · {campaign.title}</h3><button className="iasbtn" disabled={busy} onClick={() => void action(() => api.campaignState(campaign.id, closed ? "open" : "closed"), closed ? "Đã mở lại đợt đánh giá." : "Đã đóng đợt đánh giá.")}>{closed ? "Mở lại đợt" : "Đóng đợt"}</button><button className="iasbtn" disabled={busy || loading} onClick={() => void load()}>Làm mới</button></div>
+    <div className="review-toolbar"><h3>Quản trị · {campaign.title}</h3><button className="iasbtn" disabled={busy} onClick={() => void action(async () => {const updated = await api.campaignState(campaign.id, closed ? "open" : "closed"); onChange(updated);}, closed ? "Đã mở lại đợt đánh giá." : "Đã đóng đợt đánh giá.")}>{closed ? "Mở lại đợt" : "Đóng đợt"}</button><button className="iasbtn" disabled={busy || loading} onClick={() => void load()}>Làm mới</button></div>
     {error && <div className="review-error" role="alert">{error} <button className="iasbtn" onClick={() => void load()} disabled={busy || loading}>Thử tải lại</button></div>}
     {notice && <p className="review-note" role="status">{notice}</p>}
     {loading && <p role="status">Đang tải mẫu và thống kê…</p>}
@@ -63,7 +64,7 @@ export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; 
         {judgments?.judgments.length === 0 && <p>Chưa có phiếu.</p>}
         {judgments?.judgments.map(judgment => <article className="review-vote" key={judgment.id}><strong>{judgment.reviewer_id}</strong><p>{judgment.winning_candidate_id ? `Chọn candidate: ${judgment.winning_candidate_id}` : DECISIONS.find(([value]) => value === judgment.decision)?.[1]}</p><pre className="review-metadata">{JSON.stringify(judgment.candidate_error_tags, null, 2)}</pre><p>{judgment.comment || "Không có nhận xét."}</p></article>)}
         {adjudication ? <div className="review-note"><strong>Đã duyệt: {adjudication.winning_candidate_id ? `candidate ${adjudication.winning_candidate_id}` : adjudication.outcome}</strong><p>{adjudication.reason}</p></div> : <form onSubmit={e => {e.preventDefault(); void action(() => api.adjudicate(current.id, outcome.startsWith("winner:") ? "winner" : outcome, outcome.startsWith("winner:") ? outcome.slice(7) : null, reason), "Đã duyệt kết quả. Quyết định được giữ bất biến.");}}>
-          <fieldset disabled={busy || !canAdjudicate}><legend>Quyết định cuối của quản trị</legend><label className="review-field">Kết quả<select className="iasin" value={outcome} required onChange={e => setOutcome(e.target.value)}><option value="">Chọn kết quả</option>{current.candidates.map(candidate => <option key={candidate.id} value={"winner:" + candidate.id}>Candidate {candidate.id} thắng</option>)}<option value="tie">Ngang nhau</option><option value="both_bad">Cả hai không đạt</option><option value="insufficient_context">Thiếu ngữ cảnh</option></select></label><label className="review-field">Lý do (bắt buộc)<textarea className="iasin" rows={3} required maxLength={4000} value={reason} onChange={e => setReason(e.target.value)}/></label><button className="iasbtn review-primary" disabled={!outcome || !reason.trim()}>Duyệt kết quả</button></fieldset>
+          <fieldset disabled={busy || !canAdjudicate}><legend>Quyết định cuối của quản trị</legend><label className="review-field">Kết quả<select className="iasin" value={outcome} required onChange={e => setOutcome(e.target.value)}><option value="">Chọn kết quả</option>{current.candidates.map(candidate => <option key={candidate.id} value={"winner:" + candidate.id}>Candidate {candidate.id} thắng</option>)}<option value="tie">Ngang nhau</option><option value="both_bad">Cả hai không đạt</option><option value="insufficient_context">Thiếu ngữ cảnh</option><option value="skip">Bỏ qua</option></select></label><label className="review-field">Lý do (bắt buộc)<textarea className="iasin" rows={3} required maxLength={4000} value={reason} onChange={e => setReason(e.target.value)}/></label><button className="iasbtn review-primary" disabled={!outcome || !reason.trim()}>Duyệt kết quả</button></fieldset>
           {!canAdjudicate && <p className="review-muted">Cần ít nhất một phân công và toàn bộ chuyên gia nộp phiếu trước khi duyệt. Đợt phải đang mở.</p>}
         </form>}
       </div>}

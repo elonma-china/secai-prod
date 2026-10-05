@@ -57,7 +57,7 @@ Assignment detail trả `left:{text}`, `right:{text}`, prompt_messages, evidence
 {"decision":"left","error_tags":{"left":[],"right":["incorrect_fact"]},"comment":"Câu bên phải nhầm bảo vệ đường truyền với quyền truy cập."}
 ```
 
-Decision: `left`, `right`, `tie`, `both_bad`, `insufficient_context`. Tags: `incorrect_fact`, `unsupported_claim`, `incomplete`, `irrelevant`, `unsafe`, `other`. Comment tối đa 4.000 ký tự; bắt buộc khi both_bad/insufficient_context hoặc có tag other. Gửi lại payload giống hệt trả phiếu hiện tại; khác nội dung trả 409. MVP không có sửa phiếu đã nộp.
+Decision: `left`, `right`, `tie`, `both_bad`, `insufficient_context`, `skip` (bỏ qua, không bắt buộc nhận xét). Tags: `incorrect_fact`, `unsupported_claim`, `incomplete`, `irrelevant`, `unsafe`, `other`. Comment tối đa 4.000 ký tự; bắt buộc khi both_bad/insufficient_context hoặc có tag other. Gửi lại payload giống hệt trả phiếu hiện tại; khác nội dung trả 409. MVP không có sửa phiếu đã nộp.
 
 ## Duyệt và thống kê
 
@@ -67,7 +67,7 @@ Quản trị đọc judgments với reviewer_id, winning_candidate_id, candidate
 {"outcome":"winner","winning_candidate_id":"answer-1","reason":"Đối chiếu tiêu chí: HTTPS không thay thế kiểm tra quyền."}
 ```
 
-Outcome khác: `tie`, `both_bad`, `insufficient_context`, không kèm winner. Cần ít nhất một assignment và tất cả đã nộp. Quyết định bất biến/idempotent; payload khác bị 409. Lý do bắt buộc cho mọi quyết định.
+Outcome khác: `tie`, `both_bad`, `insufficient_context`, `skip` (bỏ qua), không kèm winner. Cần ít nhất một assignment và tất cả đã nộp. Quyết định bất biến/idempotent; payload khác bị 409. Lý do bắt buộc cho mọi quyết định.
 
 Stats: `items`, `assignments`, `submitted`, `pending_adjudication`, `adjudicated`, `disagreements`, `multi_reviewed_items`. Bất đồng so kết quả đã chuẩn hóa, không so trực tiếp left/right. Mẫu số là số item có ít nhất hai phiếu nộp; không diễn giải đây là mức chất lượng model.
 
