@@ -7,7 +7,9 @@ import { sha256File } from "./fileFingerprint";
 import "../styles/translateFileBatch.css";
 
 const STORAGE = "secai.translate.v2.file.batch.v1";
-const MAX_FILES = 20;
+const MAX_FILES = 5;
+// Keep older sessions readable so lowering the upload limit does not lose their job IDs.
+const MAX_RESTORED_FILES = 20;
 const MAX_BYTES = 10 * 1024 * 1024;
 const UPLOAD_INTERVAL_MS = 12_500;
 const POLL_INTERVAL_MS = 4_000;
@@ -43,7 +45,7 @@ function load(): { rows: Row[]; nextUploadAt: number } {
     const value: unknown = JSON.parse(sessionStorage.getItem(STORAGE) ?? "null");
     if (!value || typeof value !== "object" || !("rows" in value) || !Array.isArray(value.rows)) return { rows: [], nextUploadAt: 0 };
     const stored = value as { rows: unknown[]; nextUploadAt?: unknown };
-    if (stored.rows.length > MAX_FILES) return { rows: [], nextUploadAt: 0 };
+    if (stored.rows.length > MAX_RESTORED_FILES) return { rows: [], nextUploadAt: 0 };
     const rows: Row[] = [];
     for (const raw of stored.rows) {
       if (!raw || typeof raw !== "object") continue;
@@ -91,7 +93,7 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
   const [rows, setRows] = useState<Row[]>(initial.current.rows);
   const rowsRef = useRef(rows);
   const filesRef = useRef(new Map<string, File>());
-  const [source, setSource] = useState<V2Source>("vi");
+  const [source, setSource] = useState<V2Lang>("vi");
   const [target, setTarget] = useState<V2Lang>("en");
   const [notice, setNotice] = useState("");
   const [hashing, setHashing] = useState(false);
@@ -283,19 +285,18 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
   }
 
   const targets = source === "vi" ? LANGS.filter((item) => item.code !== "vi")
-    : source === "auto" ? LANGS : LANGS.filter((item) => item.code === "vi");
+    : LANGS.filter((item) => item.code === "vi");
   const accept = imagesEnabled ? ".txt,.docx,.doc,.png,.jpg,.jpeg" : ".txt,.docx,.doc";
   return (
     <section className="file-batch">
-      <p>Dịch tối đa 20 tệp mỗi phiên. Máy chủ xử lý tối đa 2 job đang chờ hoặc chạy; kết quả tệp được giữ trên máy chủ trong 24 giờ.</p>
+      <p>Dịch tối đa {MAX_FILES} tệp mỗi phiên. Máy chủ xử lý tối đa 2 job đang chờ hoặc chạy; kết quả tệp được giữ trên máy chủ trong 24 giờ.</p>
       <div className="file-batch-controls">
         <label>Ngôn ngữ nguồn của tệp
           <select value={source} onChange={(event) => {
-            const value = event.target.value as V2Source;
+            const value = event.target.value as V2Lang;
             setSource(value);
             setTarget(value === "vi" ? "en" : "vi");
           }}>
-            <option value="auto">Tự nhận diện</option>
             {LANGS.map((lang) => <option key={lang.code} value={lang.code}>{lang.label}</option>)}
           </select>
         </label>

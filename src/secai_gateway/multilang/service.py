@@ -5,7 +5,7 @@ import re
 import secrets
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable
+from typing import Awaitable, Callable
 
 from .chunks import split
 from .config import EXPECTED_MODEL, HyMtCounter, MultilangSettings
@@ -95,6 +95,7 @@ def _strong_source_mismatch(text: str, source: str) -> bool:
         "ar": {"CYRILLIC", "HANGUL", "HIRAGANA", "KATAKANA"},
         "ru": {"ARABIC", "HANGUL", "HIRAGANA", "KATAKANA"},
         "ko": {"ARABIC", "CYRILLIC", "HIRAGANA", "KATAKANA"},
+        "en": {"ARABIC", "CYRILLIC", "HANGUL", "HIRAGANA", "KATAKANA"},
         "vi": {"ARABIC", "CYRILLIC", "HANGUL", "HIRAGANA", "KATAKANA"},
         "fr": {"ARABIC", "CYRILLIC", "HANGUL", "HIRAGANA", "KATAKANA"},
         "de": {"ARABIC", "CYRILLIC", "HANGUL", "HIRAGANA", "KATAKANA"},
@@ -134,7 +135,7 @@ def _output_check(source: str, masked_source: str, output: str, masked_output: s
                           for c in letters)
             if target in ("zh-Hans", "ja") and latin / len(letters) > .85:
                 evidence = "no"
-            elif target in ("vi", "fr", "de", "es") and foreign / len(letters) > .85:
+            elif target in ("vi", "en", "fr", "de", "es") and foreign / len(letters) > .85:
                 evidence = "no"
     if evidence == "no":
         raise TranslationError("OUTPUT_VALIDATION_FAILED")
@@ -143,7 +144,8 @@ def _output_check(source: str, masked_source: str, output: str, masked_output: s
 
 async def translate(request: TranslationRequest, *, llm: LlmPort, settings: MultilangSettings,
                     token_count: Callable[[str], int] | None = None,
-                    model_semaphore: asyncio.Semaphore | None = None) -> TranslationResult:
+                    model_semaphore: asyncio.Semaphore | None = None,
+                    on_chunk: Callable[[dict], Awaitable[None]] | None = None) -> TranslationResult:
     source, target = resolve_pair(request.source_lang, request.target_lang, settings)
     specialist = settings.backend == "specialist"
     hymt = specialist and settings.specialist_profile == "hymt2_7b_gguf"
@@ -226,6 +228,9 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                                                target, system, canary)
                 warnings.extend(chunk_warnings)
                 outputs.append(restored + separator)
+                if on_chunk is not None:
+                    await on_chunk({'delta': restored + separator, 'index': len(outputs) - 1,
+                                    'total': len(chunks), 'warnings': list(dict.fromkeys(warnings))})
                 break
             except TranslationError as exc:
                 if exc.code not in ("OUTPUT_VALIDATION_FAILED", "EMPTY_TRANSLATION"):

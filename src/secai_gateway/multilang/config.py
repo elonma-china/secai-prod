@@ -77,6 +77,7 @@ class MultilangSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MULTILANG_", env_file=".env", extra="ignore")
 
     enabled: bool = False
+    enable_en: bool = False
     enable_zh: bool = False
     enable_ja: bool = False
     enable_ko: bool = False

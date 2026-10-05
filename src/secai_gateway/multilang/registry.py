@@ -13,6 +13,7 @@ LANGUAGES = (
     ("es", "Tây Ban Nha", "Español", [], "Latn", "ltr"),
     ("ru", "Nga", "Русский", [], "Cyrl", "ltr"),
     ("ar", "Ả Rập", "العربية", [], "Arab", "rtl"),
+    ("en", "Anh", "English", [], "Latn", "ltr"),
 )
 
 

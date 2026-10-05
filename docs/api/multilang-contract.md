@@ -1,11 +1,11 @@
-# Multilang text API — frozen contract v1
+# Multilang text API — contract v1 + English extension
 
 Ngày 2026-10-03. **CRITERIA_READY** cho implementation với flags OFF và test mock; không chứng nhận chất lượng hay cho phép rollout. Contract này thay các quyết định còn mở trong planning proposal. [Core criteria](../criteria/multilang-core.md), [assessment](../criteria/multilang-assessment.md) và [integration/security](../criteria/multilang-integration-security.md) là gates riêng. User đã cho triển khai code trong khi ASSESS tiếp tục.
 
 ## Scope và identity
 
-- Chỉ thêm `GET /ai/v3/translate/languages` và `POST /ai/v3/translate`. Không SSE, file, OCR, job, history hoặc session mới.
-- 16 hướng: `vi ↔ zh-Hans/ja/ko/fr/de/es/ru/ar`. `zh` alias cho `zh-Hans`; Arabic là MSA. Không `auto`, `zh-Hant`, cùng nguồn/đích, `en`, hay foreign→foreign ở API mới. Legacy en↔vi JSON/SSE và file/OCR giữ contract cũ.
+- Có `GET /ai/v3/translate/languages`, `POST /ai/v3/translate` và (bổ sung 05/10/2026) `POST /ai/v3/translate/stream`. Không thêm file, OCR, job, history hoặc session.
+- Cập nhật 05/10/2026 theo yêu cầu người dùng: 18 hướng, gồm 16 hướng ban đầu và Anh–Việt: `vi ↔ zh-Hans/ja/ko/fr/de/es/ru/ar/en`. Anh–Việt bật riêng bằng `MULTILANG_ENABLE_EN=true` (mặc định false). `zh` alias cho `zh-Hans`; Arabic là MSA. Không `auto`, `zh-Hant`, cùng nguồn/đích hay foreign→foreign ở API mới. Legacy en↔vi JSON/SSE và file/OCR giữ contract cũ.
 - Anonymous stateless, cùng convention ingress hiện hữu. Không cần token, cookie, `user_id`; không gán ownership từ header do client tự khai. Token invalid/expired, role escalation và object-owner/IDOR ở API mới là **N/A vì không có identity/object store**, không phải PASS. CORS, flags, limits, data isolation và legacy ownership tests vẫn bắt buộc.
 - Không persist source/output, prompt, glossary hay retry drafts vào session/ledger. Request ID chỉ correlation ngẫu nhiên, không phải capability truy xuất nội dung.
 - `MULTILANG_ENABLED=false` mặc định: composition trả nguyên legacy app; hai routes mới trả 404 theo legacy. Khi master ON, 8 flags riêng `MULTILANG_ENABLE_{ZH,JA,KO,FR,DE,ES,RU,AR}` mặc định false. Một flag điều khiển cả hai chiều. Request không được bật flag/model/adapter.
@@ -18,7 +18,7 @@ JSON schema dưới đây là hợp đồng wire; tất cả object đóng (`add
 ```json
 {
   "$defs": {
-    "LanguageCode": {"type":"string","enum":["vi","zh-Hans","ja","ko","fr","de","es","ru","ar"]},
+    "LanguageCode": {"type":"string","enum":["vi","zh-Hans","ja","ko","fr","de","es","ru","ar","en"]},
     "Status": {"type":"string","enum":["disabled","beta","stable"]},
     "Language": {
       "type":"object","additionalProperties":false,
@@ -41,8 +41,8 @@ JSON schema dưới đây là hợp đồng wire; tất cả object đóng (`add
     "Capabilities": {
       "type":"object","additionalProperties":false,"required":["languages","pairs","limits"],
       "properties":{
-        "languages":{"type":"array","minItems":9,"maxItems":9,"items":{"$ref":"#/$defs/Language"}},
-        "pairs":{"type":"array","minItems":16,"maxItems":16,"items":{"$ref":"#/$defs/Pair"}},
+        "languages":{"type":"array","minItems":10,"maxItems":10,"items":{"$ref":"#/$defs/Language"}},
+        "pairs":{"type":"array","minItems":18,"maxItems":18,"items":{"$ref":"#/$defs/Pair"}},
         "limits":{
           "type":"object","additionalProperties":false,
           "required":["max_text_chars","max_source_tokens","max_chunks","request_timeout_seconds"],
@@ -93,7 +93,7 @@ JSON schema dưới đây là hợp đồng wire; tất cả object đóng (`add
 
 `GET` trả `Capabilities` (200). `POST` nhận `TranslationRequest`, trả `TranslationResponse` (200) hoặc `ErrorResponse`. Message là văn bản thân thiện, không phải khóa máy đọc; FE dùng `error.code`. Các lỗi route không tồn tại/method không hỗ trợ có thể giữ 404/405 framework; master OFF không bắt buộc envelope mới. Không 401 mới. Không Pydantic error body có input gốc.
 
-Registry order cố định: vi, zh-Hans, ja, ko, fr, de, es, ru, ar. Mỗi language một entry duy nhất; aliases `zh-Hans:["zh"]`, entry khác `[]`. `name`: Tiếng Việt/Trung giản thể/Nhật/Hàn/Pháp/Đức/Tây Ban Nha/Nga/Ả Rập; `native_name`: Tiếng Việt/简体中文/日本語/한국어/Français/Deutsch/Español/Русский/العربية. Script tương ứng Latn/Hans/Jpan/Kore/Latn/Latn/Latn/Cyrl/Arab; chỉ ar RTL. `pairs` có hai chiều liên tiếp theo thứ tự ngôn ngữ mới, vi→language rồi language→vi. Disabled luôn `enabled=false,status=disabled`; enabled có status stable hoặc beta và hai chiều giống nhau. FE không đọc env trực tiếp.
+Registry order cố định: vi, zh-Hans, ja, ko, fr, de, es, ru, ar, en. Mỗi language một entry duy nhất; aliases `zh-Hans:["zh"]`, entry khác `[]`. `name`: Tiếng Việt/Trung giản thể/Nhật/Hàn/Pháp/Đức/Tây Ban Nha/Nga/Ả Rập; `native_name`: Tiếng Việt/简体中文/日本語/한국어/Français/Deutsch/Español/Русский/العربية. Script tương ứng Latn/Hans/Jpan/Kore/Latn/Latn/Latn/Cyrl/Arab; chỉ ar RTL. `pairs` có hai chiều liên tiếp theo thứ tự ngôn ngữ mới, vi→language rồi language→vi. Disabled luôn `enabled=false,status=disabled`; enabled có status stable hoặc beta và hai chiều giống nhau. FE không đọc env trực tiếp.
 
 Ví dụ success minh họa schema, **không phải evidence model live**:
 
@@ -110,7 +110,7 @@ Ví dụ success minh họa schema, **không phải evidence model live**:
 | HTTP | code | Điều kiện |
 |---|---|---|
 | 400 | INVALID_REQUEST | JSON lỗi, sai Content-Type, thiếu/sai type/extra field, whitespace-only, chỉ symbols hoặc chỉ protected literals không có prose để dịch |
-| 400 | UNSUPPORTED_LANGUAGE | Mã không thuộc registry/alias, bao gồm auto/en/zh-Hant |
+| 400 | UNSUPPORTED_LANGUAGE | Mã không thuộc registry/alias, bao gồm auto/zh-Hant |
 | 400 | UNSUPPORTED_PAIR | Cùng ngôn ngữ hoặc vi không ở một đầu |
 | 403 | LANGUAGE_DISABLED | Một trong hai chiều của ngôn ngữ chưa bật; trước mọi inference |
 | 413 | TEXT_TOO_LONG | Vượt byte body cap, 24.000 code points mặc định hoặc quá số chunk |
@@ -127,7 +127,7 @@ Trước inference: size/schema → canonical languages/pair → server flag sna
 
 Input explicit là nguồn chuẩn khi detector unknown: tiếp tục + SOURCE_LANGUAGE_UNCERTAIN. Với target rất ngắn/mixed/protected-heavy không đủ bằng chứng, không giả khẳng định sai: TARGET_LANGUAGE_UNCERTAIN; đánh giá offline phải adjudicate, không tự tính pass. Rules-only không được tuyên bố phân biệt chắc fr/de/es/vi hoặc zh-Hans/MSA. Một mẫu copy toàn prose rõ ràng chưa dịch, hay script chắc sai vẫn fail; warning không thay hard validator.
 
-Trả plain text Unicode trong JSON. Không dùng sanitizer VI/EN cũ hoặc raw HTML render. Raw HTML-like source vẫn là dữ liệu dịch, không được execute/fetch; frontend dùng text node. Không có partial success: chunk N fail hủy request, không trả draft/các chunk trước. Chunk order và separator deterministic; `metadata.chunks` là số chunk của bản dịch, `attempts` là tổng lần provider generate, bao gồm retries; `chunks <= attempts <= 2*chunks`. Nội dung chưa validate không thoát qua stream/log/history.
+Trả plain text Unicode trong JSON. Không dùng sanitizer VI/EN cũ hoặc raw HTML render. Raw HTML-like source vẫn là dữ liệu dịch, không được execute/fetch; frontend dùng text node. Đường JSON không có partial success: chunk N fail hủy request, không trả draft/các chunk trước. Stream thử nghiệm chỉ phát từng chunk đã kiểm tra; chunk sau lỗi phát error và không có final thành công, client phải coi bản tạm là chưa hoàn tất. Chunk order và separator deterministic; `metadata.chunks` là số chunk của bản dịch, `attempts` là tổng lần provider generate, bao gồm retries; `chunks <= attempts <= 2*chunks`. Nội dung chưa validate không thoát qua stream/log/history.
 
 Mọi response mới (kể cả errors/capabilities) có `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`, `X-Request-ID` khớp ID body nếu có; Content-Type JSON. Không echo request ID tùy ý chưa validate. Cancel/client disconnect hủy queued/in-flight awaits và HTTP calls, không tiếp tục retry. POST không có idempotency persistence: gửi lại có thể inference lại. FE không tự retry 502/504 hay tự submit lại sau cancel.
 
@@ -182,3 +182,7 @@ Composition option được chấp nhận: master OFF trả đúng `legacy_creat
 Không chỉ add_router vào app cũ rồi nghĩ đã cô lập: generic rate middleware cũ sẽ trả envelope khác sau15 hits và sanitizer/hook đường cũ có thể xóa CJK. Alternative composition chấp nhận nếu tests chứng minh request mới không bị guards cũ xử lý, rate429 đúng schema sau burst, CORS đúng, legacy paths giữ nguyên. Không sửa app.py/api/middleware.py hoặc source file/OCR để làm điều đó. CORS của app mới đọc origins cấu hình hiện hữu, allow_credentials=false, methods GET/POST, headers Content-Type; expose Retry-After và X-Request-ID; không wildcard origins mở rộng. Preflight được xử lý trước POST quota.
 
 No flags may be enabled for production until both directions of that language pass assessment, security and integration gates. Bật mock flags trong isolated tests không là rollout.
+
+## SSE extension (05/10/2026)
+
+`POST /ai/v3/translate/stream` nhận cùng JSON/flags/quota/budget như endpoint JSON. Phát `chunk` với `{delta,index,total,warnings}` sau validation, rồi `final` cùng TranslationResponse và `data: [DONE]`. Lỗi trước chunk đầu là HTTP/JSON; lỗi sau đó là event `error` cùng ErrorResponse, không có final. Gateway hủy task và trả admission slot khi disconnect/hoàn tất. Không phát token chưa kiểm tra. Xem [ví dụ ngắn gọn](dich-api-tom-tat.md).

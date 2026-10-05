@@ -28,12 +28,26 @@ volumes and bind mounts, and never run `down -v`. Check container ownership and
 deployment locks again immediately before applying. Roll back only containers still
 owned by this release, to the saved profiles and images; keep current databases.
 
-Shared Devspace uses gateway 8131, report upstream 18183 and translation upstream
-18185. Configure the last two through `REPORT_GATEWAY_PROXY` and
-`TRANSLATION_GATEWAY_PROXY` or their local upstream marker files. Both v2 file/image
-jobs and v3 text translation use the translation upstream; expert review and legacy
-chat/report APIs use the gateway. The private translation Devspace on 5179 uses the
-same routing settings after upgrading its static assets.
+All client APIs now use gateway **8131**. The primary entrypoint is
+`secai_gateway.unified_app:app`: legacy chat/session/project/exploit/review stay
+local; `/ai/v2/reports` forwards to `REPORT_UPSTREAM_URL`, and both
+`/ai/v2/translate` and `/ai/v3/translate` (including stream) forward to
+`TRANSLATION_UPSTREAM_URL`. Auth headers, request bodies and streaming responses
+are preserved. Report and translation stores/workers remain in their services.
+
+Current private upstreams: report `http://secai-report-backend:8131` on the existing
+report Docker network; translation `http://host.docker.internal:18185`. Attach the
+primary gateway to the external report network and preserve host-gateway mapping.
+Devspace `GATEWAY`, `REPORT_GATEWAY_PROXY`, `TRANSLATION_GATEWAY_PROXY` and local
+upstream marker files all point to `http://127.0.0.1:8131`. Client documentation
+must use 8131, never the internal upstream ports.
+
+The English/stream rollout snapshots and rollback profiles are stored privately at
+`/home/ict/secai-releases/translation-v3-en-stream-20261005`. V3 now has 18
+translation directions; `MULTILANG_ENABLE_EN=true` opts in to English/Vietnamese.
+The live Hy-MT source chunk budget is 128 tokens to leave room for Vietnamese
+output within the serving output cap. SSE emits validated chunks, then final;
+a later chunk failure emits error without a successful final.
 
 Readiness includes authenticated report/template reads and persisted revisions,
 unauthorized review rejection, multilingual language capabilities, file/image route

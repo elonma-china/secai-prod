@@ -41,7 +41,7 @@ async def test_api_wire_errors_headers_and_no_tools(incumbent):
                                  base_url="http://test") as client:
         cap = await client.get("/ai/v3/translate/languages")
         assert cap.status_code == 200
-        assert len(cap.json()["pairs"]) == 16
+        assert len(cap.json()["pairs"]) == 18
         assert cap.headers["cache-control"] == "no-store"
         invalid = await client.post("/ai/v3/translate", json={"text": "abc", "source_lang": "vi",
                                                               "target_lang": "zh", "model": "bad"})

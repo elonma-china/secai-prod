@@ -124,8 +124,8 @@ class SpecialistLlm:
         self.timeout = settings.specialist_timeout_seconds
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
-        if (request.source_lang not in ("vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar")
-                or request.target_lang not in ("vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar")
+        if (request.source_lang not in ("vi", "en", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar")
+                or request.target_lang not in ("vi", "en", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar")
                 or request.source_lang == request.target_lang
                 or "vi" not in (request.source_lang, request.target_lang)):
             raise TranslationError("MODEL_UNAVAILABLE")
