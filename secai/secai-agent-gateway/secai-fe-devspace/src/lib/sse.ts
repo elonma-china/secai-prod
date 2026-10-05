@@ -22,7 +22,7 @@
 export class ApiError extends Error {
   status: number;
   body: unknown;
-  constructor(status: number, message: string, body?: unknown) {
+  constructor(status: number, message: string, body?: unknown, readonly retryAfter: number | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -74,6 +74,7 @@ export interface StreamHandlers {
   onSection1?: (body: string, preview: boolean) => void;
   onLog?: (p: { stream?: string; line?: string; run_id?: string }) => void;
   onError?: (msg: string) => void;
+  onErrorPayload?: (payload: Record<string, unknown>) => void;
   onFinal?: (payload: FinalPayload) => void;
 }
 
@@ -104,6 +105,7 @@ function dispatch(ev: string, payload: Record<string, unknown>, h: StreamHandler
       h.onLog?.(payload as { stream?: string; line?: string; run_id?: string });
       break;
     case "error":
+      h.onErrorPayload?.(payload);
       h.onError?.(String(payload.error ?? payload.message ?? "stream error"));
       break;
     case "final":
@@ -140,14 +142,17 @@ export async function streamRequest(
   });
   if (!res.ok) {
     let detail = res.statusText;
+    let body: unknown;
     try {
       const j = await res.json();
+      body = j;
       const d = j?.detail;
-      detail = (typeof d === "string" ? d : d?.message) || j?.error || detail;
+      detail = (typeof d === "string" ? d : d?.message) || j?.error?.message || j?.error || detail;
     } catch {
       /* ignore — non-JSON error body */
     }
-    throw new ApiError(res.status, detail, undefined);
+    const retryAfter = Number(res.headers.get("Retry-After"));
+    throw new ApiError(res.status, detail, body, Number.isInteger(retryAfter) && retryAfter >= 1 ? retryAfter : null);
   }
   if (!res.body) {
     throw new ApiError(res.status, "empty SSE body");

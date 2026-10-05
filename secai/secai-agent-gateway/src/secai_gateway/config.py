@@ -211,6 +211,8 @@ class Settings(BaseSettings):
     report_feature_enabled: bool = False
     report_api_key: str = ""
     report_db_path: str = "./data/reports.db"
+    report_upstream_url: str = ""
+    translation_upstream_url: str = ""
     gateway_db_path: str = "./data/gateway.db"
     redis_url: str = ""
     admin_api_key: str = ""

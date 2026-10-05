@@ -27,7 +27,7 @@ inventory:
 | Variable | Default | Purpose |
 |---|---:|---|
 | `MULTILANG_ENABLED` | `false` | Master route switch |
-| `MULTILANG_ENABLE_{ZH,JA,KO,FR,DE,ES,RU,AR}` | `false` | Both directions of each language |
+| `MULTILANG_ENABLE_{ZH,JA,KO,FR,DE,ES,RU,AR,EN}` | `false` | Both directions of each language |
 | `MULTILANG_TOKENIZER_JSON` | empty | Local pinned `tokenizer.json`; never downloaded by this app |
 | `MULTILANG_TOKENIZER_SHA256` | empty | SHA-256 of that exact tokenizer file |
 | `MULTILANG_CONTEXT_TOKENS` | `0` | Verified serving context limit |
@@ -50,13 +50,14 @@ user content, reserved output, and the attested chat-template overhead. A proces
 quota is not a cluster-wide quota: staging with multiple workers requires ingress
 limits or another shared quota before production release.
 
-`GET /ai/v3/translate/languages` returns nine canonical languages, sixteen
+`GET /ai/v3/translate/languages` returns ten canonical languages, eighteen
 directional pairs, effective flags, and limits. `POST /ai/v3/translate` accepts
 only JSON `{ "text": "…", "source_lang": "vi", "target_lang": "zh-Hans" }`.
-`zh` is a case-insensitive alias for `zh-Hans`; all other region variants, `en`,
+`zh` is a case-insensitive alias for `zh-Hans`; all other region variants,
 `auto`, same-language, and foreign-to-foreign pairs are rejected. The new API is
 anonymous and stateless. It neither reads nor writes session/ledger content.
-Existing en↔vi, file, OCR, chat, and session paths remain on legacy handling.
+The legacy en↔vi endpoint remains available. V3 en↔vi is separately enabled with
+`MULTILANG_ENABLE_EN=true`. File, OCR, chat, and session contracts are unchanged.
 
 These response examples illustrate the wire format; they are **not live model
 evidence**:

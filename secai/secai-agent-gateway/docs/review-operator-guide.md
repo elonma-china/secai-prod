@@ -33,9 +33,9 @@ Phân phối từng token qua kênh riêng cho đúng người khi dùng API tr�
 
 ## Devspace nội bộ: vào thẳng không nhập token
 
-Devspace tĩnh (`serve_static.py`) có thể dùng hai tài khoản **dùng chung** để vào thẳng màn “Đánh giá A/B”. Đặt file `secai-fe-devspace/.review-devspace-tokens.local` ở phía server, chỉ tài khoản chạy frontend được đọc, với JSON `{"admin":"<token quản trị>","reviewer":"<token chuyên gia>"}`. File này phải nằm ngoài Git; không đưa token vào bundle JavaScript, HTML, URL hay log. Proxy chỉ tự gắn token cho request `/review-api/*` có vai trò `admin` hoặc `reviewer` khi cả địa chỉ nguồn và địa chỉ cổng nhận thuộc Tailnet (`100.64.0.0/10`). Truy cập qua tunnel công cộng hoặc cổng không thuộc Tailnet không được dùng đường tắt. API gateway vẫn đòi bearer token và giữ nguyên kiểm tra role. Sau khi cấu hình file, khởi động lại `serve_static.py` để dùng bản proxy mới.
+Devspace tĩnh (`serve_static.py`) có thể dùng hai tài khoản **dùng chung** để vào thẳng màn “Đánh giá A/B”. Đặt file `secai-fe-devspace/.review-devspace-tokens.local` ở phía server, chỉ tài khoản chạy frontend được đọc, với JSON `{"admin":"<token quản trị>","reviewer":"<token chuyên gia>"}`. File này phải nằm ngoài Git; không đưa token vào bundle JavaScript, HTML, URL hay log. Proxy chỉ tự gắn token cho request `/review-api/*` có vai trò `admin` hoặc `reviewer` khi cả địa chỉ nguồn và địa chỉ cổng nhận thuộc Tailnet (`100.64.0.0/10`). Theo cấu hình Devspace dùng chung được chọn, có thể bật thêm đường tunnel loopback bằng `DEVSPACE_REVIEW_ALLOW_LOOPBACK=true` hoặc file marker ignored `.review-loopback.local`. Khi bật, cả peer và địa chỉ nhận phải là loopback; không tin X-Forwarded-For. Người có URL Cloudflare của Devspace sẽ vào bằng tài khoản dùng chung. API gateway vẫn đòi bearer token và giữ nguyên kiểm tra role. Sau khi cấu hình file, khởi động lại `serve_static.py` để dùng bản proxy mới.
 
-Đây là lối vào nhanh cho Devspace, **không phải đăng nhập cá nhân**: mọi người có quyền vào Devspace qua Tailnet đều có thể chọn cả hai vai trò; phiếu của họ được ghi dưới actor dùng chung. Không dùng dấu vết này để quy trách nhiệm từng chuyên gia. Khi cần phân quyền và truy vết cá nhân, thay lối vào này bằng SSO/identity proxy và credential riêng theo người. Frontend Vite `npm run dev` không có proxy cấp role này; dùng Devspace tĩnh hoặc API bearer trực tiếp để thử review local.
+Đây là lối vào nhanh cho Devspace, **không phải đăng nhập cá nhân**: mọi người có quyền vào Devspace qua đường kết nối đã cấu hình đều có thể chọn cả hai vai trò; phiếu của họ được ghi dưới actor dùng chung. Không dùng dấu vết này để quy trách nhiệm từng chuyên gia. Khi cần phân quyền và truy vết cá nhân, thay lối vào này bằng SSO/identity proxy và credential riêng theo người. Frontend Vite `npm run dev` không có proxy cấp role này; dùng Devspace tĩnh hoặc API bearer trực tiếp để thử review local.
 
 ## Chạy local ở worktree riêng
 
@@ -65,7 +65,7 @@ Vào trang “Đánh giá A/B”. Backend phải được bật rõ ràng; menu 
 
 ## Chấm thử
 
-1. Đăng nhập bằng token quản trị, tạo campaign với rubric `security_qa_v1`.
+1. Chọn vai trò Quản trị trên Devspace (hoặc dùng token quản trị khi gọi API trực tiếp), tạo campaign với rubric `security_qa_v1`.
 2. Import `tests/fixtures/review_pairs.jsonl`. Đây là 5 mẫu tổng hợp, không dùng làm bằng chứng chất lượng model.
 3. Phân công cho expert-1, expert-2; người chấm dùng phiên trình duyệt riêng.
 4. Chuyên gia xem ngữ cảnh, bằng chứng và hai câu trả lời. Tên model được ẩn. A/B có thể khác thứ tự giữa người chấm nhưng ổn định cho mỗi assignment.

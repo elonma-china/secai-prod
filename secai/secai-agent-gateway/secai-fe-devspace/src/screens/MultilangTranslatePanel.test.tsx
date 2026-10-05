@@ -5,10 +5,10 @@ import type { MultilangCapabilities, MultilangLanguageCode } from "../api/multil
 import MultilangTranslatePanel from "./MultilangTranslatePanel";
 import TranslateScreen from "./TranslateScreen";
 
-const codes: MultilangLanguageCode[] = ["vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar"];
-const names = ["Tiếng Việt", "Trung giản thể", "Nhật", "Hàn", "Pháp", "Đức", "Tây Ban Nha", "Nga", "Ả Rập"];
-const natives = ["Tiếng Việt", "简体中文", "日本語", "한국어", "Français", "Deutsch", "Español", "Русский", "العربية"];
-const scripts = ["Latn", "Hans", "Jpan", "Kore", "Latn", "Latn", "Latn", "Cyrl", "Arab"] as const;
+const codes: MultilangLanguageCode[] = ["vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar", "en"];
+const names = ["Tiếng Việt", "Trung giản thể", "Nhật", "Hàn", "Pháp", "Đức", "Tây Ban Nha", "Nga", "Ả Rập", "Anh"];
+const natives = ["Tiếng Việt", "简体中文", "日本語", "한국어", "Français", "Deutsch", "Español", "Русский", "العربية", "English"];
+const scripts = ["Latn", "Hans", "Jpan", "Kore", "Latn", "Latn", "Latn", "Cyrl", "Arab", "Latn"] as const;
 
 function capabilities(enabled: MultilangLanguageCode[] = ["zh-Hans", "ar"]): MultilangCapabilities {
   return {
@@ -25,6 +25,10 @@ function capabilities(enabled: MultilangLanguageCode[] = ["zh-Hans", "ar"]): Mul
   };
 }
 
+function streamedAnswer(data: unknown) {
+  return new Response(`event: final\ndata: ${JSON.stringify(data)}\n\ndata: [DONE]\n\n`, { headers: { "Content-Type": "text/event-stream" } });
+}
+
 function answer(translated_text: string, source_lang: MultilangLanguageCode = "vi", target_lang: MultilangLanguageCode = "ar") {
   return { translated_text, source_lang, target_lang, warnings: [], metadata: { request_id: "req-1", chunks: 1, attempts: 1 } };
 }
@@ -35,14 +39,30 @@ afterEach(() => {
 });
 
 describe("multilang translation panel", () => {
+  it("shows English chunks before final and clears a failed partial translation", async () => {
+    let stream!: ReadableStreamDefaultController<Uint8Array>;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } }), { headers: { "Content-Type": "text/event-stream" } })));
+    render(<MultilangTranslatePanel capabilities={capabilities(["en"])} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Kiểm tra nhật ký." } });
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
+    await act(async () => stream.enqueue(new TextEncoder().encode('event: chunk\ndata: {"delta":"Check logs."}\n\n')));
+    expect(screen.getByRole("status", { name: "Kết quả dịch" }).textContent).toBe("Check logs.");
+    expect(screen.getByRole("button", { name: "Sao chép bản dịch" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => {
+      stream.enqueue(new TextEncoder().encode('event: error\ndata: {"error":{"code":"OUTPUT_VALIDATION_FAILED"}}\n\ndata: [DONE]\n\n'));
+      stream.close();
+    });
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(screen.queryByText("Check logs.")).toBeNull();
+  });
   it("lists the eight new languages and blocks a disabled direction before POST", () => {
     const fetch = vi.fn();
     vi.stubGlobal("fetch", fetch);
     render(<MultilangTranslatePanel capabilities={capabilities()} />);
 
     const target = screen.getByRole("combobox", { name: "Ngôn ngữ đích" });
-    expect(screen.getByRole("combobox", { name: "Ngôn ngữ nguồn" }).querySelectorAll("option")).toHaveLength(9);
-    expect(target.querySelectorAll("option")).toHaveLength(8);
+    expect(screen.getByRole("combobox", { name: "Ngôn ngữ nguồn" }).querySelectorAll("option")).toHaveLength(10);
+    expect(target.querySelectorAll("option")).toHaveLength(9);
     fireEvent.change(target, { target: { value: "ar" } });
     expect(screen.getByText("Beta")).toBeTruthy();
     fireEvent.change(target, { target: { value: "zh-Hans" } });
@@ -50,13 +70,13 @@ describe("multilang translation panel", () => {
     fireEvent.change(target, { target: { value: "fr" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Bonjour" } });
     expect(screen.getByText("Chưa bật")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Dịch trực tiếp" }).hasAttribute("disabled")).toBe(true);
     expect(fetch).not.toHaveBeenCalled();
   });
 
   it("renders Arabic and Latin technical spans as plain text and copies exact Unicode", async () => {
     const output = "افحص CVE-2024-1234 و 192.0.2.1 https://example.org/a?x=1&y=2 و ب‍ي ال‌عربية <script>alert(1)</script>";
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(answer(output)), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const fetch = vi.fn().mockResolvedValue(streamedAnswer(answer(output)));
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("fetch", fetch);
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
@@ -64,7 +84,7 @@ describe("multilang translation panel", () => {
 
     fireEvent.change(screen.getByRole("combobox", { name: "Ngôn ngữ đích" }), { target: { value: "ar" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Kiểm tra CVE-2024-1234 và 192.0.2.1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
     const result = screen.getByRole("status", { name: "Kết quả dịch" });
     await waitFor(() => expect(result.textContent).toBe(output));
     expect(result.getAttribute("dir")).toBe("rtl");
@@ -87,33 +107,42 @@ describe("multilang translation panel", () => {
 
     const source = screen.getByRole("textbox", { name: "Văn bản nguồn" });
     fireEvent.change(source, { target: { value: "Bản cũ" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
     const signal = (fetch.mock.calls[0][1] as RequestInit).signal as AbortSignal;
     fireEvent.change(source, { target: { value: "Bản mới" } });
     expect(signal.aborted).toBe(true);
-    await act(async () => resolveRequest(new Response(JSON.stringify(answer("OLD RESULT")), { status: 200, headers: { "Content-Type": "application/json" } })));
+    await act(async () => resolveRequest(streamedAnswer(answer("OLD RESULT"))));
     expect(screen.queryByText("OLD RESULT")).toBeNull();
-    expect(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Dịch trực tiếp" }).hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps code points intact, shows quality warnings, then swaps into the reverse pair", async () => {
+  it("keeps code points intact and puts language-check limitations in closed details before swapping", async () => {
     const first = { ...answer("日本語 CVE-2024-1234", "vi", "ja"), warnings: ["SOURCE_LANGUAGE_UNCERTAIN", "TARGET_LANGUAGE_UNCERTAIN"] };
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(first), { status: 200, headers: { "Content-Type": "application/json" } }));
+    const fetch = vi.fn().mockResolvedValue(streamedAnswer(first));
     vi.stubGlobal("fetch", fetch);
     render(<MultilangTranslatePanel capabilities={capabilities(["ja"])} />);
 
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "😀 CVE-2024-1234" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
-    expect(await screen.findByText(/Hệ thống chưa xác định chắc ngôn ngữ nguồn/)).toBeTruthy();
-    expect(screen.getByText(/Hệ thống chưa xác định chắc ngôn ngữ đích/)).toBeTruthy();
-    expect(screen.getByText("Mã yêu cầu: req-1 · 1 đoạn · 1 lượt tạo")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
+    expect(await screen.findByText("Dịch hoàn tất.")).toBeTruthy();
+    expect(screen.getAllByText("Hệ thống chưa có bộ kiểm tra ngôn ngữ tự động đủ tin cậy; bạn có thể kiểm tra lại bản dịch.")).toHaveLength(1);
+    const details = screen.getByText("Chi tiết bản dịch").closest("details");
+    expect(details).not.toBeNull();
+    expect(details?.hasAttribute("open")).toBe(false);
+    const sourceWarning = screen.getByText("Ngôn ngữ nguồn do người dùng chọn; hệ thống chưa xác minh tự động.");
+    const targetWarning = screen.getByText("Hệ thống chưa xác minh tự động ngôn ngữ của kết quả dịch.");
+    const metadata = screen.getByText("Mã yêu cầu: req-1 · 1 đoạn · 1 lượt tạo");
+    expect(details?.contains(sourceWarning)).toBe(true);
+    expect(details?.contains(targetWarning)).toBe(true);
+    expect(details?.contains(metadata)).toBe(true);
     expect(JSON.parse(String((fetch.mock.calls[0][1] as RequestInit).body)).text).toBe("😀 CVE-2024-1234");
 
     fireEvent.click(screen.getByRole("button", { name: "Hoán đổi hướng dịch" }));
     expect((screen.getByRole("combobox", { name: "Ngôn ngữ nguồn" }) as HTMLSelectElement).value).toBe("ja");
     expect((screen.getByRole("combobox", { name: "Ngôn ngữ đích" }) as HTMLSelectElement).value).toBe("vi");
     expect((screen.getByRole("textbox", { name: "Văn bản nguồn" }) as HTMLTextAreaElement).value).toBe("日本語 CVE-2024-1234");
-    expect(screen.queryByText(/Hệ thống chưa xác định chắc ngôn ngữ nguồn/)).toBeNull();
+    expect(screen.queryByText("Chi tiết bản dịch")).toBeNull();
+    expect(screen.queryByText("Dịch hoàn tất.")).toBeNull();
   });
 
   it("counts Unicode code points against the server limit", () => {
@@ -123,9 +152,9 @@ describe("multilang translation panel", () => {
     const source = screen.getByRole("textbox", { name: "Văn bản nguồn" });
     fireEvent.change(source, { target: { value: "ab😀c" } });
     expect(screen.getByText("4 / 4 ký tự")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Dịch trực tiếp" }).hasAttribute("disabled")).toBe(false);
     fireEvent.change(source, { target: { value: "ab😀cd" } });
-    expect(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Dịch trực tiếp" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("shows an explicit cancel state and does not retry a failed request", async () => {
@@ -133,7 +162,7 @@ describe("multilang translation panel", () => {
     vi.stubGlobal("fetch", fetch);
     render(<MultilangTranslatePanel capabilities={capabilities()} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Xin chào" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
     fireEvent.click(screen.getByRole("button", { name: "Hủy dịch" }));
     expect(await screen.findByText("Đã hủy yêu cầu dịch.")).toBeTruthy();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -153,7 +182,7 @@ describe("multilang translation panel", () => {
     vi.stubGlobal("fetch", fetch);
     render(<MultilangTranslatePanel capabilities={capabilities()} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Xin chào" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", message);
     expect(screen.queryByText("raw backend detail")).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -164,32 +193,26 @@ describe("multilang translation panel", () => {
     vi.stubGlobal("fetch", fetch);
     render(<MultilangTranslatePanel capabilities={capabilities()} />);
     fireEvent.change(screen.getByRole("textbox", { name: "Văn bản nguồn" }), { target: { value: "Xin chào" } });
-    fireEvent.click(screen.getByRole("button", { name: "Dịch đa ngôn ngữ" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dịch trực tiếp" }));
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Không kết nối được dịch vụ dịch. Kiểm tra kết nối rồi thử lại.");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("legacy screen capability gate", () => {
-  it("keeps legacy translation visible and hides the new mode when capabilities return 404", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response("Not Found", { status: 404 }));
-    vi.stubGlobal("fetch", fetch);
+describe("direct translation capability gate", () => {
+  it("shows unavailable state instead of the legacy tab when v3 is disabled", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Not Found", { status: 404 })));
     render(<TranslateScreen userId="devspace" />);
-    expect(await screen.findByText("Dịch đa ngôn ngữ chưa được bật trên máy chủ.")).toBeTruthy();
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Dịch bởi qwen2.5 · security-tuned")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Dịch đa ngôn ngữ" })).toBeNull();
+    expect(await screen.findByText("Dịch trực tiếp chưa được bật trên máy chủ.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Dịch Việt–Anh" })).toBeNull();
+    expect(screen.queryByText("Dịch bởi qwen2.5 · security-tuned")).toBeNull();
   });
 
-  it("opens the v3 mode only after server capabilities load", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(capabilities(["ar"])), { status: 200, headers: { "Content-Type": "application/json" } }));
-    vi.stubGlobal("fetch", fetch);
+  it("opens streaming text translation by default after capabilities load", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(capabilities(["en"])), { headers: { "Content-Type": "application/json" } })));
     render(<TranslateScreen userId="devspace" />);
-    expect(screen.getByText("Dịch bởi qwen2.5 · security-tuned")).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Mở dịch đa ngôn ngữ" }));
-    expect(screen.getByRole("button", { name: "Mở dịch đa ngôn ngữ" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("combobox", { name: "Ngôn ngữ nguồn" })).toBeTruthy();
-    expect(screen.queryByText("Dịch bởi qwen2.5 · security-tuned")).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("combobox", { name: "Ngôn ngữ nguồn" })).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "Ngôn ngữ đích" }) as HTMLSelectElement).value).toBe("en");
+    expect(screen.queryByRole("button", { name: "Dịch Việt–Anh" })).toBeNull();
   });
 });

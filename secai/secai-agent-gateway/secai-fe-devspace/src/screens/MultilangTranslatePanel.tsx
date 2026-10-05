@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ArrowLeftRight, Copy, Languages, X } from "lucide-react";
 import {
   MultilangApiError,
-  translateMultilang,
+  streamMultilang,
 } from "../api/multilang";
 import type {
   MultilangCapabilities,
@@ -44,19 +44,21 @@ function errorText(error: unknown): string {
     case "OUTPUT_VALIDATION_FAILED": return "Bản dịch chưa đạt kiểm tra an toàn. Vui lòng thử lại sau.";
     case "MODEL_UNAVAILABLE": return "Dịch vụ dịch tạm thời không khả dụng.";
     case "TRANSLATION_TIMEOUT": return "Yêu cầu dịch đã hết thời gian.";
+    case "STREAM_INCOMPLETE": return "Luồng dịch bị gián đoạn; bản dịch chưa hoàn tất. Vui lòng thử lại.";
     default: return `Không thể dịch văn bản (HTTP ${error.status}).`;
   }
 }
 
 function warningText(warning: MultilangTranslationResponse["warnings"][number]): string {
   return warning === "SOURCE_LANGUAGE_UNCERTAIN"
-    ? "Hệ thống chưa xác định chắc ngôn ngữ nguồn; hãy kiểm tra bản dịch."
-    : "Hệ thống chưa xác định chắc ngôn ngữ đích; hãy kiểm tra bản dịch.";
+    ? "Ngôn ngữ nguồn do người dùng chọn; hệ thống chưa xác minh tự động."
+    : "Hệ thống chưa xác minh tự động ngôn ngữ của kết quả dịch.";
 }
 
 export default function MultilangTranslatePanel({ capabilities }: { capabilities: MultilangCapabilities }) {
   const languages = capabilities.languages;
-  const firstForeign = languages.find((language) => language.code !== "vi" && capabilities.pairs.some((pair) => pair.source_lang === "vi" && pair.target_lang === language.code && pair.enabled))?.code
+  const firstForeign = (capabilities.pairs.some((pair) => pair.source_lang === "vi" && pair.target_lang === "en" && pair.enabled) ? "en" : undefined)
+    ?? languages.find((language) => language.code !== "vi" && capabilities.pairs.some((pair) => pair.source_lang === "vi" && pair.target_lang === language.code && pair.enabled))?.code
     ?? languages.find((language) => language.code !== "vi")?.code ?? "zh-Hans";
   const [source, setSource] = useState<MultilangLanguageCode>("vi");
   const [target, setTarget] = useState<MultilangLanguageCode>(firstForeign);
@@ -118,8 +120,11 @@ export default function MultilangTranslatePanel({ capabilities }: { capabilities
     const active = new AbortController();
     controller.current = active;
     setBusy(true);
+    setResultTarget(target);
     try {
-      const response = await translateMultilang({ text, source_lang: source, target_lang: target }, active.signal);
+      const response = await streamMultilang({ text, source_lang: source, target_lang: target }, (delta) => {
+        if (version === requestVersion.current && !active.signal.aborted) setResult((current) => current + delta);
+      }, active.signal);
       if (version !== requestVersion.current) return;
       setResult(response.translated_text);
       setResultTarget(response.target_lang);
@@ -127,6 +132,7 @@ export default function MultilangTranslatePanel({ capabilities }: { capabilities
       setMetadata(response.metadata);
     } catch (failure) {
       if (version !== requestVersion.current || active.signal.aborted) return;
+      setResult("");
       setError(errorText(failure));
     } finally {
       if (version === requestVersion.current) {
@@ -158,7 +164,7 @@ export default function MultilangTranslatePanel({ capabilities }: { capabilities
             {languages.map((language) => <option value={language.code} key={language.code}>{language.name} · {language.native_name}</option>)}
           </select>
         </label>
-        <button type="button" className="iasbtn ghost multilang-swap" onClick={swap} aria-label="Hoán đổi hướng dịch" title="Hoán đổi ngôn ngữ nguồn và đích">
+        <button type="button" className="iasbtn ghost multilang-swap" disabled={busy} onClick={swap} aria-label="Hoán đổi hướng dịch" title="Hoán đổi ngôn ngữ nguồn và đích">
           <ArrowLeftRight size={17} aria-hidden="true" />
         </button>
         <label>
@@ -188,19 +194,27 @@ export default function MultilangTranslatePanel({ capabilities }: { capabilities
         <section className="iascard multilang-card">
           <div className="iascard-head multilang-result-head">
             <span>Bản dịch</span>
-            <button type="button" className="iasbtn ghost" onClick={() => void copyResult()} disabled={!result} aria-label="Sao chép bản dịch">
+            <button type="button" className="iasbtn ghost" onClick={() => void copyResult()} disabled={!result || busy} aria-label="Sao chép bản dịch">
               <Copy size={14} aria-hidden="true" /> Sao chép
             </button>
           </div>
+          {busy && <p role="status">Đang dịch trực tiếp…</p>}
           <div className="multilang-result" role="status" aria-label="Kết quả dịch" aria-live="polite" dir={resultTarget === "ar" ? "rtl" : "ltr"}>
             {result ? isolatedText(result) : busy ? "Đang dịch…" : "Kết quả dịch sẽ hiển thị tại đây"}
           </div>
-          {warnings.length > 0 && <div className="multilang-warnings" role="status" aria-label="Cảnh báo bản dịch">{warnings.map((warning) => <p key={warning}>{warningText(warning)}</p>)}</div>}
-          {metadata && <div className="multilang-metadata">Mã yêu cầu: {metadata.request_id} · {metadata.chunks} đoạn · {metadata.attempts} lượt tạo</div>}
+          {metadata && <>
+            <p role="status">Dịch hoàn tất.</p>
+            {warnings.length > 0 && <p className="multilang-warnings">Hệ thống chưa có bộ kiểm tra ngôn ngữ tự động đủ tin cậy; bạn có thể kiểm tra lại bản dịch.</p>}
+            <details className="multilang-metadata">
+              <summary>Chi tiết bản dịch</summary>
+              {warnings.map((warning) => <p key={warning}>{warningText(warning)}</p>)}
+              <p>Mã yêu cầu: {metadata.request_id} · {metadata.chunks} đoạn · {metadata.attempts} lượt tạo</p>
+            </details>
+          </>}
         </section>
       </div>
       <div className="multilang-actions">
-        <button type="submit" className="iasbtn" disabled={!canTranslate}><Languages size={17} aria-hidden="true" /> Dịch đa ngôn ngữ</button>
+        <button type="submit" className="iasbtn" disabled={!canTranslate}><Languages size={17} aria-hidden="true" /> {busy ? "Đang dịch…" : "Dịch trực tiếp"}</button>
         {busy && <button type="button" className="iasbtn ghost" onClick={() => invalidate("Đã hủy yêu cầu dịch.")} aria-label="Hủy dịch"><X size={16} aria-hidden="true" /> Hủy</button>}
       </div>
       {error && <div className="error-box" role="alert">{error}</div>}

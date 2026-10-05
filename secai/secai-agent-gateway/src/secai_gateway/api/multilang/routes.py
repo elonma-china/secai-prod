@@ -10,7 +10,7 @@ from collections.abc import Callable
 import httpx
 import anyio
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, StrictStr, ValidationError
 from starlette.middleware.cors import CORSMiddleware
 
@@ -75,6 +75,73 @@ async def _disconnect(request: Request) -> None:
             return
 
 
+def _result_body(result, request_id: str) -> dict:
+    return {"translated_text": result.translated_text, "source_lang": result.source_lang,
+            "target_lang": result.target_lang, "warnings": list(result.warnings),
+            "metadata": {"request_id": request_id, "chunks": result.chunks,
+                         "attempts": result.attempts}}
+
+
+async def _validated_stream(request, run, *, deadline, request_id, release):
+    # Bounded queue: only validated chunks cross the HTTP boundary.
+    queue = asyncio.Queue(maxsize=1)
+
+    async def chunk(data):
+        await queue.put(("chunk", data))
+
+    async def produce():
+        try:
+            with anyio.fail_after(max(0.0, deadline - asyncio.get_running_loop().time())):
+                result = await run(chunk)
+            await queue.put(("final", _result_body(result, request_id)))
+        except (TranslationError, TimeoutError) as exc:
+            code = exc.code if isinstance(exc, TranslationError) else "TRANSLATION_TIMEOUT"
+            await queue.put(("error", {"error": {"code": code, "message": MESSAGES[code],
+                                               "request_id": request_id}}))
+        except Exception:
+            await queue.put(("error", {"error": {"code": "MODEL_UNAVAILABLE",
+                "message": MESSAGES["MODEL_UNAVAILABLE"], "request_id": request_id}}))
+
+    task = asyncio.create_task(produce())
+    first = asyncio.create_task(queue.get())
+    watcher = asyncio.create_task(_disconnect(request))
+    try:
+        done, _ = await asyncio.wait((first, watcher), return_when=asyncio.FIRST_COMPLETED)
+        if watcher in done:
+            raise asyncio.CancelledError
+        event = await first
+        if event[0] == "error":
+            raise TranslationError(event[1]["error"]["code"])
+    except BaseException:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+    finally:
+        first.cancel()
+        watcher.cancel()
+        await asyncio.gather(first, watcher, return_exceptions=True)
+
+    async def frames():
+        current = event
+        try:
+            while True:
+                name, data = current
+                yield f"event: {name}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                if name in ("final", "error"):
+                    yield "data: [DONE]\n\n"
+                    break
+                current = await queue.get()
+        finally:
+            # Disconnect cancellation must not skip admission release or producer cleanup.
+            release()
+            task.cancel()
+            with anyio.CancelScope(shield=True):
+                await asyncio.gather(task, return_exceptions=True)
+
+    return StreamingResponse(frames(), media_type="text/event-stream", headers={
+        **_headers(request_id), "X-Accel-Buffering": "no"})
+
+
 async def _read_json(request: Request, max_bytes: int) -> Input:
     if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
         raise TranslationError("INVALID_REQUEST")
@@ -131,6 +198,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
             return _error("RATE_LIMITED", request_id)
         return JSONResponse(capabilities(settings), headers=_headers(request_id))
 
+    @app.post("/ai/v3/translate/stream")
     @app.post("/ai/v3/translate")
     async def post_translate(request: Request):
         started = asyncio.get_running_loop().time()
@@ -140,6 +208,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
         if not admission.enter(peer, cap=settings.max_active_requests,
                                quota=settings.rate_limit_per_minute):
             return _error("RATE_LIMITED", request_id)
+        streaming = False
         try:
             with anyio.fail_after(max(0.0, started + settings.request_timeout_seconds
                                       - asyncio.get_running_loop().time())):
@@ -165,6 +234,16 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
                         if client is None:
                             raise TranslationError("MODEL_UNAVAILABLE")
                         active_llm = HttpLlm(client, legacy.qwen_base_url, legacy.qwen_api_key)
+                if request.url.path.endswith('/stream'):
+                    async def run(on_chunk):
+                        return await translate(TranslationRequest(parsed.text, parsed.source_lang, parsed.target_lang),
+                            llm=active_llm, settings=settings, token_count=counter,
+                            model_semaphore=model_semaphore, on_chunk=on_chunk)
+                    response = await _validated_stream(request, run,
+                        deadline=started + settings.request_timeout_seconds,
+                        request_id=request_id, release=admission.leave)
+                    streaming = True
+                    return response
                 task = asyncio.create_task(translate(
                     TranslationRequest(parsed.text, parsed.source_lang, parsed.target_lang),
                     llm=active_llm, settings=settings, token_count=counter,
@@ -195,6 +274,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
         except TimeoutError:
             return _error("TRANSLATION_TIMEOUT", request_id)
         finally:
-            admission.leave()
+            if not streaming:
+                admission.leave()
 
     return app

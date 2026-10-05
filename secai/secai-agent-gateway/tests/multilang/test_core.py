@@ -41,11 +41,11 @@ class FakeLlm:
 def test_registry_and_flags():
     cap = capabilities(settings())
     assert [x["code"] for x in cap["languages"]] == [
-        "vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar"]
-    assert len(cap["pairs"]) == 16
+        "vi", "zh-Hans", "ja", "ko", "fr", "de", "es", "ru", "ar", "en"]
+    assert len(cap["pairs"]) == 18
     assert canonical(" ZH-hans \t") == "zh-Hans"
     assert canonical(" zh ") == "zh-Hans"
-    assert all(canonical(x) is None for x in ("en", "auto", "zh-Hant", "ar-SA"))
+    assert all(canonical(x) is None for x in ("auto", "zh-Hant", "ar-SA"))
     assert cap["pairs"][0]["enabled"] and cap["pairs"][1]["enabled"]
     assert not cap["pairs"][2]["enabled"]
 
@@ -69,7 +69,7 @@ def test_pinned_local_tokenizer_required(tmp_path):
 @pytest.mark.asyncio
 async def test_invalid_and_disabled_do_not_generate():
     fake = FakeLlm([])
-    for source, target, code in (("en", "vi", "UNSUPPORTED_LANGUAGE"),
+    for source, target, code in (("en", "vi", "LANGUAGE_DISABLED"),
                                  ("zh", "zh-Hans", "UNSUPPORTED_PAIR"),
                                  ("fr", "de", "UNSUPPORTED_PAIR"),
                                  ("vi", "ja", "LANGUAGE_DISABLED")):

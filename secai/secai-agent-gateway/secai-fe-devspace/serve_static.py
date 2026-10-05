@@ -22,6 +22,8 @@ REPORT_GATEWAY = os.environ.get("REPORT_GATEWAY_PROXY", REPORT_UPSTREAM_FILE.rea
 TRANSLATION_UPSTREAM_FILE = Path(__file__).resolve().parent / ".translation-upstream"
 TRANSLATION_GATEWAY = os.environ.get("TRANSLATION_GATEWAY_PROXY", TRANSLATION_UPSTREAM_FILE.read_text().strip() if TRANSLATION_UPSTREAM_FILE.exists() else GATEWAY)
 REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
+REVIEW_ALLOW_LOOPBACK = os.environ.get("DEVSPACE_REVIEW_ALLOW_LOOPBACK", "false").lower() == "true"
+REVIEW_LOOPBACK_FILE = Path(__file__).resolve().parent / ".review-loopback.local"
 TAILNET = ipaddress.ip_network("100.64.0.0/10")
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
@@ -60,6 +62,17 @@ def _review_token(role: str) -> str | None:
         return value if isinstance(value, str) and value else None
     except (OSError, ValueError, AttributeError):
         return None
+
+
+def _review_connection(peer: str, local: str) -> bool:
+    if _tailnet_connection(peer, local):
+        return True
+    if not (REVIEW_ALLOW_LOOPBACK or REVIEW_LOOPBACK_FILE.exists()):
+        return False
+    try:
+        return ipaddress.ip_address(peer).is_loopback and ipaddress.ip_address(local).is_loopback
+    except ValueError:
+        return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -118,8 +131,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         review_role = self.headers.get("X-Review-Role") if path == "/review-api" or path.startswith("/review-api/") else None
         if review_role is not None:
-            if not _tailnet_connection(self.client_address[0], self.connection.getsockname()[0]):
-                self.send_error(403, "Devspace review access requires Tailnet")
+            if not _review_connection(self.client_address[0], self.connection.getsockname()[0]):
+                self.send_error(403, "Devspace review access requires a configured connection")
                 return
             review_token = _review_token(review_role)
             if review_token is None:

@@ -1,9 +1,24 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getMultilangCapabilities, MultilangApiError, translateMultilang } from "./multilang";
+import { getMultilangCapabilities, MultilangApiError, translateMultilang, streamMultilang } from "./multilang";
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("multilang JSON client", () => {
+  it("streams English chunks and requires a complete final", async () => {
+    const answer = { translated_text: "Check logs.", source_lang: "vi", target_lang: "en", warnings: [], metadata: { request_id: "req-1", chunks: 1, attempts: 1 } };
+    const chunk = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(`event: chunk\ndata: {"delta":"Check logs."}\n\nevent: final\ndata: ${JSON.stringify(answer)}\n\ndata: [DONE]\n\n`, { headers: { "Content-Type": "text/event-stream" } })));
+    await expect(streamMultilang({ text: "Kiểm tra nhật ký.", source_lang: "vi", target_lang: "en" }, chunk)).resolves.toEqual(answer);
+    expect(chunk).toHaveBeenCalledWith("Check logs.");
+    expect(fetch).toHaveBeenCalledWith("/ai/v3/translate/stream", expect.anything());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('event: chunk\ndata: {"delta":"Partial"}\n\ndata: [DONE]\n\n')));
+    await expect(streamMultilang({ text: "Dịch", source_lang: "vi", target_lang: "en" }, chunk)).rejects.toMatchObject({ code: "STREAM_INCOMPLETE" });
+  });
+
+  it("propagates a structured error after a chunk", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('event: chunk\ndata: {"delta":"Partial"}\n\nevent: error\ndata: {"error":{"code":"OUTPUT_VALIDATION_FAILED","request_id":"req-2"}}\n\ndata: [DONE]\n\n')));
+    await expect(streamMultilang({ text: "Dịch", source_lang: "vi", target_lang: "en" }, vi.fn())).rejects.toMatchObject({ code: "OUTPUT_VALIDATION_FAILED" });
+  });
   it("fetches capabilities from the exact v3 route", async () => {
     const capabilities = { languages: [], pairs: [], limits: { max_text_chars: 24000, max_source_tokens: 8192, max_chunks: 16, request_timeout_seconds: 120 } };
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(capabilities), { status: 200, headers: { "Content-Type": "application/json" } }));

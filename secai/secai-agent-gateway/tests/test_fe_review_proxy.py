@@ -21,6 +21,16 @@ def test_review_shortcut_requires_tailnet_on_both_ends():
     assert not server._tailnet_connection("invalid", "100.74.146.12")
 
 
+def test_review_shortcut_accepts_configured_loopback_tunnel(monkeypatch, tmp_path):
+    server = _server()
+    monkeypatch.setattr(server, 'REVIEW_LOOPBACK_FILE', tmp_path / 'missing')
+    monkeypatch.setattr(server, 'REVIEW_ALLOW_LOOPBACK', True)
+    assert server._review_connection('127.0.0.1', '127.0.0.1')
+    assert not server._review_connection('192.168.1.4', '127.0.0.1')
+    monkeypatch.setattr(server, 'REVIEW_ALLOW_LOOPBACK', False)
+    assert not server._review_connection('127.0.0.1', '127.0.0.1')
+
+
 def test_review_shortcut_loads_only_configured_roles(tmp_path, monkeypatch):
     server = _server()
     path = tmp_path / "tokens.json"

@@ -16,6 +16,9 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 
 ## Đọc theo tính năng
 
+- API dịch đang dùng trên giao diện: [Dịch Devspace hiện tại](api/dich-devspace-hien-tai.md).
+
+- API ngắn gọn, có ví dụ và đối chiếu cũ/mới: [Dịch](api/dich-api-tom-tat.md), [Báo cáo](api/bao-cao-api-tom-tat.md).
 - Báo cáo: [API MVP](api/report-mvp.md), [tiêu chí](criteria/report-mvp.md), [Docker](../deploy/report/README.md).
 - Dịch file/ảnh: [contract v2](api/translate-v2-contract.md), [chạy local](examples/translate-v2-local-operator.md), [worker Docker](../deploy/file-ocr/README.md).
 - Đa ngôn ngữ: [contract v3](api/multilang-contract.md), [operator](api/multilang-translate.md), [triển khai](../deploy/multilang/README.md).
@@ -24,6 +27,8 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 - PoC: [API](poc-api-guide.md), [verify](poc-verify-architecture.md).
 
 ## Triển khai và kiểm chứng hiện tại
+
+- [Dịch v3 stream và cập nhật Devspace 05/10](test-results/translation-v3-stream-devspace-20261005.md).
 
 - [Full-feature image và routing Devspace](../deploy/all-features/README.md).
 - [Tích hợp main và giới hạn suite](test-results/all-features-main-integration.md).

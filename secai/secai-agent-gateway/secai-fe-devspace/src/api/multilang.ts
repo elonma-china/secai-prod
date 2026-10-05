@@ -1,4 +1,6 @@
-export type MultilangLanguageCode = "vi" | "zh-Hans" | "ja" | "ko" | "fr" | "de" | "es" | "ru" | "ar";
+import { ApiError, streamRequest } from "../lib/sse";
+
+export type MultilangLanguageCode = "vi" | "en" | "zh-Hans" | "ja" | "ko" | "fr" | "de" | "es" | "ru" | "ar";
 export type MultilangStatus = "disabled" | "beta" | "stable";
 
 export interface MultilangLanguage {
@@ -86,4 +88,34 @@ export async function translateMultilang(
     body: JSON.stringify(request),
     signal,
   }));
+}
+
+export async function streamMultilang(
+  request: MultilangTranslationRequest,
+  onChunk: (delta: string) => void,
+  signal?: AbortSignal,
+): Promise<MultilangTranslationResponse> {
+  let final: MultilangTranslationResponse | null = null;
+  let failure: MultilangApiError | null = null;
+  const envelopeError = (body: Record<string, unknown>, status: number, retryAfter: number | null = null) => {
+    const error = body.error as Record<string, unknown> | undefined;
+    return new MultilangApiError(status, typeof error?.code === "string" ? error.code : null,
+      typeof error?.request_id === "string" ? error.request_id : null, retryAfter);
+  };
+  try {
+    await streamRequest(`${BASE}/ai/v3/translate/stream`, { ...request }, {
+      onToken: (delta) => { if (!failure) onChunk(delta); },
+      onErrorPayload: (payload) => { failure = envelopeError(payload, 200); },
+      onFinal: (payload) => { if (!failure) final = payload as unknown as MultilangTranslationResponse; },
+    }, signal);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const body = error.body as Record<string, unknown> | undefined;
+      throw envelopeError(body ?? {}, error.status, error.retryAfter);
+    }
+    throw error;
+  }
+  if (failure) throw failure;
+  if (!final) throw new MultilangApiError(200, "STREAM_INCOMPLETE", null, null);
+  return final;
 }

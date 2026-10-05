@@ -28,6 +28,48 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); sessionStorage.clear(); });
 
 describe("user-facing v2 file batch", () => {
+  it("rejects more than five selected files before submitting any job", () => {
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    const selected = Array.from({ length: 6 }, (_, index) => new File(["text"], `${index}.txt`));
+    fireEvent.change(screen.getByLabelText("Chọn nhiều tệp cần dịch"), { target: { files: selected } });
+    expect(screen.getByRole("alert").textContent).toBe("Tối đa 5 tệp mỗi phiên.");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("secai.translate.v2.file.batch.v1")).toBeNull();
+  });
+
+  it("uses Vietnamese as the language hub and resets incompatible targets", () => {
+    render(<TranslateFileBatchPanel imagesEnabled />);
+    const source = screen.getByRole("combobox", { name: "Ngôn ngữ nguồn của tệp" }) as HTMLSelectElement;
+    const target = screen.getByRole("combobox", { name: "Ngôn ngữ đích của tệp" }) as HTMLSelectElement;
+    expect(source.options).toHaveLength(10);
+    expect(Array.from(source.options, (option) => option.value)).not.toContain("auto");
+    expect(target.options).toHaveLength(9);
+    fireEvent.change(target, { target: { value: "zh" } });
+    fireEvent.change(source, { target: { value: "ja" } });
+    expect(Array.from(target.options, (option) => option.value)).toEqual(["vi"]);
+    expect(target.value).toBe("vi");
+    fireEvent.change(source, { target: { value: "vi" } });
+    expect(target.options).toHaveLength(9);
+    expect(target.value).toBe("en");
+    expect(Array.from(target.options, (option) => option.value)).not.toContain("vi");
+  });
+
+  it("retains job references from older sessions exceeding the new five-file limit", () => {
+    const rows = Array.from({ length: 6 }, (_, index) => ({
+      id: index.toString(16).repeat(32), key: index.toString(16).repeat(32), hash: "a".repeat(64),
+      name: `existing-${index}.txt`, size: 4, extension: ".txt", kind: "file", source: "vi", target: "en",
+      phase: "cancelled", jobId: index.toString(16).repeat(32),
+    }));
+    sessionStorage.setItem("secai.translate.v2.file.batch.v1", JSON.stringify({ rows }));
+    const { container } = render(<TranslateFileBatchPanel imagesEnabled />);
+    expect(container.querySelectorAll(".file-batch-row")).toHaveLength(6);
+    expect((screen.getByLabelText("Chọn nhiều tệp cần dịch") as HTMLInputElement).disabled).toBe(true);
+    expect(JSON.parse(sessionStorage.getItem("secai.translate.v2.file.batch.v1")!).rows.map((row: { jobId: string }) => row.jobId))
+      .toEqual(rows.map((row) => row.jobId));
+  });
+
   it("offers the file tab when v3 capabilities are unavailable, without changing legacy translation", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not found", { status: 404 })));
     render(<TranslateScreen userId="user" />);
@@ -41,7 +83,7 @@ describe("user-facing v2 file batch", () => {
     vi.stubEnv("VITE_TRANSLATE_V2_FILES_ENABLED", "false");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("not found", { status: 404 })));
     render(<TranslateScreen userId="user" />);
-    await screen.findByText("Dịch đa ngôn ngữ chưa được bật trên máy chủ.");
+    await screen.findByText("Dịch trực tiếp chưa được bật trên máy chủ.");
     expect(screen.queryByRole("button", { name: "Dịch tệp và ảnh" })).toBeNull();
   });
 
