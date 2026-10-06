@@ -3,6 +3,7 @@ import { createReviewApi, reviewError } from "../reviewApi";
 import type { Assignment, Campaign, JudgmentInput, QueueItem } from "../reviewTypes";
 import { useReviewIdentity } from "../reviewIdentity";
 import ReviewPair from "./review/ReviewPair";
+import ReviewSamplingSettings from "./review/ReviewSamplingSettings";
 import ReviewAdmin from "./review/ReviewAdmin";
 export default function ReviewScreen({connecting = false, connectionError = "", onReconnect = () => {}}: {connecting?: boolean; connectionError?: string; onReconnect?: () => void} = {}) {
   const identity = useReviewIdentity();
@@ -48,6 +49,7 @@ export default function ReviewScreen({connecting = false, connectionError = "", 
         <p className="review-muted">Xem lựa chọn của user → xác nhận mẫu → quyết định fine-tune. Bản demo dùng tài khoản chung theo vai trò.</p>
         {error && <div className="review-error" role="alert">{error}<button className="iasbtn" disabled={busy} onClick={() => void (actor.role === "reviewer" && campaignId ? loadQueue() : loadCampaigns().catch(e => setError(reviewError(e))))}>Thử tải lại</button></div>}
         {notice && <p className="review-note" role="status">{notice}</p>}
+        {actor.role === "admin" && <ReviewSamplingSettings api={api}/>}
         <details className="review-campaign-settings"><summary>Nâng cao · chọn hoặc tạo đợt đánh giá</summary><div className="review-toolbar"><label className="review-field">Đợt đánh giá<select className="iasin" value={campaignId} disabled={busy} onChange={e => {setCampaignId(e.target.value); setNotice("");}}><option value="">Chọn đợt đánh giá</option>{campaigns.map(c => <option key={c.id} value={c.id}>{c.title} · {c.state === "open" ? "Đang mở" : "Đã đóng"}</option>)}</select></label>{actor.role === "reviewer" && <label className="review-field">Trạng thái phiếu<select className="iasin" value={status} disabled={busy} onChange={e => setStatus(e.target.value)}><option value="pending">Chưa nộp</option><option value="submitted">Đã nộp</option></select></label>}</div>
         {actor.role === "admin" && <details><summary>Quản lý đợt đánh giá</summary><form className="review-toolbar" onSubmit={async e => {e.preventDefault(); setBusy(true); setError(""); try {const c = await api.createCampaign(title.trim()); setTitle(""); await loadCampaigns(); setCampaignId(c.id); setNotice("Đã tạo đợt đánh giá.");} catch(e) {setError(reviewError(e));} finally {setBusy(false);}}}><label className="review-field">Tên đợt mới<input className="iasin" required maxLength={200} value={title} disabled={busy} onChange={e => setTitle(e.target.value)}/></label><button className="iasbtn" disabled={busy || !title.trim()}>Tạo đợt</button></form></details>}
         </details>

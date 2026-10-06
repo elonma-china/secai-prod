@@ -7,7 +7,7 @@ import json
 import zipfile
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .review_auth import ReviewActor, get_review_actor, require_review_admin
 from .review_schemas import AdjudicationInput, AssignmentInput, CampaignInput, CampaignPatch, JudgmentInput, ReviewItemInput
 from ..state.review_store import ReviewError
@@ -142,6 +142,41 @@ async def export(cid:str,request:Request,format:Literal['raw','preference']='raw
     body = await asyncio.to_thread(build_export,snapshot,format)
     return Response(body,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="review-{snapshot["campaign"]["id"]}-{format}.zip"'})
 
+class LiveSettingsInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    sample_percent: int = Field(ge=0, le=100, strict=True)
+
+
+def live_defaults(request):
+    settings = request.app.state.gateway.settings
+    return round(getattr(settings, 'review_live_sample_rate', 0.1) * 100, 6)
+
+
+def live_settings_response(request, value):
+    return {**value, 'scope': 'global', 'cooldown_seconds': getattr(request.app.state.gateway.settings, 'review_live_cooldown_seconds', 600)}
+
+
+@router.get('/live-settings')
+async def get_live_settings(request: Request, actor: ReviewActor = Depends(require_review_admin)):
+    value = await call(request, 'live_settings', live_defaults(request))
+    return live_settings_response(request, value)
+
+
+@router.put('/live-settings')
+async def put_live_settings(request: Request, actor: ReviewActor = Depends(require_review_admin)):
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 1024:
+            raise HTTPException(413, 'settings body too large')
+        body.extend(chunk)
+    try:
+        payload = LiveSettingsInput.model_validate_json(bytes(body))
+    except ValidationError:
+        raise HTTPException(422, 'sample_percent must be an integer between 0 and 100; unknown fields are forbidden') from None
+    value = await call(request, 'set_live_settings', payload.sample_percent, live_defaults(request), actor.actor_id)
+    return live_settings_response(request, value)
+
+
 @router.post('/live-pairs')
 async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor)):
     """Occasional independent B generation; the original chat/session stays untouched."""
@@ -163,7 +198,8 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
         raise HTTPException(422,[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
     state=request.app.state.gateway
     settings=state.settings
-    sample_rate=getattr(settings,'review_live_sample_rate',0.1)
+    live_config=await call(request, 'live_settings', live_defaults(request))
+    sample_rate=live_config['sample_percent']/100
     if sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000:
         return {'offered':False}
     # Reserving before any await prevents two simultaneous actor requests spending twice.
