@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     reward_service_token: str = Field(default="", repr=False)
     reward_artifact_sha256: str = ""
     reward_timeout_seconds: float = Field(default=30,gt=0,le=120)
+    reward_training_enabled: bool = False
+    reward_training_url: str = ""
+    reward_training_token: str = Field(default="", repr=False)
 
     # ── Air-gap master switch (default ON) ─────────────────────────────────────
     # When true, the gateway must make NO outbound request to the public internet. This

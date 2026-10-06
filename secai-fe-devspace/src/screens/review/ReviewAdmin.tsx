@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Markdown from "../../components/Markdown";
+import RewardTraining from './RewardTraining';
 import { reviewError } from "../../reviewApi";
 import type { ReviewApi } from "../../reviewApi";
 import { DECISIONS, ERROR_TAGS } from "../../reviewTypes";
@@ -52,7 +53,7 @@ export default function ReviewAdmin({api, campaign, onChange}: {api: ReviewApi; 
     {notice && <p className="review-note" role="status">{notice}</p>}
     {loading && <p role="status">Đang tải phản hồi…</p>}
     {stats && <div className="review-stats"><span>Câu hỏi: <strong>{stats.items}</strong></span><span>Chờ duyệt: <strong>{stats.pending_adjudication}</strong></span><strong>Cặp đã duyệt: {approvedPairs}</strong></div>}
-    <div className="review-training"><div><h4>Huấn luyện model chấm điểm</h4><p>Chưa kết nối dịch vụ huấn luyện. Các cặp đã duyệt còn cần kiểm tra chất lượng và nguồn nhãn trước khi dùng.</p></div><button className="iasbtn" disabled>Huấn luyện model chấm điểm</button></div>
+    <RewardTraining key={campaign.id} api={api} campaignId={campaign.id} approvedPairs={approvedPairs}/>
     <div className="review-toolbar" role="group" aria-label="Lọc phản hồi">{[["pending","Chờ duyệt"],["approved","Đã duyệt"],["excluded","Đã loại"],["all","Tất cả"]].map(([value,label]) => <button className={"iasbtn" + (filter === value ? " review-primary" : "")} aria-pressed={filter === value} key={value} onClick={() => setFilter(value)}>{label}</button>)}</div>
     <div className="review-admin-grid">
       <div className="review-list" aria-label="Danh sách câu hỏi">{!loading && visibleItems.length === 0 && <p>Không có phản hồi trong nhóm này.</p>}{visibleItems.map(item => <button className={"review-list-item" + (current?.id === item.id ? " selected" : "")} key={item.id} onClick={() => void inspect(item)} disabled={busy}><strong>{question(item)}</strong><span>{item.adjudication ? item.adjudication.outcome === "winner" ? "Đã duyệt" : "Đã loại" : item.submitted_count ? "Chờ duyệt" : "Chưa có phản hồi"}</span></button>)}</div>

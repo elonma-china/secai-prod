@@ -105,7 +105,7 @@ dưới dạng TXT hoặc JSON; JSON giữ các trường OCR và cảnh báo t�
 
 ## Demo hai vai trò và phản hồi A/B
 
-Bản demo dùng bộ chuyển **Demo → Người dùng thường / Admin** trong header. User không có tab A/B quản trị; chọn **Thử đánh giá A/B** để gửi phản hồi từ ví dụ QA được phân công. Admin mở tab A/B, xem phản hồi và phê duyệt hoặc loại mẫu. Đây là mô phỏng bằng credential chung cho từng vai trò, không phải đăng nhập production. Nút huấn luyện bị khóa vì chưa có API job fine-tune.
+Bản demo dùng bộ chuyển **Demo → Người dùng thường / Admin** trong header. User không có tab A/B quản trị; chọn **Thử đánh giá A/B** để gửi phản hồi từ ví dụ QA được phân công. Admin mở tab A/B, xem phản hồi và phê duyệt hoặc loại mẫu. Đây là mô phỏng bằng credential chung cho từng vai trò, không phải đăng nhập production. Nút huấn luyện đã nối job QA riêng trên Vast khi backend được cấu hình; chỉ nhận dữ liệu QA đủ nhóm và không tự kích hoạt model cho chatbot. Xem [hướng dẫn job](../deploy/reward-training/README.md).
 
 Chức năng đăng nhập demo cần **static proxy `serve_static.py`**, không chạy qua `npm run dev` hoặc `npm run preview` trực tiếp. Vite chỉ chuyển tiếp `X-Review-Role`; gateway yêu cầu Bearer và không tự coi header này là quyền truy cập. Static proxy ánh xạ role sang credential riêng theo chính sách kết nối cho phép.
 

@@ -30,6 +30,7 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 ## Triển khai và kiểm chứng hiện tại
 
 - [Devspace: demo user/Admin và duyệt phản hồi A/B](test-results/devspace-ab-two-roles-20261006.md).
+- [Devspace → Vast: job fine-tune Qwen3-1.7B thật, 1.000 cặp QA](test-results/reward-vast-devspace-training-20261006.md).
 
 - [Fine-tune Qwen3-1.7B với 1.000 cặp QA, tối đa 5 vòng](test-results/reward-qwen3-17b-1000-pairs-20261006.md).
 
