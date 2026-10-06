@@ -32,7 +32,7 @@
 
 ## Màn hình và luồng — bản tối giản theo yêu cầu mới nhất
 
-Có đúng hai tab chính: **Phản hồi** và **Fine-tune**. Không thêm dashboard nhiều chỉ số, không đưa user ID/campaign/recipe/hash vào bảng chính.
+Có đúng hai tab chính: **Phản hồi** và **Fine-tune**. Không thêm dashboard nhiều chỉ số, không đưa user ID/campaign/recipe/hash vào bảng chính. Admin duyệt từng câu hoặc dùng Duyệt toàn bộ với snapshot confirmation; chỉ tự lấy canonical user winner nhất quán, còn mẫu mơ hồ chờ duyệt riêng.
 
 ### Tab 1 — Phản hồi
 

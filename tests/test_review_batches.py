@@ -5,10 +5,10 @@ from secai_gateway.api.review_schemas import ReviewItemInput, JudgmentInput, Adj
 from test_review_auth import client, ADMIN, REVIEW
 
 
-def submitted(store, n=12):
+def submitted(store, n=12, prefix="Question"):
     c = store.create_campaign('QA batch test', 'security_qa_v1', 'admin')
     for i in range(n):
-        v = ReviewItemInput(external_id=str(i), prompt_messages=[{'role':'user','content':f'Question {i}'}],
+        v = ReviewItemInput(external_id=str(i), prompt_messages=[{'role':'user','content':f'{prefix} {i}'}],
             candidates=[{'id':'a','text':f'Good {i}'},{'id':'b','text':f'Bad {i}'}], source_group=f'group-{i}')
         store.import_items(c['id'], [v], 'admin')
     rows = store.list_items(c['id'])
@@ -121,8 +121,21 @@ def test_holdout_bindings_persist_between_batches(tmp_path):
     e=s.training_eligibility('demo');b=s.reserve_training_batch('first','demo',e['snapshot_version'],'admin')
     first=s.batch_partitions(b['id']);old=s.batch_snapshot(b['id'])['items']
     s.update_training_run(b['runs'][0]['id'],{'status':'failed','error':'test'})
-    submitted(s,20);p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
+    submitted(s,20,prefix='New question');p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
     e=s.training_eligibility('demo');b2=s.reserve_training_batch('second','demo',e['snapshot_version'],'admin')
     second=s.batch_partitions(b2['id']);new=s.batch_snapshot(b2['id'])['items']
     by_group={r['source_group']:first[r['id']] for r in old}
     assert all(second[r['id']]==by_group[r['source_group']] for r in new)
+
+
+def test_duplicate_aliases_cannot_become_new_batch(tmp_path):
+    s=ReviewStore(tmp_path/'r.db');submitted(s,20);submitted(s,20)
+    with s.connection(True) as db: db.execute("UPDATE training_policy SET minimum_pairs=3 WHERE purpose='demo'")
+    p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
+    e=s.training_eligibility('demo');assert e['valid_new_count']==20
+    b=s.reserve_training_batch('dedup','demo',e['snapshot_version'],'admin')
+    s.update_training_run(b['runs'][0]['id'],{'status':'succeeded'})
+    assert s.training_eligibility('demo')['valid_new_count']==0
+    assert s.overview('approved','qa','',0,20)['total']==0
+    submitted(s,20);p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
+    assert s.training_eligibility('demo')['valid_new_count']==0

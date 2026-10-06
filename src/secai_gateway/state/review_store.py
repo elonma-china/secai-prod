@@ -23,7 +23,7 @@ class ReviewError(Exception):
         self.status, self.detail = status, detail
         super().__init__(detail)
 
-from .review_training_store import TrainingLedger
+from .review_training_store import TrainingLedger, pair_fingerprint
 
 class ReviewStore(TrainingLedger):
     def __init__(self, path):
@@ -50,6 +50,7 @@ class ReviewStore(TrainingLedger):
     def connection(self, write=False):
         db = sqlite3.connect(self.path, timeout=10, isolation_level=None)
         db.row_factory = sqlite3.Row
+        db.create_function('review_pair_key',1,pair_fingerprint,deterministic=True)
         db.execute('PRAGMA foreign_keys=ON')
         try:
             db.execute('BEGIN IMMEDIATE' if write else 'BEGIN')
