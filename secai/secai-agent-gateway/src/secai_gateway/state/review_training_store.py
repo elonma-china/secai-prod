@@ -2,6 +2,7 @@
 import hashlib
 import json
 from uuid import uuid4
+from fastapi import HTTPException
 
 ACTIVE = {'dispatching','queued','waiting_gpu','loading','training','evaluating','cleanup'}
 SOURCE = "CASE WHEN c.creator_id='review-live-system' THEN 'live' WHEN lower(c.title) LIKE '%qa%' OR lower(c.title) LIKE '%demo%' OR lower(c.title) LIKE '%e2e%' THEN 'qa' ELSE 'import' END"
@@ -119,7 +120,7 @@ class TrainingLedger:
         policy=db.execute('SELECT * FROM training_policy WHERE purpose=?',(purpose,)).fetchone()
         if policy is None: error(422,'unknown purpose')
         rows,_=self._overview_rows(db,'approved','qa' if purpose=='demo' else 'live','')
-        records=[]; snapshots={}; aliases={}; reasons=[]
+        records=[]; snapshots={}; aliases={}; reasons=[]; invalid_count=0
         for r in rows:
             item=self.item(db,r['id']); approval=self.adjudication(db,r['id']); judgments=self.judgments(db,r['id'])
             if r['assignment_count']!=r['submitted_count']: continue
@@ -128,7 +129,8 @@ class TrainingLedger:
                 'chosen':next(c['text'] for c in cs if c['id']==winner),'rejected':next(c['text'] for c in cs if c['id']!=winner),
                 'source_group':item['source_group'],'rubric_version':'security_qa_v1'}
             try: validate_record(record)
-            except ValueError: continue
+            except (ValueError,HTTPException):
+                invalid_count+=1; continue
             records.append(record)
             aliases.setdefault(pair_fingerprint(item),[]).append(item['id'])
             snapshots[item['id']]={**item,'adjudication':approval,'judgments':judgments,'assignments':[dict(a) for a in db.execute('SELECT * FROM assignments WHERE item_id=?',(item['id'],))]}
@@ -163,7 +165,7 @@ class TrainingLedger:
             items.append(item)
         version=digest({'policy':dict(policy),'items':items,'partitions':partitions})
         preview={'purpose':purpose,'minimum_pairs':policy['minimum_pairs'],'policy_version':policy['version'],
-            'valid_new_count':len(records),'group_count':len(components),'counts':counts,'eligible':not reasons,
+            'invalid_count':invalid_count,'valid_new_count':len(records),'group_count':len(components),'counts':counts,'eligible':not reasons,
             'blocked_reasons':list(dict.fromkeys(reasons)),'snapshot_version':version}
         return preview,items,partitions,bindings
 

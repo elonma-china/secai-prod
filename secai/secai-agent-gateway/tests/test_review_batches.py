@@ -139,3 +139,9 @@ def test_duplicate_aliases_cannot_become_new_batch(tmp_path):
     assert s.overview('approved','qa','',0,20)['total']==0
     submitted(s,20);p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
     assert s.training_eligibility('demo')['valid_new_count']==0
+
+
+def test_sensitive_approved_sample_is_skipped_not_eligibility_outage(tmp_path):
+    s=ReviewStore(tmp_path/'r.db');submitted(s,3,prefix='QA identifier 1791296232900')
+    p=s.bulk_preview('qa','');s.bulk_approve('qa','',p['snapshot_version'],'admin')
+    assert s.training_eligibility('demo')['valid_new_count']==0
