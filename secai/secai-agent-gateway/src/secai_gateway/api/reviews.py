@@ -165,7 +165,7 @@ def build_export(snapshot,format):
         if not approval or approval['outcome']!='winner': continue
         chosen = next(c for c in item['candidates'] if c['id']==approval['winning_candidate_id'])
         rejected = next(c for c in item['candidates'] if c['id']!=approval['winning_candidate_id'])
-        records.append({'item_id':item['id'],'prompt':item['prompt_messages'],'chosen':chosen['text'],'rejected':rejected['text'],'rubric_version':snapshot['campaign']['rubric_version'],'adjudication_id':approval['id'],'source_group':item['source_group']})
+        records.append({'item_id':item['id'],'prompt':item['prompt_messages'],'chosen':chosen['text'],'rejected':rejected['text'],'rubric_version':snapshot['campaign']['rubric_version'],'adjudication_id':approval['id'],'source_group':item['source_group'], **({'source_groups':item['source_groups']} if 'source_groups' in item else {})})
     name = format+'.jsonl'
     body = ''.join(json.dumps(r,ensure_ascii=False,sort_keys=True)+'\n' for r in records).encode('utf-8')
     manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'campaign_title':snapshot['campaign']['title'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}

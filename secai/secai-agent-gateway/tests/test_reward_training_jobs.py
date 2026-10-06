@@ -181,3 +181,11 @@ def test_progress_sequence_survives_crash_between_event_and_state(tmp_path):
     stale=jobs.get(j['id']);stale['event_seq']=0;atomic_json(jobs.root/j['id']/'job.json',stale)
     jobs=TrainingJobs(tmp_path/'jobs');jobs.emit(j['id'],{'stage':'training','step':2,'total_steps':6})
     assert [e['seq'] for e in jobs.events(j['id'])['items']]==[1,2]
+
+
+def test_progress_recovers_partial_journal_tail(tmp_path):
+    from secai_gateway.reward.training_jobs import TrainingJobs
+    jobs=TrainingJobs(tmp_path/'jobs');j=jobs.submit(payload(tmp_path));jobs.emit(j['id'],{'stage':'training','step':1,'total_steps':6})
+    with (jobs.root/j['id']/'events.jsonl').open('a') as out:out.write('{"seq":2')
+    jobs.emit(j['id'],{'stage':'training','step':2,'total_steps':6})
+    assert [e['seq'] for e in jobs.events(j['id'])['items']]==[1,2]

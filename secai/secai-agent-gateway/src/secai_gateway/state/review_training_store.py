@@ -10,12 +10,18 @@ BASE_QUERY = f"""SELECT i.id,i.campaign_id,i.snapshot,c.title campaign_title,c.s
  (SELECT count(*) FROM assignments a WHERE a.item_id=i.id) assignment_count,
  (SELECT count(*) FROM judgments j JOIN assignments a ON a.id=j.assignment_id WHERE a.item_id=i.id) submitted_count,
  (SELECT max(j.submitted_at) FROM judgments j JOIN assignments a ON a.id=j.assignment_id WHERE a.item_id=i.id) submitted_at,
- (SELECT b.batch_id FROM training_batch_items b WHERE b.item_id=i.id) batch_id
+ COALESCE((SELECT b.batch_id FROM training_batch_items b WHERE b.item_id=i.id),(SELECT p.batch_id FROM training_pair_reservations p WHERE p.pair_key=review_pair_key(i.snapshot))) batch_id
  FROM items i JOIN campaigns c ON c.id=i.campaign_id LEFT JOIN adjudications d ON d.item_id=i.id"""
 
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode()).hexdigest()
+
+
+def pair_fingerprint(snapshot):
+    from ..reward.dataset import _canonical,prompt_key
+    item=json.loads(snapshot) if isinstance(snapshot,str) else snapshot
+    return digest([prompt_key(item['prompt_messages']),sorted(_canonical(c['text']) for c in item['candidates'])])
 
 
 def error(status, message):
@@ -34,8 +40,11 @@ class TrainingLedger:
         CREATE TABLE IF NOT EXISTS training_batch_items (batch_id TEXT NOT NULL REFERENCES training_batches(id),item_id TEXT NOT NULL UNIQUE REFERENCES items(id),snapshot TEXT NOT NULL,PRIMARY KEY(batch_id,item_id));
         CREATE TABLE IF NOT EXISTS training_runs (id TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES training_batches(id),request_key TEXT NOT NULL UNIQUE,actor_id TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,status TEXT NOT NULL,remote_job_id TEXT,remote TEXT,error TEXT);
         CREATE INDEX IF NOT EXISTS training_runs_batch ON training_runs(batch_id,created_at);
+        CREATE TABLE IF NOT EXISTS training_pair_reservations (pair_key TEXT PRIMARY KEY,batch_id TEXT NOT NULL REFERENCES training_batches(id));
         CREATE TABLE IF NOT EXISTS training_group_splits (purpose TEXT NOT NULL,group_key TEXT NOT NULL,partition TEXT NOT NULL,PRIMARY KEY(purpose,group_key));
         ''')
+        # Backfill additive pair reservations for previously frozen canonical items.
+        db.execute('INSERT OR IGNORE INTO training_pair_reservations SELECT review_pair_key(snapshot),batch_id FROM training_batch_items')
 
     def _overview_rows(self,db,status,source,search,offset=None,limit=None):
         clauses=['submitted_count>0']; args=[]
@@ -110,7 +119,7 @@ class TrainingLedger:
         policy=db.execute('SELECT * FROM training_policy WHERE purpose=?',(purpose,)).fetchone()
         if policy is None: error(422,'unknown purpose')
         rows,_=self._overview_rows(db,'approved','qa' if purpose=='demo' else 'live','')
-        records=[]; snapshots={}; reasons=[]
+        records=[]; snapshots={}; aliases={}; reasons=[]
         for r in rows:
             item=self.item(db,r['id']); approval=self.adjudication(db,r['id']); judgments=self.judgments(db,r['id'])
             if r['assignment_count']!=r['submitted_count']: continue
@@ -121,6 +130,7 @@ class TrainingLedger:
             try: validate_record(record)
             except ValueError: continue
             records.append(record)
+            aliases.setdefault(pair_fingerprint(item),[]).append(item['id'])
             snapshots[item['id']]={**item,'adjudication':approval,'judgments':judgments,'assignments':[dict(a) for a in db.execute('SELECT * FROM assignments WHERE item_id=?',(item['id'],))]}
         try: records=deduplicate(records)
         except ValueError: records=[]; reasons.append('Có các lựa chọn mâu thuẫn cho cùng câu hỏi/đáp án.')
@@ -146,7 +156,11 @@ class TrainingLedger:
         if any(n==0 for n in counts.values()): reasons.append('Cần nhóm độc lập trong cả train, validation và test.')
         if purpose=='production': reasons.append('Chưa nối danh tính IAS và policy đánh giá production.')
         if db.execute("SELECT 1 FROM training_runs WHERE status IN ("+','.join('?' for _ in ACTIVE)+") LIMIT 1",tuple(ACTIVE)).fetchone(): reasons.append('Đang có một lượt huấn luyện; xem trong lịch sử.')
-        items=[snapshots[r['item_id']] for r in records]
+        items=[]
+        for record in records:
+            item=dict(snapshots[record['item_id']],source_groups=record['source_groups'])
+            item['duplicate_items']=[snapshots[iid] for iid in aliases[pair_fingerprint(item)] if iid!=item['id']]
+            items.append(item)
         version=digest({'policy':dict(policy),'items':items,'partitions':partitions})
         preview={'purpose':purpose,'minimum_pairs':policy['minimum_pairs'],'policy_version':policy['version'],
             'valid_new_count':len(records),'group_count':len(components),'counts':counts,'eligible':not reasons,
@@ -184,6 +198,7 @@ class TrainingLedger:
             db.execute('INSERT INTO training_batches VALUES (?,?,?,?,?,?,?,?,?,?)',(bid,key,actor,purpose,ts,p['policy_version'],digest(snapshot),len(items),encode(snapshot),encode(partitions)))
             for item in items:
                 db.execute('INSERT INTO training_batch_items VALUES (?,?,?)',(bid,item['id'],encode(item)))
+                db.execute('INSERT INTO training_pair_reservations VALUES (?,?)',(pair_fingerprint(item),bid))
             for group,split in bindings.items(): db.execute('INSERT OR IGNORE INTO training_group_splits VALUES (?,?,?)',(purpose,group,split))
             self._new_run(db,bid,key,actor)
             self.audit(db,actor,'reward.batch.freeze',bid,{'sample_count':len(items),'snapshot_sha256':digest(snapshot)})

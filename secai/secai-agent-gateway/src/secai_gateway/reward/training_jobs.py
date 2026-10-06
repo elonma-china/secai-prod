@@ -101,6 +101,17 @@ class TrainingJobs:
                     for line in stream.read().splitlines():
                         try: last_seq=max(last_seq,json.loads(line)['seq'])
                         except (ValueError,KeyError): continue
+            if path.exists() and path.stat().st_size:
+                with path.open('r+b') as journal:
+                    start=max(0,path.stat().st_size-8192);journal.seek(start);tail=journal.read()
+                    if not tail.endswith(b'\n'):
+                        last_line=tail.rsplit(b'\n',1)[-1]
+                        try:
+                            json.loads(last_line)
+                            journal.seek(0,os.SEEK_END);journal.write(b'\n')
+                        except ValueError:
+                            journal.truncate(start+tail.rfind(b'\n')+1)
+                        journal.flush();os.fsync(journal.fileno())
             seq=last_seq+1
             value={'seq':seq,'time':timestamp(),**clean}
             with path.open('a',encoding='utf-8') as out:

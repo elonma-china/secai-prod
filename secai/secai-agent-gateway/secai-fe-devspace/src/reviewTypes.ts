@@ -19,5 +19,5 @@ export interface OverviewRow {id:string;question:string;source:string;submitted_
 export interface OverviewDetail extends OverviewRow {item:ReviewItem;judgments:AdminJudgment[]}
 export interface Eligibility {enabled:boolean;purpose:string;minimum_pairs:number;policy_version:number;valid_new_count:number;group_count:number;eligible:boolean;blocked_reasons:string[];snapshot_version:string;counts:Record<string,number>}
 export interface TrainingEvent {seq:number;time:string;stage:string;epoch?:number;step?:number;total_steps?:number;loss?:number}
-export interface TrainingRun {id:string;batch_id:string;created_at:string;status:string;error:string|null;remote_job_id:string|null;remote:{progress?:TrainingEvent;counts:Record<string,number>;result:{test:{accuracy:number;records:number};artifact_sha256:string;gate:{eligible:boolean}}|null}|null}
-export interface TrainingBatch {id:string;purpose:string;created_at:string;sample_count:number;snapshot_sha256:string;status:string;runs:TrainingRun[];connection_error?:string}
+export interface TrainingRun {id:string;request_key?:string;batch_id:string;created_at:string;status:string;error:string|null;remote_job_id:string|null;remote:{progress?:TrainingEvent;counts:Record<string,number>;result:{test:{accuracy:number;records:number};artifact_sha256:string;gate:{eligible:boolean}}|null}|null}
+export interface TrainingBatch {id:string;request_key?:string;purpose:string;created_at:string;sample_count:number;snapshot_sha256:string;status:string;runs:TrainingRun[];connection_error?:string}
