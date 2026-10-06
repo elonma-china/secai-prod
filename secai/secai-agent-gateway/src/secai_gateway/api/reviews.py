@@ -25,6 +25,45 @@ async def call(request, method, *args):
 def page(items,offset,limit):
     return {'items':items[offset:offset+limit],'total':len(items),'offset':offset,'limit':limit}
 
+class BulkApprovalInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    source: Literal['all','live','qa','import'] = 'all'
+    search: str = Field(default='',max_length=200)
+    snapshot_version: str = Field(pattern='^[0-9a-f]{64}$')
+
+
+async def small_body(request, schema):
+    data=bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data)>4096: raise HTTPException(413,'input exceeds limit')
+    try: return schema.model_validate_json(data)
+    except ValidationError: raise HTTPException(422,'invalid input') from None
+
+
+@router.get('/overview')
+async def overview(request:Request,status:Literal['pending','approved','excluded','all']='pending',
+    source:Literal['all','live','qa','import']='all',search:str=Query('',max_length=200),
+    offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'overview',status,source,search,offset,limit)
+
+
+@router.get('/overview/{iid}')
+async def overview_detail(iid:str,request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'overview_detail',iid)
+
+
+@router.get('/approvals/preview')
+async def bulk_preview(request:Request,source:Literal['all','live','qa','import']='all',search:str=Query('',max_length=200),actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'bulk_preview',source,search)
+
+
+@router.post('/approvals/bulk')
+async def bulk_approve(request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    payload=await small_body(request,BulkApprovalInput)
+    return await call(request,'bulk_approve',payload.source,payload.search,payload.snapshot_version,actor.actor_id)
+
+
 @router.get('/me')
 async def me(actor: ReviewActor=Depends(get_review_actor)):
     return actor
@@ -132,8 +171,10 @@ def build_export(snapshot,format):
     manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'campaign_title':snapshot['campaign']['title'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}
     output = io.BytesIO()
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(name,body)
-        archive.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+        info=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED
+        archive.writestr(info,body)
+        info=zipfile.ZipInfo('manifest.json',date_time=(1980,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED
+        archive.writestr(info,json.dumps(manifest,ensure_ascii=False,indent=2))
     return output.getvalue()
 
 @router.get('/campaigns/{cid}/export')

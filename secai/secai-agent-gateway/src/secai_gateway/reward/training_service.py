@@ -11,7 +11,7 @@ import re
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 
 from .training_jobs import ACTIVE, TrainingJobs
 
@@ -77,6 +77,12 @@ def create_training_service(jobs, *, token_sha256, runner=None):
         if job is None:
             raise HTTPException(404, 'job not found')
         return job
+
+    @app.get('/jobs/{jid}/events')
+    async def events(jid:str,request:Request,after_seq:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=200)):
+        auth(request)
+        if await asyncio.to_thread(jobs.get,jid) is None: raise HTTPException(404,'job not found')
+        return await asyncio.to_thread(jobs.events,jid,after_seq,limit)
 
     @app.get('/campaigns/{cid}/jobs')
     async def list_jobs(cid: str, request: Request):

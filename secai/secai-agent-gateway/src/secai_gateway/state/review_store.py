@@ -23,7 +23,9 @@ class ReviewError(Exception):
         self.status, self.detail = status, detail
         super().__init__(detail)
 
-class ReviewStore:
+from .review_training_store import TrainingLedger
+
+class ReviewStore(TrainingLedger):
     def __init__(self, path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,6 +42,7 @@ class ReviewStore:
             CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, actor_id TEXT NOT NULL, action TEXT NOT NULL, entity_id TEXT NOT NULL, created_at TEXT NOT NULL, details TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS assignments_reviewer ON assignments(reviewer_id);
             ''')
+            self.init_training_ledger(db)
             if db.execute('SELECT schema_version FROM review_meta').fetchone()[0] != 1:
                 raise ValueError('unsupported review schema version')
 

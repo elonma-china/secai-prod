@@ -148,3 +148,36 @@ def test_gateway_training_list_outage_not_empty_success(client):
     response = client.get('/review-api/reward/training/campaigns/campaign',headers=ADMIN)
     assert response.status_code == 503
     assert 'secret' not in response.text
+
+
+def test_remote_request_key_survives_failed_response_and_retries(tmp_path):
+    from secai_gateway.reward.training_jobs import TrainingJobs
+    jobs=TrainingJobs(tmp_path/'jobs'); data={**payload(tmp_path),'request_key':'attempt-1'}
+    first=jobs.submit(data)
+    jobs.update(first['id'],status='failed')
+    assert jobs.submit(data)['id']==first['id']
+    second=jobs.submit({**data,'request_key':'attempt-2'})
+    assert second['id']!=first['id']
+    assert jobs.submit({**data,'request_key':'attempt-2'})['id']==second['id']
+
+
+def test_progress_cursor_allowlist(tmp_path):
+    from secai_gateway.reward.training_jobs import TrainingJobs
+    jobs=TrainingJobs(tmp_path/'jobs'); j=jobs.submit(payload(tmp_path))
+    jobs.emit(j['id'], {'stage':'training','epoch':1,'step':2,'total_steps':6,'loss':.3,'token':'secret','prompt':'private'})
+    jobs.emit(j['id'], {'stage':'evaluating'})
+    first=jobs.events(j['id'],0,1)
+    assert len(first['items'])==1 and first['next_seq']==1
+    second=jobs.events(j['id'],first['next_seq'],10)
+    assert len(second['items'])==1 and second['items'][0]['seq']==2
+    assert 'secret' not in str(first) and 'private' not in str(first)
+    assert jobs.get(j['id'])['progress']['stage']=='evaluating'
+
+
+def test_progress_sequence_survives_crash_between_event_and_state(tmp_path):
+    from secai_gateway.reward.training_jobs import TrainingJobs,atomic_json
+    jobs=TrainingJobs(tmp_path/'jobs'); j=jobs.submit(payload(tmp_path))
+    jobs.emit(j['id'],{'stage':'training','step':1,'total_steps':6})
+    stale=jobs.get(j['id']);stale['event_seq']=0;atomic_json(jobs.root/j['id']/'job.json',stale)
+    jobs=TrainingJobs(tmp_path/'jobs');jobs.emit(j['id'],{'stage':'training','step':2,'total_steps':6})
+    assert [e['seq'] for e in jobs.events(j['id'])['items']]==[1,2]

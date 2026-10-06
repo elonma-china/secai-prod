@@ -62,7 +62,7 @@ def agreement(scorer, records, *, invariance=False):
 
 
 def train(dataset, output, *, revision, mode='head', device='cpu', epochs=1,
-          learning_rate=1e-4, max_length=2048, local_files_only=True):
+          learning_rate=1e-4, max_length=2048, local_files_only=True, on_progress=None):
     import torch
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     if not re.fullmatch(r'[0-9a-f]{40}', revision):
@@ -73,6 +73,7 @@ def train(dataset, output, *, revision, mode='head', device='cpu', epochs=1,
     if output.exists(): raise FileExistsError('training output already exists')
     partitions, manifest = read_dataset(dataset)
     torch.manual_seed(manifest['seed'])
+    if on_progress: on_progress({'stage':'loading'})
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL,revision=revision,local_files_only=local_files_only,
                                               trust_remote_code=False)
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -89,7 +90,8 @@ def train(dataset, output, *, revision, mode='head', device='cpu', epochs=1,
     # Check all rows for token overflow before any training; test content remains unevaluated.
     for row in partitions['train']+partitions['validation']:
         scorer.encode(row['prompt'],[row['chosen'],row['rejected']])
-    for _ in range(epochs):
+    completed=0; total_steps=epochs*len(partitions['train'])
+    for epoch in range(epochs):
         # eval mode disables dropout; gradients remain enabled for trainable head/adapters.
         for index in torch.randperm(len(partitions['train'])).tolist():
             row = partitions['train'][index]
@@ -98,6 +100,9 @@ def train(dataset, output, *, revision, mode='head', device='cpu', epochs=1,
             loss.backward()
             torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad],1.0)
             optimizer.step(); optimizer.zero_grad()
+            completed+=1
+            if on_progress: on_progress({'stage':'training','epoch':epoch+1,'step':completed,'total_steps':total_steps,'loss':float(loss.detach().item())})
+    if on_progress: on_progress({'stage':'evaluating'})
     metrics = agreement(scorer,partitions['validation'])
     output.mkdir(parents=True,mode=0o700)
     model.save_pretrained(output,safe_serialization=True)
