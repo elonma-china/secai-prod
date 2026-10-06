@@ -9,3 +9,11 @@ test('terminal history drains events and allows selecting previous attempt',asyn
  fireEvent.change(screen.getByRole('combobox',{name:'Lần chạy'}),{target:{value:'old'}});
  await waitFor(()=>expect(api.runEvents).toHaveBeenCalledWith('old',100));
 });
+
+test('shows loading while historical events are still being fetched',async()=>{
+ let resolve:(value:unknown)=>void=()=>{};const pending=new Promise(r=>{resolve=r;});
+ const api={batch:vi.fn().mockResolvedValue({status:'succeeded',sample_count:1,runs:[{id:'r',status:'succeeded',created_at:'2026-10-06',remote:null}]}),batchItems:vi.fn().mockResolvedValue({items:[],total:0}),runEvents:vi.fn().mockReturnValue(pending)};
+ render(<TrainingBatchDetail api={api as never} id="batch" onClose={()=>{}}/>);
+ await screen.findByText('Đang tải log…');expect(screen.queryByText('Chưa có sự kiện từ worker.')).toBeNull();
+ resolve({items:[],next_seq:0});await screen.findByText('Chưa có sự kiện từ worker.');
+});
