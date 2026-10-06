@@ -1,6 +1,6 @@
 # Reward Admin Overview and Real Fine-tune Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Không tự phân công agent nếu người dùng chưa yêu cầu.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking. Không tự phân công agent nếu người dùng chưa yêu cầu.
 
 **Goal:** Một trang A/B cho admin quản lý phản hồi bằng bảng, duyệt dữ liệu sang hàng chờ, chủ động chạy fine-tune đủ điều kiện trên Vast và xem tiến trình/log thật.
 
@@ -10,7 +10,7 @@
 
 **Spec:** [Thiết kế](../specs/2026-10-06-reward-admin-overview.md).
 
-**Trạng thái:** Kế hoạch để review; chưa thực hiện thay đổi giao diện/pipeline trong tài liệu này. Ô chỉnh tỷ lệ A/B toàn hệ thống đã triển khai và có nghiệm thu riêng; không nằm trong thay đổi UI/batch đang đề xuất.
+**Trạng thái:** Đã triển khai và nghiệm thu QA trên Devspace/Vast ngày2026-10-06; xem `docs/test-results/reward-admin-batches-20261006.md`. IAS production identity/policy vẫn chờ tích hợp theo phạm vi đã chốt. Ô chỉnh tỷ lệ A/B toàn hệ thống đã triển khai và có nghiệm thu riêng; không nằm trong thay đổi UI/batch đang đề xuất.
 
 ## Global Constraints
 
@@ -104,10 +104,10 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** `ReviewStore.training_policy(purpose)`, `overview(filters,offset,limit)`, canonical actor mapping từ credential/JWT bridge đã được xác minh.
 
-- [ ] Viết test DB cũ migration không mất item/phiếu/history, nguồn QA tách biệt, actor không spoof từ JSON.
-- [ ] Chạy test đỏ; xác minh schema/auth IAS đang có trước khi chọn adapter. Nếu backend IAS ở máy khác chưa có access, giữ demo và ghi blocker, không giả tài khoản thật.
-- [ ] Thêm schema/migration additive, index cho trạng thái/thời gian/source/group; giữ môi trường `.env` và credential hiện hữu.
-- [ ] Chạy test xanh; snapshot DB nhất quán và ghi rollback chỉ code, không reset dữ liệu. Commit scoped.
+- [x] Viết test DB cũ migration không mất item/phiếu/history, nguồn QA tách biệt, actor không spoof từ JSON.
+- [x] Chạy test đỏ; xác minh schema/auth IAS đang có trước khi chọn adapter. Nếu backend IAS ở máy khác chưa có access, giữ demo và ghi blocker, không giả tài khoản thật.
+- [x] Thêm schema/migration additive, index cho trạng thái/thời gian/source/group; giữ môi trường `.env` và credential hiện hữu.
+- [x] Chạy test xanh; snapshot DB nhất quán và ghi rollback chỉ code, không reset dữ liệu. Commit scoped.
 
 ## Task 2: Bảng tổng quan và duyệt
 
@@ -115,10 +115,10 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** overview page `{items,total,offset,limit,summary}`; dùng lại `PUT /items/{iid}/adjudication`.
 
-- [ ] Test đỏ: lọc/phân trang server; canonical A/B đảo vị trí; user không xem API; hai admin duyệt đồng thời không ghi đè; lỗi/reload không hiển thị duyệt giả.
-- [ ] Query summary và rows từ DB, index thích hợp; tránh tải hết 1.000/10.000 item hoặc gọi judgments từng dòng frontend.
-- [ ] Bảng desktop, mobile row cards; panel A/B có chọn winner/loại, nhận xét tùy chọn và audit mặc định trung thực.
-- [ ] Test xanh + build; e2e user → phiếu → admin xem/duyệt → khu fine-tune tăng đúng một cặp. Commit scoped.
+- [x] Test đỏ: lọc/phân trang server; canonical A/B đảo vị trí; user không xem API; hai admin duyệt đồng thời không ghi đè; lỗi/reload không hiển thị duyệt giả.
+- [x] Query summary và rows từ DB, index thích hợp; tránh tải hết 1.000/10.000 item hoặc gọi judgments từng dòng frontend.
+- [x] Bảng desktop, mobile row cards; panel A/B có chọn winner/loại, nhận xét tùy chọn và audit mặc định trung thực.
+- [x] Test xanh + build; e2e user → phiếu → admin xem/duyệt → khu fine-tune tăng đúng một cặp. Commit scoped.
 
 ## Task 3: Eligibility, ngưỡng và immutable batch
 
@@ -126,10 +126,10 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** `training_eligibility(purpose)`, `reserve_training_batch(request_key,purpose,expected_policy_version)`; exports kèm snapshot hash.
 
-- [ ] Test đỏ: 999 chưa đủ/1.000 đủ với policy đề xuất; 1.000 click cùng item không thành 1.000 cặp; QA/tie/loại không tính sai; nhóm/split thiếu vẫn bị chặn.
-- [ ] Tạo preview nhất quán; transaction kiểm lại số lượng và reserve; khóa snapshot trước gửi Vast; idempotency có DB constraint, không chỉ state process.
-- [ ] Giữ approval riêng, lineage batch/item/attempt; pin holdout/group mapping; test snapshot không đổi khi có phiếu mới và không leakage qua nhiều vòng.
-- [ ] Test mất response/ hai admin bấm: một batch/attempt; retry HTTP đọc trạng thái thay vì gửi batch mới. Commit scoped.
+- [x] Test đỏ: 999 chưa đủ/1.000 đủ với policy đề xuất; 1.000 click cùng item không thành 1.000 cặp; QA/tie/loại không tính sai; nhóm/split thiếu vẫn bị chặn.
+- [x] Tạo preview nhất quán; transaction kiểm lại số lượng và reserve; khóa snapshot trước gửi Vast; idempotency có DB constraint, không chỉ state process.
+- [x] Giữ approval riêng, lineage batch/item/attempt; pin holdout/group mapping; test snapshot không đổi khi có phiếu mới và không leakage qua nhiều vòng.
+- [x] Test mất response/ hai admin bấm: một batch/attempt; retry HTTP đọc trạng thái thay vì gửi batch mới. Commit scoped.
 
 ## Task 4: Job orchestration và khôi phục
 
@@ -137,10 +137,10 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** request key truyền gateway→Vast; `reconcile_run(local_id,remote_job)`; remote identity/snapshot hash kiểm khớp.
 
-- [ ] Test đỏ: queue đầy, mất SSH, timeout admission, OOM, process restart, mất response sau publish; không báo thành công/consume mẫu sai.
-- [ ] Dùng existing durable Vast job và shared GPU owner. Reconcile trạng thái khi gateway restart; active job không được gửi lại.
-- [ ] Khi retry, có batch/attempt lineage và reservation đúng; succeeded chỉ sau result/evaluation/cleanup attestation. Không reset poison marker/resident để ép pass.
-- [ ] Test xanh CPU/mock bên ngoài; một smoke QA GPU được authorise sau khi worker telemetry sẵn. Commit scoped.
+- [x] Test đỏ: queue đầy, mất SSH, timeout admission, OOM, process restart, mất response sau publish; không báo thành công/consume mẫu sai.
+- [x] Dùng existing durable Vast job và shared GPU owner. Reconcile trạng thái khi gateway restart; active job không được gửi lại.
+- [x] Khi retry, có batch/attempt lineage và reservation đúng; succeeded chỉ sau result/evaluation/cleanup attestation. Không reset poison marker/resident để ép pass.
+- [x] Test xanh CPU/mock bên ngoài; một smoke QA GPU được authorise sau khi worker telemetry sẵn. Commit scoped.
 
 ## Task 5: Tiến trình và log thật
 
@@ -148,11 +148,11 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** thêm callback optional `train(..., on_progress=None)` để giữ tương thích; event `{seq,time,stage,epoch,step,total_steps,loss,message}`; `events(after_seq,limit)`.
 
-- [ ] Test đỏ: seq tăng, đọc lại cursor không mất/đúp event, job lỗi giữ cuối log; không lộ token/prompt/source nhạy cảm.
-- [ ] Emit telemetry sau optimizer steps thật, lưu `progress.json` atomic và structured events theo batch; không flush disk mỗi token.
-- [ ] Stage loading/prepare/admission/evaluate/cleanup có status riêng. Phần trăm training = completed optimizer steps / total; giai đoạn chưa biết tổng chỉ hiện trạng thái. ETA chỉ khi có tốc độ đo được.
-- [ ] Endpoint trả sự kiện allowlist/redacted, có limit/cursor và auth; không đưa arbitrary worker stdout ra UI. Kiểm reset/restart không nhảy thành Hoàn tất.
-- [ ] Chạy GPU QA thật đối chiếu epoch/step/loss với worker, kết quả và artifact; kiểm resident/cleanup. Commit scoped.
+- [x] Test đỏ: seq tăng, đọc lại cursor không mất/đúp event, job lỗi giữ cuối log; không lộ token/prompt/source nhạy cảm.
+- [x] Emit telemetry sau optimizer steps thật, lưu `progress.json` atomic và structured events theo batch; không flush disk mỗi token.
+- [x] Stage loading/prepare/admission/evaluate/cleanup có status riêng. Phần trăm training = completed optimizer steps / total; giai đoạn chưa biết tổng chỉ hiện trạng thái. ETA chỉ khi có tốc độ đo được.
+- [x] Endpoint trả sự kiện allowlist/redacted, có limit/cursor và auth; không đưa arbitrary worker stdout ra UI. Kiểm reset/restart không nhảy thành Hoàn tất.
+- [x] Chạy GPU QA thật đối chiếu epoch/step/loss với worker, kết quả và artifact; kiểm resident/cleanup. Commit scoped.
 
 ## Task 6: Khu fine-tune và nghiệm thu
 
@@ -160,12 +160,12 @@ Legacy `/campaigns/{cid}` training vẫn tương thích. Các route run mới n�
 
 **Interfaces:** eligibility + runs + events đã có ở tasks 3–5; polling bounded 2–3 giây, cursor incremental.
 
-- [ ] Test đỏ: nút khóa khi thiếu cặp/nhóm/purpose, active run; đủ điều kiện mới mở xác nhận. Chuyển role/campaign không lộ/stale dữ liệu admin.
-- [ ] Hiển thị bộ đếm, lý do bị chặn, snapshot confirmation, history và log drawer; dataset đã duyệt chuyển sang khu này ngay.
-- [ ] Reload/reconnect đọc run thật; failed/interrupted có lý do và thử lại có kiểm soát. Không tự activate model.
-- [ ] Unit/API related → full backend → frontend build → e2e desktop/mobile → live QA Vast. Full-suite fail/skip phải ghi tên và nguyên nhân, không gọi pass chung.
-- [ ] Nghiệm thu với dữ liệu QA tách biệt: user nộp → admin duyệt → thiếu ngưỡng bị chặn → đủ ngưỡng → xác nhận → queued/waiting GPU/train/evaluate/cleanup → artifact/metrics; audit chứng minh không tự train.
-- [ ] Pin image, snapshot private release profile, kiểm ownership/volume trước rollout; chỉ update service trong scope, không `down -v`. Commit và báo link public + flow ngắn.
+- [x] Test đỏ: nút khóa khi thiếu cặp/nhóm/purpose, active run; đủ điều kiện mới mở xác nhận. Chuyển role/campaign không lộ/stale dữ liệu admin.
+- [x] Hiển thị bộ đếm, lý do bị chặn, snapshot confirmation, history và log drawer; dataset đã duyệt chuyển sang khu này ngay.
+- [x] Reload/reconnect đọc run thật; failed/interrupted có lý do và thử lại có kiểm soát. Không tự activate model.
+- [x] Unit/API related → full backend → frontend build → e2e desktop/mobile → live QA Vast. Full-suite fail/skip phải ghi tên và nguyên nhân, không gọi pass chung.
+- [x] Nghiệm thu với dữ liệu QA tách biệt: user nộp → admin duyệt → thiếu ngưỡng bị chặn → đủ ngưỡng → xác nhận → queued/waiting GPU/train/evaluate/cleanup → artifact/metrics; audit chứng minh không tự train.
+- [x] Pin image, snapshot private release profile, kiểm ownership/volume trước rollout; chỉ update service trong scope, không `down -v`. Commit và báo link public + flow ngắn.
 
 ## Quyết định cần chốt sau khi review kế hoạch
 
