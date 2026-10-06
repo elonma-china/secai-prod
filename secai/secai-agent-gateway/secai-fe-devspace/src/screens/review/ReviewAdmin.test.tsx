@@ -12,7 +12,7 @@ afterEach(cleanup);
 it('keeps the confirmed campaign state when refreshing data fails', async () => {
   const initial: Campaign = {id: 'qa', title: 'QA', state: 'open', rubric_version: 'security_qa_v1'};
   const api = {items: vi.fn().mockResolvedValueOnce([]).mockRejectedValue(new Error('429')), stats: vi.fn().mockResolvedValueOnce({items:0,submitted:0,assignments:0,pending_adjudication:0,adjudicated:0,disagreements:0,multi_reviewed_items:0}).mockRejectedValue(new Error('429')),
-    reviewers: vi.fn().mockResolvedValue([]), campaignState: vi.fn().mockResolvedValue({...initial, state: 'closed'})} as unknown as ReviewApi;
+    trainingJobs: vi.fn().mockResolvedValue({enabled:false,purpose:'demo',jobs:[]}), reviewers: vi.fn().mockResolvedValue([]), campaignState: vi.fn().mockResolvedValue({...initial, state: 'closed'})} as unknown as ReviewApi;
   function Harness() {
     const [campaign, setCampaign] = useState(initial);
     return <ReviewAdmin api={api} campaign={campaign} onChange={setCampaign}/>;

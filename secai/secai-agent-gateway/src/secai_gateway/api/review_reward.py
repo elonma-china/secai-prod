@@ -12,6 +12,8 @@ from .review_auth import ReviewActor, require_review_admin
 from ..reward.schema import ScoreInput
 
 router=APIRouter(prefix='/reward',tags=['reward'])
+from .review_training import router as training_router
+router.include_router(training_router)
 
 
 @router.post('/score')

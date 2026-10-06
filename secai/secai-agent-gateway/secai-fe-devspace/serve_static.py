@@ -21,6 +21,8 @@ REPORT_UPSTREAM_FILE = Path(__file__).resolve().parent / ".report-upstream"
 REPORT_GATEWAY = os.environ.get("REPORT_GATEWAY_PROXY", REPORT_UPSTREAM_FILE.read_text().strip() if REPORT_UPSTREAM_FILE.exists() else GATEWAY)
 TRANSLATION_UPSTREAM_FILE = Path(__file__).resolve().parent / ".translation-upstream"
 TRANSLATION_GATEWAY = os.environ.get("TRANSLATION_GATEWAY_PROXY", TRANSLATION_UPSTREAM_FILE.read_text().strip() if TRANSLATION_UPSTREAM_FILE.exists() else GATEWAY)
+TRAINING_UPSTREAM_FILE = Path(__file__).resolve().parent / ".reward-training-upstream"
+TRAINING_GATEWAY = os.environ.get("REWARD_TRAINING_GATEWAY_PROXY", TRAINING_UPSTREAM_FILE.read_text().strip() if TRAINING_UPSTREAM_FILE.exists() else GATEWAY)
 REPORT_KEY_FILE = Path(os.environ.get("REPORT_KEY_FILE", str(Path(__file__).resolve().parent / ".report-api-key.local")))
 REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
 REVIEW_ALLOW_LOOPBACK = os.environ.get("DEVSPACE_REVIEW_ALLOW_LOOPBACK", "false").lower() == "true"
@@ -161,6 +163,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(503, "Devspace review access is not configured")
                 return
         target = REPORT_GATEWAY if is_report else GATEWAY
+        if path.startswith("/review-api/reward/training/"):
+            target = TRAINING_GATEWAY
         if any(path == prefix or path.startswith(prefix + "/")
                for prefix in ("/ai/v2/translate", "/ai/v3/translate")):
             target = TRANSLATION_GATEWAY

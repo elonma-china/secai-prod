@@ -291,6 +291,8 @@ label.lbl input, label.lbl select, label.lbl textarea {
 .review-training h4 {margin:0 0 8px;}
 .review-training p {color:var(--muted); font-size:13px; margin:0; max-width:620px;}
 .review-training button {flex-shrink:0;}
+.review-training > div {min-width:0;}
+.review-training code {overflow-wrap:anywhere;}
 .review-advanced {margin-top:20px; border-top:1px solid var(--line);}
 .demo-role {display:flex; align-items:center; gap:8px; font-size:12px;}
 .demo-role select {padding:8px;}
