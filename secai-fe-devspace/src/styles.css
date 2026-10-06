@@ -318,3 +318,29 @@ label.lbl input, label.lbl select, label.lbl textarea {
 }
 
 .ias .review-toolbar[aria-label="Lọc phản hồi"] button[aria-pressed="false"] {background:transparent; color:var(--text); border:1px solid var(--line);}
+
+/* A/B approval workspace */
+.review-tabs {display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 16px;border-bottom:1px solid var(--line);}
+.review-tabs button {display:flex;align-items:center;gap:10px;}
+.review-tabs button span {font-size:12px;opacity:.8;}
+.review-search {max-width:520px;margin:18px 0;}
+.review-admin-grid {grid-template-columns:minmax(240px,340px) minmax(0,1fr);}
+.review-list-item strong {font-size:14px;line-height:1.5;}
+.review-list-item time {font-size:11px;color:var(--muted);}
+.review-candidate {border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0;}
+.review-choice-badge {display:inline-block;padding:4px 8px;margin:0 0 12px;font-size:12px;color:var(--teal);border:1px solid var(--teal);border-radius:5px;}
+.review-feedback-details {border-bottom:1px solid var(--line);margin-bottom:16px;}
+.review-empty {padding:24px 12px;color:var(--muted);}
+.review-pagination {justify-content:space-between;margin-top:12px;}
+.review-campaign-settings {margin-bottom:12px;color:var(--muted);}
+.review-training-summary > div[role="status"] {margin-top:10px;}
+.review-training details {margin-top:8px;}
+.review-training details summary {font-size:12px;}
+.review-training details p {margin:8px 0;}
+@media (max-width:1100px) {.review-admin-grid {grid-template-columns:1fr;}}
+@media (max-width:640px) {.review-tabs {flex-direction:column;}.review-tabs button {justify-content:space-between;}.review-columns {gap:10px;}}
+.ias .review-tabs .iasbtn:not(.review-primary) {background:transparent;color:var(--text);border-color:var(--line);}
+.ias .review-tabs .iasbtn.review-primary {background:var(--teal);color:#071d1c;border-color:var(--teal);}
+.review-admin-grid .review-card > h3 {margin-top:0;}
+.review-stats {padding:6px 0 12px;}
+.review-training {padding:12px 16px;margin-bottom:12px;}

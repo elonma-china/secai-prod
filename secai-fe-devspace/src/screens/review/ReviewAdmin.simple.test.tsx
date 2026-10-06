@@ -17,23 +17,55 @@ it('starts with pending questions and counts only approved winner pairs',async()
  fixture();await screen.findByRole('button',{name:/MFA bảo vệ tài khoản/});
  expect(screen.queryByRole('button',{name:/Câu đã duyệt/})).toBeNull();
  expect(screen.getByText('Cặp đã duyệt: 1')).toBeTruthy();
- expect(screen.getByRole('button',{name:'Huấn luyện model chấm điểm'}).hasAttribute('disabled')).toBe(true);
- fireEvent.click(screen.getByRole('button',{name:'Tất cả'}));
- expect(screen.getAllByRole('button',{name:/Câu đã duyệt/})).toHaveLength(2);
+ expect(screen.getByRole('button',{name:'Fine-tune'}).hasAttribute('disabled')).toBe(true);
+ expect(screen.queryByRole('button',{name:'Tất cả'})).toBeNull();
+ fireEvent.click(screen.getByRole('button',{name:/Đã duyệt, chờ huấn luyện/}));
+ expect(screen.getAllByRole('button',{name:/Câu đã duyệt/})).toHaveLength(1);
 });
-it('approves the selected canonical candidate and keeps the reason required',async()=>{
+it('approves the selected canonical candidate without forcing a comment',async()=>{
  const api=fixture();fireEvent.click(await screen.findByRole('button',{name:/MFA bảo vệ tài khoản/}));
  await screen.findByText('Ngắn và dễ hiểu.');
- expect(screen.getByText('Người đánh giá chọn: Câu trả lời A')).toBeTruthy();
+ expect(screen.getByText('User đã chọn')).toBeTruthy();
  fireEvent.click(screen.getByRole('radio',{name:'Dùng câu trả lời B'}));
- expect(screen.getByRole('button',{name:'Duyệt dùng huấn luyện'}).hasAttribute('disabled')).toBe(true);
- fireEvent.change(screen.getByLabelText('Lý do duyệt hoặc loại'),{target:{value:'Đã đối chiếu và sửa lựa chọn.'}});
- fireEvent.click(screen.getByRole('button',{name:'Duyệt dùng huấn luyện'}));
- await waitFor(()=>expect(api.adjudicate).toHaveBeenCalledWith('pending','winner','generated','Đã đối chiếu và sửa lựa chọn.'));
+ expect(screen.getByRole('button',{name:'Xác nhận dùng huấn luyện'}).hasAttribute('disabled')).toBe(false);
+ fireEvent.click(screen.getByRole('button',{name:'Xác nhận dùng huấn luyện'}));
+ await waitFor(()=>expect(api.adjudicate).toHaveBeenCalledWith('pending','winner','generated','Admin xác nhận câu trả lời B để dùng huấn luyện.'));
 });
 it('excludes a sample with a skip decision rather than a fabricated winner',async()=>{
  const api=fixture();fireEvent.click(await screen.findByRole('button',{name:/MFA bảo vệ tài khoản/}));await screen.findByText('Ngắn và dễ hiểu.');
- fireEvent.change(screen.getByLabelText('Lý do duyệt hoặc loại'),{target:{value:'Không phù hợp để huấn luyện.'}});
+ fireEvent.change(screen.getByLabelText('Nhận xét (tùy chọn)'),{target:{value:'Không phù hợp để huấn luyện.'}});
  fireEvent.click(screen.getByRole('button',{name:'Loại mẫu'}));
  await waitFor(()=>expect(api.adjudicate).toHaveBeenCalledWith('pending','skip',null,'Không phù hợp để huấn luyện.'));
+});
+
+it('keeps technical controls collapsed and offers search',async()=>{
+ fixture();await screen.findByRole('button',{name:/MFA bảo vệ tài khoản/});
+ expect(screen.getByRole('searchbox',{name:'Tìm câu hỏi'})).toBeTruthy();
+ expect(screen.getByText('Nâng cao').closest('details')?.open).toBe(false);
+ fireEvent.change(screen.getByRole('searchbox',{name:'Tìm câu hỏi'}),{target:{value:'không tồn tại'}});
+ expect(screen.queryByRole('button',{name:/MFA bảo vệ tài khoản/})).toBeNull();
+});
+it('refreshes the user choice shown in the list after loading updated data',async()=>{
+ const api=fixture();
+ await screen.findByText('User chọn A');
+ vi.mocked(api.judgments).mockResolvedValue({item_id:'pending',adjudication:null,judgments:[{id:'updated',assignment_id:'a',reviewer_id:'user',winning_candidate_id:'generated',decision:'left',candidate_error_tags:{},comment:''}]});
+ fireEvent.click(screen.getByRole('button',{name:'Làm mới'}));
+ await screen.findByText('User chọn B');
+});
+it('refreshes the open detail and keeps approval locked until the latest votes load',async()=>{
+ const api=fixture();
+ fireEvent.click(await screen.findByRole('button',{name:/MFA bảo vệ tài khoản/}));
+ await screen.findByText('User đã chọn');
+ fireEvent.click(screen.getByRole('radio',{name:'Dùng câu trả lời A'}));
+ vi.mocked(api.items).mockResolvedValue([{...pending,assignment_count:2,submitted_count:2}]);
+ let finish!: (value: Awaited<ReturnType<ReviewApi['judgments']>>) => void;
+ const response = new Promise<Awaited<ReturnType<ReviewApi['judgments']>>>(resolve => {finish=resolve;});
+ vi.mocked(api.judgments).mockImplementation(()=>response);
+ fireEvent.click(screen.getByRole('button',{name:'Làm mới'}));
+ await waitFor(()=>expect((screen.getByRole('radio',{name:'Dùng câu trả lời A'}) as HTMLInputElement).disabled || screen.getByRole('radio',{name:'Dùng câu trả lời A'}).closest('fieldset')?.disabled).toBe(true));
+ finish({item_id:'pending',adjudication:null,judgments:[
+  {id:'v1',assignment_id:'a1',reviewer_id:'u1',decision:'left',winning_candidate_id:'original',candidate_error_tags:{},comment:''},
+  {id:'v2',assignment_id:'a2',reviewer_id:'u2',decision:'right',winning_candidate_id:'generated',candidate_error_tags:{},comment:''}
+ ]});
+ await waitFor(()=>expect(screen.getAllByText('User đã chọn')).toHaveLength(2));
 });
