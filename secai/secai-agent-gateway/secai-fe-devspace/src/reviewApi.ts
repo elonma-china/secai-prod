@@ -25,6 +25,8 @@ export function createReviewApi(token: string) {
     }
   }
   return {
+    liveSettings: () => request<{sample_percent:number;cooldown_seconds:number;scope:string}>("/live-settings"),
+    setLiveSettings: (sample_percent:number) => request<{sample_percent:number;cooldown_seconds:number;scope:string}>("/live-settings", "PUT", {sample_percent}),
     trainingJobs: (id:string) => request<{enabled:boolean;purpose:string;jobs:TrainingJob[]}>(`/reward/training/campaigns/${encodeURIComponent(id)}`),
     startTraining: (id:string) => request<TrainingJob>(`/reward/training/campaigns/${encodeURIComponent(id)}`, "POST", {}),
     reviseTemplate: (template: string, instruction: string) => request<{draft: string}>("/report-templates/revise", "POST", {template, instruction, input_clean_confirmed: true}),

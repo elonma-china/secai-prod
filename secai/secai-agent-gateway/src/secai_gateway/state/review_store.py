@@ -29,6 +29,7 @@ class ReviewStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection(write=True) as db:
             db.executescript('''
+            CREATE TABLE IF NOT EXISTS live_settings (id INTEGER PRIMARY KEY CHECK(id=1), sample_percent INTEGER NOT NULL CHECK(sample_percent BETWEEN 0 AND 100));
             CREATE TABLE IF NOT EXISTS review_meta (schema_version INTEGER NOT NULL);
             INSERT INTO review_meta SELECT 1 WHERE NOT EXISTS(SELECT 1 FROM review_meta);
             CREATE TABLE IF NOT EXISTS campaigns (id TEXT PRIMARY KEY, title TEXT NOT NULL, rubric_version TEXT NOT NULL, state TEXT NOT NULL, creator_id TEXT NOT NULL, created_at TEXT NOT NULL);
@@ -59,6 +60,19 @@ class ReviewStore:
 
     def audit(self, db, actor, action, entity, details=None):
         db.execute('INSERT INTO audit_events VALUES (?,?,?,?,?,?)', (str(uuid4()), actor, action, entity, now(), encode(details or {})))
+
+    def live_settings(self, default_percent):
+        with self.connection() as db:
+            row = db.execute('SELECT sample_percent FROM live_settings WHERE id=1').fetchone()
+            return {'sample_percent': row['sample_percent'] if row else default_percent}
+
+    def set_live_settings(self, percent, default_percent, actor):
+        with self.connection(True) as db:
+            row = db.execute('SELECT sample_percent FROM live_settings WHERE id=1').fetchone()
+            before = row['sample_percent'] if row else default_percent
+            db.execute('INSERT INTO live_settings VALUES (1,?) ON CONFLICT(id) DO UPDATE SET sample_percent=excluded.sample_percent', (percent,))
+            self.audit(db, actor, 'live.settings.update', 'global', {'before_percent': before, 'after_percent': percent})
+            return {'sample_percent': percent}
 
     def campaign(self, db, cid, writable=False):
         row = db.execute('SELECT * FROM campaigns WHERE id=?', (cid,)).fetchone()
