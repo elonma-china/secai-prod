@@ -24,6 +24,7 @@ class VastTrainingRunner:
     async def __call__(self, jobs, job):
         root = jobs.root/job['id']
         jobs.update(job['id'], status='waiting_gpu')
+        jobs.emit(job['id'],{'stage':'waiting_gpu'})
         owner = GpuStageOwner(self.lock_path, self.budget, NvidiaSmiObserver())
         waiting_until = time.monotonic()+600
         while True:
@@ -61,10 +62,17 @@ class VastTrainingRunner:
                     return None
 
             async def work(proc, cancel, deadline):
+                previous=None
                 while proc.poll() is None:
-                    if (root/'progress.json').exists() and jobs.get(job['id'])['status'] != 'evaluating':
-                        jobs.update(job['id'], status='evaluating')
+                    if (root/'progress.json').exists():
+                        event=json.loads((root/'progress.json').read_text())
+                        if event!=previous:
+                            jobs.emit(job['id'],event)
+                            jobs.update(job['id'],status=event['stage'])
+                            previous=event
                     if (root/'result.json').exists():
+                        jobs.update(job['id'],status='cleanup')
+                        jobs.emit(job['id'],{'stage':'cleanup'})
                         return json.loads((root/'result.json').read_text())
                     await asyncio.sleep(.25)
                 if proc.returncode != 0:
@@ -73,6 +81,8 @@ class VastTrainingRunner:
 
             jobs.update(job['id'], status='training')
             result = await owner.run(command, work, proof, deadline=time.monotonic()+3600, cancel=asyncio.Event())
+            await owner.close()
             jobs.update(job['id'], status='succeeded', result=result)
+            jobs.emit(job['id'],{'stage':'succeeded'})
         finally:
             await owner.close()

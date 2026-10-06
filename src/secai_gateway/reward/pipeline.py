@@ -27,7 +27,7 @@ def file_hash(path):
     return digest.hexdigest()
 
 
-def prepare_dataset(exports, output, *, purpose, seed=42, policy=None, expert_ids=None, campaign_ids=None):
+def prepare_dataset(exports, output, *, purpose, seed=42, policy=None, expert_ids=None, campaign_ids=None, partitions=None):
     output = Path(output)
     if output.exists():
         raise FileExistsError('dataset output already exists')
@@ -42,8 +42,20 @@ def prepare_dataset(exports, output, *, purpose, seed=42, policy=None, expert_id
     if not rows:
         raise ValueError('no approved winner preferences')
     unique = deduplicate(rows)
-    development, test = split_groups(unique, seed=seed, validation_fraction=0.2)
-    train, validation = split_groups(development, seed=seed+1, validation_fraction=0.25)
+    if partitions is None:
+        development, test = split_groups(unique, seed=seed, validation_fraction=0.2)
+        train, validation = split_groups(development, seed=seed+1, validation_fraction=0.25)
+    else:
+        if set(partitions)!= {r['item_id'] for r in unique} or any(v not in {'train','validation','test'} for v in partitions.values()):
+            raise ValueError('invalid pinned partitions')
+        train,validation,test=([r for r in unique if partitions[r['item_id']]==name] for name in ('train','validation','test'))
+        if not train or not validation or not test: raise ValueError('empty pinned partition')
+        from .dataset import prompt_key
+        seen=set()
+        for rows in (train,validation,test):
+            keys={key for r in rows for key in ['prompt:'+prompt_key(r['prompt']), *['source:'+g for g in r['source_groups'] if g.casefold() not in {'unknown','none','null'}]]}
+            if seen & keys: raise ValueError('pinned partition leakage')
+            seen|=keys
     output.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.reward-dataset-', dir=output.parent))
     try:

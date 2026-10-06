@@ -45,3 +45,30 @@ VPS xác minh export SHA-256, approval, campaign và chia theo prompt/source gro
 Có thể bật routes trong gateway hiện có, hoặc dùng `secai_gateway.reward.training_gateway:app` trên listener loopback riêng với cùng review DB/credentials. Lần Devspace dùng container relay riêng và giữ gateway chính. Static proxy đọc `.reward-training-upstream` hoặc `REWARD_TRAINING_GATEWAY_PROXY` để định tuyến riêng các path training; giữ chính sách kết nối và ánh xạ Bearer đang có. File env/token/upstream private không đưa vào Git.
 
 Đọc [bằng chứng chạy thật](../../docs/test-results/reward-vast-devspace-training-20261006.md) và kiểm unit/test auth trước rollout. Không dùng dữ liệu QA hoặc accuracy QA làm tiêu chí phát hành model.
+
+## Batch và tiến trình admin
+
+Giao diện admin dùng `GET /review-api/overview` (phân trang server), detail từng mẫu,
+`GET /approvals/preview` và `POST /approvals/bulk`. Duyệt toàn bộ cần snapshot confirmation;
+chỉ lấy canonical winner nhất quán, tất cả phiếu đã nộp và campaign đang mở. Tie, bỏ qua,
+phiếu mâu thuẫn hoặc chưa hoàn tất giữ lại. Quyết định admin không thay phiếu user.
+
+Các API mới dưới `/review-api/reward/training`: `GET /eligibility`, `POST /batches`,
+`GET /batches`, `GET /batches/{id}`, `/items`, `POST /batches/{id}/retry`,
+`GET /runs/{id}` và `/events?after_seq=&limit=`. Ngưỡng mặc định 1000 cặp hợp lệ
+chưa thuộc batch. Production bị chặn tới khi nối danh tính IAS và policy release.
+
+Batch giữ snapshot SHA-256, sample/approval/user votes và partition mapping trong cùng
+SQLite. Chốt/reserve là một transaction, item không được reserve vào hai batch.
+Lần retry dùng cùng snapshot, tạo attempt mới. Request key đi tới Vast; nếu mất response,
+GET batch/history gửi lại đúng request cũ và đồng bộ job, không tự tạo lượt GPU khác.
+Các lỗi transport giữ trạng thái dispatching tới khi xác minh được job; không giải phóng
+sample để gom vào batch khác. Batch lỗi vẫn giữ các mẫu phục vụ retry có lịch sử.
+
+Worker ghi tiến trình sau optimizer step thật; relay chỉ trả telemetry có cấu trúc
+(stage, epoch, step, total_steps, loss), không trả stdout hoặc nội dung prompt.
+Cursor tăng theo journal durable; tiến trình polling có thể gộp nhiều optimizer step,
+không giả phần trăm/ETA. Hoàn tất chỉ sau evaluation và cleanup của GPU owner.
+Holdout prompt/source keys được pin qua các batch; nối hai split khác nhau bị chặn.
+Lượt training legacy trước khi có batch ledger vẫn giữ tại API campaign/job cũ;
+không giả dựng batch hay log lịch sử mà trước đó worker chưa ghi.

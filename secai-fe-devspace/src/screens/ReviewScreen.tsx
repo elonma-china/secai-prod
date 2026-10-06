@@ -1,3 +1,4 @@
+import ReviewOverview from './review/ReviewOverview';
 import { useEffect, useMemo, useState } from "react";
 import { createReviewApi, reviewError } from "../reviewApi";
 import type { Assignment, Campaign, JudgmentInput, QueueItem } from "../reviewTypes";
@@ -43,6 +44,7 @@ export default function ReviewScreen({connecting = false, connectionError = "", 
       } catch (e) {setError("Phiếu đã lưu. " + reviewError(e));}
     } catch(e) {setSubmitError(reviewError(e));} finally {setBusy(false);}
   }
+  if (actor && ['admin'].includes(actor.role)) return <ReviewOverview key={actor.actor_id} api={api}/>;
   return <div className="review-screen"><div className="review-toolbar review-header"><h2>Phản hồi A/B</h2></div>
     <div className="review-body">
       {!actor ? <div className="iascard review-card review-login" role="status"><h3>{connecting ? "Đang kết nối công cụ đánh giá…" : "Chưa kết nối được công cụ đánh giá"}</h3>{connectionError && <p className="review-error" role="alert">{connectionError}</p>}<button className="iasbtn" type="button" disabled={connecting} onClick={onReconnect}>Thử lại</button></div> : <>

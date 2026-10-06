@@ -18,9 +18,11 @@ def main():
     torch.cuda.init()
     atomic_json(root/'owner.json', {'pid':os.getpid(), 'nonce':os.environ['REWARD_JOB_NONCE']})
     from .transformer import train, evaluate_artifact
+    def progress(event):
+        atomic_json(root/'progress.json',event)
     train(root/'dataset', root/'artifact', revision=REVISION, mode='lora', device='cuda',
-          epochs=1, learning_rate=1e-4, max_length=384, local_files_only=True)
-    atomic_json(root/'progress.json', {'status':'evaluating'})
+          epochs=1, learning_rate=1e-4, max_length=384, local_files_only=True,on_progress=progress)
+    atomic_json(root/'progress.json', {'stage':'evaluating'})
     result = evaluate_artifact(root/'dataset', root/'artifact', device='cuda')
     atomic_json(root/'result.json', {'test':result['test'], 'gate':result['gate'],
                                     'artifact_sha256':file_hash(root/'artifact/artifact.json')})

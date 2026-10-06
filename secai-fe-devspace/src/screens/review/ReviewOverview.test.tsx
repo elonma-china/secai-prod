@@ -1,0 +1,8 @@
+// @vitest-environment jsdom
+import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
+import {afterEach,expect,test,vi} from 'vitest';
+import ReviewOverview from './ReviewOverview';
+afterEach(cleanup);
+function api(){return {overview:vi.fn().mockResolvedValue({items:[{id:'i',question:'MFA là gì?',user_choice:'A',submitted_at:'2026-10-06',complete:true,campaign_state:'open',source:'live'}],total:1}),bulkPreview:vi.fn().mockResolvedValue({eligible_count:1,skipped_count:0,snapshot_version:'v'}),bulkApprove:vi.fn().mockResolvedValue({approved:1,skipped:0}),liveSettings:vi.fn().mockResolvedValue({sample_percent:10,cooldown_seconds:600}),eligibility:vi.fn().mockResolvedValue({valid_new_count:0,minimum_pairs:1000,eligible:false,blocked_reasons:['Cần 1000 cặp.']}),batches:vi.fn().mockResolvedValue({items:[],total:0})};}
+test('minimal tabs and snapshot confirmation before bulk approval',async()=>{const a=api();render(<ReviewOverview api={a as never}/>);await screen.findByText('MFA là gì?');expect(screen.getByRole('tab',{name:'Phản hồi'})).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'Duyệt toàn bộ'}));await screen.findByText(/Xác nhận duyệt 1 câu/);expect(a.bulkApprove).not.toHaveBeenCalled();fireEvent.click(screen.getByRole('button',{name:'Xác nhận duyệt'}));await waitFor(()=>expect(a.bulkApprove).toHaveBeenCalledWith('all','','v'));});
+test('fine tune blocked below threshold',async()=>{const a=api();render(<ReviewOverview api={a as never}/>);fireEvent.click(screen.getByRole('tab',{name:'Fine-tune'}));await screen.findByText(/0 \/ 1.000/);expect((screen.getByRole('button',{name:'Fine-tune'}) as HTMLButtonElement).disabled).toBe(true);});

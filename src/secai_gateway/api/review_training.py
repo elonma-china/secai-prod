@@ -77,3 +77,125 @@ async def get_job(jid: str, request: Request, actor: ReviewActor = Depends(requi
     if not getattr(request.app.state.gateway.settings, 'reward_training_enabled', False):
         raise HTTPException(404, 'reward training disabled')
     return await upstream(request, '/jobs/'+quote(jid, safe=''))
+
+
+from typing import Literal
+from fastapi import Query
+from pydantic import BaseModel, ConfigDict, Field
+from ..state.review_training_store import ACTIVE
+
+
+class BatchInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    request_key:str=Field(pattern='^[a-zA-Z0-9_-]{1,100}$')
+    purpose:Literal['demo','production']='demo'
+    snapshot_version:str=Field(pattern='^[0-9a-f]{64}$')
+
+
+class RetryInput(BaseModel):
+    model_config=ConfigDict(extra='forbid')
+    request_key:str=Field(pattern='^[a-zA-Z0-9_-]{1,100}$')
+
+
+def enabled(request):
+    if not getattr(request.app.state.gateway.settings,'reward_training_enabled',False):
+        raise HTTPException(404,'reward training disabled')
+
+
+async def reconcile(request,run):
+    from .reviews import call,build_export
+    if run['status'] not in ACTIVE: return run
+    if run['remote_job_id']:
+        remote=await upstream(request,'/jobs/'+quote(run['remote_job_id'],safe=''))
+    else:
+        snapshot=await call(request,'batch_snapshot',run['batch_id'])
+        batch=await call(request,'batch_detail',run['batch_id'])
+        exports=await asyncio.to_thread(lambda:{kind:base64.b64encode(build_export(snapshot,kind)).decode() for kind in ('raw','preference')})
+        partitions=await call(request,'batch_partitions',run['batch_id'])
+        try:
+            remote=await upstream(request,'/jobs','POST',{'campaign_id':run['batch_id'],'request_key':run['id'],
+                'snapshot_sha256':batch['snapshot_sha256'],'partitions':partitions,**exports})
+        except HTTPException as exc:
+            if exc.status_code==422:
+                await call(request,'update_training_run',run['id'],{'status':'failed','error':exc.detail})
+            # Network loss leaves dispatching: exact request key reconciles safely.
+            raise
+    batch=await call(request,'batch_detail',run['batch_id'])
+    if remote.get('campaign_id')!=run['batch_id'] or remote.get('request_key')!=run['id'] or remote.get('snapshot_sha256')!=batch['snapshot_sha256']:
+        raise HTTPException(502,'training snapshot identity mismatch')
+    return await call(request,'update_training_run',run['id'],remote)
+
+
+@router.get('/eligibility')
+async def eligibility(request:Request,purpose:Literal['demo','production']='demo',actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    result=await call(request,'training_eligibility',purpose)
+    result['enabled']=bool(getattr(request.app.state.gateway.settings,'reward_training_enabled',False))
+    if not result['enabled']:
+        result['eligible']=False;result['blocked_reasons'].append('Chưa kết nối dịch vụ huấn luyện.')
+    return result
+
+
+@router.post('/batches',status_code=202)
+async def freeze(request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    enabled(request)
+    from .reviews import call,small_body
+    p=await small_body(request,BatchInput)
+    batch=await call(request,'reserve_training_batch',p.request_key,p.purpose,p.snapshot_version,actor.actor_id)
+    await reconcile(request,batch['runs'][-1])
+    return await call(request,'batch_detail',batch['id'])
+
+
+@router.get('/batches')
+async def batches(request:Request,offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    result=await call(request,'list_batches',offset,limit)
+    for batch in result['items']:
+        if batch['status'] in ACTIVE:
+            try:
+                await reconcile(request,batch['runs'][-1])
+                batch.update(await call(request,'batch_detail',batch['id']))
+            except HTTPException as exc:
+                batch['connection_error']=exc.detail
+    return result
+
+
+@router.get('/batches/{bid}')
+async def batch_detail(bid:str,request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    batch=await call(request,'batch_detail',bid)
+    if batch['status'] in ACTIVE:
+        try:
+            await reconcile(request,batch['runs'][-1])
+            batch=await call(request,'batch_detail',bid)
+        except HTTPException as exc: batch['connection_error']=exc.detail
+    return batch
+
+
+@router.get('/batches/{bid}/items')
+async def batch_items(bid:str,request:Request,offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    return await call(request,'batch_items',bid,offset,limit)
+
+
+@router.post('/batches/{bid}/retry',status_code=202)
+async def retry(bid:str,request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    enabled(request)
+    from .reviews import call,small_body
+    p=await small_body(request,RetryInput)
+    run=await call(request,'retry_batch',bid,p.request_key,actor.actor_id)
+    return await reconcile(request,run)
+
+
+@router.get('/runs/{rid}')
+async def run_detail(rid:str,request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    return await reconcile(request,await call(request,'training_run',rid))
+
+
+@router.get('/runs/{rid}/events')
+async def run_events(rid:str,request:Request,after_seq:int=Query(0,ge=0),limit:int=Query(100,ge=1,le=200),actor:ReviewActor=Depends(require_review_admin)):
+    from .reviews import call
+    run=await call(request,'training_run',rid)
+    if not run['remote_job_id']: return {'items':[],'next_seq':after_seq}
+    return await upstream(request,'/jobs/'+quote(run['remote_job_id'],safe='')+'/events?after_seq='+str(after_seq)+'&limit='+str(limit))
