@@ -23,6 +23,9 @@ import TranslateScreen from "./screens/TranslateScreen";
 import ExploitScreen from "./screens/ExploitScreen";
 import ReportScreen from "./screens/ReportScreen";
 import ReviewScreen from "./screens/ReviewScreen";
+import DemoFeedback from "./screens/review/DemoFeedback";
+import {createReviewApi, reviewError} from "./reviewApi";
+import {clearReviewIdentity, setReviewIdentity} from "./reviewIdentity";
 
 /** The functional "Nền tảng AI" screens — the only routable/functional entries in the sidebar. */
 const AI_ITEMS: { id: AiScreenId; label: string }[] = [
@@ -54,7 +57,23 @@ const INERT_BOTTOM: { icon: LucideIconType; label: string }[] = [
 export default function App() {
   const [screen, setScreen] = useState<AiScreenId>("chat");
   const [userId, setUserId] = useState(() => localStorage.getItem("user_id") || "devspace");
+  const [demoRole, setDemoRole] = useState<"user" | "admin">(() => sessionStorage.getItem("demo_role") === "admin" ? "admin" : "user");
+  const [authRefresh, setAuthRefresh] = useState(0);
+  const [authState, setAuthState] = useState({loading:true,error:""});
   const [health, setHealth] = useState<HealthStatus | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    clearReviewIdentity(); setAuthState({loading:true,error:""});
+    const token = demoRole === "admin" ? "devspace:admin" : "devspace:reviewer";
+    createReviewApi(token).me().then(actor => {if (alive) {setReviewIdentity(token,actor); setAuthState({loading:false,error:""});}}).catch(error => {if (alive) {clearReviewIdentity(); setAuthState({loading:false,error:reviewError(error)});}});
+    return () => {alive = false;};
+  }, [demoRole, authRefresh]);
+  function switchDemoRole(next: "user" | "admin") {
+    clearReviewIdentity(); setDemoRole(next); sessionStorage.setItem("demo_role",next);
+    setUserId(next === "admin" ? "demo-admin" : "demo-user");
+    setScreen(next === "admin" ? "review" : "chat");
+  }
 
   useEffect(() => localStorage.setItem("user_id", userId), [userId]);
 
@@ -97,6 +116,8 @@ export default function App() {
         </div>
 
         <div className="ias-user">
+          <label className="demo-role">Demo<select className="iasin" aria-label="Vai trò demo" value={demoRole} onChange={e => switchDemoRole(e.target.value as "user" | "admin")}><option value="user">Người dùng thường</option><option value="admin">Admin</option></select></label>
+          {demoRole === "user" && screen === "chat" && <DemoFeedback/>}
           <div className="ias-status">
             <span className={"dot" + (online ? "" : " bad")} />
             {online ? "Hệ thống ổn định" : "Hệ thống gián đoạn"}
@@ -130,7 +151,7 @@ export default function App() {
               Nền tảng AI
             </div>
             <div style={{ padding: "2px 0 6px" }}>
-              {AI_ITEMS.map((it) => (
+              {AI_ITEMS.filter(it => it.id !== "review" || demoRole === "admin").map((it) => (
                 <div key={it.id} role="button" tabIndex={0} aria-current={screen === it.id ? "page" : undefined} className={"iassub" + (screen === it.id ? " on" : "")} onClick={() => setScreen(it.id)} onKeyDown={e => { if (e.key === "Enter" || e.key === " ") {e.preventDefault(); setScreen(it.id);} }}>
                   <span className="dot" />
                   {it.label}
@@ -157,7 +178,7 @@ export default function App() {
           {screen === "translate" && <TranslateScreen userId={userId} />}
           {screen === "exploit" && <ExploitScreen userId={userId} />}
           {screen === "report" && <ReportScreen userId={userId} />}
-          {screen === "review" && <ReviewScreen />}
+          {screen === "review" && demoRole === "admin" && <ReviewScreen connecting={authState.loading} connectionError={authState.error} onReconnect={() => setAuthRefresh(value => value + 1)}/> }
         </main>
       </div>
     </div>
