@@ -253,6 +253,7 @@ async def kb_top_rerank_score(prompt: str) -> float | None:
     fail-open). Reuses the same embed → dense-search → rerank pieces the KB tool uses; it is
     NOT the shared qdrant_search tool, so this gate stays confined to the exploit path."""
     from ..retrieval.embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
+    from ..retrieval.filters import entity_scope_filter
     from ..retrieval.qdrant import CANDIDATE_LIMIT, _dense_search
     prompt = (prompt or "").strip()
     if not prompt or not EMBEDDING_URL or not RERANKER_URL:
@@ -260,7 +261,9 @@ async def kb_top_rerank_score(prompt: str) -> float | None:
     try:
         async with httpx.AsyncClient() as client:
             vector = await embed(client, prompt)
-            hits = await _dense_search(client, vector, None, CANDIDATE_LIMIT)
+            # Entity scope: knowledge chunks (cheat sheets etc.) would answer "how do I prevent XSS"
+            # with a high rerank score and let off-topic prompts through this relevance gate.
+            hits = await _dense_search(client, vector, entity_scope_filter(), CANDIDATE_LIMIT)
             if not hits:
                 return None
             docs = [str(h["payload"].get("text") or "") for h in hits]

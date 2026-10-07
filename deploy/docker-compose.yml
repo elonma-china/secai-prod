@@ -131,6 +131,11 @@ services:
       POC_SOURCES_ROOT: /srv/poc-sources
       INPUT_CLASSIFIER_ENABLED: "true"           # classifier BẬT (giữ chặn injection/PII)
       INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"   # KHÔNG chặn offtopic → câu hỏi hệ thống/meta xuống LLM tự trả lời (hoặc "không biết"); tránh over-refusal — 2026-09-03
+      # Knowledge KB (OWASP cheat sheets/ASVS/mitigations) cho câu khái niệm + khắc phục. Mặc định TẮT; chỉ bật sau khi
+      # chunk tri thức đã nạp VÀ image đang chạy có bộ lọc scope (docs/plans/kb-knowledge-grounding.md).
+      # CHAT_KNOWLEDGE_GROUNDING_ENABLED: "true"
+      # KNOWLEDGE_TOP_K: "4"
+      # KNOWLEDGE_PREFETCH_TIMEOUT_S: "3"
       ELASTICSEARCH_URL: http://elasticsearch:9200   # activity log (service-name nội bộ)
       # ── Showcase nghiệm thu (/showcase-demo/ + /ai/finetune|model-info|kpi-bench|evidence|kb|deploy).
       # Đường dẫn host mặc định trong config.py không tồn tại trong container → trỏ lại paths được mount.
