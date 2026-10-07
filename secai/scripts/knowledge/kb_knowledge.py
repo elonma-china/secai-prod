@@ -92,6 +92,9 @@ def cmd_chunk(args: argparse.Namespace) -> int:
     chunks += ck.chunk_cwe_top25(cwe_xml, batch)
     t10_repo = RAW / "owasp-top10/repo"
     chunks += ck.chunk_owasp_top10(t10_repo, "git:" + git_sha(t10_repo), batch)
+    ghsa_repo, kev_file = RAW / "ghsa/repo", RAW / "ghsa/kev_cves.json"
+    if ghsa_repo.exists() and kev_file.exists():  # optional source: CVE-specific remediation for the KEV set
+        chunks += ck.chunk_ghsa(ghsa_repo, set(json.loads(kev_file.read_text())), "git:" + git_sha(ghsa_repo), "knowledge-ghsa-" + batch.split("knowledge-")[-1])
     chunks, dups = ck.dedup(chunks)
     with CHUNKS.open("w", encoding="utf-8") as f:
         for c in chunks:

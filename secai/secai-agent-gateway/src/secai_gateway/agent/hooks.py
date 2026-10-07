@@ -583,6 +583,26 @@ def _has_product_token(raw: str) -> bool:
     return any(m.group(0) not in _NOT_A_PRODUCT for m in _PRODUCT_TOKEN_RE.finditer(raw or ""))
 
 
+# "Which <product> bug lets …?", "CVE nào của …?", "Is there a CVE for …?": the asker does not know the id and
+# describes the flaw. Matched on diacritic-folded text; only used when discovery routing is switched on.
+_KN_DISCOVERY_RE = re.compile(
+    r"\b(?:which|what)\b.{0,80}?\b(?:cves?|vulnerabilit\w*|flaws?|bugs?|issues?|zero-?days?|exploits?|type\s+confusion|"
+    r"(?:buffer|heap|stack)\s+overflow|use-after-free|memory\s+corruption|(?:sql|command|code)\s+injection|"
+    r"(?:auth\w*\s+)?bypass|path\s+traversal|privilege\s+escalation|deserialization|rce)\b"
+    r"|\bis\s+there\s+(?:a|an|any)\b.{0,60}?\b(?:cve|vulnerab\w*|flaw|bug|issue)\b|\bany\s+cves?\b|\bcves?\s+(?:for|in|affecting)\b"
+    r"|\b(?:cve|lo\s*hong|loi)\b.{0,60}?\bnao\b|\bco\s+(?:cve|lo\s*hong)\b|\b(?:nhung|cac)\s+(?:cve|lo\s*hong)\b"
+)
+
+
+def _is_cve_discovery(raw: str) -> bool:
+    """The user describes a flaw and wants the CVE(s): a KB search, not a concept answer. Questions that ask how to
+    fix or prevent stay on the knowledge route."""
+    t = _fold_text(raw)
+    # "fixed in version 80.0.3987.122" names the patched release the asker remembers; it is not a how-to-fix question.
+    remediation = _REMEDIATION_RE.search(re.sub(r"\b(?:fix(?:ed|es)|patch(?:ed|es))\s+(?:in|at|on)\b", " ", t))
+    return _has_product_token(raw) and bool(_KN_DISCOVERY_RE.search(t)) and not remediation and not _META_RE.search(t)
+
+
 def _is_cve_style(raw: str) -> bool:
     """A question about a named vulnerability/product ("Lỗ hổng Log4Shell là gì?", "Heartbleed là lỗ hổng gì?",
     "Lỗ hổng Fortinet FortiOS path traversal?"): the CVE KB answers it, the model has to go and look."""
@@ -624,7 +644,7 @@ class ChatGroundingPlan:
 
 
 def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
-                            cve_search_enabled: bool = False) -> ChatGroundingPlan:
+                            cve_search_enabled: bool = False, discovery_enabled: bool = False) -> ChatGroundingPlan:
     """Decide which evidence tools chat must call before a final answer.
 
     ``knowledge_enabled`` / ``cve_search_enabled`` both False (default) reproduce the original routing
@@ -649,7 +669,7 @@ def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
         return ChatGroundingPlan("id_lookup", False, True)
     if knowledge_enabled and _TAXONOMY_LIST_RE.search(text):
         return ChatGroundingPlan("taxonomy", False, False, knowledge=True)
-    if cve_search_enabled and _is_cve_style(text):
+    if cve_search_enabled and (_is_cve_style(text) or (discovery_enabled and _is_cve_discovery(text))):
         return ChatGroundingPlan("cve_search", False, False, knowledge=knowledge_enabled and bool(_REMEDIATION_RE.search(_fold_text(text))))
     if knowledge_enabled and _wants_knowledge(text):
         return ChatGroundingPlan("concept_kb", False, False, knowledge=True)

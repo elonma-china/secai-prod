@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     chat_knowledge_grounding_enabled: bool = False
     # Open-ended CVE questions with no id ("Lỗ hổng Log4Shell là gì?"): pre-fetch the CVE KB server-side. On by default.
     chat_cve_search_prefetch_enabled: bool = True
+    # "Which <product> bug lets …?" questions go to the CVE search, and the search adds KEV-only candidates + vendor
+    # synonyms to its pool (retrieval/discovery.py). Off by default: routing and search then equal the previous release.
+    chat_discovery_enabled: bool = False
     knowledge_top_k: int = 4
     knowledge_min_rerank: float = 0.9
     knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off

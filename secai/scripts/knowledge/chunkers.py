@@ -27,7 +27,8 @@ _ATTACK_RE = re.compile(
     r";\s*drop\s+table|or\s+1\s*=\s*1\s*(?:--|#|/\*)|'\s*or\s*'?1'?\s*=\s*'?1|\bsleep\s*\(\s*\d+\s*\)|"
     r"<!ENTITY\s+\S+\s+SYSTEM|javascript\s*:\s*alert|\bon(?:error|load|mouseover|focus)\s*=|<svg[^>]*\bon\w+\s*=|"
     r"<img[^>]+src\s*=\s*['\"]?\s*(?:x|javascript)|bash\s+-i\s+>&\s*/dev/tcp|nc\s+-e\s+/bin/|"
-    r"\$\{jndi:|\.\./\.\./\.\./|ignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above)\s+(?:instructions|prompts?)",
+    r"\$\{jndi:|\.\./\.\./\.\./|(?:ignore|disregard|forget)\s+(?:all\s+|any\s+)?(?:the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions|prompts?|rules)|"
+    r"you\s+are\s+now\s+(?:in\s+)?(?:developer|dan|jailbreak)|b[oỏ]\s+qua\s+(?:m[oọ]i\s+)?h[uư][oớ]ng\s+d[aẫ]n\s+tr[uư][oớ]c",
     re.I,
 )
 
@@ -456,6 +457,47 @@ def chunk_owasp_top10(repo: Path, version: str, batch: str, editions: tuple[str,
                         source_url=f"https://owasp.org/Top10/{ed}/{f.stem}/", license_="CC-BY-SA-4.0",
                         attribution=f"OWASP Top 10:{ed}, CC BY-SA 4.0", version=version, batch=batch, section=sec_title,
                         tags=["owasp-top10", ed, code], extra={"cwe_refs": cwes[:20], "capec_entries": [], "mitre_techniques": [], "edition": ed}))
+    return out
+
+
+def chunk_ghsa(repo: Path, cves: set[str], version: str, batch: str, max_detail_chunks: int = 4) -> list[dict[str, Any]]:
+    """Remediation text from the GitHub Advisory Database (CC-BY-4.0), only for the given CVEs (the KB's KEV set):
+    what the advisory says to do, plus the vulnerable/patched versions per package. Stored as kind `mitigation`
+    (already excluded from entity searches); the CVE ids live in `cve_refs`, never in `cve_id`."""
+    out: list[dict[str, Any]] = []
+    for f in sorted((repo / "advisories" / "github-reviewed").rglob("*.json")):
+        d = json.loads(f.read_text(encoding="utf-8"))
+        ids = [a for a in d.get("aliases", []) if a.startswith("CVE-")]
+        wanted = [c for c in ids if c in cves]
+        if not wanted:
+            continue
+        gid, summary = d["id"], (d.get("summary") or "").strip()
+        title_base = f"{gid} ({', '.join(ids)}) — {summary}"
+        cwes = [str(x) for x in (d.get("database_specific") or {}).get("cwe_ids", []) if str(x).startswith("CWE-")]
+        base = dict(kind="mitigation", parent_id=gid, source="ghsa", license_="CC-BY-4.0",
+                    source_url=f"https://github.com/advisories/{gid}", attribution="GitHub Advisory Database, CC BY 4.0",
+                    version=version, batch=batch)
+        extra = {"cve_refs": ids, "cwe_refs": cwes, "capec_entries": [], "mitre_techniques": [], "ghsa_id": gid,
+                 "published": d.get("published"), "modified": d.get("modified")}
+        lines, seen = [], set()
+        for aff in d.get("affected", []):
+            pkg = aff.get("package") or {}
+            for rng in aff.get("ranges", []):
+                introduced = next((e["introduced"] for e in rng.get("events", []) if "introduced" in e), None)
+                fixed = next((e["fixed"] for e in rng.get("events", []) if "fixed" in e), None)
+                line = (f"{pkg.get('name')} ({pkg.get('ecosystem')}): vulnerable from {introduced or 'unknown'}"
+                        + (f", fixed in {fixed}" if fixed else ", no fixed version listed"))
+                if line not in seen:
+                    seen.add(line)
+                    lines.append(line)
+        if lines:
+            out.extend(_pack(f"{title_base} — patched versions", lines[:12], f"ghsa:{gid}#patched", section="patched-versions",
+                             tags=["ghsa", "patched-versions"], extra=extra, **base))
+        body = strip_relative_links(re.sub(r"^#+\s*(?:Summary|Impact|Patches|Workarounds|References|Details)\s*$", "", d.get("details") or "", flags=re.M | re.I)).strip()
+        for i, part in enumerate(_merge_small(split_text(body))[:max_detail_chunks]):
+            if len(part) >= 60:
+                out.append(make_chunk(doc_id=f"ghsa:{gid}#details-{i + 1}", title=f"{title_base} — advisory text", body=part,
+                                      section="advisory", tags=["ghsa", "advisory"], extra=extra, **base))
     return out
 
 

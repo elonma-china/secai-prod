@@ -14,6 +14,7 @@ ap.add_argument("--base", required=True)
 ap.add_argument("--tag", required=True)
 ap.add_argument("--out", required=True)
 ap.add_argument("--only", default="")
+ap.add_argument("--set", default="core_eval_set.jsonl", help="question file (default: the 100-question core set next to this script)")
 args = ap.parse_args()
 
 
@@ -73,7 +74,7 @@ async def run_item(client, it) -> dict:
 
 
 async def main():
-    items = [json.loads(l) for l in open(HERE / "core_eval_set.jsonl", encoding="utf-8") if l.strip()]
+    items = [json.loads(l) for l in open(HERE / args.set, encoding="utf-8") if l.strip()]
     if args.only:
         keep = set(args.only.split(","))
         items = [i for i in items if i["id"] in keep]

@@ -924,7 +924,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         cfg = state.settings
         knowledge_on = bool(getattr(cfg, "chat_knowledge_grounding_enabled", False))
         cve_search_on = bool(getattr(cfg, "chat_cve_search_prefetch_enabled", True))
-        plan = classify_chat_grounding(prompt, knowledge_enabled=knowledge_on, cve_search_enabled=cve_search_on)
+        discovery_on = bool(getattr(cfg, "chat_discovery_enabled", False))
+        plan = classify_chat_grounding(prompt, knowledge_enabled=knowledge_on, cve_search_enabled=cve_search_on,
+                                       discovery_enabled=discovery_on)
         has_id = any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values())
         followup_entity: str | None = None
         if not has_id:
@@ -949,7 +951,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # một cách ngẫu nhiên — đo thật 2026-09-20: câu hỏi KEV-status trả lời sai vì thiếu
             # đúng chunk. top_k=10 đủ dư cho số chunk/CVE thực tế mà vẫn không làm loãng context.
             _t0 = time.monotonic()
-            result = await _qdrant_search(query=query, ctx=None, top_k=10)
+            # Discovery: a question that looks for CVEs by description (route cve_search, or a class id + "CVE"), no id given.
+            discover = discovery_on and not re.search(r"CVE-\d{4}-\d{4,7}", query, re.I) and (
+                plan.route == "cve_search" or bool(re.search(r"\bCVEs?\b", prompt or "", re.I)))
+            result = await _qdrant_search(query=query, ctx=None, top_k=10, **({"discover": True} if discover else {}))
             grounding_ms = int(round((time.monotonic() - _t0) * 1000))
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")

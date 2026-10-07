@@ -18,6 +18,7 @@ from ..config import get_settings
 from .bm25 import BM25_FANOUT, BM25_VECTOR, bm25_search, rrf_merge
 from .cve_overrides import apply_cve_override
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
+from .discovery import DISCOVER_KEV_K, DISCOVER_RERANK_WINDOW, expand_discovery_query
 from .vi_en import expand_for_bm25
 from .neo4j import NEO4J_DATABASE, _auth_header, _neo4j_http_url
 from .filters import (ENTITY_ID_RES, KNOWLEDGE_KINDS, boost, build_filter, entity_scope_filter,
@@ -275,6 +276,7 @@ async def _qdrant_search(
     cvss_max: float | None = None,
     kev_only: bool = False,
     scope: str | None = None,
+    discover: bool = False,
 ) -> ToolResult:
     # Exact-ID grounding: if the caller didn't pin an entity but the query names one
     # (or more), filter to those exact IDs so a bare "CVE-2025-0282" / "CWE-89" / "T1059"
@@ -308,6 +310,12 @@ async def _qdrant_search(
                 year = [str(y) for y in range(lo, hi + 1)]
         except ValueError:
             pass
+
+    # Discovery (flag-gated by the caller): free-text CVE search only, never with a pinned CVE id or caller filters.
+    discover = bool(discover) and scope == "entity" and not cve_id and not kev_only
+    dense_query = expand_discovery_query(query) if discover else query
+    kev_extra: list[dict[str, Any]] = []
+    kev_candidates: set[str] = set()  # pool members that only the KEV pass brought in
 
     params = {
         "query": query, "top_k": top_k, "kind": kind, "cve_id": cve_id, "cwe_id": cwe_id,
@@ -355,8 +363,14 @@ async def _qdrant_search(
         async def _dense_path() -> list[dict[str, Any]]:
             if not EMBEDDING_URL:
                 return []
-            vector = await embed(client, query)
+            vector = await embed(client, dense_query)
             main = await _dense_search(client, vector, qfilter, CANDIDATE_LIMIT)
+            if discover:
+                # What people mean by "which <product> flaw" is almost always an actively exploited one.
+                try:
+                    kev_extra.extend(await _dense_search(client, vector, build_filter({**params, "kev_only": True}), DISCOVER_KEV_K))
+                except Exception:
+                    pass  # best-effort: discovery never costs the normal result
             if ids_filter:
                 pinned = await _dense_search(client, vector, ids_filter, 4)
                 seen = {h["id"] for h in pinned}
@@ -367,7 +381,7 @@ async def _qdrant_search(
             # Entity scope: the scope's must_not runs inside Qdrant, so knowledge chunks cannot crowd
             # the top-k and a CVE query keeps exactly the candidates it had before knowledge existed.
             # Knowledge scope: Vietnamese words are given English terms (the chunks are English).
-            bq = expand_for_bm25(query) if scope == "knowledge" else query
+            bq = expand_for_bm25(query) if scope == "knowledge" else dense_query
             if not scope_filter:
                 return await bm25_search(bq, bm25_fanout)
             hits = await bm25_search(bq, bm25_fanout, scope_filter)
@@ -461,11 +475,23 @@ async def _qdrant_search(
             if add:
                 merged = add + merged
 
+        # 4d. Discovery: KEV-only candidates join the pool; the reranker decides whether they are relevant.
+        if kev_extra:
+            existing = {pid for pid, _ in merged}
+            add_kev = []
+            for h in kev_extra:
+                if h["id"] not in existing and scope_ok(h["payload"], scope):
+                    payloads[h["id"]] = h["payload"]
+                    add_kev.append((h["id"], 0.85))
+                    existing.add(h["id"])
+                    kev_candidates.add(h["id"])
+            merged = add_kev + merged
+
         # 5. Rerank the top fused candidates (best-effort; skipped without a reranker).
         rerank_scores: dict[str, float] = {}
         if RERANKER_URL and merged:
             try:
-                candidates = merged[: min(10 if scope == "knowledge" else 20, len(merged))]
+                candidates = merged[: min(10 if scope == "knowledge" else (DISCOVER_RERANK_WINDOW if discover else 20), len(merged))]
                 docs = [str(payloads[pid].get("text") or "") for pid, _ in candidates]
                 results = await rerank(client, query, docs, len(docs))
                 for r in results:
@@ -490,7 +516,9 @@ async def _qdrant_search(
     for pid, rrf in merged:
         reranked = rerank_scores.get(pid)
         base = reranked if reranked is not None else rrf
-        score = boost(payloads[pid], base)
+        # Rerank scores saturate near 1, so the x1.5 KEV boost alone would put every KEV-only candidate on top of
+        # the relevant ones: those must win on relevance, not on the boost.
+        score = boost({**payloads[pid], "is_in_kev": False} if pid in kev_candidates else payloads[pid], base)
         if _is_pinned_definition(payloads[pid]):
             score *= 2.0
         scored.append({"point_id": pid, "score": score, "payload": payloads[pid], "rerank_score": reranked})
