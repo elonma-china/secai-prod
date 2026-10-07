@@ -166,3 +166,19 @@ def test_attack_version_is_the_release_not_the_stix_spec(tmp_path: Path):
     p = tmp_path / "a.json"
     p.write_text(json.dumps({"objects": objs}), encoding="utf-8")
     assert {c["version"] for c in ck.chunk_attack(p, "b1")} == {"ATT&CK-19.2"}
+
+
+def test_relative_markdown_links_and_images_are_removed_but_absolute_links_stay():
+    text = ("See [Password Storage](Password_Storage_Cheat_Sheet.md) and [the spec](https://example.org/spec) "
+            "or [anchor](#top). ![icon](assets/x.png){: style='w'} End.")
+    out = ck.strip_relative_links(text)
+    assert "Password Storage" in out and "Password_Storage_Cheat_Sheet.md" not in out and "assets/x.png" not in out
+    assert "[the spec](https://example.org/spec)" in out and "[anchor](#top)" in out
+
+
+def test_chunks_never_carry_a_relative_md_url(tmp_path: Path):
+    d = tmp_path / "cheatsheets"
+    d.mkdir()
+    (d / "A_Cheat_Sheet.md").write_text("# A Cheat Sheet\n\n## Intro\n\nRead [the other sheet](B_Cheat_Sheet.md#part) before applying this advice to your service.\n", encoding="utf-8")
+    chunk = ck.chunk_cheatsheets(tmp_path, "git:x", "b")[0]
+    assert "B_Cheat_Sheet.md" not in chunk["text"] and "the other sheet" in chunk["text"]

@@ -52,6 +52,10 @@ def compose_system_prompt(profile: Profile | None = None, *,
             body = f"{body}\n\n{lab}"
         except (FileNotFoundError, OSError):
             pass
+    if (settings is not None and getattr(settings, "chat_cve_search_prefetch_enabled", False)
+            and profile is not None and profile.name == "chat"):
+        # Rules for the server-side pre-fetch blocks; only with that flag on (both flags off = HEAD chat prompt).
+        body = f"{body}\n\n{_read('chat_prefetch.md')}"
     if (settings is not None and getattr(settings, "chat_knowledge_grounding_enabled", False)
             and profile is not None and profile.name == "chat"):
         # Only with the flag on: flag off must leave the chat prompt byte-identical.

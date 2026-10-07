@@ -240,7 +240,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         done += len(part)
         if (i // args.batch_size) % 10 == 0:
             print(f"  {done}/{len(chunks)} ({time.time() - t0:.0f}s)", flush=True)
-    print(f"done {done} in {time.time() - t0:.0f}s; unchanged and skipped {skipped}; clipped for embedding {len(CLIPPED)}: {sorted(CLIPPED)[:10]}")
+    print(f"done {len(chunks)} chunks ({len(chunks) - skipped} written, {skipped} unchanged) in {time.time() - t0:.0f}s; clipped for embedding {len(CLIPPED)}: {sorted(CLIPPED)[:10]}")
     (ROOT / "ingest_log.json").write_text(json.dumps({
         "collection": args.collection, "batch": chunks[0]["ingest_batch"] if chunks else None, "chunks": len(chunks),
         "skipped_unchanged": skipped, "embedding_model": e_model, "embedding_url": e_url,

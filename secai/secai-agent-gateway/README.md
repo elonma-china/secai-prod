@@ -179,8 +179,8 @@ Long chats stay under the context window via Linch's proactive compaction
 - **qdrant_search** — hybrid dense (fine-tuned `sec-embedding`) + BM25 retrieval over the
   `cve_kb_hybrid` collection, RRF-fused and reranked (`sec-rerank`). CVE/CWE/CAPEC/ATT&CK
   IDs in the query are auto-detected and pinned.
-- **Knowledge chunks** (OWASP Cheat Sheets, ASVS 5.0, CWE/CAPEC/ATT&CK mitigations; `kind` =
-  `cheatsheet` / `requirement` / `mitigation`) share the collection but are **scoped**:
+- **Knowledge chunks** (OWASP Cheat Sheets, ASVS 5.0, CWE/CAPEC/ATT&CK mitigations, OWASP Top 10 and CWE Top 25 lists; `kind` =
+  `cheatsheet` / `requirement` / `mitigation` / `taxonomy`) share the collection but are **scoped**:
   `qdrant_search` defaults to `scope="entity"` and never returns them; `scope="knowledge"` returns
   only them (minus chunks flagged `contains_attack_example`). Chat uses them only when
   `CHAT_KNOWLEDGE_GROUNDING_ENABLED=true` (default `false`): concept / how-to-fix questions without an id
@@ -188,6 +188,11 @@ Long chats stay under the context window via Linch's proactive compaction
   the mitigations of that CVE's CWEs. Ingest, verify and rollback: `secai/scripts/knowledge/`
   (`kb_knowledge.py`, refuses `cve_kb_hybrid` without `--allow-prod`). Plan, criteria and results:
   `docs/plans/kb-knowledge-grounding*.md`, `docs/test-results/`.
+- **Chat pre-fetch for open-ended CVE questions** (`CHAT_CVE_SEARCH_PREFETCH_ENABLED`, default **on**): questions
+  about a named vulnerability with no id ("Lỗ hổng Log4Shell là gì?", "CVE nào…") are searched server-side; PoC
+  questions get a de-duplicated PoC-catalog summary (and the real artifact when the user asks to see the code);
+  CWE/CAPEC/ATT&CK ids in a CVE record come with their official names; English questions get an English reminder.
+  Off = the original routing, prompt and context (`prompts/chat_prefetch.md` is only loaded with this flag on).
 - **neo4j_search** — graph traversal (CVE↔CWE↔CAPEC↔Technique↔Tactic↔Product), plus
   product entry-points and count/statistics queries.
 

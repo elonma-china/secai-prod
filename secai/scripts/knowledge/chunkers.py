@@ -44,6 +44,18 @@ def sensitivity_of(text: str) -> str:
     return "contains_attack_example" if _ATTACK_RE.search(text) else "defensive"
 
 
+_REL_LINK = re.compile(r"\[([^\]]+)\]\((?!https?://|mailto:|#)[^)\s]+\)")
+
+
+_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)(?:\{:[^}]*\})?")
+
+
+def strip_relative_links(text: str) -> str:
+    """`[Label](Other_Cheat_Sheet.md)` → `Label`. A relative link is meaningless outside the repo and the
+    model turned it into dead URLs (measured: 425 chunks carried them)."""
+    return _REL_LINK.sub(r"\1", _IMAGE.sub("", text))
+
+
 def norm_ws(text: str) -> str:
     return re.sub(r"[ \t]+", " ", re.sub(r"\r\n?", "\n", text)).strip()
 
@@ -122,6 +134,7 @@ def _merge_small(parts: list[str], limit: int = MAX_CHARS) -> list[str]:
 def make_chunk(*, kind: str, doc_id: str, title: str, body: str, source: str, source_url: str,
                license_: str, attribution: str, version: str, batch: str, parent_id: str = "",
                section: str = "", tags: list[str] | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    body = strip_relative_links(body)
     text = f"{title}\n\n{body}".strip()
     payload: dict[str, Any] = {
         "kind": kind, "chunk_kind": kind, "chunk_id": doc_id, "doc_id": doc_id,
@@ -430,7 +443,7 @@ def chunk_owasp_top10(repo: Path, version: str, batch: str, editions: tuple[str,
             code, _, slug = m.groups()
             md = f.read_text(encoding="utf-8", errors="replace")
             h1 = re.match(r"#\s+(.+)", md)
-            cat = (h1.group(1).strip() if h1 else f"{code} {slug.replace('_', ' ')}").lstrip("# ").strip()
+            cat = strip_relative_links((h1.group(1).strip() if h1 else f"{code} {slug.replace('_', ' ')}").lstrip("# ")).strip()
             for sec_title, body in _sections(md):
                 body = re.sub(r"^# .+\n", "", body).strip()
                 for i, part in enumerate(_merge_small(split_text(body))):

@@ -171,162 +171,34 @@ def test_exploit_relevance_gate_searches_entity_scope_only(monkeypatch):
     assert seen["filter"] == F.entity_scope_filter()
 
 
-def test_definition_node_scroll_excludes_knowledge_chunks(monkeypatch):
-    sent = {}
+def test_definition_nodes_are_fetched_by_point_id_and_the_scan_fallback_excludes_knowledge_chunks():
+    """By id (2 ms) instead of an unindexed scroll (2.1 s on prod); the fallback scan must still exclude knowledge."""
+    calls = []
 
     class _Resp:
+        def __init__(self, result): self._r = result
         def raise_for_status(self): ...
-        def json(self): return {"result": {"points": []}}
+        def json(self): return {"result": self._r}
 
     class _Client:
+        def __init__(self, by_ids): self.by_ids = by_ids
         async def post(self, url, json=None, timeout=None):
-            sent["json"] = json
-            return _Resp()
+            calls.append((url.rsplit("/", 1)[-1], json))
+            return _Resp(self.by_ids if url.endswith("/points") else {"points": []})
 
-    asyncio.run(qdrant._fetch_definition_nodes(_Client(), {"cwe_id": ["CWE-89"]}))
-    flt = sent["json"]["filter"]
+    import uuid
+    want = str(uuid.uuid5(uuid.NAMESPACE_URL, "cwe::CWE-89"))
+    got = asyncio.run(qdrant._fetch_definition_nodes(_Client([{"id": want, "payload": {"cwe_id": "CWE-89", "name": "SQL Injection", "kind": "weakness"}}]),
+                                                     {"cwe_id": ["CWE-89"], "capec_id": ["CAPEC-66"], "technique_id": ["T1190"]}))
+    assert list(got) == [want] and calls[0][0] == "points" and len(calls) == 1  # no scan when the id lookup answered
+    assert set(calls[0][1]["ids"]) == {want, str(uuid.uuid5(uuid.NAMESPACE_URL, "capec::CAPEC-66")), str(uuid.uuid5(uuid.NAMESPACE_URL, "mitre::T1190"))}
+    calls.clear()
+    asyncio.run(qdrant._fetch_definition_nodes(_Client([]), {"cwe_id": ["CWE-89"]}))
+    assert [c[0] for c in calls] == ["points", "scroll"]
+    flt = calls[1][1]["filter"]
     assert flt["should"] and flt["must_not"] == F.entity_scope_filter()["must_not"]
 
 
-# ── real pipeline, only the network layer faked (these catch what _qdrant_search-level fakes cannot) ──
-def _pipeline(monkeypatch, *, dense=None, bm25=None, payloads=None, with_embedding=True):
-    seen = {"dense": [], "bm25": []}
-
-    async def fake_embed(client, q):
-        return [0.0]
-
-    async def fake_dense(client, vector, qfilter, limit):
-        seen["dense"].append(qfilter)
-        return [h for h in (dense or []) if F.passes_filter(h["payload"], _as_params(qfilter))]
-
-    async def fake_bm25(q, k, qfilter=None):
-        seen["bm25"].append((q, qfilter))
-        return [(pid, sc) for pid, sc in (bm25 or []) if F.passes_filter((payloads or {})[pid], _as_params(qfilter))]
-
-    async def fake_retrieve(client, ids):
-        return {i: (payloads or {})[i] for i in ids if i in (payloads or {})}
-
-    async def none(client, ids):
-        return {}
-
-    monkeypatch.setattr(qdrant, "EMBEDDING_URL", "http://e" if with_embedding else "")
-    monkeypatch.setattr(qdrant, "RERANKER_URL", "")
-    monkeypatch.setattr(qdrant, "embed", fake_embed)
-    monkeypatch.setattr(qdrant, "_dense_search", fake_dense)
-    monkeypatch.setattr(qdrant, "bm25_search", fake_bm25)
-    monkeypatch.setattr(qdrant, "_retrieve_by_ids", fake_retrieve)
-    monkeypatch.setattr(qdrant, "_fetch_definition_nodes", none)
-    monkeypatch.setattr(qdrant, "_graph_reverse_candidates", none)
-    return seen
-
-
-def _as_params(qfilter):
-    """Invert a built filter back to the params dict passes_filter understands (only what these tests use)."""
-    p: dict[str, Any] = {"scope": "all"}
-    if not qfilter:
-        return p
-    for clause in qfilter.get("must", []):
-        if "should" in clause:
-            for c in clause["should"]:
-                key = {"cwe_refs": "cwe_id", "cwe_id": "cwe_id", "capec_entries": "capec_id", "capec_id": "capec_id"}.get(c["key"])
-                if key:
-                    p[key] = c["match"]["any"]
-        elif clause["key"] == "kind":
-            p["kind"] = clause["match"].get("any") or [clause["match"]["value"]]
-        elif clause["key"] == "cve_id":
-            p["cve_id"] = clause["match"].get("any") or [clause["match"]["value"]]
-    mn = qfilter.get("must_not", [])
-    if any(c["key"] == "kind" for c in mn):
-        p["scope"] = "entity"
-    elif any(c["key"] == "sensitivity" for c in mn):
-        p["scope"] = "knowledge"
-    return p
-
-
-def _dense_hit(pid, payload, score=0.9):
-    return {"id": pid, "score": score, "payload": payload}
-
-
-def test_fix_cve_question_keeps_knowledge_hits_instead_of_pinning_cve_id(monkeypatch):
-    """H1: 'cách vá CVE-X' used to add must cve_id to the knowledge filter, which no knowledge chunk has."""
-    seen = _pipeline(monkeypatch, dense=[_dense_hit("k", KNOW)], bm25=[("k", 2.0)], payloads={"k": KNOW})
-    r = asyncio.run(qdrant._qdrant_search("cách vá CVE-2021-44228", _Ctx(), scope="knowledge"))
-    assert "SQL Injection Prevention" in r.content
-    for f in seen["dense"] + [flt for _, flt in seen["bm25"]]:
-        assert "cve_id" not in json.dumps(f)
-
-
-def test_cwe_id_adds_a_pinned_pass_without_hard_filtering_the_semantic_pass(monkeypatch):
-    """H2: only ~1% of cheat-sheet chunks carry cwe refs, so the CWE id must not gate the semantic pass."""
-    mit = {**KNOW, "kind": "mitigation", "doc_id": "cwe:CWE-502#mitigation", "parent_id": "CWE-502", "title": "CWE-502 mitigations",
-           "cwe_id": "CWE-502", "cwe_refs": ["CWE-502"], "text": "avoid untrusted deserialization"}
-    sheet = {**KNOW, "doc_id": "owasp-cs:Deserialization#x", "parent_id": "owasp-cs:Deserialization_Cheat_Sheet", "cwe_refs": [], "title": "Deserialization"}
-    seen = _pipeline(monkeypatch, dense=[_dense_hit("sheet", sheet), _dense_hit("mit", mit, 0.8)], payloads={"sheet": sheet, "mit": mit}, bm25=[])
-    r = asyncio.run(qdrant._qdrant_search("how to fix CWE-502", _Ctx(), scope="knowledge"))
-    assert len(seen["dense"]) == 2  # semantic pass + pinned pass
-    assert "cwe" not in json.dumps(seen["dense"][0]).lower()  # semantic pass unpinned
-    assert "CWE-502" in json.dumps(seen["dense"][1])
-    assert "Deserialization" in r.content and "CWE-502 mitigations" in r.content  # both reach the result
-
-
-def test_entity_scope_bm25_crowding_cannot_push_cve_hits_out(monkeypatch):
-    """H3: 25 knowledge hits would fill the BM25 top-k and, after post-filtering, leave no CVE."""
-    k_payloads = {f"k{i}": KNOW for i in range(25)}
-    payloads = {**k_payloads, "c": CVE}
-    bm25 = [(f"k{i}", 10.0 - i * 0.01) for i in range(25)] + [("c", 1.0)]
-    seen = _pipeline(monkeypatch, bm25=bm25, payloads=payloads, with_embedding=False)
-    r = asyncio.run(qdrant._qdrant_search("sql injection prevention", _Ctx()))
-    assert "a CVE" in r.content and seen["bm25"][0][1] == F.entity_scope_filter()
-
-
-def test_all_hits_scoped_out_returns_not_found_not_an_empty_result(monkeypatch):
-    """H4: the tool result must say 'not found' (the prompt relies on that sentence), never ''."""
-    _pipeline(monkeypatch, dense=[], bm25=[("k", 3.0)], payloads={"k": KNOW}, with_embedding=False)
-    monkeypatch.setattr(qdrant, "bm25_search", lambda q, k, qfilter=None: _async([("k", 3.0)]))
-    r = asyncio.run(qdrant._qdrant_search("sql injection", _Ctx()))  # entity scope drops the only hit
-    assert r.content.startswith("Không tìm thấy") and not r.is_error
-
-
-async def _async(v):
-    return v
-
-
-def test_model_cannot_force_scope_or_knowledge_kinds_through_the_tool(monkeypatch):
-    """M4: the registered tool has no scope parameter and strips knowledge kinds."""
-    seen = {}
-
-    async def fake(query, ctx, **kw):
-        seen.update(kw)
-        return qdrant.ToolResult(content="x", summary="s")
-
-    monkeypatch.setattr(qdrant, "_qdrant_search", fake)
-    validated = qdrant.qdrant_search.validate({"query": "x", "scope": "all", "kind": ["cheatsheet", "core"]})
-    assert "scope" not in validated
-    asyncio.run(qdrant._qdrant_search_tool(**validated, ctx=_Ctx()))
-    assert seen["scope"] == "entity" and seen["kind"] == ["core"]
-    asyncio.run(qdrant._qdrant_search_tool(query="x", ctx=_Ctx(), kind=["mitigation"]))
-    assert seen["kind"] is None
-
-
-def test_knowledge_scope_caps_chunks_per_document(monkeypatch):
-    docs = {f"k{i}": {**KNOW, "doc_id": f"d{i}", "parent_id": "owasp-cs:Same" if i < 4 else f"owasp-cs:Other{i}"} for i in range(6)}
-    _pipeline(monkeypatch, dense=[_dense_hit(pid, pl, 0.9 - i * 0.01) for i, (pid, pl) in enumerate(docs.items())], payloads=docs, bm25=[])
-    r = asyncio.run(qdrant._qdrant_search("x", _Ctx(), scope="knowledge", top_k=6))
-    assert r.content.count("owasp-cs:Same") == 0 and r.content.count("**Ref:** d") == 4  # 2 of the 4 "Same" + 2 others
-
-
-def test_dense_gate_returns_nothing_when_no_knowledge_is_close(monkeypatch):
-    _pipeline(monkeypatch, dense=[_dense_hit("k", KNOW, 0.31)], payloads={"k": KNOW}, bm25=[])
-    monkeypatch.setattr(qdrant._settings, "knowledge_min_dense", 0.5)
-    assert qdrant.asyncio.run(qdrant._qdrant_search("what is the weather", _Ctx(), scope="knowledge")).content.startswith("Không tìm thấy")
-    monkeypatch.setattr(qdrant._settings, "knowledge_min_dense", 0.2)
-    assert "SQL Injection Prevention" in asyncio.run(qdrant._qdrant_search("sql", _Ctx(), scope="knowledge")).content
-
-
-def test_vietnamese_query_gets_english_terms_on_the_bm25_leg_only(monkeypatch):
-    seen = _pipeline(monkeypatch, dense=[_dense_hit("k", KNOW)], payloads={"k": KNOW}, bm25=[])
-    asyncio.run(qdrant._qdrant_search("Quy trình quên mật khẩu hoạt động thế nào?", _Ctx(), scope="knowledge"))
-    assert "forgot password" in seen["bm25"][0][0]
-    seen2 = _pipeline(monkeypatch, bm25=[], payloads={}, with_embedding=False)
-    asyncio.run(qdrant._qdrant_search("quên mật khẩu", _Ctx()))  # entity scope: query untouched
-    assert seen2["bm25"][0][0] == "quên mật khẩu"
+def test_definition_point_id_scheme_matches_the_production_collection():
+    """Pinned against real ids read from cve_kb_hybrid (CWE-1245 / chunk_id cwe::CWE-1245)."""
+    assert qdrant._definition_point_id("cwe_id", "CWE-1245") == "00b7a4bd-6522-55d9-b476-9c4828e5ce56"

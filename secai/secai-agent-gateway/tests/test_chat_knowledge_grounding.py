@@ -506,8 +506,94 @@ async def test_english_concept_question_without_grounding_still_gets_the_languag
     assert runner.calls[-1][3] in (None, "")
 
 
-def test_chat_prompt_forbids_invented_poc_code_and_invented_id_names():
-    from secai_gateway.agent.profiles import PROFILES
+HEAD_CHAT_MD_SHA256 = "0cb903fea2fcdeb5460fee34f5d5b3a017a1abd52fd582e14cfd8cbe6243c054"  # prompts/chat.md as on main; this change must not edit it
 
-    system = PROFILES["chat"].system
-    assert "Không tự viết mã rồi gắn nhãn" in system and "KHÔNG tự đặt tên" in system
+
+def test_chat_md_is_byte_identical_to_main_and_new_rules_live_in_their_own_flagged_file():
+    import hashlib
+    from importlib.resources import files
+
+    from secai_gateway.agent.profiles import compose_system_prompt, PROFILES
+
+    chat_md = files("secai_gateway.prompts").joinpath("chat.md").read_bytes()
+    assert hashlib.sha256(chat_md).hexdigest() == HEAD_CHAT_MD_SHA256
+
+    class S:
+        def __init__(self, cve, kn): self.chat_cve_search_prefetch_enabled, self.chat_knowledge_grounding_enabled = cve, kn
+
+    both_off = compose_system_prompt(PROFILES["chat"], settings=S(False, False))
+    assert both_off == compose_system_prompt(PROFILES["chat"])  # nothing appended
+    cve_on = compose_system_prompt(PROFILES["chat"], settings=S(True, False))
+    assert "Không tự viết mã rồi gắn nhãn" in cve_on and "KHÔNG tự đặt tên" in cve_on and "knowledge_reference_policy" not in cve_on
+    assert "Không tự viết mã rồi gắn nhãn" not in both_off
+
+
+@pytest.mark.parametrize("prompt", ["OWASP Top 10 for LLM applications gồm những gì?", "OWASP API Security Top 10 là gì", "OWASP Top 10 Mobile 2024", "Top 10 OWASP cho Kubernetes"])
+@pytest.mark.asyncio
+async def test_other_owasp_top_10_lists_do_not_get_the_web_applications_list(monkeypatch, prompt):
+    async def scroll(client, qfilter, limit):
+        return _top_rows()
+
+    calls: list[dict] = []
+    monkeypatch.setattr(routes, "_scroll_by_filter", scroll)
+    monkeypatch.setattr(routes, "_qdrant_search", _fake_search(calls))
+    monkeypatch.setenv("CHAT_KNOWLEDGE_GROUNDING_ENABLED", "true")
+    runner = _FollowupFakeRunner()
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
+        await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": prompt})
+    ctx = runner.calls[-1][3] or ""
+    assert "A02:2025" not in ctx and "KHÔNG gắn nhãn năm khác" not in ctx  # plain knowledge search instead (fake returns a cheat sheet)
+
+
+@pytest.mark.asyncio
+async def test_comparing_two_editions_hands_over_both_lists(monkeypatch):
+    async def scroll(client, qfilter, limit):
+        return _top_rows()
+
+    monkeypatch.setattr(routes, "_scroll_by_filter", scroll)
+    monkeypatch.setattr(routes, "_qdrant_search", _fake_search([]))
+    monkeypatch.setenv("CHAT_KNOWLEDGE_GROUNDING_ENABLED", "true")
+    runner = _FollowupFakeRunner()
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
+        await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": "So sánh OWASP Top 10 bản 2021 và 2025"})
+    ctx = runner.calls[-1][3]
+    assert "A01:2021" in ctx and "A02:2025" in ctx and "là bản 2021, 2025" in ctx
+
+
+@pytest.mark.asyncio
+async def test_programming_language_in_the_question_is_not_mistaken_for_the_cve_name(monkeypatch):
+    content = ("### Result 1 (score: 0.9)\n**CVE:** CVE-2021-45046\n\nTên gọi phổ biến: Python helper. CVE ID: CVE-2021-45046\n\n---\n\n"
+               "### Result 2 (score: 0.8)\n**CVE:** CVE-2021-44228\n\nTên gọi phổ biến: Log4Shell. CVE ID: CVE-2021-44228")
+
+    async def search(*, query, ctx=None, top_k=10, **kw):
+        return ToolResult(content=content, summary="s")
+
+    rows = {"CVE-2021-45046": [{"source": "x", "kind": "exploit", "language": "py", "title": "t"}] * 9,
+            "CVE-2021-44228": [{"source": "poc_github", "kind": "exploit", "language": "py", "title": "t"}] * 3}
+    monkeypatch.setattr(routes, "_qdrant_search", search)
+    runner = _FollowupFakeRunner()
+    runner.poc = type("P", (), {"catalog": _FakeCatalog(rows)})()
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
+        await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": "Log4Shell có PoC viết bằng Python không?"})
+    assert "[Catalog PoC nội bộ — CVE-2021-44228]" in runner.calls[-1][3]  # "Python" did not select the sibling with 9 PoCs
+
+
+@pytest.mark.asyncio
+async def test_official_names_block_is_off_when_the_cve_search_flag_is_off(monkeypatch):
+    called = []
+
+    async def defs(client, ids):
+        called.append(ids)
+        return {}
+
+    monkeypatch.setattr(routes, "_fetch_definition_nodes", defs)
+    monkeypatch.setattr(routes, "_qdrant_search", _fake_search([]))
+    monkeypatch.setenv("CHAT_CVE_SEARCH_PREFETCH_ENABLED", "false")
+    runner = _FollowupFakeRunner()
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
+        await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": "CVE-2021-44228 là gì?"})
+    assert not called  # both flags off: no extra Qdrant call, context exactly as before this change

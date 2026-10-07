@@ -133,6 +133,7 @@ services:
       INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"   # KHÔNG chặn offtopic → câu hỏi hệ thống/meta xuống LLM tự trả lời (hoặc "không biết"); tránh over-refusal — 2026-09-03
       # Knowledge KB (OWASP cheat sheets/ASVS/mitigations) cho câu khái niệm + khắc phục. Mặc định TẮT; chỉ bật sau khi
       # chunk tri thức đã nạp VÀ image đang chạy có bộ lọc scope (docs/plans/kb-knowledge-grounding.md).
+      # CHAT_CVE_SEARCH_PREFETCH_ENABLED: "false"   # mặc định BẬT: pre-fetch câu CVE không có mã, khối PoC, tên chính thức; đặt false để về hành vi cũ
       # CHAT_KNOWLEDGE_GROUNDING_ENABLED: "true"
       # KNOWLEDGE_TOP_K: "4"
       # KNOWLEDGE_PREFETCH_TIMEOUT_S: "3"

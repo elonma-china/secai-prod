@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from collections import Counter
 from typing import Any
 
@@ -156,16 +157,39 @@ async def _scroll_by_filter(client: httpx.AsyncClient, qfilter: dict[str, Any] |
             for p in resp.json().get("result", {}).get("points", [])]
 
 
+_DEFINITION_PREFIX = {"cwe_id": "cwe", "capec_id": "capec", "technique_id": "mitre"}
+
+
+def _definition_point_id(field: str, ident: str) -> str:
+    """Point id of a CWE/CAPEC/ATT&CK definition node: uuid5(NAMESPACE_URL, chunk_id) with chunk_id
+    `cwe::CWE-79` / `capec::CAPEC-66` / `mitre::T1190` (holds for all 2,275 nodes in cve_kb_hybrid)."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{_DEFINITION_PREFIX[field]}::{ident}"))
+
+
 async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
-    """Directly fetch the CWE/CAPEC/ATT&CK *definition* nodes for the named ids, matched
-    on each node's own id field. Needed because a single definition node is easily crowded
-    out of the dense/BM25 candidate pool by the thousands of CVEs that reference it."""
-    should = [{"key": field, "match": {"any": vals}} for field, vals in ids_by_field.items() if vals]
-    if not should:
+    """Directly fetch the CWE/CAPEC/ATT&CK *definition* nodes for the named ids. Needed because a single
+    definition node is easily crowded out of the dense/BM25 candidate pool by the thousands of CVEs that
+    reference it.
+
+    By point id (a ~2 ms lookup). The old filter scroll on cwe_id/capec_id/technique_id (not payload-indexed)
+    costs ~2.1 s on the 763k-point production collection; it stays as the fallback if the id lookup finds
+    nothing (e.g. a node stored under a different id scheme)."""
+    wanted = {_definition_point_id(field, ident): field for field, vals in ids_by_field.items() if field in _DEFINITION_PREFIX for ident in vals}
+    if not wanted:
         return {}
+    try:
+        resp = await client.post(f"{QDRANT_URL}/collections/{COLLECTION}/points",
+                                 json={"ids": list(wanted), "with_payload": True}, timeout=10)
+        resp.raise_for_status()
+        found = {str(pt["id"]): apply_cve_override(pt.get("payload") or {}) for pt in resp.json().get("result", [])}
+        if found:
+            return found
+    except Exception:
+        pass  # fall through to the scan
+    should = [{"key": field, "match": {"any": vals}} for field, vals in ids_by_field.items() if vals]
+    # must_not: knowledge chunks carry cwe_id/capec_id/technique_id too, but are not definitions.
     resp = await client.post(
         f"{QDRANT_URL}/collections/{COLLECTION}/points/scroll",
-        # must_not: knowledge chunks carry cwe_id/capec_id/technique_id too, but are not definitions.
         json={"filter": {"should": should, **entity_scope_filter()}, "limit": 16, "with_payload": True, "with_vector": False},
         timeout=20,
     )
@@ -299,7 +323,9 @@ async def _qdrant_search(
     # the extra payload fetch + wider fan-out (scope alone is enforced after the normal fetch below).
     user_filtered = bool(build_filter({**params, "scope": "all"}))
     scope_filter = build_filter({"scope": scope})  # scope clause alone: applied inside Qdrant on the BM25 leg too
-    ids_filter = build_filter({"scope": "knowledge", **kn_ids}) if kn_ids else None
+    # Pinned pass = what the document says about these ids: mitigations, cheat sheets, requirements. Not the
+    # Top-10 / Top-25 lists, which also carry cwe ids and would crowd the mitigations out.
+    ids_filter = build_filter({"scope": "knowledge", "kind": ["mitigation", "cheatsheet", "requirement"], **kn_ids}) if kn_ids else None
 
     # EXACT-CVE FAST PATH. A pinned cve_id makes the filter a hard `must` on that exact
     # record, so the full pipeline can only ever return that CVE's own chunk(s) anyway —
