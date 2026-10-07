@@ -3,6 +3,7 @@ import {createReviewApi, reviewError} from "../../reviewApi";
 import {getReviewIdentity, useReviewIdentity} from "../../reviewIdentity";
 import type {Assignment, JudgmentInput} from "../../reviewTypes";
 import ReviewPair from "./ReviewPair";
+import {AbAlert, AbLoading} from "./AbParts";
 export default function DemoFeedback() {
   const identity = useReviewIdentity();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -40,5 +41,5 @@ export default function DemoFeedback() {
     } catch(e) {if (request === version.current) setError(reviewError(e));}
     finally {if (request === version.current) setBusy(false);}
   }
-  return <><button className="iasbtn" disabled={!identity || busy} onClick={() => void open()}>Thử đánh giá A/B</button><dialog ref={dialog} className="demo-dialog review-screen" aria-labelledby="demo-feedback-title" onCancel={close}><div className="review-toolbar"><h2 id="demo-feedback-title">Demo phản hồi trong chatbot</h2><button className="iasbtn" onClick={close}>Đóng demo</button></div><p className="review-muted">Ví dụ kiểm thử đã lưu. Lựa chọn của bạn được lưu thật để Admin xem và duyệt; mẫu demo không dùng huấn luyện production.</p>{busy && !assignment && <p role="status">Đang tải ví dụ…</p>}{error && !assignment && <p role="alert">{error}</p>}{assignment && <><h3>Câu hỏi</h3><p>{assignment.prompt_messages.at(-1)?.content}</p><ReviewPair assignment={assignment} showContext={false} focusHeading={false} closed={closed} saving={busy} error={error} onSubmit={input => void submit(input)}/>{assignment.status === "submitted" && <p className="review-note" role="status">Đã lưu phản hồi. Chuyển sang Admin và mở tab A/B để phê duyệt.</p>}</>}</dialog></>;
+  return <><button className="iasbtn" disabled={!identity || busy} onClick={() => void open()}>Thử đánh giá A/B</button><dialog ref={dialog} className="demo-dialog review-screen" aria-labelledby="demo-feedback-title" onCancel={close}><div className="review-toolbar"><h2 id="demo-feedback-title">Thử đánh giá A/B</h2><button type="button" className="iasbtn ghost sm" onClick={close}>Đóng</button></div>{busy && !assignment && <AbLoading>Đang tải ví dụ…</AbLoading>}{error && !assignment && <AbAlert>{error}</AbAlert>}{assignment && <><div className="iascard ab-question-box"><span className="ab-label">Câu hỏi</span><p className="ab-full-question">{assignment.prompt_messages.at(-1)?.content}</p></div><ReviewPair assignment={assignment} showContext={false} focusHeading={false} closed={closed} saving={busy} error={error} onSubmit={input => void submit(input)}/>{assignment.status === "submitted" && <p className="ab-notice" role="status">Đã lưu phản hồi. Chuyển sang Admin và mở tab A/B để phê duyệt.</p>}</>}</dialog></>;
 }

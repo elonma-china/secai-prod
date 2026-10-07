@@ -1,4 +1,5 @@
 import ReviewOverview from './review/ReviewOverview';
+import { AbAlert, AbLoading } from './review/AbParts';
 import { useEffect, useMemo, useState } from "react";
 import { createReviewApi, reviewError } from "../reviewApi";
 import type { Assignment, Campaign, JudgmentInput, QueueItem } from "../reviewTypes";
@@ -45,6 +46,7 @@ export default function ReviewScreen({connecting = false, connectionError = "", 
     } catch(e) {setSubmitError(reviewError(e));} finally {setBusy(false);}
   }
   if (actor && ['admin'].includes(actor.role)) return <ReviewOverview key={actor.actor_id} api={api}/>;
+  if (!actor) return <section className="ab-screen"><header className="ab-head"><h3>Đánh giá A/B</h3></header><div className="ab-body">{connectionError && !connecting ? <AbAlert onRetry={onReconnect}>{connectionError}</AbAlert> : <AbLoading>Đang kết nối công cụ đánh giá…</AbLoading>}</div></section>;
   return <div className="review-screen"><div className="review-toolbar review-header"><h2>Phản hồi A/B</h2></div>
     <div className="review-body">
       {!actor ? <div className="iascard review-card review-login" role="status"><h3>{connecting ? "Đang kết nối công cụ đánh giá…" : "Chưa kết nối được công cụ đánh giá"}</h3>{connectionError && <p className="review-error" role="alert">{connectionError}</p>}<button className="iasbtn" type="button" disabled={connecting} onClick={onReconnect}>Thử lại</button></div> : <>
