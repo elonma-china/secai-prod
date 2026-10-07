@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     knowledge_min_rerank: float = 0.9
     knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off
     knowledge_prefetch_timeout_s: float = 3.0
+    # Serving host is ~240 ms away: reuse connections to embedding/rerank, and keep the vector of a prompt the input
+    # classifier already embedded. Off = previous behaviour (docs/test-results/kb-knowledge-followups-2026-10-07.md).
+    embedding_keepalive_enabled: bool = False
+    embedding_cache_ttl_s: float = 0.0
     embedding_api_url: str = ""
     reranker_api_url: str = ""
     embedding_model: str = "BAAI/bge-m3"

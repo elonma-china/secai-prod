@@ -193,6 +193,12 @@ Long chats stay under the context window via Linch's proactive compaction
   questions get a de-duplicated PoC-catalog summary (and the real artifact when the user asks to see the code);
   CWE/CAPEC/ATT&CK ids in a CVE record come with their official names; English questions get an English reminder.
   Off = the original routing, prompt and context (`prompts/chat_prefetch.md` is only loaded with this flag on).
+- **CVE discovery + serving latency** (all default **off**; off = previous routing, search and connections):
+  `CHAT_DISCOVERY_ENABLED` routes "which <product> flaw …?" questions to the CVE search, adds vendor synonyms and a
+  KEV-only candidate pass (`retrieval/discovery.py`); `EMBEDDING_KEEPALIVE_ENABLED` reuses connections to the
+  embedding/rerank host (a new connection costs one extra ~240 ms round trip); `EMBEDDING_CACHE_TTL_S` (e.g. 300) keeps
+  the vector of a prompt the input classifier already embedded. Results and rollback notes:
+  `docs/test-results/kb-knowledge-followups-2026-10-07.md`.
 - **neo4j_search** — graph traversal (CVE↔CWE↔CAPEC↔Technique↔Tactic↔Product), plus
   product entry-points and count/statistics queries.
 

@@ -85,7 +85,56 @@ Full suite on the branch: 1896 passed, 7 failed. The same 7 fail on the unmodifi
 (PoC drill-down needs the real catalog, `test_gateway` exploit stream, `test_bughunt_phase0`): no regression from
 this change. New: `tests/test_cve_discovery.py` (16), chunker cases for the wider injection detector.
 
-## 6. Finding to act on: GHSA batch is in prod
+## 7. Routing precision (P2)
+
+Two independent sets written by separate agents: A (240 questions, used while tuning) and B (150, never tuned on).
+Look-alike = ordinary engineering questions that reuse words like ssh, upload, certificate, token.
+
+| | knowledge recall | CVE recall | look-alike false trigger |
+|---|---|---|---|
+| before (A) | 94 % | 97 % | 28 % |
+| after, A (tuned on) | 97 % | 100 % | 10 % |
+| after, **B (held out)** | **88 %** | **94 %** | **11 %** |
+
+Changes: plain "how do I / làm sao / hướng dẫn" no longer counts as security intent next to an ambiguous word; `ssh`
+moved from always-security to ambiguous; added `sdlc/sast/dast`, "quản lý secrets", string-built SQL snippets, and
+"show/list/find … vulnerabilities" / "tìm CVE …" as discovery. 0 of the 339 earlier questions change route. Because a
+route only requests a reference block, the user-visible error is a block injected for a look-alike: 25 % before,
+10 % after on A+B (105 look-alikes); the dense gate (0.55) was left alone, since raising it to 0.60 costs 7 points of
+knowledge recall for 7 points fewer injections. `tests/test_routing_eval_sets.py` pins floors on both sets.
+Known B misses: open redirect, TOCTOU, cloud-IAM privilege escalation, billion-laughs — plain knowledge questions
+with no vocabulary the router knows; fixing them needs a semantic signal, not more keywords.
+
+## 8. Latency (P3)
+
+Knowledge pre-fetch p50 1.36 s was embed 763 ms + rerank 553 ms; Qdrant and BM25 are ~40 ms. The serving host is
+~240 ms away and each search opened new connections (warm: embed 267 ms, rerank 290 ms), and the input classifier
+embeds the same prompt that the pre-fetch embeds again. `EMBEDDING_KEEPALIVE_ENABLED` → 0.83 s;
+`+ EMBEDDING_CACHE_TTL_S=300` → 0.46 s when the prompt was already embedded (the cache hit is the common case in
+chat, where the classifier runs first). Rerank time does not depend on the candidate count (272–315 ms for 4–20
+documents), so shrinking the window would not help. Quiet probe, 8 questions: prod p50 3.21 s / p95 5.01 s; canary
+with all flags p50 2.24 s / p95 5.74 s.
+
+## 9. All new flags together, blind A/B on the 100-question set
+
+Canary with `CHAT_DISCOVERY_ENABLED`, keep-alive and cache vs the running image, 3 runs each, the six answers of every
+question graded blind by one judge per third of the set (strict about invented identifiers).
+
+| | running image | all flags |
+|---|---|---|
+| mean of 3 runs | 89.2 (sd 2.0) | **93.2** (sd 1.6) |
+| answers with a suspected fabricated id (3 runs) | 32 | 15 |
+| TTFT median / p90, same load | 3.06 / 3.82 s | **1.93 / 2.86 s** |
+
+Paired per question: 18 better, 12 worse, 70 equal; mean +0.040, bootstrap 95 % CI [0.005, 0.078]. The gain is
+concentrated in `cve_alias` (54 → 92: alias questions now reach the CVE search) and `taxonomy`. `cve_discovery`
+stays at 54 → 58: core-025 (ProxyLogon chain) got worse (0.33 → 0.00; the model presents ProxyShell CVEs as the
+chain, because only one ProxyLogon CVE has the alias in the KB), core-023/026/027/028 are unchanged. The 12 "worse"
+questions are mostly one PARTIAL out of three runs (irrelevant ATT&CK/CAPEC ids listed for a CVE, a wrong detail in a
+fix snippet); no group fell for a systematic reason, and groups of 3–6 questions move by 8–11 points per question.
+A larger sample would be needed to claim any per-group change other than `cve_alias`.
+
+## 10. Finding to act on: GHSA batch is in prod
 
 `cve_kb_hybrid` holds 308 points of batch `knowledge-ghsa-2026-10-07` (source `ghsa`). They arrived from the ingest
 that was interrupted at 12:18, which had already written them. They sit outside entity scope; they can appear in

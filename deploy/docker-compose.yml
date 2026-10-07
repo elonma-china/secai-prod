@@ -135,6 +135,9 @@ services:
       # chunk tri thức đã nạp VÀ image đang chạy có bộ lọc scope (docs/plans/kb-knowledge-grounding.md).
       # CHAT_CVE_SEARCH_PREFETCH_ENABLED: "false"   # mặc định BẬT: pre-fetch câu CVE không có mã, khối PoC, tên chính thức; đặt false để về hành vi cũ
       # CHAT_KNOWLEDGE_GROUNDING_ENABLED: "true"
+      # CHAT_DISCOVERY_ENABLED: "true"         # "which X flaw" -> CVE search + KEV candidates (mặc định tắt)
+      # EMBEDDING_KEEPALIVE_ENABLED: "true"    # tái dùng kết nối tới embedding/rerank (mặc định tắt)
+      # EMBEDDING_CACHE_TTL_S: "300"           # giữ vector prompt đã embed ở bước sanitize (mặc định 0 = tắt)
       # KNOWLEDGE_TOP_K: "4"
       # KNOWLEDGE_PREFETCH_TIMEOUT_S: "3"
       ELASTICSEARCH_URL: http://elasticsearch:9200   # activity log (service-name nội bộ)
