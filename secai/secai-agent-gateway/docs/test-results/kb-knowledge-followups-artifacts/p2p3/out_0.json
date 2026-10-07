@@ -1,0 +1,1090 @@
+{
+ "core-001": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE; \"Apache Finesse\" wrong vendor"
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  }
+ },
+ "core-002": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-003": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-004": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-005": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Vector I:N inconsistent with 9.8 score"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-006": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-007": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-008": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-009": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-34521 wrongly named as ProxyShell member"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-34527 is PrintNightmare, not ProxyShell"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-34472/34471 wrongly named as ProxyShell chain"
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-010": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-011": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE (CAPEC/ATT&CK)"
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-012": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-013": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists irrelevant ATT&CK/CAPEC ids for this CVE"
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-014": {
+  "A": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Says CVSS 9.8 Critical, contradicts facts 8.8 HIGH"
+  },
+  "B": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Says CVSS 9.8 Critical, contradicts facts 8.8 HIGH"
+  },
+  "C": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "CVSS ~9.8 contradicts facts; invented driver ms17-010.sys"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-015": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Windows 10/11 as DC claim dubious"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Invents CISA as discoverer; wrong LSA mechanism; disable Netlogon advice"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Wrong discoverer (Marcus Hutchins/ZDI); real is Secura"
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-016": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "T1574.010 implausible for this chain"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Unsupported APT41/Lazarus attribution"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "T1574.010 implausible; Exchange Online not affected"
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "T1574.010 implausible"
+  }
+ },
+ "core-017": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-27065 called stored XSS; wrong (arbitrary file write)"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-018": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "MS19-020 bulletin id invented"
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Claims Windows 8 affected; minor"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "MS19-020 invented; Server 2012/Win 8.1 not affected"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-019": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-36934 misdescribed as Print Spooler follow-up; \"no auth\" wrong"
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2021-34528 invented as follow-on print driver CVE"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-020": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "CVSS 9.8 Critical contradicts facts 7.8 HIGH; no-interaction wrong"
+  },
+  "C": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "CVSS 9.8 Critical contradicts facts 7.8 HIGH"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Wrong vector AV:N/S:C; dubious registry mitigation"
+  }
+ },
+ "core-021": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Attaches FortiWeb description to CVE-2018-13379 duplicate entry"
+  }
+ },
+ "core-022": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Only CVE-2017-6167; omits 2022-1388/2021-22986"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "CVE-2017-10271 is Oracle WebLogic, not F5"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-023": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real Struts OGNL CVEs but omits CVE-2017-5638/CVE-2018-11776"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real Struts OGNL CVEs but omits CVE-2017-5638/CVE-2018-11776"
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real Struts OGNL CVEs but omits CVE-2017-5638/CVE-2018-11776"
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real Struts OGNL CVEs but omits CVE-2017-5638/CVE-2018-11776"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real Struts OGNL CVEs but omits CVE-2017-5638/CVE-2018-11776"
+  },
+  "F": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Mislabels S2-045/S2-037/S2-063 ids; claims 2019-0230 KEV; omits required CVEs"
+  }
+ },
+ "core-024": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Mixes FortiWeb/FortiManager CVEs into FortiOS list"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "CVE-2024-26009 is auth bypass, not path traversal"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-025": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Presents ProxyShell/ProxyNotShell CVEs as ProxyLogon chain; omits 26857/26858/27065"
+  },
+  "C": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Presents ProxyShell/ProxyNotShell CVEs as ProxyLogon chain; omits 26857/26858/27065"
+  },
+  "D": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Presents ProxyShell/ProxyNotShell CVEs as ProxyLogon chain; omits 26857/26858/27065"
+  },
+  "E": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Presents ProxyShell/ProxyNotShell CVEs as ProxyLogon chain; omits 26857/26858/27065"
+  },
+  "F": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Presents ProxyShell/ProxyNotShell CVEs as ProxyLogon chain; omits 26857/26858/27065"
+  }
+ },
+ "core-026": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Leads with CVE-2024-8068 priv-esc, not session hijack; omits CVE-2023-4966"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Omits CVE-2023-4966; irrelevant ATT&CK ids"
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Omits CVE-2023-4966; CVE-2016-2071 weak fit"
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real session fixation CVE but omits CVE-2023-4966"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Omits CVE-2023-4966; CVE-2016-2071 weak fit"
+  },
+  "F": {
+   "v": "FAIL",
+   "fab": false,
+   "note": "Only privilege-escalation CVEs; no session hijack, omits CVE-2023-4966"
+  }
+ },
+ "core-027": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-78 CVEs but omits CVE-2014-6271/2024-3400/2023-2868"
+  }
+ },
+ "core-028": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852; calls SonicWall SMA \"Fortinet\""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852"
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852"
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Real CWE-502 CVEs but omits CVE-2021-44228/2017-9805/2015-4852; calls SonicWall SMA \"Fortinet\""
+  }
+ },
+ "core-029": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2026-42897 CVSS 8.1 inconsistent (others 6.1); CVE-2020-26799 9.8 doubtful"
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2026-42897 CVSS 8.1 inconsistent with 6.1"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-030": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-031": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-032": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CAPEC-78 unrelated (confused with CWE-78)"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-033": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-034": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ }
+}

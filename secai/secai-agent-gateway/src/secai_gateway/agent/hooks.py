@@ -526,26 +526,29 @@ _KN_STRONG_RE = re.compile(
     r"security\s+headers?|http\s+headers?|rbac|access\s+control|authenticat\w*|authoriz\w*|encrypt\w*|cryptograph\w*|"
     r"prompt\s+injection|denial[- ]of[- ]service|forgot(?:ten)?\s+password|password\s+(?:reset|storage|hashing)|"
     r"key\s+management|secrets?\s+management|supply\s+chain\s+(?:attack|security)|sbom|tls|ssl|insecure\s+\w+|"
-    r"security\s+misconfiguration|broken\s+access|harden\w*|ssh|stor\w*\s+(?:\w+\s+)?passwords?|https|md5|sha[- ]?1|"
+    r"security\s+misconfiguration|broken\s+access|harden\w*|stor\w*\s+(?:\w+\s+)?passwords?|https|md5|sha[- ]?1|"
     r"secure\s+(?:defaults?|by\s+design|design)|security\s+(?:issues?|review|checklist|testing|audit|controls?|practices?))\b"
     r"|xac\s*thuc|phan\s*quyen|kiem\s*soat\s*truy\s*cap|ma\s*hoa\s*(?:du\s*lieu|mat\s*khau|file)|bam\s*mat\s*khau|quen\s*mat\s*khau|luu\s*(?:tru\s*)?mat\s*khau|chuoi\s*cung\s*ung|"
-    r"quan\s*ly\s*khoa|mo\s*hinh\s*de\s*doa|gia\s*mao\s*yeu\s*cau|chen\s*ma",
+    r"quan\s*ly\s*khoa|quan\s*ly\s*(?:secrets?|bi\s*mat)|mo\s*hinh\s*de\s*doa|gia\s*mao\s*yeu\s*cau|chen\s*ma|"
+    r"secure\s+sdlc|\bsdlc\b|\bsast\b|\bdast\b|devsecops|select\b.{0,60}\bwhere\b.{0,60}(?:['\"]\s*\+|\{\w+\}|%s)",
 )
 # AMBIGUOUS: everyday technical words ("docker compose up", "hash map", "log scale"): only count together
 # with a security / how-to-protect intent word.
 _KN_AMBIG_RE = re.compile(
     r"\b(?:passwords?|hash(?:ing)?|salt(?:ing)?|sessions?|cookies?|apis?|rest(?:ful)?\s+api|containers?|docker|kubernetes|k8s|tokens?|"
-    r"logs?|logged|logging|upload\w*|validat\w*|dependenc\w*|secrets?|pipelines?|ci/cd|webhooks?|graphql|websockets?|dos|ddos|nosql|"
+    r"ssh|logs?|logged|logging|upload\w*|validat\w*|dependenc\w*|secrets?|pipelines?|ci/cd|webhooks?|graphql|websockets?|dos|ddos|nosql|"
     r"credentials?|prompts?|template|github\s+actions|error\s+handling|firewall|waf|certificates?)\b"
     r"|mat\s*khau|ma\s*hoa|phien\s*(?:dang\s*nhap|lam\s*viec)|nhat\s*ky|dau\s*vao|tai\s*(?:len|file)|phu\s*thuoc|xu\s*ly\s*loi",
 )
-# INTENT: wants protection / risk / a secure way to do something.
+# INTENT: wants protection / risk / a secure way to do something. Plain "how do I …" is NOT security intent: with an
+# ambiguous word it is an engineering question ("ssh vào server bằng key thế nào", "how do I rotate log files"),
+# which measured 28 % false triggers on look-alike vocabulary when it counted.
 _KN_INTENT_RE = re.compile(
     r"\b(?:secur\w*|safe(?:ly)?|protect\w*|prevent\w*|harden\w*|mitigat\w*|defen[cs]\w*|attack\w*|vulnerab\w*|exploit\w*|"
-    r"risks?|threats?|best\s+practices?|how\s+(?:to|do|can|should)|sensitive|untrusted|leak\w*|expos\w*|mitigat\w*)\b"
+    r"risks?|threats?|best\s+practices?|sensitive|untrusted|leak\w*|expos\w*|mitigat\w*)\b"
     r"|bao\s*mat|an\s*toan|an\s*ninh|bao\s*ve|rui\s*ro|de\s*doa|tan\s*cong|lo\s*hong|khai\s*thac|khac\s*phuc|phong\s*(?:chong|tranh|ngua)|"
-    r"ngan\s*(?:chan|ngua)|nhay\s*cam|lam\s*sao|cach\s+(?:de|nao)|nguyen\s*tac|dung\s*cach|giam\s*thieu|"
-    r"khong\s*(?:duoc\s*)?tin|khong\s*lo|\blo\s+(?:thong|du)|stack\s*trace|bien\s*phap|thuat\s*toan",
+    r"ngan\s*(?:chan|ngua)|nhay\s*cam|giam\s*thieu|nguyen\s*tac|dung\s*cach|"
+    r"khong\s*(?:duoc\s*)?tin|khong\s*lo|\blo\s+(?:thong|du)|stack\s*trace|bien\s*phap",
 )
 # Generic security words that also describe a CVE/alias question ("Lỗ hổng Heartbleed là gì?"):
 # they only count together with a fix/prevent intent, otherwise the CVE KB is the right source.
@@ -590,6 +593,7 @@ _KN_DISCOVERY_RE = re.compile(
     r"(?:buffer|heap|stack)\s+overflow|use-after-free|memory\s+corruption|(?:sql|command|code)\s+injection|"
     r"(?:auth\w*\s+)?bypass|path\s+traversal|privilege\s+escalation|deserialization|rce)\b"
     r"|\bis\s+there\s+(?:a|an|any)\b.{0,60}?\b(?:cve|vulnerab\w*|flaw|bug|issue)\b|\bany\s+cves?\b|\bcves?\s+(?:for|in|affecting)\b"
+    r"|\b(?:show|list|find|search)\b.{0,40}?\b(?:cves?|vulnerabilit\w*|flaws?)\b|\b(?:tim|liet\s*ke)\s+(?:cac\s+|nhung\s+)?(?:cve|lo\s*hong)\b"
     r"|\b(?:cve|lo\s*hong|loi)\b.{0,60}?\bnao\b|\bco\s+(?:cve|lo\s*hong)\b|\b(?:nhung|cac)\s+(?:cve|lo\s*hong)\b"
 )
 

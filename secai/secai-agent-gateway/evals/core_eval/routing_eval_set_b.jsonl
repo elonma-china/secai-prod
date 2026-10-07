@@ -1,0 +1,150 @@
+{"id": "rb-001", "query": "Path traversal là gì và cách ngăn chặn triệt để?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-002", "query": "Tại sao sau deploy cookie không được gửi giữa hai subdomain? Mình đã set domain=.example.com rồi mà vẫn lỗi.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-003", "query": "có CVE nào cho Moodle bị SSRF qua tính năng import không", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-004", "query": "Tóm tắt giúp mình cuộc trò chuyện vừa rồi nhé.", "label": "none", "kind": "chitchat"}
+{"id": "rb-005", "query": "OWASP API Security Top 10 gồm những mục nào?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-006", "query": "Cisco IOS XE web UI bị tạo tài khoản đặc quyền trái phép, CVE nào vậy?", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-007", "query": "Mình quên mật khẩu wifi router TP-Link, reset về mặc định thế nào?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-008", "query": "Is this safe? const resetToken = Math.random().toString(36).slice(2); I use it for password reset links. How would you fix it?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-009", "query": "Làm sao để REST API trả về phân trang theo cursor thay vì offset?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-010", "query": "List CVEs affecting OpenSSH where a signal handler race leads to unauthenticated root RCE.", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-011", "query": "Cách đặt chmod cho thư mục /var/www để nginx đọc được file mà tôi deploy bằng user deploy?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-012", "query": "Looking for CVEs in Veeam Backup & Replication that allow credential theft.", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-013", "query": "Threat modeling theo STRIDE là gì, áp dụng cho API thanh toán ra sao?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-014", "query": "Chọn thư viện đăng nhập cho side project Next.js: NextAuth hay Lucia hay Clerk?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-015", "query": "tim cve cho phpMyAdmin bi sql injection o trang export", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-016", "query": "What's the difference between SHA-256 and xxHash if I only need a fast checksum to deduplicate files?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-017", "query": "Best way to back up my dotfiles and home directory to an external drive with rsync?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-018", "query": "tìm CVE nói về MOVEit Transfer bị SQL injection", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-019", "query": "Cách bật HTTPS cho Spring Boot ở môi trường dev với keystore PKCS12?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-020", "query": "CVE-2019-0708 BlueKeep có bị khai thác ngoài thực tế không?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-021", "query": "Can you speak Vietnamese?", "label": "none", "kind": "chitchat"}
+{"id": "rb-022", "query": "What is the CVSS score of CVE-2017-0144?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-023", "query": "Details on CVE-2024-3094, the xz backdoor: who discovered it and which versions?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-024", "query": "Cheat sheet của OWASP về logging khuyên nên ghi gì và tuyệt đối không ghi gì?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-025", "query": "ownCloud graphapi information disclosure exposing phpinfo, is there a CVE?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-026", "query": "What are the CAPEC-recommended mitigations for session fixation?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-027", "query": "What can you do?", "label": "none", "kind": "chitchat"}
+{"id": "rb-028", "query": "VMware vCenter Server heap overflow ở DCERPC thuộc CVE nào", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-029", "query": "Làm sao đổi mật khẩu root MySQL 8 vì mình quên?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-030", "query": "Hôm nay thời tiết Hà Nội thế nào?", "label": "none", "kind": "chitchat"}
+{"id": "rb-031", "query": "How do I set up a SOCKS proxy through SSH so I can watch my home media library while abroad?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-032", "query": "How do I mitigate prototype pollution in Node.js apps?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-033", "query": "Cho tôi các CVE của Zabbix gây SQL injection trong module API", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-034", "query": "Tell me a joke about programmers.", "label": "none", "kind": "chitchat"}
+{"id": "rb-035", "query": "Quy trinh quan ly secrets (API key) trong CI/CD de khong bi lo nen the nao?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-036", "query": "What CVE lets an attacker crash libwebp with a crafted WebP image?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-037", "query": "iptables vs nftables for a simple home router doing NAT: which should I learn?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-038", "query": "Spring Cloud Gateway SpEL injection - what CVE is that?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-039", "query": "các CVE liên quan Zimbra Collaboration XSS gây lấy cắp email", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-040", "query": "Shellshock ảnh hưởng những bản bash nào, công bố ngày nào?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-041", "query": "Mình cần các CVE của Oracle WebLogic T3 deserialization từ 2020 trở lại đây", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-042", "query": "Cài chứng chỉ SSL Let's Encrypt cho domain trên Ubuntu bằng certbot như thế nào?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-043", "query": "el.innerHTML = location.hash.slice(1); trong JS này có nguy hiểm không? Cách khắc phục?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-044", "query": "Cookie consent banner: dùng thư viện nào nhẹ cho site Astro?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-045", "query": "Heartbleed là gì, CVE-2014-0160 được công bố năm nào?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-046", "query": "Docker image của mình nặng 2GB, giảm xuống kiểu gì cho gọn?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-047", "query": "Biện pháp bảo vệ website khỏi clickjacking là gì?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-048", "query": "Làm sao cho người dùng upload ảnh avatar thẳng lên S3 bằng presigned URL trong Node? Cho mình ví dụ code.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-049", "query": "Làm sao bảo mật chức năng tải file lên để chặn webshell?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-050", "query": "Postman báo 'self signed certificate in certificate chain' khi gọi API nội bộ, cấu hình sao?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-051", "query": "Review: app.get('/dl', (req,res)=> res.sendFile(path.join(__dirname,'files',req.query.name))) — is this exploitable and what is the fix?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-052", "query": "What does 'Permission denied (publickey)' mean on git clone and how do I add my SSH key to GitHub?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-053", "query": "Explain the ASVS input validation requirements at level 1.", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-054", "query": "Is reCAPTCHA v3 or hCaptcha better for UX on a signup form? I mostly care about conversion rate.", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-055", "query": "What is CWE-79 and how do I remediate it properly?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-056", "query": "Cách phòng chống XXE khi parse XML bằng DocumentBuilder trong Java?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-057", "query": "Các biện pháp giảm thiểu của MITRE ATT&CK cho kỹ thuật T1078 Valid Accounts gồm những gì?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-058", "query": "Redis session store cho Express nên dùng connect-redis bản nào cho ổn định?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-059", "query": "My Django users get logged out after 5 minutes of activity; how do I debug the session timeout config?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-060", "query": "Lệnh tìm file lớn hơn 1GB và xóa các file .log cũ hơn 30 ngày trên Linux?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-061", "query": "Supabase Auth hay Firebase Auth rẻ và dễ dùng hơn cho app side project?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-062", "query": "How can I log request duration in Express with a custom morgan format?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-063", "query": "Any CVEs for the Linux kernel nf_tables use-after-free that give local privilege escalation?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-064", "query": "CAPEC-66 SQL Injection nên được giảm thiểu bằng những biện pháp nào?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-065", "query": "có lỗ hổng nào ở Citrix NetScaler gateway gây rò rỉ session không", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-066", "query": "Tìm các CVE ảnh hưởng đến Fortinet FortiOS SSL VPN gây bypass xác thực.", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-067", "query": "Which entries in the CWE Top 25 relate to memory safety?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-068", "query": "CVE-2022-22965 Spring4Shell đã có exploit công khai chưa?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-069", "query": "Which Go library is most commonly used to parse JWTs in a hobby project?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-070", "query": "Which CVE affects Apache Tomcat partial PUT leading to remote code execution?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-071", "query": "What are the OWASP Top 10 for LLM Applications?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-072", "query": "What CAPTCHA alternatives work well for screen-reader users?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-073", "query": "What vulnerabilities exist for the Redis Lua sandbox escape? CVE numbers please.", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-074", "query": "liệt kê các lỗ hổng của Confluence Data Center cho phép RCE trong 2023", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-075", "query": "Git keeps asking for my password; how do I make the credential helper cache it?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-076", "query": "Lỗ hổng nào khiến module HTTP/3 QUIC của nginx bị crash worker? cho xin số CVE", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-077", "query": "Explain defense in depth with concrete web application examples.", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-078", "query": "Best practices for protecting GraphQL endpoints against abusive queries?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-079", "query": "tìm lỗ hổng SMB trên Windows Server 2019 cho phép thực thi mã từ xa không cần xác thực", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-080", "query": "How do I set up an SSH config so I can jump to my home server by alias?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-081", "query": "What does OWASP say about error handling and avoiding information leakage?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-082", "query": "Mình muốn xoay vòng file log của nginx theo ngày bằng logrotate, giữ 14 ngày.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-083", "query": "Cho mình thông tin về CVE-2023-4863: sản phẩm bị ảnh hưởng và bản vá.", "label": "none", "kind": "id_lookup"}
+{"id": "rb-084", "query": "My Python script computing md5 of 10GB files is slow; how can I speed up the hashing?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-085", "query": "How do I configure a proxy for pip behind my company network?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-086", "query": "Code PHP: $page = $_GET['page']; include($page . '.php'); có lỗ hổng không, và vá ra sao?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-087", "query": "Viết giúp mình config nginx reverse proxy cho app Node chạy cổng 3000.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-088", "query": "Python snippet: data = yaml.load(request.data) — safe? What should I use instead?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-089", "query": "Any CVE for Jenkins that lets an attacker read arbitrary files through the CLI?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-090", "query": "lỗ hổng cho phép thoát khỏi container trong runc, liệt kê CVE giúp mình", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-091", "query": "Thanks, that helped a lot!", "label": "none", "kind": "chitchat"}
+{"id": "rb-092", "query": "Đoạn code này có an toàn không? query = \"SELECT * FROM users WHERE name='\" + name + \"'\" — sửa thế nào?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-093", "query": "Xin chào!", "label": "none", "kind": "chitchat"}
+{"id": "rb-094", "query": "Mã hóa ổ USB bằng VeraCrypt để mang đi cho tiện, các bước thế nào?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-095", "query": "Cảm ơn nhé, tạm biệt!", "label": "none", "kind": "chitchat"}
+{"id": "rb-096", "query": "Samba có lỗ hổng nào cho phép ghi file tùy ý qua symlink, CVE gì?", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-097", "query": "Khi nào cần dùng PKCE trong OAuth2 và triển khai thế nào cho an toàn?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-098", "query": "Dockerfile multi-stage cho app Go, cho ví dụ ngắn gọn.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-099", "query": "How do I use Ansible Vault to encrypt a vars file so I can commit it to my private repo?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-100", "query": "Cách đặt biến môi trường trong systemd unit để app đọc được cấu hình cổng và đường dẫn?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-101", "query": "Tạo chứng chỉ self-signed cho localhost khi dev bằng mkcert như thế nào?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-102", "query": "Bạn là ai vậy?", "label": "none", "kind": "chitchat"}
+{"id": "rb-103", "query": "Recommendations for a secure TLS configuration on a public web server?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-104", "query": "How do I add a Bearer token header to every request in my axios instance?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-105", "query": "How do I defend against open redirect vulnerabilities?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-106", "query": "Drupal core RESTful web services RCE - which CVE?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-107", "query": "Cach rate limit dang nhap de chong credential stuffing nen lam the nao?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-108", "query": "EternalBlue khai thác lỗ hổng nào của SMBv1, mã CVE là gì?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-109", "query": "Liệt kê giúp mình các hạng mục của OWASP Top 10 bản 2021.", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-110", "query": "Lỗ hổng bypass xác thực của Atlassian Jira Service Management là CVE nào", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-111", "query": "CWE Top 25 gần nhất gồm những điểm yếu nào, xếp hạng ra sao?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-112", "query": "lam sao de phong chong SSRF khi ung dung cho phep nguoi dung nhap URL webhook?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-113", "query": "ASVS level 2 yêu cầu những gì về quản lý phiên (session management)?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-114", "query": "Hướng dẫn cấu hình CORS an toàn, đặc biệt khi dùng credentials.", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-115", "query": "Mình muốn dựng WireGuard VPN để truy cập NAS ở nhà khi đi du lịch.", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-116", "query": "How do I convert a PEM certificate to PFX with openssl for IIS?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-117", "query": "Best practice bao ve JWT la gi? Co nen luu token o localStorage khong?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-118", "query": "Bạn đang dùng mô hình nào vậy?", "label": "none", "kind": "chitchat"}
+{"id": "rb-119", "query": "Lam the nao de reset mat khau an toan, tranh user enumeration va token bi doan?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-120", "query": "Khắc phục lỗi deserialization không an toàn trong Java như thế nào?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-121", "query": "Which CVEs affect Apache ActiveMQ OpenWire protocol deserialization?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-122", "query": "lỗi tràn bộ đệm trong thư viện curl ở bước SOCKS5 handshake, CVE nào?", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-123", "query": "ufw chỉ cho phép port 8080 từ mạng LAN nhà mình thì gõ lệnh gì?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-124", "query": "How should I harden Kubernetes pods according to security best practices?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-125", "query": "How do I avoid race conditions like TOCTOU in a checkout flow?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-126", "query": "Is there a known CVE for Grafana path traversal allowing plugin file read?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-127", "query": "Cách chống CSRF hiệu quả cho ứng dụng SPA dùng cookie xác thực là gì?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-128", "query": "PAN-OS GlobalProtect command injection là CVE gì?", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-129", "query": "Compare AES-GCM and ChaCha20 throughput on a Raspberry Pi 4 for my benchmark blog post.", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-130", "query": "Backup PostgreSQL hàng đêm bằng pg_dump rồi đẩy lên Google Drive thế nào?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-131", "query": "Có lỗ hổng nào trong Apache Struts cho phép thực thi mã từ xa qua OGNL năm 2017 không? Cho mình số CVE.", "label": "cve_search", "kind": "cve_vi"}
+{"id": "rb-132", "query": "Are there any CVEs on Exim with an out-of-bounds write in SMTP auth?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-133", "query": "How do I prevent insecure direct object references (IDOR) in a REST API?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-134", "query": "What controls prevent privilege escalation in cloud IAM setups?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-135", "query": "How can XML entity expansion (billion laughs) attacks be mitigated?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-136", "query": "What mitigations does MITRE ATT&CK list for T1059 Command and Scripting Interpreter?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-137", "query": "Which MFA factors are recommended and how should MFA be implemented securely?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-138", "query": "Nên lưu mật khẩu người dùng bằng thuật toán băm nào theo khuyến nghị của OWASP?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-139", "query": "Is it fine to use UUIDv4 as primary keys in Postgres performance-wise?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-140", "query": "CVE-2021-44228 ảnh hưởng những phiên bản Log4j nào và CVSS bao nhiêu?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-141", "query": "Nguyên tắc đặc quyền tối thiểu (least privilege) áp dụng cho tài khoản dịch vụ như thế nào?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-142", "query": "How do I rotate and compress Docker container logs so the disk doesn't fill up?", "label": "none", "kind": "lookalike_en"}
+{"id": "rb-143", "query": "Which cookie flags should session cookies have, per best practice?", "label": "knowledge", "kind": "kb_en"}
+{"id": "rb-144", "query": "Which Ivanti Connect Secure vulnerabilities were exploited in the wild in early 2024?", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-145", "query": "Hardening Docker image: các khuyến nghị bảo mật quan trọng nhất là gì?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-146", "query": "Explain Dirty COW (CVE-2016-5195): which kernels were affected?", "label": "none", "kind": "id_lookup"}
+{"id": "rb-147", "query": "Need CVEs for a WordPress plugin, Elementor Pro, with arbitrary file upload.", "label": "cve_search", "kind": "cve_en"}
+{"id": "rb-148", "query": "Mass assignment là gì và cách phòng tránh trong Express + Mongoose?", "label": "knowledge", "kind": "kb_vi"}
+{"id": "rb-149", "query": "docker compose up báo lỗi port is already allocated, xử lý sao?", "label": "none", "kind": "lookalike_vi"}
+{"id": "rb-150", "query": "cho mình danh sách CVE của GitLab dẫn đến chiếm tài khoản qua reset password", "label": "cve_search", "kind": "cve_vi"}
