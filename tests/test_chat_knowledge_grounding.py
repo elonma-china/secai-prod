@@ -597,3 +597,13 @@ async def test_official_names_block_is_off_when_the_cve_search_flag_is_off(monke
         sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
         await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": "CVE-2021-44228 là gì?"})
     assert not called  # both flags off: no extra Qdrant call, context exactly as before this change
+
+
+def test_knowledge_policy_asks_for_a_structured_source_line_and_forbids_talking_about_the_mechanism():
+    """core-034 echoed 'nếu có trong ngữ cảnh tài liệu tham chiếu — tuân thủ giấy phép CC BY-SA' into the answer."""
+    from importlib.resources import files
+
+    text = files("secai_gateway.prompts").joinpath("chat_knowledge.md").read_text(encoding="utf-8")
+    assert "Nguồn: {Title} — {URL} ({License})" in text
+    assert "KHÔNG viết \"khối\"" in text
+    assert "tuân thủ giấy phép" not in text and "nêu \"OWASP Cheat Sheet Series (CC BY-SA 4.0)\"" not in text

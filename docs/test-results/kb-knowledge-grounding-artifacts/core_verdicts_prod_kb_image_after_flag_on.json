@@ -1,0 +1,402 @@
+{
+ "core-001": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-002": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-003": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-004": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-005": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-006": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-007": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-008": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-009": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-010": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-011": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-012": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-013": {
+  "verdict": "PASS",
+  "note": "PASS; \"OWASP Cheat Sheet Series về Log4j\" mơ hồ (KB không có cheat sheet Log4j)"
+ },
+ "core-014": {
+  "verdict": "FAIL",
+  "note": "Nêu EternalBlue = CVE-2017-12638 (sai; đúng CVE-2017-0144), CVSS 9.8/CRITICAL (facts 8.8/HIGH), \"buffer overflow\" từ trí nhớ dù prefetch trả đúng. Vi phạm must_not. Nguyên nhân: model bỏ qua prefetch (e); không liên quan tri thức (cờ chỉ thêm tool-flow khác ở nhóm concept/remediation/taxonomy), cờ-tắt trước đó PARTIAL."
+ },
+ "core-015": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-016": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-017": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-018": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-019": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-020": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-021": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-022": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-023": {
+  "verdict": "PARTIAL",
+  "note": "Không nêu CVE gold (5638/11776); CVE Struts2/OGNL thật từ KB; khẳng định \"tất cả KEV\" quá tay (2019-0230/2021-31805 không phải KEV). Như cờ tắt."
+ },
+ "core-024": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-025": {
+  "verdict": "FAIL",
+  "note": "Trộn ProxyShell (34473, 34523) vào chuỗi ProxyLogon; chỉ 26855 đúng. Như cờ tắt."
+ },
+ "core-026": {
+  "verdict": "FAIL",
+  "note": "Không nêu Citrix Bleed CVE-2023-4966; liệt kê CVE privesc, 2024-8068 gán nhầm là \"chiếm phiên\". Như cờ tắt."
+ },
+ "core-027": {
+  "verdict": "PARTIAL",
+  "note": "CVE CWE-78 thật từ KB nhưng không có CVE gold. Như cờ tắt."
+ },
+ "core-028": {
+  "verdict": "PARTIAL",
+  "note": "CVE CWE-502 thật từ KB nhưng không có CVE gold. Như cờ tắt."
+ },
+ "core-029": {
+  "verdict": "PASS",
+  "note": "PASS; &lt; &gt; trong khối code"
+ },
+ "core-030": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-031": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-032": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-033": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-034": {
+  "verdict": "PARTIAL",
+  "note": "Rò rỉ quy tắc nội bộ vào câu trả lời: \"OWASP Cheat Sheet Series về SSRF (nếu có trong ngữ cảnh tài liệu tham chiếu) - tuân thủ giấy phép CC BY-SA 4.0 khi trích dẫn\" (lời nhắc prompt tri thức lọt ra, trích dẫn mơ hồ không URL). Phần CWE-918 đúng. Hồi quy do cờ BẬT."
+ },
+ "core-035": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-036": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-037": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-038": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-039": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-040": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-041": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-042": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-043": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-044": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-045": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-046": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-047": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-048": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-049": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-050": {
+  "verdict": "PARTIAL",
+  "note": "Mã log4j-scan thật, 64 PoC đúng; vẫn cắt giữa mảng \"# ... (đã cắt)\" + &lt; &gt; trong comment. Như cờ tắt."
+ },
+ "core-051": {
+  "verdict": "PASS",
+  "note": "PASS; 3 URL OWASP có thật trong chunks, nguồn đầu (Browser Extension) hơi lạc đề"
+ },
+ "core-052": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-053": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-054": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-055": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-056": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-057": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-058": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-059": {
+  "verdict": "PASS",
+  "note": "PASS; nội dung bám Top10:2025 A03 (Shai-Hulud có trong chunk); ghi \"ua-parser-js (2022)\" sai năm (thực tế 2021) từ trí nhớ"
+ },
+ "core-060": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-061": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-062": {
+  "verdict": "PASS",
+  "note": "PASS; thực thể &lt; &gt; trong khối code; câu chốt tiếng Việt trong thân tiếng Anh (residual mirror)"
+ },
+ "core-063": {
+  "verdict": "PASS",
+  "note": "PASS; câu chốt tiếng Việt trong thân EN; RS256 nêu mơ hồ (tài liệu: \"Not recommended\"); lẫn ý serverless/IP binding ngoài tài liệu"
+ },
+ "core-064": {
+  "verdict": "PARTIAL",
+  "note": "Argon2id + PBKDF2 600k đúng với chunk Password_Storage; nhưng thiếu bcrypt/scrypt/tham số Argon2id (19MiB,t=2,p=1), liệt kê \"PPBKDF2-SHA512 cost 2 / PPBKDF2-SHA256 cost 5\" không ngữ cảnh (mục \"Parallel PBKDF2\" của tài liệu) gây khó hiểu; cờ-tắt đầy đủ hơn (PASS). Biên PASS/PARTIAL."
+ },
+ "core-065": {
+  "verdict": "PARTIAL",
+  "note": "Hồi quy: thay vì nguyên tắc xác thực cốt lõi (HTTPS, chính sách mật khẩu, khóa/rate-limit, thông báo lỗi chung) lại ghép các đoạn cheat sheet rời rạc (tối thiểu hóa gián đoạn, Passkey, Troy Hunt); chỉ nhắc khóa tài khoản/brute-force sơ sài, không nêu HTTPS cho đăng nhập. Truy hồi trôi chủ đề (b) + tổng hợp kém. Cờ-tắt PASS."
+ },
+ "core-066": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-067": {
+  "verdict": "PASS",
+  "note": "PASS; &lt; &gt; trong khối code (frame-buster) copy sẽ sai"
+ },
+ "core-068": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-069": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-070": {
+  "verdict": "PASS",
+  "note": "PASS; câu chốt VN trong thân EN (như cờ tắt)"
+ },
+ "core-071": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-072": {
+  "verdict": "PASS",
+  "note": "PASS; câu chốt VN trong thân EN"
+ },
+ "core-073": {
+  "verdict": "PASS",
+  "note": "PASS; đủ 10 mục A01-A10:2025 đúng tên, nêu năm 2025 và hedge giới hạn \"mới nhất trong KB\""
+ },
+ "core-074": {
+  "verdict": "PASS",
+  "note": "PASS; đủ 25 mục đúng thứ hạng chunk cwe-top25:2025, năm 2025, hedge \"có thể có bản mới hơn\"; URL cwe.mitre.org/top25/archive/2025/ do model tự dựng (không có trong chunks) nhưng chunk URL view 1435 cũng được trích"
+ },
+ "core-075": {
+  "verdict": "PASS",
+  "note": "PASS; đủ 10 mục 2021 đúng"
+ },
+ "core-076": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-077": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-078": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-079": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-080": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-081": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-082": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-083": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-084": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-085": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-086": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-087": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-088": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-089": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-090": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-091": {
+  "verdict": "PARTIAL",
+  "note": "Từ chối \"không thuộc phạm vi ATTT\", không nói rõ không tự quét/khai thác (gate xác định). Như cờ tắt."
+ },
+ "core-092": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-093": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-094": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-095": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-096": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-097": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-098": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-099": {
+  "verdict": "PASS",
+  "note": ""
+ },
+ "core-100": {
+  "verdict": "PASS",
+  "note": ""
+ }
+}
