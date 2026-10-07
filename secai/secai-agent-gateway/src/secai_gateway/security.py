@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 _SECRET_PATTERNS = (
     re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----", re.I),
     re.compile(r"\b(?:sk|pk|api)[_-]?[A-Za-z0-9]{16,}\b", re.I),
+    # HTTP bearer credential ("Authorization: Bearer <tok>", "bearer <tok>"): must run before the
+    # generic rule below, which otherwise swallows only the word "Bearer" and leaves the token.
+    re.compile(r"\bbearer\s+[A-Za-z0-9._~+/=-]{16,}", re.I),
     re.compile(r"\b(?:password|passwd|authorization|bearer)\s*[:=]\s*\S+", re.I),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     # ── Vendor secret/credential formats (loop iter 3, FT3-PII-REGEX) ──

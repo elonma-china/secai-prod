@@ -7,13 +7,32 @@ import json
 import zipfile
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .review_auth import ReviewActor, get_review_actor, require_review_admin
 from .review_schemas import AdjudicationInput, AssignmentInput, CampaignInput, CampaignPatch, JudgmentInput, ReviewItemInput
 from ..state.review_store import ReviewError
 
-router = APIRouter(prefix='/review-api',tags=['expert review'])
+class ReviewRoute(APIRoute):
+    """Answer body-validation failures with a 422 that never echoes the submitted input.
+
+    FastAPI's default 422 body embeds the rejected value; for a lone UTF-16 surrogate
+    ("\\ud800") that value cannot be JSON-encoded, so the error response itself crashed (500).
+    """
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+        async def guarded(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                return JSONResponse({'detail': [{'loc': list(e['loc']), 'msg': str(e['msg']), 'type': e['type']} for e in exc.errors()]}, status_code=422)
+        return guarded
+
+router = APIRouter(prefix='/review-api',tags=['expert review'],route_class=ReviewRoute)
 MAX_UPLOAD = 10*1024*1024
+MAX_OFFSET = 1_000_000_000  # keeps OFFSET inside SQLite INTEGER; larger values 422 instead of OverflowError/500
 
 async def call(request, method, *args):
     try:
@@ -44,7 +63,7 @@ async def small_body(request, schema):
 @router.get('/overview')
 async def overview(request:Request,status:Literal['pending','approved','excluded','all']='pending',
     source:Literal['all','live','qa','import']='all',search:str=Query('',max_length=200),
-    offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+    offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     return await call(request,'overview',status,source,search,offset,limit)
 
 
@@ -69,7 +88,7 @@ async def me(actor: ReviewActor=Depends(get_review_actor)):
     return actor
 
 @router.get('/reviewers')
-async def reviewers(request:Request,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def reviewers(request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     return page(sorted([a.model_dump() for a in request.app.state.gateway.review_credentials.values() if a.role=='reviewer'],key=lambda a:a['actor_id']),offset,limit)
 
 @router.post('/campaigns')
@@ -77,7 +96,7 @@ async def create_campaign(payload:CampaignInput,request:Request,actor:ReviewActo
     return await call(request,'create_campaign',payload.title,payload.rubric_version,actor.actor_id)
 
 @router.get('/campaigns')
-async def campaigns(request:Request,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
+async def campaigns(request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
     return page(await call(request,'list_campaigns',actor.actor_id if actor.role=='reviewer' else None),offset,limit)
 
 @router.patch('/campaigns/{cid}')
@@ -117,7 +136,7 @@ async def import_items(cid:str,request:Request,actor:ReviewActor=Depends(require
     return await call(request,'import_items',cid,items,actor.actor_id)
 
 @router.get('/campaigns/{cid}/items')
-async def items(cid:str,request:Request,disagreement:bool=False,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def items(cid:str,request:Request,disagreement:bool=False,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     return page(await call(request,'list_items',cid,disagreement),offset,limit)
 
 @router.post('/items/{iid}/assignments')
@@ -133,7 +152,7 @@ async def delete_assignment(aid:str,request:Request,actor:ReviewActor=Depends(re
     return Response(status_code=204)
 
 @router.get('/assignments')
-async def assignments(request:Request,status:Literal['pending','submitted']|None=None,campaign_id:str|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
+async def assignments(request:Request,status:Literal['pending','submitted']|None=None,campaign_id:str|None=None,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
     return page(await call(request,'list_assignments',actor.actor_id,status,campaign_id),offset,limit)
 
 @router.get('/assignments/{aid}')

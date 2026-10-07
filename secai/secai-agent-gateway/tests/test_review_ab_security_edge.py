@@ -745,7 +745,6 @@ def test_d_live_pairs_rate_limit_is_15_per_minute_with_429(mw_client):
     assert live(mw_client).status_code == 429
 
 
-@pytest.mark.xfail(strict=True, reason='T4-M2: 429 from the shared rate-limit middleware carries no Retry-After header.')
 def test_d_rate_limit_response_has_retry_after(mw_client):
     mw_client.app.state.gateway.settings.review_live_sample_rate = 0
     for _ in range(15):
@@ -754,7 +753,6 @@ def test_d_rate_limit_response_has_retry_after(mw_client):
     assert r.status_code == 429 and r.headers.get('retry-after')
 
 
-@pytest.mark.xfail(strict=True, reason='T4-M3: rate-limit bucket is keyed by exact request path, so varying the {id} segment gives every request a fresh 120/min bucket (unbounded throttle bypass and bucket growth).')
 def test_d_rate_limit_cannot_be_bypassed_by_varying_path_ids(mw_client):
     codes = [mw_client.get(f'{P}/overview/guess-{i}', headers={'Authorization': 'Bearer wrong-%d' % i}).status_code for i in range(140)]
     assert 429 in codes
@@ -968,7 +966,6 @@ def test_e_500_on_internal_error_is_generic(tmp_path):
 
 
 # ------------------------------------------------------- confirmed defects (xfail)
-@pytest.mark.xfail(strict=True, reason='T4-I1: a lone UTF-16 surrogate ("\\ud800") in a FastAPI-parsed body (judgment comment, campaign title, adjudication reason) is accepted by validation and then crashes the SQLite write: HTTP 500. live-pairs/bulk/settings use model_validate_json and correctly answer 422.')
 @pytest.mark.parametrize('route', ['judgment', 'campaign', 'adjudication'])
 def test_c_lone_surrogate_in_json_string_is_422_not_500(client, route):
     w = World(client)
@@ -986,7 +983,6 @@ def test_c_lone_surrogate_in_json_string_is_422_not_500(client, route):
     assert r.status_code == 422, r.status_code
 
 
-@pytest.mark.xfail(strict=True, reason='T4-M6: offset larger than SQLite INTEGER (>= 2**63) on /overview and /reward/training/batches raises OverflowError: HTTP 500 (the in-memory paged routes return an empty page).')
 @pytest.mark.parametrize('path', ['/overview', '/reward/training/batches'])
 def test_c_huge_offset_is_not_a_500(client, tmp_path, path):
     Training(client, tmp_path)
@@ -1000,7 +996,6 @@ def test_c_duplicate_json_keys_rejected(client):
     assert r.status_code == 422
 
 
-@pytest.mark.xfail(strict=True, reason='T4-I2: redact_public_input matches "authorization: <\\S+>" so "Authorization: Bearer <token>" only loses the word "Bearer"; the bearer token itself (and any "bearer <token>" without a colon) is stored verbatim by live-pairs and shown to admins.')
 @pytest.mark.parametrize('text', ['Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123456789', 'bearer abcdefghijklmnopqrstuvwxyz0123456789',
                                   'curl -H "Authorization: Bearer Zk3jH8sLq0PwX1yT7vN2mC9bR4dF6gA5" https://x'])
 def test_d_bearer_token_in_pasted_http_header_is_redacted(client, text):
