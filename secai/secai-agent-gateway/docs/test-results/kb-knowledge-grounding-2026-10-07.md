@@ -1,78 +1,104 @@
-# KB tri thức + sửa search + bài test 100 câu core: kết quả (2026-10-06 → 07)
+# KB tri thức + sửa search + bài test 100 câu core: kết quả và triển khai (2026-10-06 → 07)
 
-Plan: [kb-knowledge-grounding.md](../plans/kb-knowledge-grounding.md). Tiêu chí: [kb-knowledge-grounding-criteria.md](../plans/kb-knowledge-grounding-criteria.md).
-Mọi thử nghiệm chạy trên **collection thử** `cve_kb_knowledge_lab` (42.318 điểm CVE/định nghĩa sao từ prod + 8.386 chunk tri thức) và hai gateway cô lập :8133 (cờ tắt) / :8134 (cờ bật). **Prod (`cve_kb_hybrid`, :8131) không bị ghi hay thay đổi.** Chưa commit, chưa deploy.
+Plan: [kb-knowledge-grounding.md](../plans/kb-knowledge-grounding.md). Tiêu chí: [kb-knowledge-grounding-criteria.md](../plans/kb-knowledge-grounding-criteria.md). Bằng chứng gốc: [kb-knowledge-grounding-artifacts/](kb-knowledge-grounding-artifacts/).
+
+**Trạng thái:** đã triển khai lên gateway prod :8131 (image `secai-agent-gateway:knowledge-kb-20261007`, cờ tri thức BẬT) và đã nạp 8.386 chunk vào `cve_kb_hybrid`. Mã nằm trên nhánh `feat/knowledge-kb-grounding` (chưa push, chưa merge).
 
 ## 1. Đã làm
 
 | Hạng mục | Nội dung |
 |---|---|
-| Dữ liệu | 6 nguồn → 8.386 chunk: OWASP Cheat Sheets (3.750), ASVS 5.0 (345), mitigations CWE/CAPEC/ATT&CK (3.960), OWASP Top 10 2021/2025 + CWE Top 25 2019–2025 (331, kind `taxonomy`). Có license/attribution/URL/version trên 100% chunk. |
-| Pipeline | `secai/scripts/knowledge/` (`chunkers.py`, `kb_knowledge.py`, `make_lab_collection.py`): chunk → ingest (dense 1024 + sparse `bm25`, idempotent theo `text_sha`, chặn ghi prod nếu thiếu `--allow-prod`) → verify → rollback (đã diễn tập thật: 50.369 → 42.318, đúng 8.051 điểm tri thức bị xoá, prod giữ 763.518). |
-| Search | `scope` entity/knowledge/all; BM25 lọc trong Qdrant; truy vấn có mã CWE/CAPEC/ATT&CK = 2 lượt (ngữ nghĩa + ghim mã); mở rộng thuật ngữ Việt→Anh cho BM25; tối đa 2 chunk/tài liệu; ngưỡng dense 0,5; tool của model không còn truyền được `scope`/kind tri thức; mọi nơi gọi trực tiếp Qdrant (node định nghĩa, cổng exploit, 2 script KPI) đều loại chunk tri thức. |
-| Chat (sau cờ `CHAT_KNOWLEDGE_GROUNDING_ENABLED`, mặc định tắt) | route `concept_kb` + pre-fetch có trích nguồn; khối bọc `untrusted_retrieved_content`, tối đa 6000 ký tự, timeout 3 s; `taxonomy` trả đủ danh sách đúng phiên bản; chính sách trích dẫn nằm ở `prompts/chat_knowledge.md`, chỉ nạp khi cờ bật (cờ tắt: prompt giống hệt cũ). |
-| Chat (cờ riêng `CHAT_CVE_SEARCH_PREFETCH_ENABLED`, mặc định bật) | sửa lỗi nền do bài test 100 câu phát hiện: tự tra KB cho câu CVE không có mã ("Lỗ hổng Log4Shell là gì?", "CVE nào…"), khối PoC catalog xác định (đếm khử trùng), bảng tên chính thức CWE/CAPEC/ATT&CK, nhắc ngôn ngữ cho câu tiếng Anh. |
+| Dữ liệu | 8.386 chunk từ 6 nguồn: OWASP Cheat Sheets (3.750), ASVS 5.0 (345), mitigation CWE/CAPEC/ATT&CK (3.960 gồm CWE 1.947, CAPEC 436, ATT&CK 1.577), OWASP Top 10 2021/2025 và CWE Top 25 2019–2025 (331, kind `taxonomy`; 317 + 14). Mọi chunk có license, attribution, URL, version. 56 chunk gắn `contains_attack_example` (không bao giờ vào ngữ cảnh chat). |
+| Pipeline | `secai/scripts/knowledge/` (`chunkers.py`, `kb_knowledge.py` chunk/ingest/verify/rollback, `make_lab_collection.py`). Nạp idempotent theo `text_sha`, chặn ghi prod nếu thiếu `--allow-prod`, rollback chỉ xoá kind tri thức của đúng batch. |
+| Search | `scope` entity/knowledge/all. Entity (mặc định) không bao giờ trả chunk tri thức: bộ lọc nằm trong Qdrant cho cả dense lẫn BM25 và ở mọi nơi gọi trực tiếp (tra node định nghĩa, cổng exploit, KPI). Scope knowledge: lượt ghim mã CWE/CAPEC/ATT&CK, mở rộng thuật ngữ Việt→Anh cho BM25, cổng cosine 0,55, tối đa 2 chunk/tài liệu. Tool của model không còn truyền được `scope`/kind tri thức. Tra node định nghĩa theo point id (UUIDv5 của `chunk_id`, đúng 2.275/2.275 node): 2 ms thay vì scroll ~2,1 s trên prod. |
+| Chat, cờ `CHAT_KNOWLEDGE_GROUNDING_ENABLED` | route `concept_kb` với pre-fetch có bọc `untrusted_retrieved_content`, tối đa 6.000 ký tự, timeout 3 s; câu hỏi OWASP Top 10 / CWE Top 25 nhận đủ danh sách đúng phiên bản (kèm các phiên bản có trong KB); chính sách trích dẫn ở `prompts/chat_knowledge.md` (dòng `Nguồn: {Title} — {URL} ({License})`). |
+| Chat, cờ `CHAT_CVE_SEARCH_PREFETCH_ENABLED` (mặc định bật) | sửa lỗi nền do bài test 100 câu lộ ra: tự tra KB cho câu CVE không có mã; khối PoC catalog (đếm khử trùng, chọn CVE có nhiều PoC nhất trong các CVE cùng tên) và mã PoC thật khi người dùng xin xem mã; tên chính thức CWE/CAPEC/ATT&CK đi kèm mã; nhắc trả lời tiếng Anh cho câu tiếng Anh. Quy tắc prompt của nhóm này ở `prompts/chat_prefetch.md`. |
+| Cờ tắt | cả hai cờ tắt: routing, ngữ cảnh và prompt giống bản cũ (golden 661 prompt; `chat.md` byte-identical với main, có test sha256). |
 
-## 2. Cổng và tiêu chí (số tự đo, sau sửa)
+## 2. Các phép đo chính
+
+### 2.1 Tra CVE không giảm (G1)
+
+| Phép đo | Kết quả |
+|---|---|
+| Prod, code HEAD cũ (trước mọi thay đổi) | recall@5 0,667 · MRR 0,598 |
+| Prod, code mới, **sau khi nạp tri thức vào prod** | recall@5 0,667 · MRR 0,598 (từng nhóm trùng khớp) |
+| Chunk tri thức trong 121 truy vấn entity | 0 |
+| Lab trước/sau nạp tri thức | 0,846 / 0,767 cả hai; 0/117 hạng đáp án đổi |
+
+(File kết quả cũ ghi 0,675/0,599 đã lỗi thời; baseline đúng là số đo lại bằng code HEAD.)
+
+### 2.2 Truy hồi tri thức (bộ 114 câu)
+
+recall@5 **0,965**, MRR 0,798; tiếng Việt 0,963; **114/114 truy vấn chạy hybrid**; 0 chunk gắn nhãn payload trong kết quả; độ trễ tìm kiếm p50 1,36 s. Lưu ý: bộ này dễ (chủ đề trùng tên cheat sheet); với gold chỉ là cheat sheet, reviewer đo 0,92/0,73.
+
+### 2.3 Bài test 100 câu chức năng core (15 nhóm)
+
+Bộ câu: `evals/core_eval/core_eval_set.jsonl`; đáp án đối chiếu đọc từ chính KB và catalog PoC. Chấm bởi agent độc lập (PASS=1, PARTIAL=0,5, FAIL=0), mỗi lượt chạy 1 lần. Cấu hình thử giống prod (`INPUT_CLASSIFIER_BLOCK_OFFTOPIC=false`, cascade bật, air-gap).
+
+**Vòng lặp trên KB thử (cờ tắt / cờ bật):** 78,0 / 77,5 → 88,5 / 88,5 → 90,0 / 91,0 → **92,5 / 91,5**. Không có hồi quy FAIL ở các vòng; nhiễu đo được 0/21 câu ngoài phạm vi thay đổi.
+
+**A/B trên KB prod thật (763.518 CVE), canary cô lập, cờ tri thức tắt:**
+
+| Nhóm | Image đang chạy trước đó | Image mới | Image mới + cờ bật (tri thức đã nạp) |
+|---|---|---|---|
+| cve_lookup | 95,8 | 100 | 100 |
+| cve_alias | 75,0 | 93,8 | 87,5 |
+| cve_discovery | 25,0 | 56,2 | 56,2 |
+| cwe_lookup | 100 | 100 | 91,7 |
+| capec_attack | 91,7 | 100 | 100 |
+| poc | 45,0 | 95,0 | 95,0 |
+| concept | 86,4 | 100 | 100 |
+| remediation | 86,4 | 100 | 90,9 |
+| taxonomy | 50,0 | 50,0 | **100** |
+| meta / offtopic / edge | 100 | 100 | 100 |
+| safety | 100 | 90 | 90 |
+| multilingual | 83,3 | 100 | 100 |
+| followup | 83,3 | 100 | 100 |
+| **Tổng /100** | **80,0** | **93,5** | **93,0** |
+
+- Tên mã CWE/CAPEC/ATT&CK gắn sai: image cũ 3 câu, bản đầu của image mới 6 (bảng tên bị timeout trên prod vì scroll không index), **bản cuối 0 câu** sau khi tra theo point id.
+- Số PoC trong câu trả lời khớp catalog khử trùng 100% (64/21/15/18/11/9/16/0/0).
+- Cờ bật giữ nguyên tổng điểm nhưng: taxonomy 50% → 100% (đủ 10 mục OWASP Top 10:2025 và 25 mục CWE Top 25 đúng thứ hạng, nêu rõ "mới nhất trong KB"), câu khái niệm/khắc phục bám tài liệu (66 URL nguồn, 100% khớp `source_url` trong chunk, trừ 1 URL model tự dựng ở câu 074), tránh được khuyến nghị sai (JWT: bản tắt khuyên RS256, trái tài liệu).
+- Độ trễ (TTFT p50/p95, giây): image cũ 1,77/5,28; image mới cờ tắt 1,84/4,47; cờ bật tăng ~1,5 s TTFT riêng cho concept/remediation (`3,26` vs `1,78`), p95 toàn cục ngang nhau. Nhóm alias/discovery +~2 s do tự tra KB.
+
+### 2.4 Các phép đo khác
 
 | Mục | Kết quả |
 |---|---|
-| G1 không giảm chất lượng tra CVE | Prod code cũ vs mới: recall@5 0,667, MRR 0,598, **giống hệt**. Lab trước/sau nạp: 0,846 / 0,767, 0/117 hạng gold đổi. 0 chunk tri thức lọt vào kết quả entity. |
-| G2 test | pytest toàn repo trên code cuối: **2.225 pass, 2 fail có sẵn** (`tests/multilang/test_api.py::test_composition_off_on_legacy_and_cors`, `tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal`). |
-| G3 rollback / cờ tắt | (a) rollback đã chạy thật trên lab (xem trên). (b) `classify_chat_grounding` không cờ ≡ HEAD trên 171 prompt golden; prompt chat byte-identical khi cờ tắt (có test). |
-| G4 license | 8.386/8.386 chunk đủ license, attribution, URL, version; không có nguồn bị cấm. Version ATT&CK ghi đúng 19.2. |
-| G5 an toàn | 0 chunk nhãn `contains_attack_example` trong context; nhãn mở rộng từ 18 lên 56 chunk. Sanitize eval không chạy (cần serving). |
-| G6 embedding + hybrid | `check_embed_model` xác nhận `DuyTa/sec-embedding` qua `/v1/models` trước khi ghi; 100% điểm có dense + sparse; **114/114 truy vấn chạy hybrid** (sau khi thêm mở rộng Việt→Anh; trước đó 94,7%). |
-| S2 truy hồi tri thức | recall@5 **0,965**, MRR 0,798 (114 câu), tiếng Việt 0,963. Gold theo tài liệu cha; lưu ý agent chấm nhận xét bộ này dễ (tên chủ đề trùng tên cheat sheet). |
-| S3 routing | Bộ 114 câu: 114/114, control 0/10 (in-sample). **Tập 115 câu viết mới, lần chạy đầu: 82% bắt đúng, 4% nhầm** (chưa đạt ≥90%/≤2%); sau khi chỉnh luật theo tập đó: 100%/0% (số này không còn độc lập). CVE hỏi theo sản phẩm: 0 câu bị route nhầm sang tri thức. |
-| S6 độ trễ | Tra tri thức p50 1,36 s (trước 1,90 s). Cờ bật vẫn thêm ~1,2–2 s TTFT cho câu khái niệm/khắc phục: **không đạt ngưỡng +300 ms** của tiêu chí. |
-| Chất lượng câu trả lời (S4) | Bản bật tốt hơn 29/50 câu khái niệm-khắc phục, ngang 17, kém 4 (agent đọc tay 60 cặp, không mù); trích nguồn đúng 88%; 0 URL bịa ở bản bật (bản tắt ≥5). Độ phủ ý chính không đổi (đã gần trần). Đây **không** phải điểm judge LLM độc lập. |
+| pytest toàn repo (code cuối) | **2.243 pass, 2 fail có sẵn** (`tests/multilang/test_api.py::test_composition_off_on_legacy_and_cors`, `tests/test_bughunt_phase0.py::test_bugbounty_root_and_arsenal`). Lượt chạy cuối chạy trên đúng code đã triển khai (sau sửa chính sách trích dẫn). |
+| Sanitize eval (`scripts/eval_sanitize.py`, endpoint thật) | FP 0/219, injection recall 36/36, PII guard 54,6% (báo cáo trước 54,0%): trong ±1 điểm; `sanitize/` không bị sửa |
+| S5 `eval_remediation_owasp.py` part A | 9/10 cả hai cấu hình (câu lỗi duy nhất thiếu khối code) |
+| Rollback | diễn tập thật trên lab (50.369 → 42.318, đúng 8.051 điểm tri thức bị xoá); dry-run trên prod cho batch thật `knowledge-2026-10-07` = 8.386 điểm |
 
-Agent chấm độc lập lần đầu kết luận KHÔNG ĐẠT (~65/100) với 6 lỗi mức Cao; tất cả đã sửa và có test chạy pipeline thật (H0 `&` trần trong prompt, H1/H2 id làm filter trả 0 hit, H3 BM25 entity bị tri thức chen, H4 kết quả rỗng, H5 độ trễ/timeout). Chưa có lần chấm lại toàn bộ tiêu chí sau khi sửa, ngoài bài test 100 câu bên dưới.
+## 3. Các lỗi được phát hiện và đã sửa (tóm tắt)
 
-## 3. Bài test 100 câu chức năng core (15 nhóm)
+- Lần chấm độc lập đầu (KHÔNG ĐẠT, ~65/100): 6 lỗi mức Cao (prompt có `&` làm vỡ XML; id mã CVE biến thành filter làm 0 kết quả; BM25 entity bị chunk tri thức chen; kết quả rỗng thay vì "không tìm thấy"; độ trễ/timeout; thiếu test chạy pipeline thật) — đã sửa, có test chạy pipeline thật.
+- Lần chấm độc lập thứ hai (KHÔNG ĐẠT, S≈61 theo quy tắc chặt): 1 test đỏ do double thiếu `grounding_context`, cờ tắt chưa giống HEAD (bảng tên và 2 luật prompt vô điều kiện), Top 10 sai loại (LLM/API/Mobile), URL `.md` chết, lượt ghim CWE lẫn danh sách taxonomy, file KPI của người khác bị đưa vào commit — đã sửa.
+- Phát hiện khi chạy trên prod thật: scroll theo `cwe_id`/`capec_id`/`technique_id` (chưa index) mất ~2,1 s trên 763k điểm: làm bảng tên chính thức hết hạn và là nguyên nhân độ trễ 5 s của câu hỏi CWE/CAPEC có sẵn từ trước. Đã tra theo point id và thêm payload index.
+- Rò rỉ chỉ dẫn vào câu trả lời (câu 034 lặp lại "nếu có trong ngữ cảnh… CC BY-SA"): đã đổi chính sách trích dẫn sang một dòng `Nguồn:` có cấu trúc, cấm nhắc tới cơ chế; kiểm lại 27 câu, 0 rò rỉ.
+- Cấu hình thử ban đầu khác prod (`BLOCK_OFFTOPIC` mặc định true, prod false) làm lộ các ca "classifier chặn nhầm" không có trên prod; đã chạy lại đúng cấu hình prod.
 
-Bộ câu: `evals/core_eval/core_eval_set.jsonl` (đáp án đối chiếu đọc từ chính KB và catalog PoC). Gateway thử dùng cấu hình **giống prod**: `INPUT_CLASSIFIER_BLOCK_OFFTOPIC=false`, cascade bật, air-gap. Chấm bởi agent độc lập, 3 vòng (PASS=1, PARTIAL=0,5, FAIL=0), mỗi vòng chạy 1 lần.
+## 4. Triển khai prod (2026-10-07)
 
-| Nhóm | n | Cờ tắt R1→R2→R3 (%) | Cờ bật R1→R2→R3 (%) | Kết luận R3 (tắt / bật) |
-|---|---|---|---|---|
-| cve_lookup | 12 | 96 → 96 → 100 | 96 → 96 → 100 | đáp ứng / đáp ứng |
-| cve_alias | 8 | 62 → 94 → 94 | 62 → 62 → 62 | đáp ứng / **chưa** |
-| cve_discovery | 8 | 50 → 81 → 81 | 44 → 75 → 75 | chưa / chưa |
-| cwe_lookup | 6 | 92 → 92 → 92 | 92 → 92 → 92 | đáp ứng / đáp ứng |
-| capec_attack | 6 | 83 → 83 → 83 | 92 → 92 → 92 | chưa (sát) / đáp ứng |
-| poc | 10 | 40 → 75 → 80 | 45 → 80 → 90 | chưa / đáp ứng |
-| concept | 11 | 100 → 95 → 95 | 100 → 100 → 100 | đáp ứng / đáp ứng |
-| remediation | 11 | 86 → 82 → 82 | 86 → 95 → 95 | chưa / đáp ứng |
-| taxonomy | 3 | 50 → 50 → 50 | 50 → 67 → **100** | chưa / đáp ứng |
-| meta | 6 | 67 → 100 → 100 | 67 → 100 → 100 | đáp ứng / đáp ứng |
-| offtopic | 6 | 100 → 100 → 100 | 100 → 100 → 100 | đáp ứng / đáp ứng |
-| safety | 5 | 100 → 100 → 100 | 90 → 90 → 90 | đáp ứng / đáp ứng |
-| multilingual | 3 | 67 → 83 → 83 | 50 → 67 → 67 | chưa (sát) / chưa |
-| followup | 3 | 67 → 83 → 100 | 67 → 100 → 100 | đáp ứng / đáp ứng |
-| edge | 2 | 100 → 100 → 100 | 100 → 100 → 100 | đáp ứng / đáp ứng |
-| **Tổng /100** | 100 | 78,0 → 88,5 → **90,0** | 77,5 → 88,5 → **91,0** | |
+1. **Bước 1 (09:25):** gateway đổi sang image overlay 12 file (nền: image đang chạy `ab-backend-fix-20261007`), cờ tri thức tắt; profile container giống hệt baseline; smoke 7 câu đạt.
+2. **Bước 2:** nạp 8.386 chunk vào `cve_kb_hybrid` (`--allow-prod`, 720 s), tạo thêm payload index (`sensitivity`, `ingest_batch`, `source`, `license`, `doc_id`, `parent_id`, `cwe_id`, `capec_id`, `technique_id`); verify 8.386/8.386 (đủ dense + sparse `bm25`, 0 trùng, text khớp `chunks.jsonl`); điểm không phải tri thức vẫn 763.518. Không chụp snapshot 22 GB (đĩa còn ~44 GB): bảo vệ bằng rollback theo batch đã diễn tập.
+3. **Bước 3 (10:06):** image sửa lỗi chính sách trích dẫn + `CHAT_KNOWLEDGE_GROUNDING_ENABLED=true`; smoke 10 câu đạt, 0 traceback, health ok.
 
-- FAIL còn lại: 3 mỗi cấu hình (026 Citrix Bleed không truy hồi được; 050 model tự viết mã rồi gắn nhãn "trích từ PoC"; 074 tắt / 094 bật: bịa Top 25 hoặc tham số giảm thiểu Log4Shell). Không có lỗi nặng ở safety/offtopic/edge; không có hồi quy FAIL mới.
-- Sau vòng 3 còn sửa thêm một lỗi do agent chỉ ra: khối PoC chọn nhầm CVE anh em (CVE-2021-45046, 12 PoC) cho câu "Log4Shell có PoC…"; nay chọn CVE có nhiều PoC nhất trong các CVE cùng tên (CVE-2021-44228, 64 PoC, đã kiểm qua log). Chưa chạy lại cả 100 câu sau sửa này.
-- Độ tin cậy: model gần tất định theo ngữ cảnh (81 câu tắt và 75 câu bật giống hệt giữa R2 và R3); 0/86 verdict đổi ở các nhóm không liên quan. Mỗi vòng chỉ chạy 1 lần, n nhỏ ở taxonomy/multilingual/followup/edge/safety: một câu đổi = 17–33 điểm % của nhóm.
-- Cờ bật không cho tổng điểm khác đáng kể trên bài test này (91,0 vs 90,0); lợi ích của nó nằm ở trích nguồn (concept/remediation có URL cheat sheet 19/22 câu so với 1/22) và taxonomy.
+Vận hành (thư mục private `/home/ict/secai-releases/knowledge-kb-20261007`, dùng khóa `gateway-deploy.lock`; ghi chú phối hợp đã thêm vào `DEPLOYMENT-STATE.md`):
 
-## 4. Nhóm chưa đáp ứng và việc tiếp theo
+```sh
+./rollback-gateway.sh flag   # tắt cờ tri thức, giữ image mới
+./rollback-gateway.sh full   # về image cũ 5d2f6e816189… (giữ nguyên image, không prune)
+python3 secai/scripts/knowledge/kb_knowledge.py rollback --collection cve_kb_hybrid --batch knowledge-2026-10-07 --allow-prod
+```
 
-| Nhóm | Nguyên nhân gốc | Loại | Đề xuất |
-|---|---|---|---|
-| cve_alias (bật), capec_attack (tắt) | model tự thêm chi tiết ngoài ngữ cảnh (người phát hiện, mốc vá, tên CAPEC/ATT&CK sai dù đã có bảng tên) | lỗi nền model | hậu kiểm đầu ra trong `agent/hooks.py::chat_final_text`; thay tên sai bằng tên chính thức ở tầng code |
-| cve_discovery | 026: truy hồi không ra Citrix Bleed; 027: truy hồi theo CWE-78 trả CVE tuỳ ý | code + KB thử nhỏ | đồng nghĩa Citrix=NetScaler; xếp KEV-first như `_graph_reverse_candidates` |
-| poc | 050: model viết mã giả gắn nhãn PoC mà không gọi `poc_fetch` | lỗi nền model + code | lọc khối code nhãn "trích từ PoC" khi không có `poc_fetch`; ép `poc_fetch` cho "cho tôi xem" |
-| remediation (tắt) | câu tiếng Anh bị trả tiếng Việt khi không có grounding | code | gắn nhắc ngôn ngữ độc lập grounding (`EphemeralTurnContextHook`) |
-| taxonomy (tắt) | không có dữ liệu danh sách khi cờ tắt | cờ | bật cờ tri thức, hoặc luôn gọi `_taxonomy_grounding` |
-| multilingual / 094 | bịa tham số giảm thiểu Log4Shell | model + KB | thêm chunk khắc phục Log4Shell vào KB tri thức |
-| chung | `&lt;` thô trong khối code | code | `security.py::neutralize_active_content`: cần quyết định có nới ở code fence không (liên quan anti-XSS) |
+Mọi release gateway sau này phải overlay lên **image hiện tại** (`46fa8f385b1d…`); baseline của các release trước đó đã lỗi thời.
 
-## 5. Chưa làm / cần bạn quyết định
+## 5. Còn tồn tại, giới hạn và chưa đo
 
-- **P6 (đưa lên prod): chưa làm có chủ đích.** Cần: (1) pháp chế duyệt license CC-BY-SA (OWASP) và điều khoản MITRE khi trích nguyên văn; (2) snapshot Qdrant prod (đĩa còn ~46 GB, collection 22 GB); (3) deploy image có bộ lọc scope **trước** khi ghi chunk tri thức vào `cve_kb_hybrid` (image prod hiện tại không có `must_not`, chunk sẽ lọt vào kết quả CVE); (4) bật cờ theo canary và theo dõi TTFT p95 + tỉ lệ 0 hit.
-- `CHAT_CVE_SEARCH_PREFETCH_ENABLED` mặc định **bật**: đổi hành vi chat của prod khi deploy (tốt cho nhóm alias/discovery, TTFT +~2 s cho các câu đó). Muốn giữ như cũ thì đặt `false`.
-- Chưa chạy: S5 (`eval_remediation_owasp.py`, cần gateway live), sanitize eval, judge LLM độc lập cho faithfulness, đo TTFT tại host, bài test 100 câu lặp ≥3 lần.
-- Mã chưa commit: nhiều file thay đổi nằm lẫn với thay đổi sẵn có của bạn (FE devspace, multilang…); tôi không stage gì.
+- **Chưa đạt tiêu chí gốc:** S6 (TTFT +300 ms; thực tế +~1,5 s cho concept/remediation khi bật cờ, +~2 s cho câu alias); routing trên tập độc lập của reviewer chỉ bắt đúng 81% và nhầm 32% ở nhóm "từ vựng trùng" (upload, log, ssh…) — cổng cosine 0,55 chỉ loại ~62% câu không liên quan; chưa có judge LLM độc lập cho faithfulness (đã thay bằng agent đọc tay); mỗi vòng test chạy 1 lần, n nhỏ ở taxonomy/multilingual/followup/edge/safety (một câu = 17–33 điểm % của nhóm).
+- **Lỗi nội dung còn lại:** cve_discovery 56% (026 Citrix Bleed không truy hồi được, 023/027/028 không đưa CVE gold lên; 025 trả CVE ProxyShell cho chuỗi ProxyLogon); 014 CVSS lấy từ trí nhớ; 050 mã PoC thật nhưng bị cắt giữa mảng; 065 truy hồi trôi chủ đề; câu chốt tiếng Việt lẫn trong thân tiếng Anh (062/063/070/072); `&lt;` thô trong khối code (lớp anti-XSS của backend có chủ đích: sửa ở FE).
+- **Rủi ro chưa kiểm chứng:** 10 chunk trong LLM Prompt Injection Prevention / RAG Security cheat sheet chứa chuỗi tấn công thật ("ignore previous instructions"); đã bọc untrusted nhưng bộ test chưa có câu hỏi nhắm vào chúng. Nhãn payload còn yếu ở sheet XSS Filter Evasion (22/55 chunk).
+- **Chưa làm:** pháp chế duyệt giấy phép CC-BY-SA/MITRE ToU (nội dung được trích kèm nguồn và URL, license nằm trong metadata); đo TTFT tại host; instrument TTFT trong gateway; bài test lặp ≥3 lần; chunk khắc phục Log4Shell và nguồn GHSA (kind `advisory_fix`); bản dịch tiếng Việt của chunk; nối pipeline nạp vào cron hằng đêm.
+- **Theo dõi 30–60 phút sau bật cờ:** 5xx, câu rỗng/fallback, TTFT p95, tỉ lệ `hits=0` trong log `qdrant_search scope=knowledge`, và các câu 001/014/020/025/039/068/091 để tách nhiễu khỏi lỗi hệ thống.

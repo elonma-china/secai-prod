@@ -51,3 +51,12 @@ Baseline đã đo offline ngày 2026-10-06 (reviewer độc lập):
 
 - **G6, vế "≥ 95% truy vấn hybrid"**: đo được 108/114 = 94,7% (không đạt theo câu chữ gốc). 6 truy vấn còn lại đều là tiếng Việt thuần, BM25 không có token trùng với chunk tiếng Anh nên rơi về dense. Báo cáo chấm điểm ghi G6 vế này là **không đạt theo tiêu chí gốc**; đề xuất tiêu chí sửa: "100% truy vấn tiếng Anh chạy hybrid; truy vấn tiếng Việt được phép dense-only", kèm hạng mục cải thiện xuyên ngôn ngữ cho đợt sau.
 - **Baseline retrieval CVE**: dùng số đo lại bằng code HEAD trên collection prod (recall@5 0,667, MRR 0,598), thay cho 0,675/0,599 trong file kết quả cũ.
+
+## E. Kết quả sau khi triển khai (2026-10-07)
+
+Số đo, bảng điểm 100 câu và các tiêu chí chưa đạt: [kb-knowledge-grounding-2026-10-07.md](../test-results/kb-knowledge-grounding-2026-10-07.md). Tóm tắt trạng thái theo tiêu chí gốc:
+
+- **Đạt (số đo tự động hoặc đo trực tiếp):** G1 (prod, sau khi nạp tri thức, giống hệt baseline), G2 (chỉ còn 2 fail có sẵn), G4, G5 (theo cấu trúc), G6 (kể cả hybrid 114/114 sau khi thêm mở rộng Việt→Anh), S1, S2, S5 (9/10).
+- **Đạt có điều kiện:** G3 (rollback đã diễn tập trên lab; trên prod mới dry-run theo batch thật, cờ tắt ≡ HEAD ở routing/ngữ cảnh/prompt).
+- **Chưa đạt hoặc không đo được:** S3 (routing độc lập: 81% bắt đúng, 32% nhầm ở nhóm từ vựng trùng), S4 (không có judge LLM độc lập; dùng agent đọc tay), S6 (TTFT +~1,5 s thay vì +300 ms), S7 (thiếu bản lưu một số JSON gốc: nay đã đặt trong `kb-knowledge-grounding-artifacts/`).
+- Điều chỉnh ở mục D vẫn giữ nguyên; riêng vế "≥95% truy vấn hybrid" nay **đạt** (114/114) nhờ mở rộng thuật ngữ Việt→Anh cho BM25 thay vì miễn trừ tiếng Việt.

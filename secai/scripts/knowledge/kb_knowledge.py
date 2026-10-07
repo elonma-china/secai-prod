@@ -44,7 +44,10 @@ EXPECTED_EMBED_MODEL = "DuyTa/sec-embedding"
 BM25_MODEL = "Qdrant/bm25"
 LOCAL_BM25_MODEL_DIR = "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model"
 PAYLOAD_INDEXES = {"sensitivity": "keyword", "ingest_batch": "keyword", "source": "keyword",
-                   "license": "keyword", "doc_id": "keyword", "parent_id": "keyword"}
+                   "license": "keyword", "doc_id": "keyword", "parent_id": "keyword",
+                   # definition/mitigation ids: filtering on them without an index scans the whole collection
+                   # (~2 s on 763k points); entity lookups of CWE/CAPEC/ATT&CK ids use them
+                   "cwe_id": "keyword", "capec_id": "keyword", "technique_id": "keyword"}
 
 
 def load_env(*paths: str) -> dict[str, str]:
