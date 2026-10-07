@@ -2,7 +2,7 @@
 
 Plan: [kb-knowledge-grounding.md](../plans/kb-knowledge-grounding.md). Tiêu chí: [kb-knowledge-grounding-criteria.md](../plans/kb-knowledge-grounding-criteria.md). Bằng chứng gốc: [kb-knowledge-grounding-artifacts/](kb-knowledge-grounding-artifacts/).
 
-**Trạng thái:** đã triển khai lên gateway prod :8131 (image `secai-agent-gateway:knowledge-kb-20261007`, cờ tri thức BẬT) và đã nạp 8.386 chunk vào `cve_kb_hybrid`. Mã nằm trên nhánh `feat/knowledge-kb-grounding` (chưa push, chưa merge).
+**Trạng thái:** đã triển khai lên gateway prod :8131 (image `secai-agent-gateway:knowledge-kb-20261007` = `sha256:062b3ecabdff…`, cờ tri thức BẬT) và đã nạp 8.386 chunk vào `cve_kb_hybrid`. Mã nằm trên nhánh `feat/knowledge-kb-grounding` (chưa push, chưa merge).
 
 ## 1. Đã làm
 
@@ -84,6 +84,7 @@ Bộ câu: `evals/core_eval/core_eval_set.jsonl`; đáp án đối chiếu đọ
 1. **Bước 1 (09:25):** gateway đổi sang image overlay 12 file (nền: image đang chạy `ab-backend-fix-20261007`), cờ tri thức tắt; profile container giống hệt baseline; smoke 7 câu đạt.
 2. **Bước 2:** nạp 8.386 chunk vào `cve_kb_hybrid` (`--allow-prod`, 720 s), tạo thêm payload index (`sensitivity`, `ingest_batch`, `source`, `license`, `doc_id`, `parent_id`, `cwe_id`, `capec_id`, `technique_id`); verify 8.386/8.386 (đủ dense + sparse `bm25`, 0 trùng, text khớp `chunks.jsonl`); điểm không phải tri thức vẫn 763.518. Không chụp snapshot 22 GB (đĩa còn ~44 GB): bảo vệ bằng rollback theo batch đã diễn tập.
 3. **Bước 3 (10:06):** image sửa lỗi chính sách trích dẫn + `CHAT_KNOWLEDGE_GROUNDING_ENABLED=true`; smoke 10 câu đạt, 0 traceback, health ok.
+4. **Bước 4 (10:25):** thêm vào image `/app/kpi_bench/scripts/retrieval_kpi.py` đã vá (loại chunk tri thức khỏi top-k của KPI tra CVE: script này đọc thẳng `cve_kb_hybrid` và nằm trong image cho KPI Studio). Bản host `KPI-VA-GEN-TEST/scripts/retrieval_kpi.py` (bind-mount, không nằm trong git) cũng được vá cùng cách, bản gốc lưu cạnh với đuôi `.bak-pre-knowledge-20261007`. Script `kpi_eval_v2/quality/common.py` (WIP chưa track của người khác) cũng có bản vá cục bộ nhưng không nằm trong nhánh. Smoke 6 câu đạt sau recreate.
 
 Vận hành (thư mục private `/home/ict/secai-releases/knowledge-kb-20261007`, dùng khóa `gateway-deploy.lock`; ghi chú phối hợp đã thêm vào `DEPLOYMENT-STATE.md`):
 
@@ -93,7 +94,7 @@ Vận hành (thư mục private `/home/ict/secai-releases/knowledge-kb-20261007`
 python3 secai/scripts/knowledge/kb_knowledge.py rollback --collection cve_kb_hybrid --batch knowledge-2026-10-07 --allow-prod
 ```
 
-Mọi release gateway sau này phải overlay lên **image hiện tại** (`46fa8f385b1d…`); baseline của các release trước đó đã lỗi thời.
+Mọi release gateway sau này phải overlay lên **image hiện tại** (`062b3ecabdff…`); baseline của các release trước đó đã lỗi thời.
 
 ## 5. Còn tồn tại, giới hạn và chưa đo
 
