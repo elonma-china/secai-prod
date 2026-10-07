@@ -23,10 +23,18 @@ Tài liệu theo chủ đề được giữ ở các thư mục dưới đây. C
 - Dịch file/ảnh: [contract v2](api/translate-v2-contract.md), [chạy local](examples/translate-v2-local-operator.md), [worker Docker](../deploy/file-ocr/README.md).
 - Đa ngôn ngữ: [contract v3](api/multilang-contract.md), [operator](api/multilang-translate.md), [triển khai](../deploy/multilang/README.md).
 - Expert review: [API](api/review-mvp.md), [operator](review-operator-guide.md).
+- Reward Qwen3-1.7B: [chuẩn bị dữ liệu, huấn luyện, đánh giá và dịch vụ chấm điểm](reward-qwen-operator.md).
 - Chat/session: [API chung](api-guide.md), [project/session](session-project-api-guide.md).
 - PoC: [API](poc-api-guide.md), [verify](poc-verify-architecture.md).
 
 ## Triển khai và kiểm chứng hiện tại
+
+- [Devspace: demo user/Admin và duyệt phản hồi A/B](test-results/devspace-ab-two-roles-20261006.md).
+- [Devspace → Vast: job fine-tune Qwen3-1.7B thật, 1.000 cặp QA](test-results/reward-vast-devspace-training-20261006.md).
+
+- [Fine-tune Qwen3-1.7B với 1.000 cặp QA, tối đa 5 vòng](test-results/reward-qwen3-17b-1000-pairs-20261006.md).
+
+- [Luồng đánh giá → huấn luyện Qwen3-1.7B thật → API chấm điểm (dataset QA)](test-results/reward-qwen3-17b-real-flow-20261006.md).
 
 - [Xuất báo cáo TXT/DOCX/PDF và kiểm chứng](test-results/report-export-20261005.md).
 

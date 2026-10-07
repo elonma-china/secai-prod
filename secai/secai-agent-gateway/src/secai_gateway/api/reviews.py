@@ -7,13 +7,32 @@ import json
 import zipfile
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import ValidationError
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .review_auth import ReviewActor, get_review_actor, require_review_admin
 from .review_schemas import AdjudicationInput, AssignmentInput, CampaignInput, CampaignPatch, JudgmentInput, ReviewItemInput
 from ..state.review_store import ReviewError
 
-router = APIRouter(prefix='/review-api',tags=['expert review'])
+class ReviewRoute(APIRoute):
+    """Answer body-validation failures with a 422 that never echoes the submitted input.
+
+    FastAPI's default 422 body embeds the rejected value; for a lone UTF-16 surrogate
+    ("\\ud800") that value cannot be JSON-encoded, so the error response itself crashed (500).
+    """
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+        async def guarded(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError as exc:
+                return JSONResponse({'detail': [{'loc': list(e['loc']), 'msg': str(e['msg']), 'type': e['type']} for e in exc.errors()]}, status_code=422)
+        return guarded
+
+router = APIRouter(prefix='/review-api',tags=['expert review'],route_class=ReviewRoute)
 MAX_UPLOAD = 10*1024*1024
+MAX_OFFSET = 1_000_000_000  # keeps OFFSET inside SQLite INTEGER; larger values 422 instead of OverflowError/500
 
 async def call(request, method, *args):
     try:
@@ -25,12 +44,51 @@ async def call(request, method, *args):
 def page(items,offset,limit):
     return {'items':items[offset:offset+limit],'total':len(items),'offset':offset,'limit':limit}
 
+class BulkApprovalInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    source: Literal['all','live','qa','import'] = 'all'
+    search: str = Field(default='',max_length=200)
+    snapshot_version: str = Field(pattern='^[0-9a-f]{64}$')
+
+
+async def small_body(request, schema):
+    data=bytearray()
+    async for chunk in request.stream():
+        data.extend(chunk)
+        if len(data)>4096: raise HTTPException(413,'input exceeds limit')
+    try: return schema.model_validate_json(data)
+    except ValidationError: raise HTTPException(422,'invalid input') from None
+
+
+@router.get('/overview')
+async def overview(request:Request,status:Literal['pending','approved','excluded','all']='pending',
+    source:Literal['all','live','qa','import']='all',search:str=Query('',max_length=200),
+    offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'overview',status,source,search,offset,limit)
+
+
+@router.get('/overview/{iid}')
+async def overview_detail(iid:str,request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'overview_detail',iid)
+
+
+@router.get('/approvals/preview')
+async def bulk_preview(request:Request,source:Literal['all','live','qa','import']='all',search:str=Query('',max_length=200),actor:ReviewActor=Depends(require_review_admin)):
+    return await call(request,'bulk_preview',source,search)
+
+
+@router.post('/approvals/bulk')
+async def bulk_approve(request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    payload=await small_body(request,BulkApprovalInput)
+    return await call(request,'bulk_approve',payload.source,payload.search,payload.snapshot_version,actor.actor_id)
+
+
 @router.get('/me')
 async def me(actor: ReviewActor=Depends(get_review_actor)):
     return actor
 
 @router.get('/reviewers')
-async def reviewers(request:Request,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def reviewers(request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     return page(sorted([a.model_dump() for a in request.app.state.gateway.review_credentials.values() if a.role=='reviewer'],key=lambda a:a['actor_id']),offset,limit)
 
 @router.post('/campaigns')
@@ -38,7 +96,7 @@ async def create_campaign(payload:CampaignInput,request:Request,actor:ReviewActo
     return await call(request,'create_campaign',payload.title,payload.rubric_version,actor.actor_id)
 
 @router.get('/campaigns')
-async def campaigns(request:Request,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
+async def campaigns(request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
     return page(await call(request,'list_campaigns',actor.actor_id if actor.role=='reviewer' else None),offset,limit)
 
 @router.patch('/campaigns/{cid}')
@@ -78,7 +136,7 @@ async def import_items(cid:str,request:Request,actor:ReviewActor=Depends(require
     return await call(request,'import_items',cid,items,actor.actor_id)
 
 @router.get('/campaigns/{cid}/items')
-async def items(cid:str,request:Request,disagreement:bool=False,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def items(cid:str,request:Request,disagreement:bool=False,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     return page(await call(request,'list_items',cid,disagreement),offset,limit)
 
 @router.post('/items/{iid}/assignments')
@@ -94,7 +152,7 @@ async def delete_assignment(aid:str,request:Request,actor:ReviewActor=Depends(re
     return Response(status_code=204)
 
 @router.get('/assignments')
-async def assignments(request:Request,status:Literal['pending','submitted']|None=None,campaign_id:str|None=None,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
+async def assignments(request:Request,status:Literal['pending','submitted']|None=None,campaign_id:str|None=None,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(50,ge=1,le=100),actor:ReviewActor=Depends(get_review_actor)):
     return page(await call(request,'list_assignments',actor.actor_id,status,campaign_id),offset,limit)
 
 @router.get('/assignments/{aid}')
@@ -126,14 +184,16 @@ def build_export(snapshot,format):
         if not approval or approval['outcome']!='winner': continue
         chosen = next(c for c in item['candidates'] if c['id']==approval['winning_candidate_id'])
         rejected = next(c for c in item['candidates'] if c['id']!=approval['winning_candidate_id'])
-        records.append({'item_id':item['id'],'prompt':item['prompt_messages'],'chosen':chosen['text'],'rejected':rejected['text'],'rubric_version':snapshot['campaign']['rubric_version'],'adjudication_id':approval['id'],'source_group':item['source_group']})
+        records.append({'item_id':item['id'],'prompt':item['prompt_messages'],'chosen':chosen['text'],'rejected':rejected['text'],'rubric_version':snapshot['campaign']['rubric_version'],'adjudication_id':approval['id'],'source_group':item['source_group'], **({'source_groups':item['source_groups']} if 'source_groups' in item else {})})
     name = format+'.jsonl'
     body = ''.join(json.dumps(r,ensure_ascii=False,sort_keys=True)+'\n' for r in records).encode('utf-8')
-    manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}
+    manifest = {'schema_version':snapshot['schema_version'],'rubric_version':snapshot['campaign']['rubric_version'],'campaign_id':snapshot['campaign']['id'],'campaign_title':snapshot['campaign']['title'],'exported_at':snapshot['exported_at'],'format':format,'counts':{'items':len(snapshot['items']),'records':len(records)},'files':{name:{'sha256':hashlib.sha256(body).hexdigest(),'records':len(records)}}}
     output = io.BytesIO()
     with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(name,body)
-        archive.writestr('manifest.json',json.dumps(manifest,ensure_ascii=False,indent=2))
+        info=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED
+        archive.writestr(info,body)
+        info=zipfile.ZipInfo('manifest.json',date_time=(1980,1,1,0,0,0)); info.compress_type=zipfile.ZIP_DEFLATED
+        archive.writestr(info,json.dumps(manifest,ensure_ascii=False,indent=2))
     return output.getvalue()
 
 @router.get('/campaigns/{cid}/export')
@@ -141,6 +201,41 @@ async def export(cid:str,request:Request,format:Literal['raw','preference']='raw
     snapshot = await call(request,'export_snapshot',cid)
     body = await asyncio.to_thread(build_export,snapshot,format)
     return Response(body,media_type='application/zip',headers={'Content-Disposition':f'attachment; filename="review-{snapshot["campaign"]["id"]}-{format}.zip"'})
+
+class LiveSettingsInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    sample_percent: int = Field(ge=0, le=100, strict=True)
+
+
+def live_defaults(request):
+    settings = request.app.state.gateway.settings
+    return round(getattr(settings, 'review_live_sample_rate', 0.1) * 100, 6)
+
+
+def live_settings_response(request, value):
+    return {**value, 'scope': 'global', 'cooldown_seconds': getattr(request.app.state.gateway.settings, 'review_live_cooldown_seconds', 600)}
+
+
+@router.get('/live-settings')
+async def get_live_settings(request: Request, actor: ReviewActor = Depends(require_review_admin)):
+    value = await call(request, 'live_settings', live_defaults(request))
+    return live_settings_response(request, value)
+
+
+@router.put('/live-settings')
+async def put_live_settings(request: Request, actor: ReviewActor = Depends(require_review_admin)):
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > 1024:
+            raise HTTPException(413, 'settings body too large')
+        body.extend(chunk)
+    try:
+        payload = LiveSettingsInput.model_validate_json(bytes(body))
+    except ValidationError:
+        raise HTTPException(422, 'sample_percent must be an integer between 0 and 100; unknown fields are forbidden') from None
+    value = await call(request, 'set_live_settings', payload.sample_percent, live_defaults(request), actor.actor_id)
+    return live_settings_response(request, value)
+
 
 @router.post('/live-pairs')
 async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor)):
@@ -163,7 +258,8 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
         raise HTTPException(422,[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
     state=request.app.state.gateway
     settings=state.settings
-    sample_rate=getattr(settings,'review_live_sample_rate',0.1)
+    live_config=await call(request, 'live_settings', live_defaults(request))
+    sample_rate=live_config['sample_percent']/100
     if sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000:
         return {'offered':False}
     # Reserving before any await prevents two simultaneous actor requests spending twice.
@@ -228,4 +324,6 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
 
 # Template assistance shares review identity only; no existing IAS report route changes.
 from .review_templates import router as template_router
+from .review_reward import router as reward_router
+router.include_router(reward_router)
 router.include_router(template_router)

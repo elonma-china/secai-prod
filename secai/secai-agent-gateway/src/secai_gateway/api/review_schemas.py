@@ -4,12 +4,30 @@ import json
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Decision = Literal['left', 'right', 'tie', 'both_bad', 'insufficient_context']
+Decision = Literal['left', 'right', 'tie', 'both_bad', 'insufficient_context', 'skip']
 ErrorTag = Literal['incorrect_fact', 'unsupported_claim', 'incomplete', 'irrelevant', 'unsafe', 'other']
 RUBRIC = 'Ưu tiên đúng kỹ thuật và có bằng chứng; sau đó đủ ý và phù hợp câu hỏi. Không chọn chỉ vì câu trả lời dài. Phân biệt không có bằng chứng với đã xác minh sai.'
 
+def _has_lone_surrogate(value) -> bool:
+    if isinstance(value, str):
+        return any('\ud800' <= ch <= '\udfff' for ch in value)
+    if isinstance(value, dict):
+        return any(_has_lone_surrogate(k) or _has_lone_surrogate(v) for k, v in value.items())
+    if isinstance(value, (list, tuple)):
+        return any(_has_lone_surrogate(v) for v in value)
+    return False
+
 class Input(BaseModel):
     model_config = ConfigDict(extra='forbid')
+
+    @model_validator(mode='before')
+    @classmethod
+    def reject_lone_surrogates(cls, data):
+        # JSON "\ud800" decodes to an unpaired surrogate that cannot be UTF-8 encoded; left alone
+        # it would crash the SQLite/JSON write with HTTP 500 instead of a 422.
+        if _has_lone_surrogate(data):
+            raise ValueError('text must not contain unpaired UTF-16 surrogates')
+        return data
 
     @field_validator('id', 'external_id', 'title', 'source_group', 'comment', 'reason', 'winning_candidate_id', mode='before', check_fields=False)
     @classmethod
@@ -83,7 +101,7 @@ class JudgmentInput(Input):
         return self
 
 class AdjudicationInput(Input):
-    outcome: Literal['winner', 'tie', 'both_bad', 'insufficient_context']
+    outcome: Literal['winner', 'tie', 'both_bad', 'insufficient_context', 'skip']
     winning_candidate_id: str | None = Field(default=None, max_length=200)
     reason: str = Field(min_length=1, max_length=4000)
     @model_validator(mode='after')

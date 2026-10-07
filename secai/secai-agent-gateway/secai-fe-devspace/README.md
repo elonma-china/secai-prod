@@ -102,3 +102,18 @@ trang, job đã nhận được tiếp tục kiểm tra; tệp chưa gửi hoặ
 cần chọn lại đúng tệp để phát lại cùng khóa. Giao diện không thể hủy một POST
 chưa rõ máy chủ đã nhận cho tới khi khôi phục được ID job. Kết quả có thể tải
 dưới dạng TXT hoặc JSON; JSON giữ các trường OCR và cảnh báo từ API.
+
+## Demo hai vai trò và phản hồi A/B
+
+Bản demo dùng bộ chuyển **Demo → Người dùng thường / Admin** trong header. User không có tab A/B quản trị; chọn **Thử đánh giá A/B** để gửi phản hồi từ ví dụ QA được phân công. Admin mở tab A/B, xem phản hồi và phê duyệt hoặc loại mẫu. Đây là mô phỏng bằng credential chung cho từng vai trò, không phải đăng nhập production. Nút huấn luyện đã nối job QA riêng trên Vast khi backend được cấu hình; chỉ nhận dữ liệu QA đủ nhóm và không tự kích hoạt model cho chatbot. Xem [hướng dẫn job](../deploy/reward-training/README.md).
+
+Chức năng đăng nhập demo cần **static proxy `serve_static.py`**, không chạy qua `npm run dev` hoặc `npm run preview` trực tiếp. Vite chỉ chuyển tiếp `X-Review-Role`; gateway yêu cầu Bearer và không tự coi header này là quyền truy cập. Static proxy ánh xạ role sang credential riêng theo chính sách kết nối cho phép.
+
+Sau khi quản trị đã cấu hình credential reviewer/admin trong `.review-devspace-tokens.local`, cấu hình quyền kết nối local/tailnet của proxy và gateway review đang chạy:
+
+```bash
+npm run build
+FE_HOST=127.0.0.1 FE_PORT=5173 python3 serve_static.py
+```
+
+Không chạy thêm server nếu cổng đang được sử dụng. Không công khai file credential hoặc tắt Bearer/kiểm tra quyền để demo hoạt động. Luồng kiểm thử và ảnh: [báo cáo demo hai vai trò](../docs/test-results/devspace-ab-two-roles-20261006.md).

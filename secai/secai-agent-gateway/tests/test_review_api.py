@@ -3,9 +3,10 @@ import pytest
 from test_review_auth import client, ADMIN, REVIEW, OTHER
 from test_review_store import pair
 
-def prepared(client, reviewers=('expert',)):
+def prepared(client, reviewers=('expert',), source_group='unknown'):
     cid = client.post('/review-api/campaigns',headers=ADMIN,json={'title':'Pilot'}).json()['id']
-    assert client.post(f'/review-api/campaigns/{cid}/imports',headers=ADMIN,content=pair().model_dump_json()).json() == {'imported':1,'skipped':0}
+    assert client.post(f'/review-api/campaigns/{cid}/imports',headers=ADMIN,
+                      content=pair().model_copy(update={'source_group':source_group}).model_dump_json()).json() == {'imported':1,'skipped':0}
     item = client.get(f'/review-api/campaigns/{cid}/items',headers=ADMIN).json()['items'][0]
     assignments = client.post(f'/review-api/items/{item["id"]}/assignments',headers=ADMIN,json={'reviewer_ids':list(reviewers)}).json()['items']
     return cid,item,assignments
@@ -78,3 +79,21 @@ def test_import_rejects_invalid_prompt_atomically(client,messages):
     assert response.status_code==422
     remaining=client.get(f'/review-api/campaigns/{cid}/items',headers=ADMIN).json()
     assert remaining['total']==1 and remaining['items'][0]['id']==item['id']
+
+
+def test_skip_is_distinct_immutable_and_excluded_from_preference(client):
+    import io
+    import zipfile
+    cid, item, assignments = prepared(client)
+    aid = assignments[0]['id']
+    response = client.put(f'/review-api/assignments/{aid}/judgment', headers=REVIEW, json={'decision': 'skip'})
+    assert response.status_code == 200
+    assert response.json()['decision'] == 'skip'
+    normalized = client.get(f'/review-api/items/{item["id"]}/judgments', headers=ADMIN).json()['judgments'][0]
+    assert normalized['winning_candidate_id'] is None
+    assert client.put(f'/review-api/assignments/{aid}/judgment', headers=REVIEW, json={'decision': 'left'}).status_code == 409
+    assert client.put(f'/review-api/items/{item["id"]}/adjudication', headers=ADMIN,
+                      json={'outcome': 'skip', 'reason': 'QA skip'}).status_code == 200
+    for format, count in [('preference', 0), ('raw', 1)]:
+        archive = zipfile.ZipFile(io.BytesIO(client.get(f'/review-api/campaigns/{cid}/export?format={format}', headers=ADMIN).content))
+        assert len(archive.read(format + '.jsonl').splitlines()) == count

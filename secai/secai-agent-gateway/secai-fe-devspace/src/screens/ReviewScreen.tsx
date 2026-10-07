@@ -1,12 +1,14 @@
+import ReviewOverview from './review/ReviewOverview';
+import { AbAlert, AbLoading } from './review/AbParts';
 import { useEffect, useMemo, useState } from "react";
 import { createReviewApi, reviewError } from "../reviewApi";
 import type { Assignment, Campaign, JudgmentInput, QueueItem } from "../reviewTypes";
-import { clearReviewIdentity, setReviewIdentity, useReviewIdentity } from "../reviewIdentity";
+import { useReviewIdentity } from "../reviewIdentity";
 import ReviewPair from "./review/ReviewPair";
+import ReviewSamplingSettings from "./review/ReviewSamplingSettings";
 import ReviewAdmin from "./review/ReviewAdmin";
-export default function ReviewScreen() {
+export default function ReviewScreen({connecting = false, connectionError = "", onReconnect = () => {}}: {connecting?: boolean; connectionError?: string; onReconnect?: () => void} = {}) {
   const identity = useReviewIdentity();
-  const [role, setRole] = useState<"admin" | "reviewer">(identity?.actor.role || "admin");
   const token = identity?.token || "";
   const actor = identity?.actor || null;
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -21,23 +23,8 @@ export default function ReviewScreen() {
   const [notice, setNotice] = useState("");
   const api = useMemo(() => createReviewApi(token), [token]);
   const campaign = campaigns.find(c => c.id === campaignId);
-  useEffect(() => {
-    if (identity?.token === `devspace:${role}`) return;
-    let alive = true;
-    setBusy(true); setError("");
-    createReviewApi(`devspace:${role}`).me()
-      .then(actor => {if (alive) setReviewIdentity(`devspace:${role}`, actor);})
-      .catch(e => {if (alive) setError(reviewError(e));})
-      .finally(() => {if (alive) setBusy(false);});
-    return () => {alive = false;};
-  }, [role]);
-  function switchRole(next: "admin" | "reviewer") {
-    if (next === role) return;
-    clearReviewIdentity(); setCampaigns([]); setCampaignId(""); setQueue([]); setAssignment(null);
-    setError(""); setSubmitError(""); setNotice(""); setRole(next);
-  }
-  async function loadCampaigns() { const rows = await api.campaigns(); setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows[0]?.id || ""); }
-  useEffect(() => { if (!actor) return; let alive = true; setBusy(true); api.campaigns().then(rows => {if (alive) {setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows[0]?.id || "");}}).catch(e => alive && setError(reviewError(e))).finally(() => alive && setBusy(false)); return () => {alive = false;}; }, [api, actor]);
+  async function loadCampaigns() { const rows = await api.campaigns(); setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows.find(c => c.title === "Đánh giá từ chat")?.id || rows.find(c => c.title.startsWith("Demo 2 vai trò"))?.id || rows[0]?.id || ""); }
+  useEffect(() => { if (!actor) return; let alive = true; setBusy(true); api.campaigns().then(rows => {if (alive) {setCampaigns(rows); setCampaignId(prev => rows.some(c => c.id === prev) ? prev : rows.find(c => c.title === "Đánh giá từ chat")?.id || rows.find(c => c.title.startsWith("Demo 2 vai trò"))?.id || rows[0]?.id || "");}}).catch(e => alive && setError(reviewError(e))).finally(() => alive && setBusy(false)); return () => {alive = false;}; }, [api, actor]);
   async function loadQueue() {setBusy(true); setError(""); try {setQueue(await api.queue(status, campaignId));} catch(e) {setError(reviewError(e));} finally {setBusy(false);}}
   useEffect(() => {
     if (!actor || actor.role !== "reviewer" || !campaignId) return;
@@ -58,17 +45,21 @@ export default function ReviewScreen() {
       } catch (e) {setError("Phiếu đã lưu. " + reviewError(e));}
     } catch(e) {setSubmitError(reviewError(e));} finally {setBusy(false);}
   }
-  return <div className="review-screen"><div className="review-toolbar review-header"><h2>Quản trị & dán nhãn A/B</h2><div className="review-toolbar" role="group" aria-label="Vai trò Devspace"><button className="iasbtn" type="button" aria-pressed={role === "admin"} disabled={busy} onClick={() => switchRole("admin")}>Quản trị</button><button className="iasbtn" type="button" aria-pressed={role === "reviewer"} disabled={busy} onClick={() => switchRole("reviewer")}>Chuyên gia</button></div>{actor && <span>{actor.actor_id} · tài khoản dùng chung</span>}</div>
+  if (actor && ['admin'].includes(actor.role)) return <ReviewOverview key={actor.actor_id} api={api}/>;
+  if (!actor) return <section className="ab-screen"><header className="ab-head"><h3>Đánh giá A/B</h3></header><div className="ab-body">{connectionError && !connecting ? <AbAlert onRetry={onReconnect}>{connectionError}</AbAlert> : <AbLoading>Đang kết nối công cụ đánh giá…</AbLoading>}</div></section>;
+  return <div className="review-screen"><div className="review-toolbar review-header"><h2>Phản hồi A/B</h2></div>
     <div className="review-body">
-      {!actor ? <div className="iascard review-card review-login" role="status"><h3>{busy ? "Đang mở công cụ đánh giá…" : "Chưa kết nối được công cụ đánh giá"}</h3>{error && <p className="review-error" role="alert">{error}</p>}<button className="iasbtn" type="button" disabled={busy} onClick={() => {setBusy(true); createReviewApi(`devspace:${role}`).me().then(found => {setReviewIdentity(`devspace:${role}`, found); setError("");}).catch(e => setError(reviewError(e))).finally(() => setBusy(false));}}>Thử lại</button></div> : <>
-        <p className="review-muted">Devspace dùng tài khoản {actor.role === "admin" ? "quản trị" : "chuyên gia"} chung. Phiếu và quyết định được lưu thật, nhưng chưa định danh riêng từng người. Preference đã duyệt có thể xuất để chuyển cho nhóm Reward Function; màn này không huấn luyện model.</p>
+      {!actor ? <div className="iascard review-card review-login" role="status"><h3>{connecting ? "Đang kết nối công cụ đánh giá…" : "Chưa kết nối được công cụ đánh giá"}</h3>{connectionError && <p className="review-error" role="alert">{connectionError}</p>}<button className="iasbtn" type="button" disabled={connecting} onClick={onReconnect}>Thử lại</button></div> : <>
+        <p className="review-muted">Xem lựa chọn của user → xác nhận mẫu → quyết định fine-tune. Bản demo dùng tài khoản chung theo vai trò.</p>
         {error && <div className="review-error" role="alert">{error}<button className="iasbtn" disabled={busy} onClick={() => void (actor.role === "reviewer" && campaignId ? loadQueue() : loadCampaigns().catch(e => setError(reviewError(e))))}>Thử tải lại</button></div>}
         {notice && <p className="review-note" role="status">{notice}</p>}
-        <div className="review-toolbar"><label className="review-field">Đợt đánh giá<select className="iasin" value={campaignId} disabled={busy} onChange={e => {setCampaignId(e.target.value); setNotice("");}}><option value="">Chọn đợt đánh giá</option>{campaigns.map(c => <option key={c.id} value={c.id}>{c.title} · {c.state === "open" ? "Đang mở" : "Đã đóng"}</option>)}</select></label>{actor.role === "reviewer" && <label className="review-field">Trạng thái phiếu<select className="iasin" value={status} disabled={busy} onChange={e => setStatus(e.target.value)}><option value="pending">Chưa nộp</option><option value="submitted">Đã nộp</option></select></label>}</div>
-        {actor.role === "admin" && <form className="review-toolbar" onSubmit={async e => {e.preventDefault(); setBusy(true); setError(""); try {const c = await api.createCampaign(title.trim()); setTitle(""); await loadCampaigns(); setCampaignId(c.id); setNotice("Đã tạo đợt đánh giá.");} catch(e) {setError(reviewError(e));} finally {setBusy(false);}}}><label className="review-field">Tên đợt mới<input className="iasin" required maxLength={200} value={title} disabled={busy} onChange={e => setTitle(e.target.value)}/></label><button className="iasbtn" disabled={busy || !title.trim()}>Tạo đợt</button></form>}
+        {actor.role === "admin" && <ReviewSamplingSettings api={api}/>}
+        <details className="review-campaign-settings"><summary>Nâng cao · chọn hoặc tạo đợt đánh giá</summary><div className="review-toolbar"><label className="review-field">Đợt đánh giá<select className="iasin" value={campaignId} disabled={busy} onChange={e => {setCampaignId(e.target.value); setNotice("");}}><option value="">Chọn đợt đánh giá</option>{campaigns.map(c => <option key={c.id} value={c.id}>{c.title} · {c.state === "open" ? "Đang mở" : "Đã đóng"}</option>)}</select></label>{actor.role === "reviewer" && <label className="review-field">Trạng thái phiếu<select className="iasin" value={status} disabled={busy} onChange={e => setStatus(e.target.value)}><option value="pending">Chưa nộp</option><option value="submitted">Đã nộp</option></select></label>}</div>
+        {actor.role === "admin" && <details><summary>Quản lý đợt đánh giá</summary><form className="review-toolbar" onSubmit={async e => {e.preventDefault(); setBusy(true); setError(""); try {const c = await api.createCampaign(title.trim()); setTitle(""); await loadCampaigns(); setCampaignId(c.id); setNotice("Đã tạo đợt đánh giá.");} catch(e) {setError(reviewError(e));} finally {setBusy(false);}}}><label className="review-field">Tên đợt mới<input className="iasin" required maxLength={200} value={title} disabled={busy} onChange={e => setTitle(e.target.value)}/></label><button className="iasbtn" disabled={busy || !title.trim()}>Tạo đợt</button></form></details>}
+        </details>
         {busy && <p role="status">Đang xử lý…</p>}
         {!busy && !campaigns.length && <p>Chưa có đợt đánh giá{actor.role === "reviewer" ? " được phân công cho bạn" : ""}.</p>}
-        {campaign && (actor.role === "admin" ? <ReviewAdmin key={campaign.id} api={api} campaign={campaign} onChange={() => void loadCampaigns().catch(e => setError(reviewError(e)))}/> : <div>
+        {campaign && (actor.role === "admin" ? <ReviewAdmin key={campaign.id} api={api} campaign={campaign} onChange={updated => setCampaigns(rows => rows.map(row => row.id === updated.id ? updated : row))}/> : <div>
           <div className="review-toolbar"><h3>Hàng đợi · {queue.length} mẫu</h3><button className="iasbtn" disabled={busy} onClick={() => void loadQueue()}>Làm mới hàng đợi</button>{campaign.state === "closed" && <span className="review-note">Đợt đã đóng; chỉ được xem.</span>}</div>
           <div className="review-reviewer-grid"><div className="review-list" aria-label="Hàng đợi được phân công">{!busy && !queue.length && <p>Không có mẫu {status === "pending" ? "chưa nộp" : "đã nộp"}.</p>}{queue.map(row => <button key={row.id} className={"review-list-item" + (assignment?.id === row.id ? " selected" : "")} disabled={busy} onClick={() => void openAssignment(row.id)}>{row.external_id}<span>{row.status === "submitted" ? "Đã nộp" : "Chưa nộp"}</span></button>)}</div>{assignment ? <ReviewPair key={assignment.id} assignment={assignment} closed={campaign.state === "closed"} saving={busy} error={submitError} onSubmit={input => void submit(input)}/> : <p>Chọn một mẫu trong hàng đợi để bắt đầu đánh giá.</p>}</div>
         </div>)}

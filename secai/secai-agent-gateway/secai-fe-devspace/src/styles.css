@@ -286,3 +286,62 @@ label.lbl input, label.lbl select, label.lbl textarea {
 .review-live { height:auto; margin:20px 0; padding:16px; border:1px solid var(--line); border-radius:8px; }
 .review-live-toggle { font-size:12px; margin-left:auto; }
 .review-live .review-pair > h3 { outline:none; }
+
+.review-training {display:flex; justify-content:space-between; align-items:center; gap:20px; padding:16px; margin-bottom:20px; border:1px solid var(--line); border-radius:8px;}
+.review-training h4 {margin:0 0 8px;}
+.review-training p {color:var(--muted); font-size:13px; margin:0; max-width:620px;}
+.review-training button {flex-shrink:0;}
+.review-training > div {min-width:0;}
+.review-training code {overflow-wrap:anywhere;}
+.review-advanced {margin-top:20px; border-top:1px solid var(--line);}
+.demo-role {display:flex; align-items:center; gap:8px; font-size:12px;}
+.demo-role select {padding:8px;}
+.demo-dialog:not([open]) {display:none;}
+.demo-dialog {color:var(--text); display:block; height:auto; position:fixed; inset:5vh max(20px,12vw); z-index:100; overflow:auto; background:var(--panel, #0b1824); border:1px solid var(--teal); border-radius:12px; padding:24px; box-shadow:0 0 0 100vmax #0009;}
+@media(max-width:640px){.review-training{align-items:stretch;flex-direction:column}.demo-dialog{inset:12px;padding:14px}.ias-user{flex-wrap:wrap}.demo-role{font-size:11px}}
+
+/* Keep demo controls visible when the IAS theme's fixed header is applied. */
+@media(max-width:900px){.ias .ias-brand{width:auto}.ias .ias-header{gap:12px}.ias .ias-user{gap:8px}}
+@media(max-width:640px){
+ .ias .ias-header{height:auto;min-height:62px;padding:8px;flex-wrap:wrap}
+ .ias .ias-search,.ias .ias-user .ias-status,.ias .ias-user .ias-uid,.ias .ias-user .avatar{display:none}
+ .ias .ias-user{flex:1;justify-content:flex-end;flex-wrap:wrap}
+ .ias .ias-body{display:flex;flex-direction:column}
+ .ias .ias-sidebar{flex:none;height:46px}
+ .ias .ias-sidebar-scroll{overflow-x:auto;overflow-y:hidden;padding:4px}
+ .ias .ias-sidebar-scroll>.iasnav,.ias .ias-sidebar-foot{display:none}
+ .ias .ias-sidebar-scroll>div[style]{display:flex;width:max-content}
+ .ias .iassub{white-space:nowrap;margin:0 4px;padding:7px;font-size:12px}
+ .ias .ias-main{flex:1}
+ .ias .chat-topbar{padding:12px;flex-wrap:wrap}
+ .ias .chat-topbar h3{font-size:17px}
+}
+
+.ias .review-toolbar[aria-label="Lọc phản hồi"] button[aria-pressed="false"] {background:transparent; color:var(--text); border:1px solid var(--line);}
+
+/* A/B approval workspace */
+.review-tabs {display:flex;flex-wrap:wrap;gap:8px;padding:8px 0 16px;border-bottom:1px solid var(--line);}
+.review-tabs button {display:flex;align-items:center;gap:10px;}
+.review-tabs button span {font-size:12px;opacity:.8;}
+.review-search {max-width:520px;margin:18px 0;}
+.review-admin-grid {grid-template-columns:minmax(240px,340px) minmax(0,1fr);}
+.review-list-item strong {font-size:14px;line-height:1.5;}
+.review-list-item time {font-size:11px;color:var(--muted);}
+.review-candidate {border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0;}
+.review-choice-badge {display:inline-block;padding:4px 8px;margin:0 0 12px;font-size:12px;color:var(--teal);border:1px solid var(--teal);border-radius:5px;}
+.review-feedback-details {border-bottom:1px solid var(--line);margin-bottom:16px;}
+.review-empty {padding:24px 12px;color:var(--muted);}
+.review-pagination {justify-content:space-between;margin-top:12px;}
+.review-campaign-settings {margin-bottom:12px;color:var(--muted);}
+.review-training-summary > div[role="status"] {margin-top:10px;}
+.review-training details {margin-top:8px;}
+.review-training details summary {font-size:12px;}
+.review-training details p {margin:8px 0;}
+@media (max-width:1100px) {.review-admin-grid {grid-template-columns:1fr;}}
+@media (max-width:640px) {.review-tabs {flex-direction:column;}.review-tabs button {justify-content:space-between;}.review-columns {gap:10px;}}
+.ias .review-tabs .iasbtn:not(.review-primary) {background:transparent;color:var(--text);border-color:var(--line);}
+.ias .review-tabs .iasbtn.review-primary {background:var(--teal);color:#071d1c;border-color:var(--teal);}
+.review-admin-grid .review-card > h3 {margin-top:0;}
+.review-stats {padding:6px 0 12px;}
+.review-training {padding:12px 16px;margin-bottom:12px;}
+/* Admin A/B workspace styles moved to screens/review/reviewAb.css (theme.css tokens only). */

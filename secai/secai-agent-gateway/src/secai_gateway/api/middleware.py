@@ -1,7 +1,9 @@
 """CORS + fixed-window rate limiting."""
 from __future__ import annotations
 
+import math
 import secrets
+import time
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -38,6 +40,10 @@ def route_limit(path: str) -> int:
         # AFTER the chat-route check above so /sessions/{sid}/chat[/stream] still gets 150,
         # not 120.
         return 120
+    if path.startswith("/review-api/") and path != "/review-api/live-pairs" and not path.startswith("/review-api/report-templates/"):
+        # Review CRUD shares the Devspace proxy IP and refreshes after each vote.
+        # Keep model-backed live/template routes at their existing limit.
+        return 120
     if path == "/ai/exploit" or path == "/ai/exploit/run":
         return 20
     if path == "/admin/refresh-models":
@@ -47,13 +53,46 @@ def route_limit(path: str) -> int:
     return 15
 
 
+# Literal path segments of the /review-api/* surface; every other segment is an identifier.
+_REVIEW_STATIC_SEGMENTS = frozenset({
+    "overview", "approvals", "preview", "bulk", "me", "reviewers", "campaigns", "imports", "items",
+    "stats", "export", "assignments", "judgment", "judgments", "adjudication", "live-settings",
+    "live-pairs", "report-templates", "revise", "render", "reward", "score", "training", "jobs",
+    "eligibility", "batches", "retry", "runs", "events",
+})
+
+
+def rate_limit_key(path: str) -> str:
+    """Bucket key for the limiter: a route template for /review-api/*, else the exact path.
+
+    Keying by exact path let a client dodge the limit (and grow the bucket dict without bound)
+    by changing an {id} segment on every request. Done by segment vocabulary rather than router
+    introspection so it does not depend on FastAPI internals.
+    """
+    if not path.startswith("/review-api/"):
+        return path
+    segments = [seg for seg in path[len("/review-api/"):].split("/") if seg]
+    if len(segments) > 6:
+        return "/review-api/*deep"
+    return "/review-api/" + "/".join(seg if seg in _REVIEW_STATIC_SEGMENTS else "{id}" for seg in segments)
+
+
+def retry_after(limiter: Any, client: str, key: str) -> int:
+    """Seconds until the oldest request leaves the 60s window (never below 1)."""
+    stamps = getattr(limiter, "_buckets", {}).get((client, key)) or []
+    if not stamps:
+        return 60
+    return max(1, min(60, math.ceil(min(stamps) + 60 - time.monotonic())))
+
+
 def configure_middleware(app: FastAPI, state: Any) -> None:
     app.add_middleware(
         CORSMiddleware, allow_origins=state.settings.cors_origins, allow_credentials=False,
         # DELETE/PATCH added for the Project/Session CRUD surface (api/projects.py) — without
         # them the browser's CORS preflight (OPTIONS) rejects those verbs before the request
         # ever reaches the route.
-        allow_methods=["POST", "GET", "DELETE", "PATCH"], allow_headers=["Content-Type", "X-API-Key"],
+        allow_methods=["POST", "GET", "PUT", "DELETE", "PATCH"],
+        allow_headers=["Content-Type", "X-API-Key", "Authorization"],
     )
 
     @app.middleware("http")
@@ -91,8 +130,10 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
             return await call_next(request)
         limit = route_limit(request.url.path)
         client = request.client.host if request.client else "unknown"
+        key = rate_limit_key(request.url.path)
         try:
-            state.rate_limiter.check(client, request.url.path, limit)
+            state.rate_limiter.check(client, key, limit)
         except RuntimeError:
-            return JSONResponse({"detail": "rate limit exceeded"}, status_code=429)
+            return JSONResponse({"detail": "rate limit exceeded"}, status_code=429,
+                                headers={"Retry-After": str(retry_after(state.rate_limiter, client, key))})
         return await call_next(request)
