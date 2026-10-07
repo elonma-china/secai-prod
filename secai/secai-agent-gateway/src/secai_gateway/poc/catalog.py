@@ -203,6 +203,20 @@ class PocCatalog:
             (match, limit)).fetchall()
         return self._rows_to_dicts(rows)
 
+    def summary_by_cve(self, cve_id: str) -> dict[str, Any]:
+        """De-duplicated PoC counts for one CVE: total, per source, per kind. (``search`` is capped at 50
+        rows, so counting its result under-reports popular CVEs: Log4Shell has 64 here.)"""
+        rows = self._db.execute(
+            """SELECT p.source, p.kind, COUNT(*) AS n FROM poc p JOIN poc_cve c ON c.poc_id = p.id
+               WHERE c.cve_id = ? AND p.duplicate_of IS NULL GROUP BY p.source, p.kind""",
+            ((cve_id or "").upper(),)).fetchall()
+        by_source: dict[str, int] = {}
+        by_kind: dict[str, int] = {}
+        for source, kind, n in rows:
+            by_source[str(source)] = by_source.get(str(source), 0) + int(n)
+            by_kind[str(kind)] = by_kind.get(str(kind), 0) + int(n)
+        return {"total": sum(by_source.values()), "by_source": by_source, "by_kind": by_kind}
+
     def get(self, poc_id: int) -> dict[str, Any] | None:
         # Fetches by exact id (used to resolve a search-issued ref). Duplicates are excluded
         # from search(), so a ref never points at a duplicate row — no redirect needed here.

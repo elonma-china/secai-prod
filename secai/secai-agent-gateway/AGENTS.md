@@ -49,6 +49,7 @@ python3 -m venv .venv
 - Giữ nhất quán câu trả lời stream, `final` và lịch sử lưu; không persist prompt nội bộ, context grounding hay bản nháp retry vào lịch sử hiển thị.
 - Báo cáo thống kê có `detail` dạng mảng được dựng bảng bằng code trong `api/messages.py`; giữ tương thích với `detail` dạng chuỗi cũ.
 - Không bỏ redaction, anti-XSS, admin API key, allowlist target, air-gap hoặc cổng bật/tắt thực thi để làm test pass. `/ai/exploit` phải phân biệt rõ artifact thật và nội dung tổng hợp, trạng thái chưa chạy và đã xác minh.
+- Chunk tri thức (`cheatsheet`/`requirement`/`mitigation`) nằm chung collection với CVE/CWE/CAPEC/ATT&CK: mọi lời gọi `_dense_search`/scroll trực tiếp phải loại chúng (`entity_scope_filter()`), `qdrant_search` mặc định `scope="entity"`. Không ghi chunk tri thức vào `cve_kb_hybrid` đang phục vụ khi image chạy chưa có bộ lọc scope. Cờ `chat_knowledge_grounding_enabled` tắt phải cho kết quả routing y hệt cũ (golden `tests/fixtures/chat_grounding_routes_baseline.json`).
 - Đọc `CLAUDE.md` khi làm serving: dùng đúng model fine-tuned `DuyTa/sec-embedding` và `DuyTa/sec-rerank`; tên model request phải khớp serving. `/health` đơn lẻ không chứng minh embedding/reranker hoạt động.
 
 ## Báo cáo, dịch và expert review

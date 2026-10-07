@@ -60,7 +60,7 @@ def _encode_query(query: str) -> dict[str, list] | None:
     return {"indices": indices, "values": values}
 
 
-def _qdrant_sparse_search_sync(query: str, top_k: int) -> list[tuple[str, float]]:
+def _qdrant_sparse_search_sync(query: str, top_k: int, qfilter: dict | None = None) -> list[tuple[str, float]]:
     sparse = _encode_query(query)
     if not sparse or not BM25_VECTOR:
         return []
@@ -69,6 +69,8 @@ def _qdrant_sparse_search_sync(query: str, top_k: int) -> list[tuple[str, float]
         "limit": top_k,
         "with_payload": False,
     }
+    if qfilter:
+        body["filter"] = qfilter
     with httpx.Client(timeout=20.0) as client:
         resp = client.post(
             f"{QDRANT_URL}/collections/{COLLECTION}/points/search",
@@ -82,16 +84,21 @@ def _qdrant_sparse_search_sync(query: str, top_k: int) -> list[tuple[str, float]
         ]
 
 
-def _bm25_search_sync(query: str, top_k: int) -> list[tuple[str, float]]:
+def _bm25_search_sync(query: str, top_k: int, qfilter: dict | None = None) -> list[tuple[str, float]]:
     if not BM25_VECTOR:
         return []
     try:
-        return _qdrant_sparse_search_sync(query, top_k)
+        return _qdrant_sparse_search_sync(query, top_k, qfilter)
     except Exception:
         return []
 
 
-async def bm25_search(query: str, top_k: int) -> list[tuple[str, float]]:
+async def bm25_search(query: str, top_k: int, qfilter: dict | None = None) -> list[tuple[str, float]]:
+    """``qfilter`` is applied inside Qdrant. Only the knowledge scope passes one: its documents are
+    ~1% of the collection, so a collection-wide top-k followed by a post-filter would leave
+    (almost) none of them. Other callers keep the old unfiltered fan-out + post-filter."""
+    if qfilter:
+        return await asyncio.to_thread(_bm25_search_sync, query, top_k, qfilter)
     return await asyncio.to_thread(_bm25_search_sync, query, top_k)
 
 

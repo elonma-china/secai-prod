@@ -482,6 +482,12 @@ _TAXONOMY_RE = re.compile(
     r"|\bTop\s*25\b.{0,60}(?:điểm yếu|weakness)",
     re.I | re.S,
 )
+# Looser than _TAXONOMY_RE (which gates web fetching and must not move): used ONLY on the knowledge path
+# to recognise "Top 10 rủi ro OWASP", "danh sách CWE Top 25 mới nhất", … and serve the whole versioned list.
+_TAXONOMY_LIST_RE = re.compile(
+    r"owasp.{0,24}top\s*(?:10|ten)|top\s*(?:10|ten).{0,24}owasp|(?:cwe|mitre).{0,24}top\s*25|top\s*25.{0,40}(?:cwe|weakness|điểm yếu|mitre)",
+    re.I | re.S,
+)
 _ENTITY_ID_RE = re.compile(r"\b(?:CVE|CWE|CAPEC)-\d{1,7}(?:-\d+)?\b|\bT\d{4}(?:\.\d{3})?\b", re.I)
 _CVE_FAMILY_RE = re.compile(r"\bCVEs?\b", re.I)
 _ID_LOOKUP_RE = re.compile(
@@ -501,17 +507,130 @@ _ID_LOOKUP_RE = re.compile(
 )
 
 
+# Knowledge-KB routing (docs/plans/kb-knowledge-grounding.md). Only consulted when the caller
+# passes knowledge_enabled=True, so the flag-off behaviour of classify_chat_grounding is untouched.
+# Concept/remediation questions carry no CVE/CWE id, so they are recognised by vocabulary: the
+# security class or control being asked about, or an explicit "how do I fix/prevent" intent.
+# All patterns run on diacritic-stripped, lower-cased text (retrieval.vi_en.fold), so "Mật khẩu",
+# "mat khau" and "MẬT KHẨU" are one thing; Vietnamese terms below are written unaccented.
+#
+# STRONG: unambiguous security techniques/controls — enough on their own to want reference text.
+_KN_STRONG_RE = re.compile(
+    r"\b(?:sql\s*injection|sqli|xss|cross[- ]site|csrf|ssrf|xxe|rce|remote\s+code\s+execution|command\s+injection|"
+    r"code\s+injection|ldap\s+injection|xpath\s+injection|nosql\s+injection|template\s+injection|ssti|prototype\s+pollution|"
+    r"path\s+traversal|directory\s+traversal|deserializ\w*|idor|jwt|json\s+web\s+token|oauth\w*|saml|openid|clickjack\w*|"
+    r"hsts|cors|csp|content[\s-]+security[\s-]+policy|mfa|2fa|zero\s+trust|threat\s+model\w*|stride|pentest\w*|penetration\s+test\w*|"
+    r"ransomware|phishing|malware|buffer\s+overflow|owasp|asvs|capec|bcrypt|argon2|scrypt|pbkdf2|least\s+privilege|"
+    r"defen[cs]e\s+in\s+depth|cia\s+triad|subdomain\s+takeover|secure\s+coding|hardening|mass\s+assignment|"
+    r"session\s+(?:fixation|hijack\w*|management)|credential\s+stuffing|brute[- ]force|input\s+validation|"
+    r"security\s+headers?|http\s+headers?|rbac|access\s+control|authenticat\w*|authoriz\w*|encrypt\w*|cryptograph\w*|"
+    r"prompt\s+injection|denial[- ]of[- ]service|forgot(?:ten)?\s+password|password\s+(?:reset|storage|hashing)|"
+    r"key\s+management|secrets?\s+management|supply\s+chain\s+(?:attack|security)|sbom|tls|ssl|insecure\s+\w+|"
+    r"security\s+misconfiguration|broken\s+access|harden\w*|ssh|stor\w*\s+(?:\w+\s+)?passwords?|https|md5|sha[- ]?1|"
+    r"secure\s+(?:defaults?|by\s+design|design)|security\s+(?:issues?|review|checklist|testing|audit|controls?|practices?))\b"
+    r"|xac\s*thuc|phan\s*quyen|kiem\s*soat\s*truy\s*cap|ma\s*hoa\s*(?:du\s*lieu|mat\s*khau|file)|bam\s*mat\s*khau|quen\s*mat\s*khau|luu\s*(?:tru\s*)?mat\s*khau|chuoi\s*cung\s*ung|"
+    r"quan\s*ly\s*khoa|mo\s*hinh\s*de\s*doa|gia\s*mao\s*yeu\s*cau|chen\s*ma",
+)
+# AMBIGUOUS: everyday technical words ("docker compose up", "hash map", "log scale"): only count together
+# with a security / how-to-protect intent word.
+_KN_AMBIG_RE = re.compile(
+    r"\b(?:passwords?|hash(?:ing)?|salt(?:ing)?|sessions?|cookies?|apis?|rest(?:ful)?\s+api|containers?|docker|kubernetes|k8s|tokens?|"
+    r"logs?|logged|logging|upload\w*|validat\w*|dependenc\w*|secrets?|pipelines?|ci/cd|webhooks?|graphql|websockets?|dos|ddos|nosql|"
+    r"credentials?|prompts?|template|github\s+actions|error\s+handling|firewall|waf|certificates?)\b"
+    r"|mat\s*khau|ma\s*hoa|phien\s*(?:dang\s*nhap|lam\s*viec)|nhat\s*ky|dau\s*vao|tai\s*(?:len|file)|phu\s*thuoc|xu\s*ly\s*loi",
+)
+# INTENT: wants protection / risk / a secure way to do something.
+_KN_INTENT_RE = re.compile(
+    r"\b(?:secur\w*|safe(?:ly)?|protect\w*|prevent\w*|harden\w*|mitigat\w*|defen[cs]\w*|attack\w*|vulnerab\w*|exploit\w*|"
+    r"risks?|threats?|best\s+practices?|how\s+(?:to|do|can|should)|sensitive|untrusted|leak\w*|expos\w*|mitigat\w*)\b"
+    r"|bao\s*mat|an\s*toan|an\s*ninh|bao\s*ve|rui\s*ro|de\s*doa|tan\s*cong|lo\s*hong|khai\s*thac|khac\s*phuc|phong\s*(?:chong|tranh|ngua)|"
+    r"ngan\s*(?:chan|ngua)|nhay\s*cam|lam\s*sao|cach\s+(?:de|nao)|nguyen\s*tac|dung\s*cach|giam\s*thieu|"
+    r"khong\s*(?:duoc\s*)?tin|khong\s*lo|\blo\s+(?:thong|du)|stack\s*trace|bien\s*phap|thuat\s*toan",
+)
+# Generic security words that also describe a CVE/alias question ("Lỗ hổng Heartbleed là gì?"):
+# they only count together with a fix/prevent intent, otherwise the CVE KB is the right source.
+_KN_GENERIC_RE = re.compile(
+    r"\b(?:security|vulnerab\w*|exploit\w*|cve|cwe|mitre|risks?|safely|secure(?:ly)?)\b"
+    r"|bao\s*mat|an\s*toan|an\s*ninh|lo\s*hong|khai\s*thac|tan\s*cong|rui\s*ro",
+)
+_REMEDIATION_RE = re.compile(
+    r"khac\s*phuc|va\s*loi|ban\s*va|sua\s*loi|\bfix(?:es|ed|ing)?\b|\bpatch\w*|mitigat\w*|remediat\w*|workaround|"
+    r"phong\s*(?:chong|tranh|ngua)|ngan\s*(?:chan|ngua)|\bprevent\w*|cach\s*xu\s*ly|bien\s*phap|giam\s*thieu|"
+    r"hardening|how\s+to\s+secure|securely|best\s+practices?|defen[cs]e",
+)
+# "Lỗ hổng <vendor/product> …?" / "CVE nào của <vendor>": a CVE lookup, not a concept question.
+_KN_CVE_PHRASE_RE = re.compile(r"^\s*(?:cac\s+)?(?:lo\s*hong|cve)\b|\bcve\s+nao\b|\bnhung\s+cve\b|\bcac\s+cve\b")
+_PRODUCT_TOKEN_RE = re.compile(r"\b(?:[A-Z][a-z]{2,}\w*|[a-z]+[A-Z]\w+|[A-Z][a-z]+[A-Z]\w*|[A-Z]{2,}[a-z]+\w*|[A-Z]+-[A-Z0-9]+)\b")
+_NOT_A_PRODUCT = frozenset({"How", "What", "Why", "When", "Where", "Which", "Who", "Explain", "Describe", "Does", "Should", "Could",
+                            "Would", "Can", "Best", "The", "Are", "Is", "List", "Give", "Tell", "Show", "Please", "Compare", "Define"})
+# Words that make a question about "a vulnerability / exploit / PoC" rather than a concept.
+_KN_CVEWORD_RE = re.compile(r"\b(?:cve|vulnerab\w*|exploit\w*|poc|proof\s+of\s+concept)\b|lo\s*hong|khai\s*thac|ma\s*khai\s*thac")
+# Questions about the assistant/system itself stay on the meta path (answered from <about_system>).
+_META_RE = re.compile(
+    r"ban\s+la\s+(?:ai|gi)|who\s+are\s+you|what\s+are\s+you|what\s+can\s+you\s+do|ban\s+(?:co\s+the|lam\s+duoc|biet\s+gi)|"
+    r"\bias\.?ai\b|he\s*thong\s*(?:nay|cua\s+ban)|mo\s*hinh\s*(?:nao|gi|nen)|\bmodel\s+(?:nao|gi)|"
+    r"du\s*lieu\s*(?:cua\s+)?(?:ban|he\s*thong)|cap\s*nhat\s*(?:den|toi|luc|khi\s+nao)|knowledge\s+base",
+)
+
+
+def _fold_text(raw: str) -> str:
+    from ..retrieval.vi_en import fold
+
+    return fold(raw)
+
+
+def _has_product_token(raw: str) -> bool:
+    return any(m.group(0) not in _NOT_A_PRODUCT for m in _PRODUCT_TOKEN_RE.finditer(raw or ""))
+
+
+def _is_cve_style(raw: str) -> bool:
+    """A question about a named vulnerability/product ("Lỗ hổng Log4Shell là gì?", "Heartbleed là lỗ hổng gì?",
+    "Lỗ hổng Fortinet FortiOS path traversal?"): the CVE KB answers it, the model has to go and look."""
+    if not _has_product_token(raw):
+        return False
+    t = _fold_text(raw)
+    return bool(_KN_CVE_PHRASE_RE.search(t) or (_KN_CVEWORD_RE.search(t) and not _KN_STRONG_RE.search(t)))
+
+
+def _wants_knowledge(raw: str) -> bool:
+    """True for concept / how-to-fix questions that reference text can answer better."""
+    from ..retrieval.vi_en import fold
+
+    t = fold(raw)
+    remediation = bool(_REMEDIATION_RE.search(t))
+    if _is_cve_style(raw) and not remediation:
+        return False
+    if _KN_STRONG_RE.search(t):
+        return True
+    if _META_RE.search(t):
+        return False
+    if _KN_AMBIG_RE.search(t) and _KN_INTENT_RE.search(t):
+        return True
+    return bool(_KN_GENERIC_RE.search(t) and remediation)
+
+
 @dataclass(frozen=True, slots=True)
 class ChatGroundingPlan:
-    """Deterministic route for one user prompt."""
+    """Deterministic route for one user prompt.
 
-    route: str  # taxonomy | entity | id_lookup | concept
+    ``knowledge`` asks the pre-fetch to ALSO consult the knowledge KB (cheat sheets / ASVS /
+    mitigations). It never forces the model to call a tool (need_kb stays False for
+    ``concept_kb``), so no enforcement hook can turn it into a retry loop."""
+
+    route: str  # taxonomy | entity | id_lookup | concept | concept_kb
     need_web: bool
     need_kb: bool
+    knowledge: bool = False
 
 
-def classify_chat_grounding(prompt: str) -> ChatGroundingPlan:
-    """Decide which evidence tools chat must call before a final answer."""
+def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
+                            cve_search_enabled: bool = False) -> ChatGroundingPlan:
+    """Decide which evidence tools chat must call before a final answer.
+
+    ``knowledge_enabled`` / ``cve_search_enabled`` both False (default) reproduce the original routing
+    exactly. ``cve_search`` is the route for open-ended CVE questions with no id ("Lỗ hổng Log4Shell là
+    gì?", "Lỗ hổng Fortinet FortiOS path traversal?"): the server searches the KB with the question itself
+    instead of hoping the model calls the tool (a measured 8/8 miss on alias questions)."""
     text = (prompt or "").strip()
     if not text:
         return ChatGroundingPlan("concept", False, False)
@@ -523,11 +642,17 @@ def classify_chat_grounding(prompt: str) -> ChatGroundingPlan:
 
     if need_web:
         need_kb = has_entity or cve_family or id_lookup
-        return ChatGroundingPlan("taxonomy", True, need_kb)
+        return ChatGroundingPlan("taxonomy", True, need_kb, knowledge=knowledge_enabled)
     if has_entity:
-        return ChatGroundingPlan("entity", False, True)
+        return ChatGroundingPlan("entity", False, True, knowledge=knowledge_enabled and bool(_REMEDIATION_RE.search(_fold_text(text))))
     if id_lookup:
         return ChatGroundingPlan("id_lookup", False, True)
+    if knowledge_enabled and _TAXONOMY_LIST_RE.search(text):
+        return ChatGroundingPlan("taxonomy", False, False, knowledge=True)
+    if cve_search_enabled and _is_cve_style(text):
+        return ChatGroundingPlan("cve_search", False, False, knowledge=knowledge_enabled and bool(_REMEDIATION_RE.search(_fold_text(text))))
+    if knowledge_enabled and _wants_knowledge(text):
+        return ChatGroundingPlan("concept_kb", False, False, knowledge=True)
     return ChatGroundingPlan("concept", False, False)
 
 

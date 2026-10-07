@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     qdrant_collection: str = "cve_kb_hybrid"
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
+    # Knowledge KB (cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations): docs/plans/kb-knowledge-grounding.md.
+    # Off by default: chat then routes exactly as before. knowledge_min_rerank 0 = no cut-off (sec-rerank scores saturate near 1: relevant hits >=0.97, measured 2026-10-06).
+    chat_knowledge_grounding_enabled: bool = False
+    # Open-ended CVE questions with no id ("Lỗ hổng Log4Shell là gì?"): pre-fetch the CVE KB server-side. On by default.
+    chat_cve_search_prefetch_enabled: bool = True
+    knowledge_top_k: int = 4
+    knowledge_min_rerank: float = 0.9
+    knowledge_min_dense: float = 0.5  # cosine of the best dense hit (measured 2026-10-06: relevant >=0.533, 31% of unrelated probes fall below 0.5); 0 = off
+    knowledge_prefetch_timeout_s: float = 3.0
     embedding_api_url: str = ""
     reranker_api_url: str = ""
     embedding_model: str = "BAAI/bge-m3"
