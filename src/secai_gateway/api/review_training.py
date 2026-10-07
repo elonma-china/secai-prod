@@ -81,6 +81,7 @@ async def get_job(jid: str, request: Request, actor: ReviewActor = Depends(requi
 
 from typing import Literal
 from fastapi import Query
+MAX_OFFSET = 1_000_000_000  # keeps OFFSET inside SQLite INTEGER; larger values 422 instead of OverflowError/500
 from pydantic import BaseModel, ConfigDict, Field
 from ..state.review_training_store import ACTIVE
 
@@ -147,7 +148,7 @@ async def freeze(request:Request,actor:ReviewActor=Depends(require_review_admin)
 
 
 @router.get('/batches')
-async def batches(request:Request,offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def batches(request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     from .reviews import call
     result=await call(request,'list_batches',offset,limit)
     for batch in result['items']:
@@ -173,7 +174,7 @@ async def batch_detail(bid:str,request:Request,actor:ReviewActor=Depends(require
 
 
 @router.get('/batches/{bid}/items')
-async def batch_items(bid:str,request:Request,offset:int=Query(0,ge=0),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
+async def batch_items(bid:str,request:Request,offset:int=Query(0,ge=0,le=MAX_OFFSET),limit:int=Query(20,ge=1,le=100),actor:ReviewActor=Depends(require_review_admin)):
     from .reviews import call
     return await call(request,'batch_items',bid,offset,limit)
 
