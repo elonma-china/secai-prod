@@ -960,7 +960,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         summary = result.summary
         # The model names CWE/CAPEC/ATT&CK ids it was handed from memory and gets the names wrong
         # (measured: 6 of 100 core questions). Hand it the official names with the ids.
-        glossary = await _id_glossary(result.content)
+        glossary = await _id_glossary(result.content) if cve_search_on else None
         if glossary:
             blocks.append(glossary)
         if cve_search_on and _poc_intent(prompt):
@@ -995,7 +995,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         contains that name, not just the first block (which can be a sibling CVE such as CVE-2021-45046)."""
         from ..agent.hooks import _NOT_A_PRODUCT, _PRODUCT_TOKEN_RE
 
-        names = [m.group(0).lower() for m in _PRODUCT_TOKEN_RE.finditer(prompt or "") if m.group(0) not in _NOT_A_PRODUCT and len(m.group(0)) >= 4]
+        languages = {"python", "java", "ruby", "perl", "powershell", "bash", "javascript", "typescript", "golang", "metasploit", "nuclei"}
+        names = [m.group(0).lower() for m in _PRODUCT_TOKEN_RE.finditer(prompt or "")
+                 if m.group(0) not in _NOT_A_PRODUCT and len(m.group(0)) >= 4 and m.group(0).lower() not in languages]
         blocks = re.split(r"(?=### Result \d+)", content or "")[1:]
         named: list[str] = []
         first = None
@@ -1178,6 +1180,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return {"query": prompt, "result": KNOWLEDGE_BLOCK_HEADER + wrap_untrusted_content(body, source="knowledge_base"),
                 "summary": summary, "duration_ms": ms, "knowledge": True}
 
+    _TOP10_OTHER_RE = re.compile(r"\b(?:llm|llms|large language|api|apis|mobile|kubernetes|k8s|cloud|serverless|ci/cd|docker|iot|machine learning|agentic|ai)\b", re.I)
     _TAXONOMY_FAMILIES = (
         ("owasp-top10", "owasp-top10", re.compile(r"owasp.{0,24}top\s*(?:10|ten)|top\s*(?:10|ten).{0,24}owasp", re.I | re.S)),
         ("cwe-top25", "cwe", re.compile(r"(?:cwe|mitre).{0,24}top\s*25|top\s*25.{0,40}(?:cwe|weakness|điểm yếu|mitre)", re.I | re.S)),
@@ -1190,6 +1193,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         fam = next(((name, source) for name, source, rx in _TAXONOMY_FAMILIES if rx.search(prompt or "")), None)
         if fam is None:
             return None
+        if fam[0] == "owasp-top10" and _TOP10_OTHER_RE.search(prompt or ""):
+            return None  # "OWASP Top 10 for LLM / API / Mobile / Kubernetes": a different list, do not hand over the web one
         name, source = fam
         try:
             t0 = time.monotonic()
@@ -1208,12 +1213,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
         if not lists:
             return None
         editions = sorted(lists)
-        asked = re.findall(r"\b(20\d{2})\b", prompt or "")
-        edition = next((y for y in asked if y in lists), editions[-1])
-        chunks = sorted(lists[edition], key=lambda pl: [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", str(pl.get("doc_id")))])
+        asked = [y for y in dict.fromkeys(re.findall(r"\b(20\d{2})\b", prompt or "")) if y in lists][:3]
+        shown = asked if len(asked) >= 2 else [asked[0] if asked else editions[-1]]  # "so sánh 2021 và 2025" gets both
+        edition = ", ".join(shown)
+        chunks = [pl for ed in shown for pl in sorted(lists[ed], key=lambda pl: [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", str(pl.get("doc_id")))])]
         latest = re.search(r"mới nhất|hiện hành|hiện tại|latest|current|newest", prompt or "", re.I)
         note = (f"Phiên bản có trong KB: {', '.join(editions)}. Danh sách dưới đây là bản {edition}"
-                + (" — bản MỚI NHẤT có trong KB (có thể đã có bản mới hơn ngoài KB, hãy nói rõ giới hạn này)" if edition == editions[-1] else "")
+                + (" — bản MỚI NHẤT có trong KB (có thể đã có bản mới hơn ngoài KB, hãy nói rõ giới hạn này)" if shown == [editions[-1]] else "")
                 + f". Câu trả lời PHẢI ghi rõ \"{edition}\" và đủ toàn bộ mục theo đúng thứ tự dưới đây; "
                   f"KHÔNG gắn nhãn năm khác, KHÔNG nói bản khác là mới nhất."
                 + (" (Người dùng hỏi bản mới nhất.)" if latest else ""))

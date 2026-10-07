@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     chat_cve_search_prefetch_enabled: bool = True
     knowledge_top_k: int = 4
     knowledge_min_rerank: float = 0.9
-    knowledge_min_dense: float = 0.5  # cosine of the best dense hit (measured 2026-10-06: relevant >=0.533, 31% of unrelated probes fall below 0.5); 0 = off
+    knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off
     knowledge_prefetch_timeout_s: float = 3.0
     embedding_api_url: str = ""
     reranker_api_url: str = ""

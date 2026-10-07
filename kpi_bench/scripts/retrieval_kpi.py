@@ -68,7 +68,7 @@ def embed(text):
 
 def dense_search(vec, limit=TOP_DENSE):
     # knowledge chunks (kind cheatsheet/requirement/mitigation) share this collection: acceptance KPIs measure CVE retrieval only
-    body = {"filter": {"must_not": [{"key": "kind", "match": {"any": ["cheatsheet", "requirement", "mitigation"]}}]}, "vector": {"name": "dense", "vector": vec}, "limit": limit, "with_payload": True}
+    body = {"filter": {"must_not": [{"key": "kind", "match": {"any": ["cheatsheet", "requirement", "mitigation", "taxonomy"]}}]}, "vector": {"name": "dense", "vector": vec}, "limit": limit, "with_payload": True}
     r = _post(f"{config.QDRANT_URL}/collections/{config.QDRANT_COLLECTION}/points/search", body, timeout=60)
     out = []
     for p in r.get("result", []):
@@ -155,7 +155,7 @@ class QdrantSparseBM25:
         if not sp:
             return []
         # knowledge chunks (kind cheatsheet/requirement/mitigation) share this collection: acceptance KPIs measure CVE retrieval only
-        body = {"filter": {"must_not": [{"key": "kind", "match": {"any": ["cheatsheet", "requirement", "mitigation"]}}]}, "vector": {"name": BM25_VECTOR, "vector": sp}, "limit": top_k, "with_payload": False}
+        body = {"filter": {"must_not": [{"key": "kind", "match": {"any": ["cheatsheet", "requirement", "mitigation", "taxonomy"]}}]}, "vector": {"name": BM25_VECTOR, "vector": sp}, "limit": top_k, "with_payload": False}
         r = _post(f"{config.QDRANT_URL}/collections/{config.QDRANT_COLLECTION}/points/search", body, timeout=30)
         return [(str(x["id"]), float(x.get("score", 0.0)))
                 for x in r.get("result", []) if x.get("score", 0) > 0]
