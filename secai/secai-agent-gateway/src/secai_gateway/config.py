@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     knowledge_min_rerank: float = 0.9
     knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off
     knowledge_prefetch_timeout_s: float = 3.0
+    # Semantic routing: decide from what the knowledge KB actually holds, not from keywords alone. A keyword hit must be
+    # confirmed by the reranker (knowledge_confirm_min_rerank) and a question with NO keyword still gets reference text when
+    # its best chunk is an unmistakable match (rerank >= semantic_route_min_rerank, cosine >= semantic_route_min_dense).
+    # Off = the previous keyword-only routing and the previous (leaky) rerank gate.
+    chat_semantic_routing_enabled: bool = False
+    knowledge_confirm_min_rerank: float = 0.5
+    semantic_route_min_rerank: float = 0.99
+    semantic_route_min_dense: float = 0.62
+    semantic_route_min_rerank_cve: float = 0.998  # a CVE record has to answer the question this clearly to be fetched without a keyword
+    semantic_route_min_dense_cve: float = 0.60  # …and be at least this close (cosine), else the reranker is not even called
     # Serving host is ~240 ms away: reuse connections to embedding/rerank, and keep the vector of a prompt the input
     # classifier already embedded. Off = previous behaviour (docs/test-results/kb-knowledge-followups-2026-10-07.md).
     embedding_keepalive_enabled: bool = False

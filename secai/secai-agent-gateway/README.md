@@ -197,7 +197,11 @@ Long chats stay under the context window via Linch's proactive compaction
   `CHAT_DISCOVERY_ENABLED` routes "which <product> flaw …?" questions to the CVE search, adds vendor synonyms and a
   KEV-only candidate pass (`retrieval/discovery.py`); `EMBEDDING_KEEPALIVE_ENABLED` reuses connections to the
   embedding/rerank host (a new connection costs one extra ~240 ms round trip); `EMBEDDING_CACHE_TTL_S` (e.g. 300) keeps
-  the vector of a prompt the input classifier already embedded. Results and rollback notes:
+  the vector of a prompt the input classifier already embedded. `CHAT_SEMANTIC_ROUTING_ENABLED` (needs the knowledge
+  flag) lets the databases themselves decide which one a question needs: a keyword hit must be confirmed by the
+  reranker, a question with no keyword still gets reference text when its best chunk matches unmistakably, and a CVE
+  record that answers the question almost verbatim turns it into a CVE lookup (`gate=` in `retrieval/qdrant.py`,
+  thresholds `KNOWLEDGE_CONFIRM_MIN_RERANK`, `SEMANTIC_ROUTE_*`). Results and rollback notes:
   `docs/test-results/kb-knowledge-followups-2026-10-07.md`.
 - **neo4j_search** — graph traversal (CVE↔CWE↔CAPEC↔Technique↔Tactic↔Product), plus
   product entry-points and count/statistics queries.

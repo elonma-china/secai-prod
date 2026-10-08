@@ -559,7 +559,7 @@ _KN_GENERIC_RE = re.compile(
 _REMEDIATION_RE = re.compile(
     r"khac\s*phuc|va\s*loi|ban\s*va|sua\s*loi|\bfix(?:es|ed|ing)?\b|\bpatch\w*|mitigat\w*|remediat\w*|workaround|"
     r"phong\s*(?:chong|tranh|ngua)|ngan\s*(?:chan|ngua)|\bprevent\w*|cach\s*xu\s*ly|bien\s*phap|giam\s*thieu|"
-    r"hardening|how\s+to\s+secure|securely|best\s+practices?|defen[cs]e",
+    r"harden\w*|how\s+to\s+secure|securely|best\s+practices?|defen[cs]e|cach\s*sua\b",
 )
 # "Lỗ hổng <vendor/product> …?" / "CVE nào của <vendor>": a CVE lookup, not a concept question.
 _KN_CVE_PHRASE_RE = re.compile(r"^\s*(?:cac\s+)?(?:lo\s*hong|cve)\b|\bcve\s+nao\b|\bnhung\s+cve\b|\bcac\s+cve\b")
@@ -598,13 +598,34 @@ _KN_DISCOVERY_RE = re.compile(
 )
 
 
+# An explicit request for CVE ids ("liệt kê CVE giúp mình", "cho xin số CVE", "list CVEs for …") needs no capitalised product
+# name: "runc", "nginx", "openssh" are products too.
+_KN_CVE_REQUEST_RE = re.compile(
+    r"\b(?:cho\s*(?:xin|minh|toi|em)?\s*(?:so\s*)?cves?|liet\s*ke\s+(?:cac\s+|nhung\s+)?cves?|"
+    r"(?:list|give\s+me|show\s+me)\s+(?:me\s+)?(?:the\s+|all\s+)?cves?)\b"
+)
+
+
+def wants_remediation(raw: str) -> bool:
+    """The question also asks how to fix / mitigate / harden (reference text belongs next to the CVE records)."""
+    return bool(_REMEDIATION_RE.search(_fold_text(raw)))
+
+
+def is_semantic_route_candidate(raw: str) -> bool:
+    """A free-form question worth a semantic look at the knowledge KB when no keyword asked for it: long enough to carry
+    a topic, and not a question about the assistant itself."""
+    text = (raw or "").strip()
+    return len(text.split()) >= 4 and not _META_RE.search(_fold_text(text)) and not _VAGUE_PROMPT_RE.match(text)
+
+
 def _is_cve_discovery(raw: str) -> bool:
     """The user describes a flaw and wants the CVE(s): a KB search, not a concept answer. Questions that ask how to
     fix or prevent stay on the knowledge route."""
     t = _fold_text(raw)
     # "fixed in version 80.0.3987.122" names the patched release the asker remembers; it is not a how-to-fix question.
     remediation = _REMEDIATION_RE.search(re.sub(r"\b(?:fix(?:ed|es)|patch(?:ed|es))\s+(?:in|at|on)\b", " ", t))
-    return _has_product_token(raw) and bool(_KN_DISCOVERY_RE.search(t)) and not remediation and not _META_RE.search(t)
+    wants = (_has_product_token(raw) and bool(_KN_DISCOVERY_RE.search(t))) or bool(_KN_CVE_REQUEST_RE.search(t))
+    return wants and not remediation and not _META_RE.search(t)
 
 
 def _is_cve_style(raw: str) -> bool:

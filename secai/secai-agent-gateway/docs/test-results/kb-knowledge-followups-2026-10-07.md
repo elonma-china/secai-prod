@@ -140,3 +140,43 @@ A larger sample would be needed to claim any per-group change other than `cve_al
 that was interrupted at 12:18, which had already written them. They sit outside entity scope; they can appear in
 concept/remediation answers. Legal sign-off for CC-BY-4.0 is pending. Remove with
 `kb_knowledge.py rollback --collection cve_kb_hybrid --batch knowledge-ghsa-2026-10-07 --allow-prod`, or keep.
+
+## 11. Round 2 (2026-10-08): data fixes, semantic routing, release to prod
+
+Everything below was requested ("update theo khuyến nghị") and **deployed to the prod gateway**; backups and rollbacks are listed at the end.
+
+### 11.1 Data
+* **GHSA batch removed** from `cve_kb_hybrid` (308 points, batch `knowledge-ghsa-2026-10-07`; sign-off for CC-BY-4.0 was pending). Backup of the points with vectors: `/home/ict/secai-releases/knowledge-followups-20261007/data/ghsa-backup-points.json`. Knowledge points stay at 8,386. The collection total also grew by ~5.3k CVE points that this work did not write (nightly CVE sync).
+* **Alias enrichment** (`evals/rag_eval/alias_enrich_v2.py`): the core chunks of CVE-2023-4966 (Citrix Bleed: the record never says "session", so a question in the user's words found nothing) and of the four ProxyLogon CVEs (only one carried the name) now start with a "Tên gọi phổ biến" line that includes the effect; 7 points re-embedded (dense + bm25). Backup of old text+vectors: `data/alias-v2-backup.json`; `alias_enrich_v2.py restore --backup` puts them back. Retrieval, 68 discovery questions: recall@5 0.868 → 0.882; the 8 original questions 0.50 → 0.625; core-025 (ProxyLogon members) and core-026 (Citrix Bleed) now rank first.
+
+### 11.2 Where the databases disagreed with the keywords
+Routing was decided by keywords; the gates that were meant to catch mistakes did not work:
+* **The knowledge rerank gate (`knowledge_min_rerank` 0.9) was inert.** Candidates beyond the rerank window (10) carry no rerank score and the rule `rerank_score is None or >= 0.9` let them through, so a block of reference text was handed over whenever the keyword router asked for one (measured: block returned for 390 of 390 questions). With `gate=` the unjudged candidates no longer pass.
+* Semantic evidence separates the classes much better than the keywords: best rerank of the knowledge scope vs knowledge questions and look-alikes, AUC 0.968; best rerank among CVE records vs look-alikes, AUC 1.000 (A+B) / 0.98 (C).
+
+`CHAT_SEMANTIC_ROUTING_ENABLED` (default off, needs the knowledge flag): both databases are asked at once (latency = the slower one). Keyword hit → the reranker must confirm it (best ≥ 0.5; strong evidence keeps only chunks ≥ 0.9). No keyword → reference text only if best rerank ≥ 0.99 and cosine ≥ 0.62. A CVE record that answers almost verbatim (rerank ≥ 0.998, cosine ≥ 0.60) and no strong reference text → CVE lookup, with the mitigations appended when the question also asks for them. Also: an explicit "liệt kê CVE / cho xin số CVE / list CVEs" needs no capitalised product name (nginx, runc), and `harden*`, "cách sửa" count as remediation. Thresholds were chosen on sets A+B (390 questions) and checked on **set C: 240 questions written by a separate agent that never saw the code or the other sets**.
+
+### 11.3 Routing, measured through the real chat API (what the model is actually handed)
+`evals/core_eval/run_route_e2e.py` reads only the pre-fetch frames of `/ai/chat/stream`. Image running before this release vs this release (all flags):
+
+| set | cve_search | knowledge | look-alike wrongly grounded | both (CVE+mitigation) |
+|---|---|---|---|---|
+| A (240, tuned on) | 0.70 → **1.00** | 0.94 → 0.95 | 0.25 → **0.02** | – |
+| B (150) | 0.66 → **1.00** | 0.82 → **0.94** | 0.29 → **0.07** | – |
+| **C (240, held out)** | 0.48 → **0.94** | 0.78 → **0.88–0.93** | 0.36 → **0.09** | 0.15 → 0.30 |
+
+(Set C knowledge was 0.93 on the src-mounted canary and 0.88 on the built image and on prod: the 3 s pre-fetch time-box makes the borderline questions load-dependent.) Known remaining misses on C: "both" questions where only the CVE block arrives (the mitigation text is not always found), a few look-alikes with real security vocabulary (jwt malformed in a Jest test, sts:AssumeRole, mixed content), famous names the CVE store does not tag (Heartbleed with c_rr 0.985).
+
+### 11.4 Answer quality, 100-question core set, 3 runs per side, blind shuffled judges (same procedure as §9)
+| | image before | this release |
+|---|---|---|
+| mean | 92.0 | **93.5** |
+| answers with a suspected fabricated id | 24 | 22 |
+| TTFT median / p90 | 3.06 / 3.66 s | **1.88 / 2.79 s** |
+
+Paired per question: 13 better, 11 worse, 76 equal; difference +1.5, 95 % CI [-0.8, 4.3] — **no regression, no significant gain on this set**; it is saturated (the earlier 89.2 → 93.2 came mostly from alias questions that this release's data fix now gives both sides). The routing gains of §11.3 are not visible here because the core set has few look-alikes. The one question that got worse (core-015 Zerologon) takes the same route on both sides; the model wrote a wrong CVSS vector in all three new runs (generation variance, not routing). Full suite: 1923 passed, the same 7 environment failures as before.
+
+### 11.5 Release
+Overlay image `secai-agent-gateway:followups-20261008` = `sha256:7bf54773d97f…` on top of `062b3ecabdff…` (6 files: `agent/hooks.py`, `api/routes.py`, `config.py`, `retrieval/{qdrant,embedding,discovery}.py`). Applied in two steps with the shared lock, guards and profile comparison: `latency` (keep-alive + vector cache), then `full` (+ discovery + semantic routing). After: 0 chat 5xx, 0 tracebacks, 0 restarts; knowledge pre-fetch p50 392 ms / p95 670 ms (was 1.36 s); probe TTFT p50 2.2 s / p95 2.9 s; set C through prod gives the same numbers as the canary; Citrix Bleed, open-redirect and Spring4Shell questions are now grounded on the right database.
+Scripts, profiles and snapshots: `/home/ict/secai-releases/knowledge-followups-20261007/` (`apply-gateway.sh latency|full`, `rollback-gateway.sh flags|all`, `build.sh`, `gen.py`). Rollback: `rollback-gateway.sh flags` (discovery + semantic routing off, keep the image), `rollback-gateway.sh all` (previous image `062b3eca…`). Data: `kb_knowledge.py` GHSA points can be re-upserted from `data/ghsa-backup-points.json` (not recommended before legal sign-off); `alias_enrich_v2.py restore`.
+Artifacts: `kb-knowledge-followups-artifacts/p4/` (route results per set, judge outputs, features).
