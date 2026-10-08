@@ -43,6 +43,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,11 @@ API_USER = os.environ.get("AUTOSCAN_USER", "cyber")
 # (resolved just below, after _ENV loads). main() fail-fasts if it is still empty.
 API_PASS = os.environ.get("AUTOSCAN_PASS", "")
 GATEWAY_ENV = "/home/ict/AIEngines/secai/secai-agent-gateway/.env"
+# The env file of the RUNNING gateway (Docker). Serving URLs (embedding) are repointed here on
+# every Vast instance swap; the native gateway .env lagged behind (3-7 Oct 2026 outage: cron kept
+# the dead host for 5 nights). It wins for the EMBEDDING_* keys below.
+LIVE_ENV = "/home/ict/AIEngines/secai/secai-docker/.env"
+LIVE_ENV_KEYS = ("EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL")
 QDRANT = "http://localhost:6333"
 COLLECTION = "cve_kb_hybrid"
 EXPECTED_DENSE_DIM = 1024  # collection's `dense` vector size; a mismatch = wrong embed model
@@ -63,6 +69,8 @@ LOCAL_BM25_MODEL_DIR = "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_m
 SOURCE = "autoscan-api-sync"
 STATE = Path("/home/ict/AIEngines/secai/secai-data/_state/autoscan_to_kb.json")
 NS = uuid.NAMESPACE_DNS
+NEO4J_ERRORS = [0]  # CVEs whose Neo4j upsert failed this run (best-effort; surfaced in the state summary)
+LOOKBACK_HOURS = float(os.environ.get("AUTOSCAN_LOOKBACK_HOURS", "6"))
 MAX_EMBED_CHARS = 1000
 
 
@@ -82,12 +90,15 @@ def load_env(path: str) -> dict[str, str]:
 
 
 _ENV = load_env(GATEWAY_ENV)
+_ENV.update({k: v for k, v in load_env(LIVE_ENV).items() if k in LIVE_ENV_KEYS and v})
 # Fall back to the gateway .env for the API creds when not set as real env vars (env wins).
 if not API_PASS:
     API_PASS = _ENV.get("AUTOSCAN_PASS", "")
 if not os.environ.get("AUTOSCAN_USER") and _ENV.get("AUTOSCAN_USER"):
     API_USER = _ENV["AUTOSCAN_USER"]
-EMBED_URL = _ENV.get("EMBEDDING_API_URL", "http://23.127.144.217:18906").rstrip("/") + "/v1/embeddings"
+if not _ENV.get("EMBEDDING_API_URL"):
+    raise SystemExit(f"[autoscan->kb] FATAL: EMBEDDING_API_URL missing in {LIVE_ENV} and {GATEWAY_ENV}")
+EMBED_URL = _ENV["EMBEDDING_API_URL"].rstrip("/") + "/v1/embeddings"
 EMBED_KEY = _ENV.get("EMBEDDING_API_KEY", "")
 EMBED_MODEL = _ENV.get("EMBEDDING_MODEL", "BAAI/bge-m3")
 NEO4J_AUTH = (_ENV.get("NEO4J_USER", "neo4j"), _ENV.get("NEO4J_PASSWORD", "secai2026"))
@@ -471,6 +482,7 @@ def neo4j_merge(rows: list[dict]) -> None:
                   body={"statements": [{"statement": stmt, "parameters": {"rows": batch}}]},
                   headers={"Authorization": _basic(*NEO4J_AUTH)}, timeout=60)
     except Exception as exc:  # noqa: BLE001 — best-effort graph sync
+        NEO4J_ERRORS[0] += len(batch)
         print(f"  neo4j warn ({len(batch)} cves): {exc}", flush=True)
 
 
@@ -482,6 +494,15 @@ def load_state() -> dict:
 
 
 def save_state(state: dict) -> None:
+    """Persist state. ``finished_at`` is every completed run; ``last_success_at`` only advances on
+    a run with zero errors (freshness signal for monitoring), and is carried over otherwise."""
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    state = dict(state)
+    state["finished_at"] = now
+    if state.get("errors"):
+        state["last_success_at"] = load_state().get("last_success_at", "")
+    else:
+        state["last_success_at"] = now
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state, indent=2))
 
@@ -556,9 +577,20 @@ def main() -> int:
               "full backfill, or restore/seed the watermark file.", flush=True)
         return 2
 
+    # Re-scan a few hours before the watermark: rows can surface on the source API after the
+    # watermark already passed their `updated_at` (seen 7 Oct 2026). Re-ingest is idempotent and
+    # refresh-if-newer skips up-to-date points, so the overlap is cheap.
+    query_wm = watermark
+    if watermark and LOOKBACK_HOURS > 0:
+        try:
+            dt = datetime.strptime(watermark[:19], "%Y-%m-%dT%H:%M:%S") - timedelta(hours=LOOKBACK_HOURS)
+            query_wm = dt.strftime("%Y-%m-%dT%H:%M:%S") + "Z"
+        except ValueError:
+            query_wm = watermark
     t0 = time.time()
-    cands = fetch_candidates(watermark, args.page_size, args.max_pages)
-    print(f"[autoscan->kb] candidates since '{watermark or 'FULL'}': {len(cands)} "
+    cands = fetch_candidates(query_wm, args.page_size, args.max_pages)
+    print(f"[autoscan->kb] candidates since '{query_wm or 'FULL'}' (watermark '{watermark or 'FULL'}', "
+          f"lookback {LOOKBACK_HOURS}h): {len(cands)} "
           f"({time.time()-t0:.1f}s)", flush=True)
     if not cands:
         print("[autoscan->kb] nothing to do", flush=True)
@@ -575,6 +607,8 @@ def main() -> int:
         deduped.append(c)
     cands = deduped
     max_lu = max((str(c.get("updated_at") or "") for c in cands), default="")
+    if watermark and max_lu < watermark:  # lookback must never move the watermark backwards
+        max_lu = watermark
 
     if args.dry_run:
         for c in cands[:30]:
@@ -665,7 +699,11 @@ def main() -> int:
     # failed lookup) must not let the watermark jump past CVEs that were never ingested, or
     # they are lost until a manual --full. --max-pages is a manual slice and never advances.
     # Counters are per-run (not cumulative) for a readable nightly health signal.
-    summary = {"ingested": run_ingested, "skipped": run_skipped, "errors": run_errors}
+    summary = {"ingested": run_ingested, "skipped": run_skipped, "errors": run_errors,
+               "neo4j_errors": NEO4J_ERRORS[0]}
+    if NEO4J_ERRORS[0]:
+        print(f"[autoscan->kb] WARNING: Neo4j upsert failed for {NEO4J_ERRORS[0]} CVE(s) — graph out of "
+              "sync with Qdrant for those; check Neo4j and re-run with --no-refresh off / backfill.", flush=True)
     if args.max_pages:
         print(f"[autoscan->kb] --max-pages: watermark left at '{state.get('watermark','')}' "
               f"(manual slice) {json.dumps(summary)}", flush=True)

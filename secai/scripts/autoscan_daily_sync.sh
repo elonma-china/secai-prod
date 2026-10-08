@@ -22,6 +22,10 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GW_ROOT="/home/ict/AIEngines/secai/secai-agent-gateway"
 GW_ENV="$GW_ROOT/.env"
+# Env of the RUNNING gateway (Docker): serving URLs are repointed here on each Vast instance
+# swap. Embedding settings are read from it FIRST, then fall back to GW_ENV (3-7 Oct 2026: GW_ENV
+# lagged 5 nights behind a dead host and the KB silently went stale).
+LIVE_ENV="/home/ict/AIEngines/secai/secai-docker/.env"
 STATE_DIR="/home/ict/AIEngines/secai/secai-data/_state"
 LOG_FILE="$STATE_DIR/autoscan_daily.log"
 MAX_LOG_SIZE=$((10 * 1024 * 1024))  # 10MB
@@ -50,16 +54,20 @@ fi
 # just in bash) — a real exported env var of the same name still takes precedence below,
 # same precedence Settings/pydantic itself uses.
 env_val() {
-    [ -f "$GW_ENV" ] || return 0
-    grep -m1 "^$1=" "$GW_ENV" 2>/dev/null \
+    local file="${2:-$GW_ENV}"
+    [ -f "$file" ] || return 0
+    grep -m1 "^$1=" "$file" 2>/dev/null \
         | cut -d'=' -f2- \
         | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' \
               -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
 
-EMBEDDING_API_URL="${EMBEDDING_API_URL:-$(env_val EMBEDDING_API_URL)}"
-EMBEDDING_API_KEY="${EMBEDDING_API_KEY:-$(env_val EMBEDDING_API_KEY)}"
-EMBEDDING_MODEL="${EMBEDDING_MODEL:-$(env_val EMBEDDING_MODEL)}"
+EMBEDDING_API_URL="${EMBEDDING_API_URL:-$(env_val EMBEDDING_API_URL "$LIVE_ENV")}"
+[ -n "$EMBEDDING_API_URL" ] || EMBEDDING_API_URL="$(env_val EMBEDDING_API_URL)"
+EMBEDDING_API_KEY="${EMBEDDING_API_KEY:-$(env_val EMBEDDING_API_KEY "$LIVE_ENV")}"
+[ -n "$EMBEDDING_API_KEY" ] || EMBEDDING_API_KEY="$(env_val EMBEDDING_API_KEY)"
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-$(env_val EMBEDDING_MODEL "$LIVE_ENV")}"
+[ -n "$EMBEDDING_MODEL" ] || EMBEDDING_MODEL="$(env_val EMBEDDING_MODEL)"
 
 # Reachability probe: a real (tiny) POST to /v1/embeddings, not just a TCP/health check —
 # CLAUDE.md's own incident note is that /health can report "ok" while the embed endpoint
@@ -105,10 +113,13 @@ log "========================================"
 # ── Step 1: CVE -> KB — only when BOTH the AutoScan API and the embed endpoint are up ──
 # Preflight both before any write. A skip sets a NON-ZERO exit (D1) so the failure is visible
 # to cron/monitoring — the real risk is the KB silently going stale, not a loud failure.
-if ! autoscan_api_reachable; then
+# Retry the probes a few times: a transient blip must not cost a whole night (idempotent anyway).
+retry() { local n; for n in 1 2 3; do "$@" && return 0; [ "$n" -lt 3 ] && sleep 20; done; return 1; }
+
+if ! retry autoscan_api_reachable; then
     kb_exit=1
     log "ERROR: AutoScan API unreachable ('$AUTOSCAN_API') -- SKIPPING KB ingest. Source host may be down or its IP moved; check AUTOSCAN_API in .env. KB left unchanged (no partial write). NVD pipeline (run_sync.sh) remains available as a standby."
-elif ! embed_reachable; then
+elif ! retry embed_reachable; then
     kb_exit=1
     log "ERROR: embed endpoint unreachable ('$EMBEDDING_API_URL') -- SKIPPING KB ingest. Ingesting CVEs without dense vectors would degrade RAG to BM25-only. Fix the serving endpoint / .env, then re-run."
 else
