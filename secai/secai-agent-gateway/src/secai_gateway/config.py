@@ -455,6 +455,8 @@ class Settings(BaseSettings):
     # Log cron cập nhật KB (CVE/0-day) hằng ngày — nhóm "Cập nhật KB".
     showcase_kb_sync_log: str = "/home/ict/Downloads/CVE-DB/sync_cve.log"
     showcase_kb_cron: str = "0 3 * * *"
+    # /health also probes embedding/rerank/Qdrant/Neo4j and the KB-sync cron age (cached 30s).
+    health_deep_checks: bool = True
     # Triển khai: docker-compose + Helm chart để trưng trên UI (tiêu chí Docker image + Helm).
     showcase_docker_compose: str = "/home/ict/AIEngines/secai/secai-docker/docker-compose.yml"
     showcase_helm_dir: str = "./deploy/helm/secai-gateway"

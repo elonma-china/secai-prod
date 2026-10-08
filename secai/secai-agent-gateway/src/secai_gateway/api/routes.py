@@ -2611,7 +2611,27 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # over a real sample means the guard is bypassed on most requests right now.
         sanitize_stats = verdict_stats()
         status = _health_status(qwen_ok, sanitize_stats)
-        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        payload: dict[str, Any] = {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        if s.health_deep_checks:
+            # Real embedding/rerank probes + Qdrant/Neo4j + nightly-KB-sync age (see health_deps).
+            # Lets an operator confirm after a restart or .env change that the stack is actually
+            # usable, not just that the process is up. Still HTTP 200 (Docker healthcheck only
+            # needs liveness); readiness is in `ready`/`problems`.
+            from . import health_deps
+
+            extra = await health_deps.cached_collect(s)
+            problems = health_deps.problems_from(extra)
+            if redis_status == "unreachable":
+                problems.append("redis: unreachable")
+            if not qwen_ok:
+                problems.insert(0, f"llm: {llm_base} không phản hồi /models")
+            payload.update(extra)
+            payload.update(health_deps.uptime())
+            payload["problems"] = problems
+            payload["ready"] = not problems
+            if problems:
+                payload["status"] = "degraded"
+        return payload
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:
