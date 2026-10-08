@@ -23,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from linch.events import ResultEvent, SystemEvent
 
 from ..agent import registry_for
-from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding
+from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding, is_semantic_route_candidate, wants_remediation
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -925,14 +925,33 @@ def register_routes(app: FastAPI, state: Any) -> None:
         knowledge_on = bool(getattr(cfg, "chat_knowledge_grounding_enabled", False))
         cve_search_on = bool(getattr(cfg, "chat_cve_search_prefetch_enabled", True))
         discovery_on = bool(getattr(cfg, "chat_discovery_enabled", False))
+        semantic_on = knowledge_on and bool(getattr(cfg, "chat_semantic_routing_enabled", False))
         plan = classify_chat_grounding(prompt, knowledge_enabled=knowledge_on, cve_search_enabled=cve_search_on,
                                        discovery_enabled=discovery_on)
         has_id = any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values())
         followup_entity: str | None = None
+        semantic_cve: Any = None  # ToolResult of the semantic CVE probe when it found a clearly matching record
+        semantic_kn: dict[str, Any] | None = None  # reference text found by the same semantic pass
         if not has_id:
             if plan.route == "taxonomy" and plan.knowledge:
-                return prompt, _finish_grounding(await _taxonomy_grounding(prompt) or await _knowledge_grounding(prompt), prompt)
-            if plan.route == "concept_kb":
+                return prompt, _finish_grounding(await _taxonomy_grounding(prompt) or await _knowledge_grounding(
+                    prompt, gate="confirm" if semantic_on else None), prompt)
+            if semantic_on and plan.route in ("concept", "concept_kb") and (plan.route == "concept_kb" or is_semantic_route_candidate(prompt)):
+                # Semantic routing: keywords are only a hint. Both databases are asked at once (latency = the slower one):
+                # the knowledge KB (a keyword hit needs a weak confirmation, no keyword needs an unmistakable match) and
+                # the CVE KB (a record must answer the question almost verbatim). Strong reference text wins; otherwise
+                # a CVE record that clearly matches turns the question into a CVE lookup.
+                semantic_kn, semantic_cve = await asyncio.gather(
+                    _knowledge_grounding(prompt, gate="confirm" if plan.route == "concept_kb" else "semantic"),
+                    _semantic_cve_probe(prompt))
+                strong_kn = bool(semantic_kn) and _best_rerank(semantic_kn["result"]) >= float(getattr(cfg, "knowledge_min_rerank", 0.9))
+                if semantic_cve is None or strong_kn:
+                    if semantic_kn or plan.route == "concept_kb":
+                        return prompt, _finish_grounding(semantic_kn, prompt)
+                    semantic_kn = None
+                else:
+                    logger.info("semantic routing: CVE records answer this question (route %s → cve_search)", plan.route)
+            elif plan.route == "concept_kb":
                 # No id to look up: concept / how-to-fix questions are answered from the knowledge KB
                 # (cheat sheets, ASVS, mitigations) when it has a relevant chunk.
                 return prompt, _finish_grounding(await _knowledge_grounding(prompt), prompt)
@@ -940,7 +959,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 followup_entity = await _resolve_followup_entity_id(session_id)
                 if followup_entity:
                     query = f"{followup_entity} {prompt}".strip()
-            if not followup_entity and not (cve_search_on and plan.route in ("cve_search", "id_lookup")):
+            if not followup_entity and semantic_cve is None and not (cve_search_on and plan.route in ("cve_search", "id_lookup")):
                 return prompt, (_lang_only_grounding(prompt) if cve_search_on and not plan.need_kb else None)
             # else: open-ended CVE question (no id anywhere) → search the KB with the question itself.
         try:
@@ -954,7 +973,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # Discovery: a question that looks for CVEs by description (route cve_search, or a class id + "CVE"), no id given.
             discover = discovery_on and not re.search(r"CVE-\d{4}-\d{4,7}", query, re.I) and (
                 plan.route == "cve_search" or bool(re.search(r"\bCVEs?\b", prompt or "", re.I)))
-            result = await _qdrant_search(query=query, ctx=None, top_k=10, **({"discover": True} if discover else {}))
+            result = semantic_cve if semantic_cve is not None else await _qdrant_search(
+                query=query, ctx=None, top_k=10, **({"discover": True} if discover else {}))
             grounding_ms = int(round((time.monotonic() - _t0) * 1000))
         except Exception:
             logger.exception("pre-fetch grounding lookup lỗi — dùng nguyên prompt gốc, không chặn chat")
@@ -980,10 +1000,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 code_text = await _poc_code_block(cves[0], prompt)
                 if code_text:
                     blocks.append(code_text)
-        if plan.knowledge:
+        if plan.knowledge or (semantic_cve is not None and (semantic_kn or wants_remediation(prompt))):
             # "How do I fix CVE-X / prevent CWE-Y": append the mitigations of the weaknesses the
             # entity result names, so the remediation is quoted from a source, not improvised.
-            extra = await _knowledge_grounding(prompt, cwe_ids=_cwe_ids_in(result.content))
+            extra = semantic_kn or await _knowledge_grounding(
+                prompt, cwe_ids=_cwe_ids_in(result.content), gate="confirm" if semantic_on else None)
             if extra:
                 blocks.append(extra["result"])
                 summary = f"{summary} + {extra['summary']}"
@@ -1152,7 +1173,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     ids.append(cid.upper())
         return ids[:3]
 
-    async def _knowledge_grounding(prompt: str, cwe_ids: list[str] | None = None) -> dict[str, Any] | None:
+    _RERANK_IN_BLOCK_RE = re.compile(r"rerank: ([0-9.]+)\)")
+
+    def _best_rerank(content: str) -> float:
+        return max((float(m) for m in _RERANK_IN_BLOCK_RE.findall(content or "")), default=0.0)
+
+    async def _semantic_cve_probe(prompt: str) -> Any:
+        """CVE search used as a routing question: returns the search result only when one CVE record matches the
+        prompt unmistakably (retrieval/qdrant.py gate="cve"), else None. Fail-open and time-boxed like the other pre-fetches."""
+        timeout = float(getattr(state.settings, "knowledge_prefetch_timeout_s", 3.0))
+        try:
+            res = await asyncio.wait_for(_qdrant_search(query=prompt, ctx=None, top_k=10, gate="cve"), timeout=timeout)
+        except Exception:
+            return None
+        return res if "### Result" in (res.content or "") and not getattr(res, "is_error", False) else None
+
+    async def _knowledge_grounding(prompt: str, cwe_ids: list[str] | None = None, gate: str | None = None) -> dict[str, Any] | None:
         """Pre-fetch from the knowledge KB (scope="knowledge"). Fail-open: any error or no
         relevant chunk → None, and the chat proceeds exactly as it did without this layer."""
         timeout = float(getattr(state.settings, "knowledge_prefetch_timeout_s", 3.0))
@@ -1160,7 +1196,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             t0 = time.monotonic()
             res = await asyncio.wait_for(
                 _qdrant_search(query=prompt, ctx=None, top_k=min(KNOWLEDGE_MAX_HITS, int(getattr(state.settings, "knowledge_top_k", 4))),
-                               scope="knowledge", cwe_id=cwe_ids or None),
+                               scope="knowledge", cwe_id=cwe_ids or None, **({"gate": gate} if gate else {})),
                 timeout=timeout)
             ms = int(round((time.monotonic() - t0) * 1000))
         except asyncio.TimeoutError:

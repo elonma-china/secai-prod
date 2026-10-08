@@ -277,6 +277,7 @@ async def _qdrant_search(
     kev_only: bool = False,
     scope: str | None = None,
     discover: bool = False,
+    gate: str | None = None,
 ) -> ToolResult:
     # Exact-ID grounding: if the caller didn't pin an entity but the query names one
     # (or more), filter to those exact IDs so a bare "CVE-2025-0282" / "CWE-89" / "T1059"
@@ -417,11 +418,19 @@ async def _qdrant_search(
             ][:BM25_FANOUT]
 
         top_dense = max((h["score"] for h in dense_hits), default=0.0)
-        if (scope == "knowledge" and dense_hits and _settings.knowledge_min_dense > 0
-                and top_dense < _settings.knowledge_min_dense):
+        min_dense = _settings.knowledge_min_dense
+        if gate == "semantic":  # no keyword asked for reference text: only a clearly close chunk may bring it in
+            min_dense = max(min_dense, _settings.semantic_route_min_dense)
+        if (scope == "knowledge" and dense_hits and min_dense > 0
+                and top_dense < min_dense):
             # Nothing in the knowledge base is semantically close: better no reference than a random one.
-            logger.info("qdrant_search scope=knowledge gated top_dense=%.3f < %.3f", top_dense, _settings.knowledge_min_dense)
+            logger.info("qdrant_search scope=knowledge gated top_dense=%.3f < %.3f", top_dense, min_dense)
             dense_hits, bm25_hits = [], []
+        if gate == "cve" and scope == "entity" and dense_hits:
+            # Semantic CVE routing probe: no CVE record is even close to the question → skip the reranker call altogether.
+            close = max((h["score"] for h in dense_hits if h["payload"].get("cve_id")), default=0.0)
+            if close < _settings.semantic_route_min_dense_cve:
+                return ToolResult(content="Không tìm thấy kết quả trong knowledge base.", summary=f"qdrant_search({query}) 0 hits")
         if not dense_hits and not bm25_hits:
             note = "" if (EMBEDDING_URL or BM25_VECTOR) else " (no embedding / BM25 configured)"
             return ToolResult(content=f"Không tìm thấy kết quả trong knowledge base.{note}", summary=f"qdrant_search({query}) 0 hits")
@@ -501,6 +510,12 @@ async def _qdrant_search(
             except Exception:
                 pass  # best-effort, same fallback as production
 
+    if gate == "cve" and scope == "entity":
+        # The probe only passes when the reranker found a CVE record that unmistakably answers the question.
+        best_cve = max((v for pid, v in rerank_scores.items() if payloads.get(pid, {}).get("cve_id")), default=None)
+        if best_cve is None or best_cve < _settings.semantic_route_min_rerank_cve:
+            return ToolResult(content="Không tìm thấy kết quả trong knowledge base.", summary=f"qdrant_search({query}) 0 hits")
+
     # 6. Final score: rerank if available else RRF, then payload boost. When the query
     # names a CWE/CAPEC/ATT&CK entity, its own definition node should outrank the CVEs
     # that merely reference it ("CWE-89 là gì" wants the CWE definition first).
@@ -541,7 +556,24 @@ async def _qdrant_search(
                 continue
             seen_cve.add(cve)
         deduped.append(h)
-    if scope == "knowledge" and _settings.knowledge_min_rerank > 0:
+    if scope == "knowledge" and gate and _settings.knowledge_min_rerank > 0:
+        # Semantic routing (CHAT_SEMANTIC_ROUTING_ENABLED). The reranker judged the top candidates; a candidate it did not
+        # judge is not evidence, so it never passes (the plain rule below lets those through). "confirm": a keyword already
+        # asked for reference text, so a weak match is enough to keep it from being dropped; "semantic": no keyword did, so
+        # the best candidate has to be an unmistakable match. A strong best match keeps only strong chunks.
+        if gate == "semantic":
+            floor = _settings.semantic_route_min_rerank
+        else:
+            floor = _settings.knowledge_confirm_min_rerank
+        best = max(rerank_scores.values(), default=None)
+        if best is None and gate == "confirm":
+            pass  # no reranker output (serving down): behave as before
+        elif best is None or best < floor:
+            deduped = []
+        else:
+            hit_min = _settings.knowledge_min_rerank if best >= _settings.knowledge_min_rerank else floor
+            deduped = [h for h in deduped if h["rerank_score"] is not None and h["rerank_score"] >= hit_min]
+    elif scope == "knowledge" and _settings.knowledge_min_rerank > 0:
         # Only meaningful when a reranker scored the hit; without one we keep the RRF order.
         deduped = [h for h in deduped if h["rerank_score"] is None or h["rerank_score"] >= _settings.knowledge_min_rerank]
     final_hits = deduped[:top_k]
