@@ -6,12 +6,14 @@ disposable child runner must wrap it before any GPU backend is enabled.
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Awaitable, Callable, TypeVar
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 class StageFailure(Exception):
@@ -58,7 +60,8 @@ class GpuBudget:
     def check_preload(self, sample: GpuSample) -> None:
         self._owned(sample, None, before_load=True)
         if sample.free_mib < self.min_free_mib + self.max_owned_mib:
-            raise StageFailure("GPU_RESERVE", poison=True)
+            # No child exists yet, so a transient shortage must not latch poison.
+            raise StageFailure("GPU_RESERVE", pre_admission=True)
 
     def check_running(self, sample: GpuSample,
                       owner_host_pid: int | None) -> tuple[int, int | None]:
@@ -152,6 +155,7 @@ class GpuStageQueue:
             try:
                 return await operation(cancel)
             except StageFailure as exc:
+                logger.warning("gpu stage failure code=%s poison=%s", exc.code, exc.poison)
                 if exc.poison:
                     self.poisoned = True
                 raise
