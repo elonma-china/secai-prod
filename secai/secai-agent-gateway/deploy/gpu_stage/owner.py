@@ -241,6 +241,9 @@ class GpuStageOwner:
         async with self._busy:
             if deadline <= time.monotonic() or cancel.is_set():
                 raise StageFailure("TIMEOUT", pre_admission=True)
+            # Cheap gate first: attest hashes multi-GB files, so do not pay for
+            # it while VRAM is short. The check after attest stays authoritative.
+            self.budget.check_preload(await asyncio.to_thread(self.observer.sample, None))
             await asyncio.wait_for(asyncio.to_thread(command.attest),
                                    timeout=max(0, deadline - time.monotonic()))
             self.budget.check_preload(await asyncio.to_thread(self.observer.sample, None))
