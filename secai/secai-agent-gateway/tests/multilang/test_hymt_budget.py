@@ -56,6 +56,38 @@ def test_real_pinned_tokenizer_counts_exact_rendered_server_prompt():
 
 @pytest.mark.skipif(not TOKENIZER.is_file() or not TOKENIZER_CONFIG.is_file(),
                     reason="pinned public Hy-MT tokenizer not staged on this host")
+def test_gpu_profile_requires_actual_2048_context_and_preserves_cpu_profile():
+    gpu = configured(specialist_profile="hymt2_7b_gguf_gpu",
+                     specialist_context_tokens=2048)
+    assert isinstance(verified_specialist_counter(gpu), HyMtCounter)
+    assert verified_specialist_counter(configured(
+        specialist_profile="hymt2_7b_gguf_gpu")) is None
+    assert verified_specialist_counter(configured(
+        specialist_context_tokens=2048)) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not TOKENIZER.is_file() or not TOKENIZER_CONFIG.is_file(),
+                    reason="pinned public Hy-MT tokenizer not staged on this host")
+async def test_gpu_profile_uses_actual_hymt_prompt_without_t5_prefix():
+    settings = configured(specialist_profile="hymt2_7b_gguf_gpu",
+                          specialist_context_tokens=2048)
+    counter = verified_specialist_counter(settings)
+    calls = []
+
+    class Fake:
+        async def generate(self, request):
+            calls.append(request)
+            return GenerationResult("你好。", "stop", "tencent/Hy-MT2-7B")
+
+    result = await translate(TranslationRequest("Xin chào.", "vi", "zh"), llm=Fake(),
+                             settings=settings, token_count=counter)
+    assert result.translated_text == "你好。"
+    assert calls[0].user == "Xin chào." and calls[0].max_output_tokens == 512
+
+
+@pytest.mark.skipif(not TOKENIZER.is_file() or not TOKENIZER_CONFIG.is_file(),
+                    reason="pinned public Hy-MT tokenizer not staged on this host")
 @pytest.mark.parametrize("changes", [
     {"specialist_model": "tencent/Hy-MT2-1.8B"},
     {"specialist_tokenizer_sha256": "0" * 64},

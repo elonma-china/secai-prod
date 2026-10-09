@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sqlite3
 import time
 from contextlib import asynccontextmanager
@@ -56,6 +57,11 @@ class GatewayState:
 
 
 def create_app(runner: CompletionRunner | None = None) -> FastAPI:
+    # Without this the root logger sits at WARNING and every logger.info in the package is
+    # dropped in production — including the input-sanitize cascade audit line, which is the
+    # only record of a judge overriding the threshold. uvicorn configures its own loggers.
+    logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO").upper(),
+                        format="%(asctime)s %(levelname)s %(name)s %(message)s")
     state = GatewayState(runner)
 
     @asynccontextmanager

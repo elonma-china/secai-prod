@@ -55,10 +55,14 @@ class RedisSessionStore:
     """Implements the linch SessionStore protocol over Redis (sessions/messages/snapshots
     persisted; tasks in-memory). Keys expire after 24h and are refreshed on every write."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, ttl_seconds: int = _TTL_SECONDS) -> None:
         from redis.asyncio import Redis  # lazy import — only needed when Redis is configured
 
         self._redis = Redis.from_url(url, decode_responses=True)
+        # Live-memory retention window, refreshed on every write. Parametrized (default =
+        # the legacy 24h) so a deploy can widen the working window; durable history is a
+        # separate SQLite store (state/conversations.py), independent of this TTL.
+        self._ttl = int(ttl_seconds or _TTL_SECONDS)
         self._tasks: dict[str, dict[str, Task]] = {}
         self._task_counter: dict[str, int] = {}
 
@@ -69,7 +73,7 @@ class RedisSessionStore:
             return False
 
     async def _save_record(self, rec: SessionRecord) -> None:
-        await self._redis.set(_rec_key(rec.id), _rec_to_json(rec), ex=_TTL_SECONDS)
+        await self._redis.set(_rec_key(rec.id), _rec_to_json(rec), ex=self._ttl)
 
     # ── sessions ───────────────────────────────────────────────────────────────
     async def create(self, *, id: str | None = None, meta: dict[str, object] | None = None) -> SessionRecord:
@@ -122,13 +126,13 @@ class RedisSessionStore:
             stored.append(StoredMessage(seq=seq, appended_at=ts, message=message))
         if payloads:
             await self._redis.rpush(_msgs_key(id), *payloads)
-            await self._redis.expire(_msgs_key(id), _TTL_SECONDS)
+            await self._redis.expire(_msgs_key(id), self._ttl)
         rec.updated_at = ts
         await self._save_record(rec)
         return stored
 
     async def save_provider_snapshot(self, id: str, snapshot: ProviderViewSnapshot) -> None:
-        await self._redis.set(_snap_key(id), json.dumps(snapshot_to_dict(snapshot), ensure_ascii=False), ex=_TTL_SECONDS)
+        await self._redis.set(_snap_key(id), json.dumps(snapshot_to_dict(snapshot), ensure_ascii=False), ex=self._ttl)
 
     async def load_provider_snapshot(self, id: str) -> ProviderViewSnapshot | None:
         raw = await self._redis.get(_snap_key(id))

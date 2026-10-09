@@ -3,8 +3,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from linch import Agent, InMemoryRunStore, InMemorySessionStore
 from linch.config import FeatureFlags
@@ -59,6 +63,16 @@ _FAKE_SURFACE = {
 }
 
 
+@pytest.fixture
+def offline_workflow_services(monkeypatch):
+    # Even use_llm=False still runs HTTP verification and may launch cve_scan.sh.
+    monkeypatch.setattr("secai_gateway.bughunt.workflow.verify_high_signal", AsyncMock(
+        return_value={"ok": False, "leads": [], "notes": [],
+                      "summary": "verify_high_signal: no high-signal hits in offline fixture"}))
+    monkeypatch.setattr("secai_gateway.bughunt.map_cve.run_cve_sweep", AsyncMock(
+        return_value={"cves": [], "skipped": True, "reason": "offline fixture"}))
+
+
 def _agent() -> Agent:
     return Agent(
         model="scripted",
@@ -109,7 +123,7 @@ def test_normalize_base_url():
     assert normalize_base_url("https://example.com/path") == "https://example.com"
 
 
-def test_bughunt_phases_fixed_order(tmp_path, monkeypatch):
+def test_bughunt_phases_fixed_order(tmp_path, monkeypatch, offline_workflow_services):
     monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "gw.db"))
     agent = _agent()
     events: list[WorkflowEvent] = []
@@ -166,7 +180,7 @@ def test_workflow_event_to_sse_phase():
     assert '"title": "AgentHunt"' in text
 
 
-def test_stream_bughunt_workflow_yields_phases_then_result(tmp_path, monkeypatch):
+def test_stream_bughunt_workflow_yields_phases_then_result(tmp_path, monkeypatch, offline_workflow_services):
     monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "gw.db"))
     agent = _agent()
 
@@ -195,13 +209,65 @@ def test_stream_bughunt_workflow_yields_phases_then_result(tmp_path, monkeypatch
     assert "bh-stream-1" in result["run_id"] or result["run_id"] == "bh-stream-1"
 
 
-def test_bugbounty_root_and_arsenal():
-    from secai_gateway.bughunt.engine import arsenal_status, bugbounty_root, recon_engine_script
-    root = bugbounty_root()
-    assert root.is_dir(), root
-    assert recon_engine_script().is_file()
+def test_bugbounty_root_prefers_settings_then_environment_and_resolves_script(tmp_path, monkeypatch):
+    from secai_gateway.bughunt.engine import bugbounty_root, recon_engine_script
+
+    settings_root = tmp_path / "from-settings"
+    env_root = tmp_path / "from-env"
+    settings_root.mkdir()
+    (settings_root / "tools").mkdir()
+    script = settings_root / "tools" / "recon_engine.sh"
+    script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    monkeypatch.setenv("BUGBOUNTY_ROOT", str(env_root))
+
+    settings = SimpleNamespace(bugbounty_root=str(settings_root))
+    assert bugbounty_root(settings) == settings_root.resolve()
+    assert recon_engine_script(settings) == script.resolve()
+    assert recon_engine_script(settings).is_file()
+
+    # An empty configured value falls through to BUGBOUNTY_ROOT, even when its script is
+    # absent; callers can inspect the resolved expected path without requiring the clone.
+    empty_settings = SimpleNamespace(bugbounty_root="")
+    assert bugbounty_root(empty_settings) == env_root.resolve()
+    assert recon_engine_script(empty_settings) == (env_root / "tools" / "recon_engine.sh").resolve()
+    assert not recon_engine_script(empty_settings).is_file()
+
+
+def test_arsenal_status_uses_controlled_path_and_ready_contract(tmp_path, monkeypatch):
+    from secai_gateway.bughunt.engine import arsenal_status
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    subfinder = bin_dir / "subfinder"
+    subfinder.write_text("", encoding="utf-8")
+    monkeypatch.setattr("secai_gateway.bughunt.engine.shutil.which", lambda name: str(subfinder) if name == "subfinder" else None)
     status = arsenal_status()
-    assert "present" in status and "missing" in status
+    assert status["present"] == ["subfinder"]
+    assert "nmap" in status["missing"]
+    assert status["ready"] is False
+
+    nmap = bin_dir / "nmap"
+    nmap.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "secai_gateway.bughunt.engine.shutil.which",
+        lambda name: str({"subfinder": subfinder, "nmap": nmap}[name]) if name in {"subfinder", "nmap"} else None,
+    )
+    assert arsenal_status()["ready"] is True
+
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_BUGBOUNTY_EXTERNAL_SMOKE") != "1",
+    reason="external integration; set RUN_BUGBOUNTY_EXTERNAL_SMOKE=1 to require the real claude-bug-bounty clone and recon_engine.sh",
+)
+def test_bugbounty_external_clone_and_arsenal_smoke():
+    from secai_gateway.bughunt.engine import arsenal_status, bugbounty_root, recon_engine_script
+
+    root = bugbounty_root()
+    assert root.is_dir(), f"external claude-bug-bounty clone missing: {root}"
+    script = recon_engine_script()
+    assert script.is_file(), f"external recon engine script missing: {script}"
+    status = arsenal_status()
+    assert "present" in status and "missing" in status and isinstance(status["ready"], bool)
 
 
 def test_llm_hunt_json_helpers():
@@ -238,7 +304,7 @@ def test_hunt_validate_helpers():
     assert val["leads"]
 
 
-def test_bughunt_http_stream(tmp_path, monkeypatch):
+def test_bughunt_http_stream(tmp_path, monkeypatch, offline_workflow_services):
     monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "gw.db"))
     monkeypatch.setenv("VERIFY_ALLOW_ALL", "true")
 

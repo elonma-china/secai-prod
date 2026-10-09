@@ -17,6 +17,7 @@ def hermetic_env(monkeypatch):
     """
     monkeypatch.setenv("REDIS_URL", "")
     monkeypatch.setenv("AIRGAP", "false")
+    monkeypatch.setenv("POC_EXPLOIT_SIMULATE_DELAY_S", "0")
     # The default session store backend is now `sqlite` (durable, config.Settings default),
     # which would otherwise write a real ./data/sessions.db during a test run (or a
     # tmp_path one via test_airgap.py's LinchRunner) — unit tests must stay hermetic and

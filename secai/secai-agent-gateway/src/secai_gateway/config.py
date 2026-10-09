@@ -52,8 +52,37 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     # Dense+sparse hybrid collection (legacy dense-only: cve_kb).
     qdrant_collection: str = "cve_kb_hybrid"
+    # Optional advisory/patch collections queried only for exact, linked CVE refs.
+    # Empty by default so deployments opt in after provisioning the collection.
+    qdrant_kb_supplemental_collections: str = ""
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
+    # Knowledge KB (cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations): docs/plans/kb-knowledge-grounding.md.
+    # Off by default: chat then routes exactly as before. knowledge_min_rerank 0 = no cut-off (sec-rerank scores saturate near 1: relevant hits >=0.97, measured 2026-10-06).
+    chat_knowledge_grounding_enabled: bool = False
+    # Open-ended CVE questions with no id ("Lỗ hổng Log4Shell là gì?"): pre-fetch the CVE KB server-side. On by default.
+    chat_cve_search_prefetch_enabled: bool = True
+    # "Which <product> bug lets …?" questions go to the CVE search, and the search adds KEV-only candidates + vendor
+    # synonyms to its pool (retrieval/discovery.py). Off by default: routing and search then equal the previous release.
+    chat_discovery_enabled: bool = False
+    knowledge_top_k: int = 4
+    knowledge_min_rerank: float = 0.9
+    knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off
+    knowledge_prefetch_timeout_s: float = 3.0
+    # Semantic routing: decide from what the knowledge KB actually holds, not from keywords alone. A keyword hit must be
+    # confirmed by the reranker (knowledge_confirm_min_rerank) and a question with NO keyword still gets reference text when
+    # its best chunk is an unmistakable match (rerank >= semantic_route_min_rerank, cosine >= semantic_route_min_dense).
+    # Off = the previous keyword-only routing and the previous (leaky) rerank gate.
+    chat_semantic_routing_enabled: bool = False
+    knowledge_confirm_min_rerank: float = 0.5
+    semantic_route_min_rerank: float = 0.99
+    semantic_route_min_dense: float = 0.62
+    semantic_route_min_rerank_cve: float = 0.998  # a CVE record has to answer the question this clearly to be fetched without a keyword
+    semantic_route_min_dense_cve: float = 0.60  # …and be at least this close (cosine), else the reranker is not even called
+    # Serving host is ~240 ms away: reuse connections to embedding/rerank, and keep the vector of a prompt the input
+    # classifier already embedded. Off = previous behaviour (docs/test-results/kb-knowledge-followups-2026-10-07.md).
+    embedding_keepalive_enabled: bool = False
+    embedding_cache_ttl_s: float = 0.0
     embedding_api_url: str = ""
     reranker_api_url: str = ""
     embedding_model: str = "BAAI/bge-m3"
@@ -214,6 +243,24 @@ class Settings(BaseSettings):
     # simple queries to 1-2 turns. Override per-deploy via STEP_CAP.
     step_cap: int = 16
     tool_timeout_ms: int = 30000
+    # ── LLM output budgets — DECOUPLED into two independent knobs ────────────────────────────
+    # In linch a single value is overloaded: the GENERATION cap (max tokens a turn may emit) is
+    # `RunOptions.max_output_tokens or agent.max_output_tokens`, while the COMPACTION reserve is
+    # `agent.max_output_tokens` only (compaction fires when est(context)+reserve >= 0.8*window).
+    # Coupling them was dangerous: a reserve small enough to keep compaction healthy at any window
+    # ALSO capped generation → an exploit PoC could be truncated. So we split them: agent-level
+    # holds only the (small) compaction reserve, and each run passes its own generous per-profile
+    # generation cap via RunOptions (agent/runner.py).
+    #
+    # Compaction reserve (agent-level). Small → compaction fires rarely + as one big fact-
+    # preserving pass at ANY context window (fixes the qwen_context_window=32768 default which,
+    # with the old ~32768 reserve, made compaction re-fire every turn and erode early facts —
+    # measured 2026-09-02). Never used as a generation cap (every run overrides that below).
+    llm_compaction_reserve_tokens: int = 4096
+    # Per-turn GENERATION cap, per profile (RunOptions.max_output_tokens). Generous so nothing is
+    # truncated. exploit_research gets the largest budget because a synthesized PoC can be long.
+    llm_max_output_tokens: int = 16384          # chat/translate/report/statistical/bughunt (~64KB)
+    llm_exploit_max_output_tokens: int = 32768  # exploit_research — long PoC headroom (~128KB)
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     report_feature_enabled: bool = False
@@ -222,6 +269,12 @@ class Settings(BaseSettings):
     report_upstream_url: str = ""
     translation_upstream_url: str = ""
     gateway_db_path: str = "./data/gateway.db"
+    document_agent_enabled: bool = False
+    document_agent_tokenizer_json: str = ""
+    document_agent_tokenizer_sha256: str = ""
+    document_agent_chat_template_path: str = ""
+    document_agent_chat_template_sha256: str = ""
+    document_agent_context_tokens: int = 0
     redis_url: str = ""
     admin_api_key: str = ""
     allowed_origins: str = ""
@@ -234,6 +287,30 @@ class Settings(BaseSettings):
     # dev/test-only and never persists. See agent/runner.py's LinchRunner.__init__.
     session_store_backend: str = "sqlite"
     session_db_path: str = "./data/sessions.db"
+    # ── Chat history / multi-conversation (new /ai/conversations/* endpoints) ────
+    # Live-memory window in the linch Redis session store, refreshed on every write.
+    # Default = the legacy 24h so old /ai/chat behavior is untouched. Durable history
+    # (conversation index + full transcript) is a separate SQLite store that never expires,
+    # so widening this only affects how long the *live* compacted context survives idle.
+    session_ttl_seconds: int = 86400
+    # Master flag for the durable multi-conversation feature (endpoints stay registered;
+    # this gates the durable-store bookkeeping and rehydrate). Fail-open when off.
+    chat_history_enabled: bool = True
+    # When a conversation is reopened after its Redis live window expired, seed the linch
+    # session with this many of the most recent durable transcript messages before running
+    # (0 = disable rehydrate). linch compacts further if the seed is large.
+    chat_history_rehydrate_turns: int = 12
+    # Surface a `compaction` object in the NEW stream endpoint's final metadata (and an
+    # additive `compaction` SSE frame) when linch compacts mid-run. Observational only.
+    conversation_compaction_meta: bool = True
+    # Swap linch's coding-flavored ENGLISH compaction summary for a fact-preserving Vietnamese
+    # one (agent/factory.py::CHAT_SUMMARY_PROMPT_VI). Default OFF (conservative — the Agent is
+    # shared by every profile). Live-test (2026-09-02) note: enabling it makes summaries VI and
+    # asks to keep user facts, but the small summarizer (Cyber-F1) still does NOT reliably retain
+    # an out-of-domain early fact across compaction — the durable SQLite transcript + rehydrate
+    # are the real safety net, and in production (32k window) compaction only fires on very long
+    # threads. Flag is now functional (it was previously inert — factory never read it).
+    chat_general_summary_prompt: bool = False
 
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào
