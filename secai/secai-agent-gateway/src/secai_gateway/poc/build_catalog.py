@@ -172,8 +172,8 @@ def dedup_same_repo(db) -> dict[str, int]:
     ``owner/repo`` no longer collides on UNIQUE(source, source_ref) and inserts a SECOND row
     for the SAME repo: one fetched (code-path ref), one link-only (repo-root ref). Tier-1
     can't see it (needs a DIFFERENT owner — fork family), Tier-2 can't see it (needs an exact
-    ``artifact_sha256`` on BOTH rows — the link-only twin has none). Result: ``github_candidates``
-    re-downloads an already-fetched repo and search returns the same PoC twice.
+    ``artifact_sha256`` on BOTH rows — the link-only twin has none). Result: the link-only
+    twin gets re-fetched and search returns the same PoC twice.
 
     Groups still-canonical ``poc_github`` rows by their normalized repo identity
     (``provenance.repo``, always ``owner/repo`` regardless of the code-path retarget). A

@@ -591,90 +591,6 @@ def _consolidated_prompt_appendix(consolidated: dict[str, Any], cve_id: str | No
     )
 
 
-def _github_evidence_from_fetch(entry_bytes: bytes, entry_rel: str,
-                                file_set: list[tuple[str, bytes]], row: dict[str, Any],
-                                cve_id: str | None,
-                                fileset_truncated: bool = False) -> dict[str, Any]:
-    """Turn a request-path on-demand GitHub tarball fetch (fetch_github.fetch_repo_code) into
-    the same evidence-dict shape poc_fetch produces, so consolidation + Section-1 injection
-    treat it identically to a pre-fetched catalog PoC. Full bytes (no truncation).
-
-    ``fileset_truncated`` (from ``fetch_repo_code``'s 4th return value) flags that
-    ``_pick_set``'s file-count/byte cap discarded a candidate repo file for THIS fetch — a
-    provenance signal (see 2026-08 research finding silent-dependency-drop), not a hard error:
-    the entry file itself is always complete, only a same-repo sibling may be missing."""
-    from ..poc.fetch_github import _is_doc_file
-    entry_text = entry_bytes.decode("utf-8", errors="replace")
-    entry_sha = hashlib.sha256(entry_bytes).hexdigest()
-    lang = Path(entry_rel).suffix.lstrip(".") or None
-    cves = [cve_id.upper()] if cve_id else []
-    base = {
-        "source": "poc_github",
-        "source_ref": row.get("source_ref") or entry_rel,
-        "url": row.get("url") or "",
-        "kind": "exploit",
-        "title": (row.get("source_ref") or entry_rel or "GitHub PoC"),
-        "description": "",
-        "cve_ids": cves,
-        "language": lang,
-        "sha256": entry_sha,
-        "code_truncated": False,
-        "candidate_status": "draft_not_executed",
-        "static_indicators": {"language": lang, "on_demand": True,
-                              "fileset_truncated": bool(fileset_truncated)},
-    }
-    if len(file_set) > 1:
-        source_files: list[dict[str, Any]] = []
-        for frel, fdata in file_set:
-            role = ("entry" if frel == entry_rel
-                    else "readme" if _is_doc_file(Path(frel).name) else "support")
-            source_files.append({
-                "path": frel, "code": fdata.decode("utf-8", errors="replace"),
-                "sha256": hashlib.sha256(fdata).hexdigest(),
-                "language": Path(frel).suffix.lstrip(".") or None,
-                "role": role, "truncated": False,
-            })
-        base["source_files"] = source_files
-        base["source_code"] = entry_text
-    else:
-        base["source_code"] = entry_text
-        base["source_files"] = None
-    return base
-
-
-async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list[dict[str, Any]]:
-    """Fetch a link-only GitHub PoC's code on demand for ``cve_id`` (highest-star, link-only
-    first) and return it as real-code evidence — or ``[]`` on any miss. Blocking tarball I/O is
-    off-loaded to a thread; stops at the first repo that yields a picked PoC. Never raises."""
-    from ..poc.fetch_github import fetch_repo_code
-    catalog = getattr(poc, "catalog", None)
-    if catalog is None:
-        return []
-    try:
-        rows = await asyncio.to_thread(catalog.github_candidates, cve_id, 3)
-    except Exception:
-        logger.exception("github_candidates lookup failed for %s", cve_id)
-        return []
-    for row in rows:
-        try:
-            prov = json.loads(row.get("provenance") or "{}")
-        except (ValueError, TypeError):
-            prov = {}
-        branch = prov.get("default_branch") or "master"
-        try:
-            fetched = await asyncio.to_thread(
-                fetch_repo_code, row.get("source_ref") or "", row.get("url") or "",
-                branch, cve_id, timeout)
-        except Exception:
-            logger.info("on-demand github fetch errored for %s (%s)", cve_id, row.get("url"))
-            continue
-        if fetched:
-            entry_bytes, entry_rel, file_set, fileset_truncated = fetched
-            return [_github_evidence_from_fetch(
-                entry_bytes, entry_rel, file_set, row, cve_id, fileset_truncated)]
-    return []
-
-
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
@@ -1740,17 +1656,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
         prefetch_result: dict[str, Any], web_hints: list[dict[str, Any]],
         session_id: str | None, target: str | None = None,
         strategy_override: str | None = None) -> tuple[list[dict[str, Any]], str, bool]:
-        """Acquire the best real PoC code (catalog → temp cache → on-demand GitHub → web raw
-        script), consolidate it into ONE runnable file when enabled, and build the model
-        appendix. Internet-fetched code is saved to the temp cache for reuse next time.
+        """Acquire the best real PoC code (catalog → temp cache → web raw script), consolidate
+        it into ONE runnable file when enabled, and build the model appendix. Internet-fetched
+        code is saved to the temp cache for reuse next time.
 
         Returns ``(pre_evidence, appendix, consolidated)``:
         * consolidated → ``pre_evidence`` is ``[merged_file] + description-only hints``; the
           appendix tells the model Mục 1 is that file (system-injected) and to write Mục 2/3
           against it. Session real-code/coverage flags are set so the synthesis/search hooks
           don't force a spurious retry.
-        * not consolidated → the unchanged verbatim path: on-demand/web real code is still
-          merged in (better coverage), and the existing prefetch + web-hint appendices apply.
+        * not consolidated → the unchanged verbatim path: web real code is still merged in
+          (better coverage), and the existing prefetch + web-hint appendices apply.
         """
         from ..poc.ondemand_cache import load_cached, resolve_cache_dir, save_cached
         from ..poc.fixed_pocs import load_fixed, resolve_fixed_dir
@@ -1761,9 +1677,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         base_evidence = prefetch_result.get("evidence") or []
         base_real = [e for e in base_evidence if has_real_code_evidence([e])]
 
-        # Acquisition priority when the catalog has no code: TEMP cache → INTERNET (GitHub
-        # on-demand). Internet-acquired code is saved back to the temp cache below so the next
-        # request for the same CVE reuses it instead of re-downloading.
+        # Acquisition priority when the catalog has no code: TEMP cache → web raw script.
+        # Internet-acquired code is saved back to the temp cache below so the next request for
+        # the same CVE reuses it instead of re-downloading.
         cache_dir = resolve_cache_dir(settings)
         extra_real: list[dict[str, Any]] = []
         cached_hit = False
@@ -1772,17 +1688,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if cached:
                 extra_real = [cached]
                 cached_hit = True
-            elif poc is not None and getattr(settings, "poc_github_ondemand_enabled", False):
-                extra_real = await _ondemand_github_evidence(
-                    poc, cve_id, int(getattr(settings, "poc_github_ondemand_timeout_s", 30)))
 
         web_real = [e for e in (web_hints or []) if e.get("source_code")]
         all_real = base_real + extra_real
         if not all_real:
             all_real = web_real  # web raw PoC script → real code (also internet)
 
-        # Cache whatever we pulled from the internet (GitHub on-demand or web) so DB→temp→internet
-        # holds next time. Skip DB-sourced code (already persistent) and cache re-reads.
+        # Cache whatever we pulled from the internet (web) so DB→temp→internet holds next time.
+        # Skip DB-sourced code (already persistent) and cache re-reads.
         if cve_id and not base_real and not cached_hit and all_real:
             save_cached(cache_dir, cve_id, all_real[0])
 
@@ -1899,7 +1812,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # tiers have real hints; no-op unless WEB_SEARCH_ENABLED. gather_web_hints self-gates
         # on CVE relevance, so an unknown id simply yields nothing.
         web_hints = await _maybe_web_hints(prefetch_result)
-        # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
+        # Acquire best real code (catalog → temp cache → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
         exploit_target = _exploit_target(body, prompt_text)
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
