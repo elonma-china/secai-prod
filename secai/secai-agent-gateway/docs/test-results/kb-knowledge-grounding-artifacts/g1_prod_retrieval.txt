@@ -1,0 +1,24 @@
+== prod_oldcode
+=== RETRIEVAL (n=117): recall@5=0.667 recall@10=0.667 MRR=0.598 ===
+  alias        n=30: recall@5=0.833 recall@10=0.833 MRR=0.775
+  description  n=25: recall@5=0.600 recall@10=0.600 MRR=0.523
+  product      n=20: recall@5=0.750 recall@10=0.750 MRR=0.633
+  cwe          n=15: recall@5=0.067 recall@10=0.067 MRR=0.013
+  multi_hop    n=15: recall@5=0.667 recall@10=0.667 MRR=0.583
+  exact_id     n=12: recall@5=1.000 recall@10=1.000 MRR=1.000
+== prod_newcode
+=== RETRIEVAL (n=117): recall@5=0.667 recall@10=0.667 MRR=0.598 ===
+  alias        n=30: recall@5=0.833 recall@10=0.833 MRR=0.775
+  description  n=25: recall@5=0.600 recall@10=0.600 MRR=0.523
+  product      n=20: recall@5=0.750 recall@10=0.750 MRR=0.633
+  cwe          n=15: recall@5=0.067 recall@10=0.067 MRR=0.013
+  multi_hop    n=15: recall@5=0.667 recall@10=0.667 MRR=0.583
+  exact_id     n=12: recall@5=1.000 recall@10=1.000 MRR=1.000
+== prod_with_knowledge
+=== RETRIEVAL (n=117): recall@5=0.667 recall@10=0.667 MRR=0.598 ===
+  alias        n=30: recall@5=0.833 recall@10=0.833 MRR=0.775
+  description  n=25: recall@5=0.600 recall@10=0.600 MRR=0.523
+  product      n=20: recall@5=0.750 recall@10=0.750 MRR=0.633
+  cwe          n=15: recall@5=0.067 recall@10=0.067 MRR=0.013
+  multi_hop    n=15: recall@5=0.667 recall@10=0.667 MRR=0.583
+  exact_id     n=12: recall@5=1.000 recall@10=1.000 MRR=1.000

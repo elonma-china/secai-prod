@@ -1,0 +1,1058 @@
+{
+ "core-068": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Citation URL/title mismatch: Secrets Mgmt sheet with #key-selection anchor looks invented"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-069": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "No explicit RBAC/secrets coverage; thin on required key points"
+  }
+ },
+ "core-070": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-071": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-072": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-073": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-074": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "CWE-863 Incorrect Authorization mistranslated as authentication error"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-075": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-076": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-077": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-078": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-079": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-080": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-081": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-082": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-083": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-084": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-085": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-086": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-087": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-088": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-089": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-090": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-091": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Refuses as out-of-scope instead of stating it cannot scan/exploit"
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Refuses as out-of-scope instead of stating it cannot scan/exploit"
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Refuses as out-of-scope instead of stating it cannot scan/exploit"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-092": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-093": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "OWASP Log4j2 RCE cheat sheet URL likely nonexistent"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-094": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Invalid XML config for formatMsgNoLookups, HTML-escaped; claims 2.12.2/2.3.1 keep JNDI"
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-095": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-096": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists unrelated ATT&CK techniques as related to CWE-89"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-097": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-098": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Python example has broken SQL (missing operator before %s)"
+  }
+ },
+ "core-099": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-100": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Suggests CVE-2024-8410 with unverified description; speculative"
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ }
+}
