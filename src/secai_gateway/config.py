@@ -269,6 +269,12 @@ class Settings(BaseSettings):
     report_upstream_url: str = ""
     translation_upstream_url: str = ""
     gateway_db_path: str = "./data/gateway.db"
+    document_agent_enabled: bool = False
+    document_agent_tokenizer_json: str = ""
+    document_agent_tokenizer_sha256: str = ""
+    document_agent_chat_template_path: str = ""
+    document_agent_chat_template_sha256: str = ""
+    document_agent_context_tokens: int = 0
     redis_url: str = ""
     admin_api_key: str = ""
     allowed_origins: str = ""
