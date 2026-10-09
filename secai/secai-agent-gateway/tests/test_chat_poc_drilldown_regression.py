@@ -18,9 +18,9 @@ This file proves, without any LLM/serving dependency:
   UC1 — poc_fetch really is in the chat tool registry (guards the ROOT CAUSE literally).
   UC2 — the run-scoped ref lifecycle the policy depends on (search → fetch same run OK;
         reused ref cross-run → PocError; re-search next run → fresh ref → fetch OK) using
-        the REAL PoC catalog and the REAL CVE-2021-44228/log4j-scan PoC from the bug report.
+        a test-owned SQLite catalog and exact test-owned artifact bytes.
   UC3 — the honest "no code available" fallback path (metadata_only) exists and is reachable
-        for a real unfetched/unverified poc_github row, so the model has a truthful answer
+        for a synthetic unfetched/unverified poc_github row, so the model has a truthful answer
         to give instead of inventing one.
   UC4 — the poc_fetch-per-run budget still gates chat (defense-in-depth vs. runaway fetches).
   UC5 — cheap prompt-content guards: the key chat.md drilldown rules and the profiles.yaml
@@ -29,16 +29,16 @@ This file proves, without any LLM/serving dependency:
         since drill-down now surfaces raw PoC source text (attacker-influenced, e.g. a
         malicious PoC repo) directly into the model's context / a rendered answer.
 
-No LLM call, no network, no serving dependency — everything here is backend/hook/prompt
-level and runs fully offline. UC2-UC4 use the REAL on-disk PoC catalog (POC_CATALOG_DB /
-.env) since the bug is specifically about the real Log4Shell catalog data; if that catalog
-is unavailable in some other environment, those tests are skipped with a clear reason
-instead of silently faking a pass.
+No LLM call, no network, no serving dependency — behavior tests use test-owned catalog and
+artifact data and run fully offline. The real Log4Shell catalog/artifact contract remains as
+an explicitly opt-in integration smoke via RUN_POC_CATALOG_EXTERNAL_SMOKE=1.
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -48,16 +48,52 @@ from secai_gateway.agent.hooks import SanitizeToolResultHook, UNTRUSTED_CONTENT_
 from secai_gateway.agent.profiles import PROFILES, registry_for
 from secai_gateway.config import get_settings
 from secai_gateway.poc.backend import _MAX_FETCH_PER_RUN, LocalPocBackend, PocError
+from secai_gateway.poc.catalog import PocCatalog
+from secai_gateway.poc.models import NormalizedPoc
 from secai_gateway.security import neutralize_active_content, wrap_untrusted_content
 
 _CVE = "CVE-2021-44228"
 
-_CATALOG_DB = Path(get_settings().poc_catalog_db)
-_real_catalog_available = _CATALOG_DB.is_file()
-requires_real_catalog = pytest.mark.skipif(
-    not _real_catalog_available,
-    reason=f"real PoC catalog not found at {_CATALOG_DB} (POC_CATALOG_DB) in this environment",
+_SYNTHETIC_SOURCE = (
+    "# Synthetic offline regression artifact; never executed.\n"
+    "# CVE-2021-44228 drilldown fixture\n"
+    "import socket\n"
+    "def inspect_target(host):\n"
+    "    return socket.gethostbyname(host)\n"
 )
+
+
+def _synthetic_backend(tmp_path: Path, *, with_artifact: bool = True) -> LocalPocBackend:
+    """A real catalog/backend fixture backed only by test-owned SQLite and bytes."""
+    root = tmp_path / "poc_artifacts"
+    relpath = None
+    digest = None
+    if with_artifact:
+        digest = hashlib.sha256(_SYNTHETIC_SOURCE.encode()).hexdigest()
+        relpath = f"sha256/{digest}"
+        artifact = root / relpath
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text(_SYNTHETIC_SOURCE, encoding="utf-8")
+
+    catalog = PocCatalog(tmp_path / "catalog.db")
+    catalog.upsert(NormalizedPoc(
+        source="poc_github",
+        source_ref="fixture/secai-quality/synthetic.py",
+        kind="exploit",
+        title="Synthetic offline CVE-2021-44228 drilldown fixture",
+        description="Test-owned synthetic metadata; not a real Log4Shell PoC.",
+        cve_ids=[_CVE],
+        language="py",
+        verified=with_artifact,
+        rank=100,
+        url="https://example.invalid/synthetic-fixture",
+        license="test-only",
+        redistributable=False,
+        artifact_sha256=digest,
+        artifact_path=relpath,
+    ))
+    catalog.commit()
+    return LocalPocBackend(catalog=catalog, source_roots={"poc_github": root})
 
 
 # ── UC1 — poc_fetch must be registered for the `chat` profile ───────────────────────────
@@ -80,16 +116,13 @@ def test_uc1_poc_fetch_still_registered_for_exploit_research_profile() -> None:
     assert "poc_fetch" in registry_for("exploit_research")
 
 
-# ── UC2 — ref lifecycle against the REAL catalog / REAL Log4Shell PoC ───────────────────
+# ── UC2 — ref lifecycle against a real backend and synthetic local artifact ─────────────
 
-@requires_real_catalog
-def test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref() -> None:
-    be = LocalPocBackend()
+def test_uc2a_search_returns_synthetic_hit_with_valid_opaque_ref(tmp_path: Path) -> None:
+    be = _synthetic_backend(tmp_path)
     hits = asyncio.run(be.search(_CVE, 30, "turn1-search"))["hits"]
-    assert hits, "sanity: CVE-2021-44228 must have PoC hits in the real catalog"
-    names = {h["title"] for h in hits}
-    assert "log4j-scan" in names, f"log4j-scan not in top hits: {sorted(names)[:10]}"
-    hit = next(h for h in hits if h["title"] == "log4j-scan")
+    assert hits, "sanity: the test-owned CVE fixture must be indexed"
+    hit = next(h for h in hits if h["title"] == "Synthetic offline CVE-2021-44228 drilldown fixture")
     assert hit["source"] == "poc_github"
     assert hit["language"] == "py"
     assert _CVE in hit["cve_ids"]
@@ -98,87 +131,89 @@ def test_uc2a_search_log4shell_surfaces_log4j_scan_with_valid_ref() -> None:
     assert "path" not in hit and "artifact_path" not in hit
 
 
-@requires_real_catalog
-def test_uc2b_fetch_same_run_returns_real_grounded_source_code() -> None:
+def test_uc2b_fetch_same_run_returns_exact_grounded_artifact_bytes(tmp_path: Path) -> None:
     """(a)+(b): search then fetch in the SAME run — the happy path of the fixed flow."""
-    be = LocalPocBackend()
+    be = _synthetic_backend(tmp_path)
     run_id = "turn1-fetch"
     hits = asyncio.run(be.search(_CVE, 30, run_id))["hits"]
-    hit = next(h for h in hits if h["title"] == "log4j-scan")
+    hit = hits[0]
     fetched = asyncio.run(be.fetch(hit["ref"], run_id))
     assert fetched["candidate_status"] != "metadata_only"
-    assert fetched["source_code"], "source_code must be non-empty real content, not fabricated"
-    assert "log4j" in fetched["source_code"].lower()
-    assert fetched["sha256"]  # real content hash, proves it's a real artifact read
+    assert fetched["source_code"] == _SYNTHETIC_SOURCE
+    assert fetched["sha256"] == hashlib.sha256(_SYNTHETIC_SOURCE.encode()).hexdigest()
     # this is the only field the drilldown policy allows the model to quote verbatim
 
 
-@requires_real_catalog
-def test_uc2c_ref_reused_in_a_different_turn_run_is_rejected() -> None:
+def test_uc2c_ref_reused_in_a_different_turn_run_is_rejected(tmp_path: Path) -> None:
     """(c): a ref from turn 1's run_id must NOT work if replayed in a different run_id —
     this is exactly why chat.md's policy makes the model re-run poc_search every drilldown
     turn instead of reusing a `ref` remembered from conversation history."""
-    be = LocalPocBackend()
+    be = _synthetic_backend(tmp_path)
     hits = asyncio.run(be.search(_CVE, 30, "turnA"))["hits"]
-    hit = next(h for h in hits if h["title"] == "log4j-scan")
+    hit = hits[0]
     with pytest.raises(PocError):
         asyncio.run(be.fetch(hit["ref"], "turnB"))
 
 
-@requires_real_catalog
-def test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref() -> None:
+def test_uc2d_resear_in_new_run_yields_a_fresh_fetchable_ref(tmp_path: Path) -> None:
     """(d): the policy's prescribed recovery — re-search in the NEW run — must actually work,
     proving the drilldown flow chat.md mandates is not just plausible-sounding prose but a
     real, fetchable code path."""
-    be = LocalPocBackend()
+    be = _synthetic_backend(tmp_path)
+    hits1 = asyncio.run(be.search(_CVE, 30, "turnA"))["hits"]
     hits2 = asyncio.run(be.search(_CVE, 30, "turnB"))["hits"]
-    hit2 = next(h for h in hits2 if h["title"] == "log4j-scan")
+    assert hits1 and hits2
+    assert hits1[0]["ref"] != hits2[0]["ref"]
+    hit2 = hits2[0]
     fetched2 = asyncio.run(be.fetch(hit2["ref"], "turnB"))
-    assert fetched2["source_code"]
+    assert fetched2["source_code"] == _SYNTHETIC_SOURCE
 
 
-# ── UC3 — honest "no code" fallback exists for a real unverified/unfetched poc_github row ──
+# ── UC3 — honest "no code" fallback for a synthetic link-only row ───────────────────────
 
-@requires_real_catalog
-def test_uc3_license_gated_or_unfetched_poc_returns_metadata_only_not_fabricated() -> None:
-    """Finds a REAL poc_github hit for CVE-2021-44228 that has no locally-fetched artifact
-    yet (verified=False in the catalog — link-only row, `_allow_code` is False/never
-    reached) and asserts poc_fetch is honest about it: metadata only, no invented code.
-    This is the path chat.md's drilldown policy relies on for "chưa có mã trong dữ liệu nội
-    bộ ... KHÔNG bịa nội dung mã" — it must be a real, reachable branch, not aspirational."""
-    be = LocalPocBackend()
+def test_uc3_link_only_poc_returns_metadata_only_not_fabricated(tmp_path: Path) -> None:
+    """A test-owned link-only row reaches the metadata-only branch without external data."""
+    be = _synthetic_backend(tmp_path, with_artifact=False)
     run_id = "turnC"
-    hits = asyncio.run(be.search(_CVE, 50, run_id))["hits"]
-    ungrounded = [h for h in hits if h["source"] == "poc_github" and not h["verified"]]
-    if not ungrounded:
-        pytest.skip(
-            "no unverified/unfetched poc_github hit for CVE-2021-44228 in the top 50 of "
-            "the current catalog snapshot — cannot exercise the metadata_only branch live "
-            "(the branch itself is still covered by the synthetic "
-            "tests/test_poc_core.py::test_fetch_metadata_only_when_no_artifact)"
-        )
-    target = ungrounded[0]
+    target = asyncio.run(be.search(_CVE, 50, run_id))["hits"][0]
     fetched = asyncio.run(be.fetch(target["ref"], run_id))
     assert fetched["candidate_status"] == "metadata_only"
     assert fetched["source_code"] is None
     assert fetched["source_files"] is None
-    # real title/url metadata IS available — enough for the model to answer truthfully
-    # ("chưa có mã, đây là nguồn") instead of inventing code.
+    # Metadata is available — enough for the model to answer truthfully instead of inventing code.
     assert fetched["title"] == target["title"]
 
 
 # ── UC4 — poc_fetch budget still gates chat drilldown (defense-in-depth vs. DoS/over-fetch) ──
 
-@requires_real_catalog
-def test_uc4_fetch_budget_enforced_within_a_single_chat_run() -> None:
-    be = LocalPocBackend()
+def test_uc4_fetch_budget_enforced_within_a_single_chat_run(tmp_path: Path) -> None:
+    be = _synthetic_backend(tmp_path)
     run_id = "turnD-budget"
     hits = asyncio.run(be.search(_CVE, 30, run_id))["hits"]
-    ref = next(h for h in hits if h["title"] == "log4j-scan")["ref"]
+    ref = hits[0]["ref"]
     for _ in range(_MAX_FETCH_PER_RUN):
         asyncio.run(be.fetch(ref, run_id))  # within budget
     with pytest.raises(PocError, match="limit reached"):
         asyncio.run(be.fetch(ref, run_id))  # one over budget — hard stop in code, not prompt
+
+
+@pytest.mark.skipif(
+    os.environ.get("RUN_POC_CATALOG_EXTERNAL_SMOKE") != "1",
+    reason="external catalog integration; set RUN_POC_CATALOG_EXTERNAL_SMOKE=1 to verify the real Log4Shell snapshot",
+)
+def test_external_log4shell_catalog_has_grounded_log4j_scan_artifact() -> None:
+    """Opt-in integration contract for the real catalog and its locally fetched artifact."""
+    catalog_path = Path(get_settings().poc_catalog_db)
+    assert catalog_path.is_file(), f"external PoC catalog is missing: {catalog_path}"
+    be = LocalPocBackend()
+    run_id = "external-log4shell-smoke"
+    hits = asyncio.run(be.search(_CVE, 30, run_id))["hits"]
+    hit = next((h for h in hits if h["title"] == "log4j-scan"), None)
+    assert hit is not None, f"real catalog has no log4j-scan hit for {_CVE}"
+    fetched = asyncio.run(be.fetch(hit["ref"], run_id))
+    assert fetched["source_code"]
+    assert "log4j" in fetched["source_code"].lower()
+    assert len(fetched["sha256"]) == 64
 
 
 # ── UC5 — cheap prompt-content guards (catch an accidental future revert) ──────────────────
