@@ -1,0 +1,5893 @@
+{
+ "summary": {
+  "overall": {
+   "n": 114,
+   "recall@5": 0.965,
+   "MRR": 0.798
+  },
+  "by_group": {
+   "asvs": {
+    "n": 6,
+    "recall@5": 1.0,
+    "MRR": 1.0
+   },
+   "concept": {
+    "n": 49,
+    "recall@5": 0.959,
+    "MRR": 0.763
+   },
+   "entity_remediation": {
+    "n": 10,
+    "recall@5": 1.0,
+    "MRR": 1.0
+   },
+   "remediation": {
+    "n": 49,
+    "recall@5": 0.959,
+    "MRR": 0.767
+   }
+  },
+  "vi": {
+   "n": 80,
+   "recall@5": 0.963,
+   "MRR": 0.791
+  },
+  "en": {
+   "n": 34,
+   "recall@5": 0.971,
+   "MRR": 0.814
+  },
+  "routing": {
+   "noncontrol_to_knowledge": 0.991,
+   "noncontrol_by_route": {
+    "concept": 1,
+    "concept_kb": 103,
+    "entity": 10
+   },
+   "control_false_trigger": 0,
+   "control_n": 10
+  },
+  "attack_example_hits": 0,
+  "entity_scope_knowledge_leak": 0,
+  "mode_hybrid_fraction": 1.0,
+  "modes": {
+   "hybrid": 114
+  },
+  "latency_ms": {
+   "p50": 1364,
+   "p95": 1433
+  },
+  "kp_coverage_mean": 0.877
+ },
+ "rows": [
+  {
+   "id": "c-sqli",
+   "group": "concept",
+   "query": "SQL injection là gì và xảy ra như thế nào?",
+   "gold_parents": [
+    "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet",
+    "CWE-89",
+    "CAPEC-66"
+   ],
+   "key_points": [
+    "truy vấn|query",
+    "đầu vào|input|người dùng|user"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet#what-is-a-sql-injection-attack",
+     "rerank": 0.9955,
+     "knowledge": true,
+     "parent": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Query_Parameterization_Cheat_Sheet#introduction",
+     "rerank": 0.992,
+     "knowledge": true,
+     "parent": "owasp-cs:Query_Parameterization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-2",
+     "rerank": 0.9902,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-1",
+     "rerank": 0.9865,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#sql-injection-1",
+     "rerank": 0.9838,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-sqli",
+   "group": "remediation",
+   "query": "Làm sao để chống SQL injection trong ứng dụng web?",
+   "gold_parents": [
+    "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet",
+    "CWE-89",
+    "CAPEC-66"
+   ],
+   "key_points": [
+    "prepared statement|parameterized|tham số hóa",
+    "allow-list|allowlist|danh sách cho phép|validation"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#sql-injection-1",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet#what-is-a-sql-injection-attack",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Query_Parameterization_Cheat_Sheet#parameterized-query-examples-1",
+     "rerank": 0.9935,
+     "knowledge": true,
+     "parent": "owasp-cs:Query_Parameterization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9901,
+     "knowledge": true,
+     "parent": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:FastAPI_Security_Cheat_Sheet#pydantic-validation-and-input-hardening-3",
+     "rerank": 0.9865,
+     "knowledge": true,
+     "parent": "owasp-cs:FastAPI_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-xss",
+   "group": "concept",
+   "query": "What is cross-site scripting and what are its types?",
+   "gold_parents": [
+    "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet",
+    "CWE-79"
+   ],
+   "key_points": [
+    "script",
+    "browser|trình duyệt"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#3-cross-site-scripting-xss",
+     "rerank": 0.9949,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DOM_based_XSS_Prevention_Cheat_Sheet#introduction-1",
+     "rerank": 0.9945,
+     "knowledge": true,
+     "parent": "owasp-cs:DOM_based_XSS_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9729,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cross-site-scripting-xss-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DOM_based_XSS_Prevention_Cheat_Sheet#rule-7-fixing-dom-cross-site-scripting-vulnerabilities-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:DOM_based_XSS_Prevention_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-xss",
+   "group": "remediation",
+   "query": "Cách phòng chống XSS khi hiển thị dữ liệu người dùng nhập?",
+   "gold_parents": [
+    "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet",
+    "CWE-79"
+   ],
+   "key_points": [
+    "encod|mã hóa|escape",
+    "context|ngữ cảnh|csp|content security policy"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#3-cross-site-scripting-xss",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Ruby_on_Rails_Cheat_Sheet#items-3",
+     "rerank": 0.9969,
+     "knowledge": true,
+     "parent": "owasp-cs:Ruby_on_Rails_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#context-1",
+     "rerank": 0.9957,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet#xss-defense-philosophy",
+     "rerank": 0.9927,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-79#mitigation-8",
+     "rerank": 0.9906,
+     "knowledge": true,
+     "parent": "CWE-79"
+    }
+   ],
+   "rank": 4,
+   "hit5": true,
+   "rr": 0.25,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-csrf",
+   "group": "concept",
+   "query": "CSRF là gì?",
+   "gold_parents": [
+    "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet",
+    "CWE-352"
+   ],
+   "key_points": [
+    "request|yêu cầu",
+    "session|cookie|phiên"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet#dealing-with-client-side-csrf-attacks-important-1",
+     "rerank": 0.9965,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cross-site-request-forgery-csrf-1",
+     "rerank": 0.9957,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-25",
+     "rerank": 0.9921,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cross-site-request-forgery-csrf-2",
+     "rerank": 0.9761,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet#introduction-3",
+     "rerank": 0.9759,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-csrf",
+   "group": "remediation",
+   "query": "How do I protect a web app against CSRF?",
+   "gold_parents": [
+    "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet",
+    "CWE-352"
+   ],
+   "key_points": [
+    "token",
+    "samesite"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cross-site-request-forgery-csrf-2",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet#javascript-automatically-including-csrf-tokens-as-an-ajax-request-header-3",
+     "rerank": 0.996,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet#disallowing-simple-requests-3",
+     "rerank": 0.9932,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cross-site-request-forgery-csrf-1",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Ruby_on_Rails_Cheat_Sheet#items-13",
+     "rerank": 0.988,
+     "knowledge": true,
+     "parent": "owasp-cs:Ruby_on_Rails_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-ssrf",
+   "group": "concept",
+   "query": "SSRF là gì, tại sao nguy hiểm với cloud?",
+   "gold_parents": [
+    "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet",
+    "CWE-918"
+   ],
+   "key_points": [
+    "server|máy chủ",
+    "request|yêu cầu|url"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-top10:2021:A10#description-1",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A10"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet#imdsv2-in-aws",
+     "rerank": 0.9965,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1552.005#M1037",
+     "rerank": 0.994,
+     "knowledge": true,
+     "parent": "T1552.005"
+    },
+    {
+     "doc_id": "attack:T1552#M1037",
+     "rerank": 0.9905,
+     "knowledge": true,
+     "parent": "T1552"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet#overview-of-a-ssrf-common-flow",
+     "rerank": 0.9887,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-ssrf",
+   "group": "remediation",
+   "query": "Biện pháp phòng chống SSRF hiệu quả là gì?",
+   "gold_parents": [
+    "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet",
+    "CWE-918"
+   ],
+   "key_points": [
+    "allow-list|allowlist|danh sách cho phép",
+    "metadata|nội bộ|internal|private"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-top10:2021:A10#how-to-prevent-1",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A10"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A10#how-to-prevent-2",
+     "rerank": 0.9979,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A10"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet#imdsv2-in-aws",
+     "rerank": 0.9947,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#asp-net-web-forms-guidance-4",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-xxe",
+   "group": "concept",
+   "query": "What is an XXE attack?",
+   "gold_parents": [
+    "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet",
+    "CWE-611"
+   ],
+   "key_points": [
+    "xml",
+    "entity|thực thể"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet#overview-of-a-ssrf-common-flow",
+     "rerank": 0.9893,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-45",
+     "rerank": 0.9865,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#unrestricted-file-uploads-4",
+     "rerank": 0.9725,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet#php-2",
+     "rerank": 0.9405,
+     "knowledge": true,
+     "parent": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-xxe",
+   "group": "remediation",
+   "query": "Cấu hình parser XML như thế nào để tránh XXE?",
+   "gold_parents": [
+    "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet",
+    "CWE-611"
+   ],
+   "key_points": [
+    "dtd|doctype",
+    "disable|tắt|vô hiệu"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet#c-c-2",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet#general-guidance-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:XML_External_Entity_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-1.5.1",
+     "rerank": 0.9985,
+     "knowledge": true,
+     "parent": "owasp-asvs:1.5"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-45",
+     "rerank": 0.9945,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-611#mitigation",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-611"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-deser",
+   "group": "concept",
+   "query": "Insecure deserialization là gì?",
+   "gold_parents": [
+    "owasp-cs:Deserialization_Cheat_Sheet",
+    "CWE-502"
+   ],
+   "key_points": [
+    "object|đối tượng",
+    "untrusted|không tin cậy"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Deserialization_Cheat_Sheet#what-is-deserialization",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:Deserialization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A08#description-2",
+     "rerank": 0.9975,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A08"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A08#example-attack-scenarios-2",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A08"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-1.5.2",
+     "rerank": 0.9966,
+     "knowledge": true,
+     "parent": "owasp-asvs:1.5"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A08#example-attack-scenarios-2",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A08"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-deser",
+   "group": "remediation",
+   "query": "How to safely handle deserialization of untrusted data?",
+   "gold_parents": [
+    "owasp-cs:Deserialization_Cheat_Sheet",
+    "CWE-502"
+   ],
+   "key_points": [
+    "integrity|chữ ký|signature|kiểm tra",
+    "allow|whitelist|danh sách cho phép|avoid|tránh"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Deserialization_Cheat_Sheet#introduction",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Deserialization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Deserialization_Cheat_Sheet#guidance-on-deserializing-objects-safely-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Deserialization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-502#mitigation-1",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "CWE-502"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-1.5.2",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "owasp-asvs:1.5"
+    },
+    {
+     "doc_id": "owasp-cs:Security_Terminology_Cheat_Sheet#data-handling-encoding-escaping-sanitization-and-serialization-3",
+     "rerank": 0.9965,
+     "knowledge": true,
+     "parent": "owasp-cs:Security_Terminology_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-jwt",
+   "group": "concept",
+   "query": "JWT gồm những phần nào và có rủi ro gì?",
+   "gold_parents": [
+    "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+   ],
+   "key_points": [
+    "header",
+    "signature|chữ ký"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:JSON_Web_Token_Cheat_Sheet#token-structure-1",
+     "rerank": 0.9985,
+     "knowledge": true,
+     "parent": "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JSON_Web_Token_Cheat_Sheet#threats-on-jwts-1",
+     "rerank": 0.9959,
+     "knowledge": true,
+     "parent": "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#jwt-4",
+     "rerank": 0.9919,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#jwt-1",
+     "rerank": 0.9865,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-18",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-jwt",
+   "group": "remediation",
+   "query": "Best practices to use JWT securely?",
+   "gold_parents": [
+    "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+   ],
+   "key_points": [
+    "algorithm|thuật toán|alg",
+    "expir|hết hạn|exp"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#jwt-1",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Serverless_FaaS_Security_Cheat_Sheet#best-practices-2",
+     "rerank": 0.9941,
+     "knowledge": true,
+     "parent": "owasp-cs:Serverless_FaaS_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JSON_Web_Token_Cheat_Sheet#considerations-about-using-jwts-7",
+     "rerank": 0.9919,
+     "knowledge": true,
+     "parent": "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JSON_Web_Token_Cheat_Sheet#considerations-about-using-jwts-1",
+     "rerank": 0.9864,
+     "knowledge": true,
+     "parent": "owasp-cs:JSON_Web_Token_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NPM_Security_Cheat_Sheet#13-verify-documentation-examples-before-copying-into-production-3",
+     "rerank": 0.9719,
+     "knowledge": true,
+     "parent": "owasp-cs:NPM_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-oauth",
+   "group": "concept",
+   "query": "OAuth 2.0 authorization code flow hoạt động ra sao?",
+   "gold_parents": [
+    "owasp-cs:OAuth2_Cheat_Sheet"
+   ],
+   "key_points": [
+    "authorization code|mã ủy quyền",
+    "token"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:OAuth2_Cheat_Sheet#pkce-proof-key-for-code-exchange-mechanism-2",
+     "rerank": 0.986,
+     "knowledge": true,
+     "parent": "owasp-cs:OAuth2_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:OAuth2_Cheat_Sheet#oauth-2-0-essential-basics-1",
+     "rerank": 0.9652,
+     "knowledge": true,
+     "parent": "owasp-cs:OAuth2_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.6.1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.6"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.2.2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.2"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-oauth",
+   "group": "remediation",
+   "query": "How to secure an OAuth2 implementation?",
+   "gold_parents": [
+    "owasp-cs:OAuth2_Cheat_Sheet"
+   ],
+   "key_points": [
+    "pkce",
+    "redirect"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:OAuth2_Cheat_Sheet#introduction-1",
+     "rerank": 0.9969,
+     "knowledge": true,
+     "parent": "owasp-cs:OAuth2_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:OAuth2_Cheat_Sheet#token-replay-prevention-1",
+     "rerank": 0.9968,
+     "knowledge": true,
+     "parent": "owasp-cs:OAuth2_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:FastAPI_Security_Cheat_Sheet#secure-authentication-and-jwt-implementation-1",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-cs:FastAPI_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#2-general-secrets-management-24",
+     "rerank": 0.9936,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:FastAPI_Security_Cheat_Sheet#references",
+     "rerank": 0.9651,
+     "knowledge": true,
+     "parent": "owasp-cs:FastAPI_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.0
+  },
+  {
+   "id": "c-saml",
+   "group": "concept",
+   "query": "SAML là gì và dùng để làm gì?",
+   "gold_parents": [
+    "owasp-cs:SAML_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "assertion",
+    "sso|single sign|đăng nhập một lần|identity provider|idp"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#use-of-authentication-protocols-that-require-no-password-6",
+     "rerank": 0.9976,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SAML_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "owasp-cs:SAML_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SAML_Security_Cheat_Sheet#identity-provider-and-service-provider-considerations-3",
+     "rerank": 0.9915,
+     "knowledge": true,
+     "parent": "owasp-cs:SAML_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#use-of-authentication-protocols-that-require-no-password-7",
+     "rerank": 0.9808,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-saml",
+   "group": "remediation",
+   "query": "Những lưu ý bảo mật khi triển khai SAML?",
+   "gold_parents": [
+    "owasp-cs:SAML_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "signature|chữ ký",
+    "xml|validat"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:SAML_Security_Cheat_Sheet#validate-security-countermeasures-1",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:SAML_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SAML_Security_Cheat_Sheet#validate-message-confidentiality-and-integrity-1",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-cs:SAML_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#use-of-authentication-protocols-that-require-no-password-6",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#use-of-authentication-protocols-that-require-no-password-7",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-session",
+   "group": "concept",
+   "query": "Session ID là gì và vì sao cần quản lý an toàn?",
+   "gold_parents": [
+    "owasp-cs:Session_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "session|phiên",
+    "cookie|id"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Session_Management_Cheat_Sheet#session-id-properties-5",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "owasp-cs:Session_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Session_Management_Cheat_Sheet#session-id-life-cycle-2",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:Session_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Symfony_Cheat_Sheet#main-sections-23",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Symfony_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet#token-based-mitigation-6",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Cross-Site_Request_Forgery_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Code_Review_Cheat_Sheet#review-checklists-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Code_Review_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-session",
+   "group": "remediation",
+   "query": "How do I secure session cookies?",
+   "gold_parents": [
+    "owasp-cs:Session_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "httponly",
+    "secure"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cookie-security-and-session-management-3",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Symfony_Cheat_Sheet#main-sections-21",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-cs:Symfony_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Session_Management_Cheat_Sheet#cookies-1",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Session_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-37",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#cookie-security-and-session-management-1",
+     "rerank": 0.9956,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-pwdstore",
+   "group": "concept",
+   "query": "Tại sao không được lưu mật khẩu dạng plaintext?",
+   "gold_parents": [
+    "owasp-cs:Password_Storage_Cheat_Sheet",
+    "owasp-asvs:6.2"
+   ],
+   "key_points": [
+    "hash|băm",
+    "salt"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-256#mitigation",
+     "rerank": 0.9922,
+     "knowledge": true,
+     "parent": "CWE-256"
+    },
+    {
+     "doc_id": "owasp-cs:Password_Storage_Cheat_Sheet#background-1",
+     "rerank": 0.9851,
+     "knowledge": true,
+     "parent": "owasp-cs:Password_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Password_Storage_Cheat_Sheet#background-2",
+     "rerank": 0.9813,
+     "knowledge": true,
+     "parent": "owasp-cs:Password_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1552#M1017",
+     "rerank": 0.964,
+     "knowledge": true,
+     "parent": "T1552"
+    },
+    {
+     "doc_id": "cwe:CWE-260#mitigation",
+     "rerank": 0.9581,
+     "knowledge": true,
+     "parent": "CWE-260"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "r-pwdstore",
+   "group": "remediation",
+   "query": "Which algorithm should I use to store passwords?",
+   "gold_parents": [
+    "owasp-cs:Password_Storage_Cheat_Sheet",
+    "owasp-asvs:6.2"
+   ],
+   "key_points": [
+    "argon2|bcrypt|scrypt|pbkdf2",
+    "work factor|cost|iteration|vòng lặp|hệ số"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Password_Storage_Cheat_Sheet#password-hashing-algorithms-8",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:Password_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Password_Storage_Cheat_Sheet#password-hashing-algorithms-1",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:Password_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#introduction",
+     "rerank": 0.9957,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-7",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#algorithms-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-mfa",
+   "group": "concept",
+   "query": "MFA là gì?",
+   "gold_parents": [
+    "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+   ],
+   "key_points": [
+    "factor|yếu tố",
+    "password|mật khẩu|biometric|sinh trắc"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1078#M1032",
+     "rerank": 0.9965,
+     "knowledge": true,
+     "parent": "T1078"
+    },
+    {
+     "doc_id": "owasp-cs:Multifactor_Authentication_Cheat_Sheet#implementing-mfa-1",
+     "rerank": 0.9964,
+     "knowledge": true,
+     "parent": "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:M1032#overview-1",
+     "rerank": 0.9949,
+     "knowledge": true,
+     "parent": "M1032"
+    },
+    {
+     "doc_id": "attack:T1078.003#M1032",
+     "rerank": 0.9929,
+     "knowledge": true,
+     "parent": "T1078.003"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-27",
+     "rerank": 0.9913,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-mfa",
+   "group": "remediation",
+   "query": "Cách triển khai xác thực đa yếu tố an toàn?",
+   "gold_parents": [
+    "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+   ],
+   "key_points": [
+    "fido|passkey|totp|authenticator|webauthn",
+    "sms|recovery|khôi phục|phishing"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1078#M1032",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "T1078"
+    },
+    {
+     "doc_id": "attack:M1032#overview-1",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "M1032"
+    },
+    {
+     "doc_id": "owasp-cs:Multifactor_Authentication_Cheat_Sheet#introduction-1",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Multifactor_Authentication_Cheat_Sheet#implementing-mfa-4",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#identity-and-access-management-1",
+     "rerank": 0.997,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-credstuff",
+   "group": "concept",
+   "query": "Credential stuffing là gì?",
+   "gold_parents": [
+    "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet",
+    "CAPEC-600"
+   ],
+   "key_points": [
+    "credential|thông tin đăng nhập",
+    "breach|rò rỉ|leak|reuse|tái sử dụng"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-top10:2025:A07#example-attack-scenarios-1",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A07"
+    },
+    {
+     "doc_id": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet#references",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A07#example-attack-scenarios-1",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A07"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-26",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-credstuff",
+   "group": "remediation",
+   "query": "How to defend against credential stuffing attacks?",
+   "gold_parents": [
+    "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet",
+    "CAPEC-600"
+   ],
+   "key_points": [
+    "mfa|multi-factor|đa yếu tố",
+    "rate|giới hạn|captcha|breached"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet#alternative-defenses",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet#defense-in-depth-metrics-14",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A07#example-attack-scenarios-1",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A07"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-6",
+     "rerank": 0.993,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-26",
+     "rerank": 0.9913,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-forgotpw",
+   "group": "concept",
+   "query": "Quy trình quên mật khẩu hoạt động thế nào?",
+   "gold_parents": [
+    "owasp-cs:Forgot_Password_Cheat_Sheet"
+   ],
+   "key_points": [
+    "email|reset|đặt lại",
+    "token"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Forgot_Password_Cheat_Sheet#forgot-password-service-1",
+     "rerank": 0.9937,
+     "knowledge": true,
+     "parent": "owasp-cs:Forgot_Password_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Forgot_Password_Cheat_Sheet#forgot-password-service-3",
+     "rerank": 0.9795,
+     "knowledge": true,
+     "parent": "owasp-cs:Forgot_Password_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Passkey_Security_Cheat_Sheet#protect-the-credential-lifecycle-and-recovery-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Passkey_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Multifactor_Authentication_Cheat_Sheet#implementing-mfa-6",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Multifactor_Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Email_Validation_and_Verification_Cheat_Sheet#password-reset-flows",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Email_Validation_and_Verification_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-forgotpw",
+   "group": "remediation",
+   "query": "Thiết kế chức năng quên mật khẩu sao cho an toàn?",
+   "gold_parents": [
+    "owasp-cs:Forgot_Password_Cheat_Sheet"
+   ],
+   "key_points": [
+    "generic|chung|không tiết lộ|same response",
+    "expire|hết hạn|single use|một lần"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Forgot_Password_Cheat_Sheet#introduction-1",
+     "rerank": 0.9956,
+     "knowledge": true,
+     "parent": "owasp-cs:Forgot_Password_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Forgot_Password_Cheat_Sheet#forgot-password-service-2",
+     "rerank": 0.9544,
+     "knowledge": true,
+     "parent": "owasp-cs:Forgot_Password_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Passkey_Security_Cheat_Sheet#protect-the-credential-lifecycle-and-recovery-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Passkey_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-640#mitigation",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-640"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Code_Review_Cheat_Sheet#review-checklists-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Code_Review_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.0
+  },
+  {
+   "id": "c-authn",
+   "group": "concept",
+   "query": "Authentication khác authorization ở điểm nào?",
+   "gold_parents": [
+    "owasp-cs:Authentication_Cheat_Sheet"
+   ],
+   "key_points": [
+    "identity|danh tính|xác thực",
+    "password|credential|mật khẩu"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Security_Terminology_Cheat_Sheet#identity-authentication-and-authorization",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Security_Terminology_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Patterns_Cheat_Sheet#introduction-3",
+     "rerank": 0.9976,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Patterns_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transaction_Authorization_Cheat_Sheet#1-functional-guidelines-6",
+     "rerank": 0.9937,
+     "knowledge": true,
+     "parent": "owasp-cs:Transaction_Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#introduction-1",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transaction_Authorization_Cheat_Sheet#1-functional-guidelines-5",
+     "rerank": 0.991,
+     "knowledge": true,
+     "parent": "owasp-cs:Transaction_Authorization_Cheat_Sheet"
+    }
+   ],
+   "rank": null,
+   "hit5": false,
+   "rr": 0.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-authn",
+   "group": "remediation",
+   "query": "Những nguyên tắc xác thực người dùng an toàn cần tuân thủ?",
+   "gold_parents": [
+    "owasp-cs:Authentication_Cheat_Sheet"
+   ],
+   "key_points": [
+    "https|tls",
+    "lockout|rate|brute|khóa"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-16",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Passkey_Security_Cheat_Sheet#deployment-and-review-checklist-4",
+     "rerank": 0.977,
+     "knowledge": true,
+     "parent": "owasp-cs:Passkey_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-9",
+     "rerank": 0.9472,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:User_Privacy_Protection_Cheat_Sheet#guidelines-1",
+     "rerank": 0.9079,
+     "knowledge": true,
+     "parent": "owasp-cs:User_Privacy_Protection_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Product_Design_Cheat_Sheet#security-principles-4",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Product_Design_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-authz",
+   "group": "concept",
+   "query": "Broken access control nghĩa là gì?",
+   "gold_parents": [
+    "owasp-cs:Authorization_Cheat_Sheet",
+    "CWE-862"
+   ],
+   "key_points": [
+    "permission|quyền",
+    "access|truy cập"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-top10:2021:A01#description-1",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A01"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A01#description-1",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A01"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A01#description-2",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A01"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A01#description-2",
+     "rerank": 0.9967,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A01"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#introduction-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    }
+   ],
+   "rank": 5,
+   "hit5": true,
+   "rr": 0.2,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-authz",
+   "group": "remediation",
+   "query": "How to implement authorization correctly?",
+   "gold_parents": [
+    "owasp-cs:Authorization_Cheat_Sheet",
+    "CWE-862"
+   ],
+   "key_points": [
+    "least privilege|đặc quyền tối thiểu",
+    "deny by default|mặc định từ chối|every request|mọi request|server-side"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Authorization_Testing_Automation_Cheat_Sheet#introduction",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Testing_Automation_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transaction_Authorization_Cheat_Sheet#2-non-functional-guidelines-1",
+     "rerank": 0.9951,
+     "knowledge": true,
+     "parent": "owasp-cs:Transaction_Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#recommendations-13",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transaction_Authorization_Cheat_Sheet#2-non-functional-guidelines-5",
+     "rerank": 0.9899,
+     "knowledge": true,
+     "parent": "owasp-cs:Transaction_Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#introduction-1",
+     "rerank": 0.9897,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-idor",
+   "group": "concept",
+   "query": "IDOR là lỗi gì?",
+   "gold_parents": [
+    "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet",
+    "CWE-639"
+   ],
+   "key_points": [
+    "object|đối tượng|id",
+    "authoriz|quyền|truy cập"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Assessment_Cheat_Sheet#broken-object-level-authorization-bola-1",
+     "rerank": 0.9922,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Assessment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#recommendations-24",
+     "rerank": 0.9914,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet#examples-2",
+     "rerank": 0.9887,
+     "knowledge": true,
+     "parent": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Regression_Testing_Cheat_Sheet#introduction-2",
+     "rerank": 0.9876,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Regression_Testing_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-idor",
+   "group": "remediation",
+   "query": "Cách ngăn chặn IDOR trong REST API?",
+   "gold_parents": [
+    "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet",
+    "CWE-639"
+   ],
+   "key_points": [
+    "access control|kiểm tra quyền|authorization check",
+    "indirect|unpredictable|uuid|không đoán"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet#mitigation-1",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Assessment_Cheat_Sheet#broken-object-level-authorization-bola-1",
+     "rerank": 0.9955,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Assessment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9879,
+     "knowledge": true,
+     "parent": "owasp-cs:Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#preventing-out-of-order-api-execution-2",
+     "rerank": 0.9495,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Code_Review_Cheat_Sheet#review-checklists-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Code_Review_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-massassign",
+   "group": "concept",
+   "query": "Mass assignment vulnerability là gì?",
+   "gold_parents": [
+    "owasp-cs:Mass_Assignment_Cheat_Sheet",
+    "CWE-915"
+   ],
+   "key_points": [
+    "bind|gán|field|trường",
+    "request|object"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#mass-assignment-1",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Mass_Assignment_Cheat_Sheet#introduction-3",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Mass_Assignment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Mass_Assignment_Cheat_Sheet#introduction-1",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "owasp-cs:Mass_Assignment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#mass-assignment-2",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Assessment_Cheat_Sheet#mass-assignment-in-json-apis",
+     "rerank": 0.9966,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Assessment_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-massassign",
+   "group": "remediation",
+   "query": "How can I prevent mass assignment in my framework?",
+   "gold_parents": [
+    "owasp-cs:Mass_Assignment_Cheat_Sheet",
+    "CWE-915"
+   ],
+   "key_points": [
+    "allow|whitelist|danh sách cho phép|dto",
+    "block|readonly|denylist|không cho"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Mass_Assignment_Cheat_Sheet#language-framework-specific-solutions-3",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:Mass_Assignment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Mass_Assignment_Cheat_Sheet#introduction-1",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Mass_Assignment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#mass-assignment-1",
+     "rerank": 0.9966,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Assessment_Cheat_Sheet#mass-assignment-in-json-apis",
+     "rerank": 0.9962,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Assessment_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#mass-assignment-2",
+     "rerank": 0.9959,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-cmdinj",
+   "group": "concept",
+   "query": "OS command injection là gì?",
+   "gold_parents": [
+    "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet",
+    "CWE-78"
+   ],
+   "key_points": [
+    "command|lệnh",
+    "shell"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet#introduction-2",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet#introduction-1",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-78#mitigation-13",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "CWE-78"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-14",
+     "rerank": 0.9962,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#command-injection-1",
+     "rerank": 0.9955,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-cmdinj",
+   "group": "remediation",
+   "query": "Cách tránh command injection khi gọi lệnh hệ thống?",
+   "gold_parents": [
+    "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet",
+    "CWE-78"
+   ],
+   "key_points": [
+    "avoid|tránh|api|library|thư viện",
+    "parameter|tham số|argument|validat|allow"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet#primary-defenses-2",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet#introduction-2",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#command-injection-1",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-16",
+     "rerank": 0.9949,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-78#mitigation-9",
+     "rerank": 0.9911,
+     "knowledge": true,
+     "parent": "CWE-78"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-ldapinj",
+   "group": "concept",
+   "query": "LDAP injection là gì?",
+   "gold_parents": [
+    "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet",
+    "CWE-90"
+   ],
+   "key_points": [
+    "ldap",
+    "filter|query|truy vấn"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet#introduction-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet#introduction-1",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-12",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-11",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-1.2.6",
+     "rerank": 0.9497,
+     "knowledge": true,
+     "parent": "owasp-asvs:1.2"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-ldapinj",
+   "group": "remediation",
+   "query": "How to prevent LDAP injection?",
+   "gold_parents": [
+    "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet",
+    "CWE-90"
+   ],
+   "key_points": [
+    "escap",
+    "allow|validat|parameter"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet#introduction-2",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet#primary-defenses-9",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:LDAP_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-12",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Injection_Prevention_Cheat_Sheet#forms-of-injection-13",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-1.2.6",
+     "rerank": 0.9603,
+     "knowledge": true,
+     "parent": "owasp-asvs:1.2"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-upload",
+   "group": "concept",
+   "query": "Rủi ro khi cho người dùng upload file là gì?",
+   "gold_parents": [
+    "owasp-cs:File_Upload_Cheat_Sheet",
+    "CWE-434"
+   ],
+   "key_points": [
+    "file",
+    "extension|đuôi|content|mime|type"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:File_Upload_Cheat_Sheet#file-upload-threats-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:File_Upload_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:File_Upload_Cheat_Sheet#file-upload-threats-1",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-cs:File_Upload_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#unrestricted-file-uploads-1",
+     "rerank": 0.9918,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Symfony_Cheat_Sheet#main-sections-11",
+     "rerank": 0.9796,
+     "knowledge": true,
+     "parent": "owasp-cs:Symfony_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#unrestricted-file-uploads-2",
+     "rerank": 0.9244,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-upload",
+   "group": "remediation",
+   "query": "Best practices for secure file upload?",
+   "gold_parents": [
+    "owasp-cs:File_Upload_Cheat_Sheet",
+    "CWE-434"
+   ],
+   "key_points": [
+    "allow|danh sách cho phép",
+    "webroot|outside|ngoài|rename|đổi tên|antivirus|scan"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:File_Upload_Cheat_Sheet#introduction-1",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-cs:File_Upload_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:File_Upload_Cheat_Sheet#file-upload-protection-14",
+     "rerank": 0.996,
+     "knowledge": true,
+     "parent": "owasp-cs:File_Upload_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NPM_Security_Cheat_Sheet#13-verify-documentation-examples-before-copying-into-production-4",
+     "rerank": 0.9924,
+     "knowledge": true,
+     "parent": "owasp-cs:NPM_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Multi_Tenant_Security_Cheat_Sheet#best-practices-37",
+     "rerank": 0.9338,
+     "knowledge": true,
+     "parent": "owasp-cs:Multi_Tenant_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Symfony_Cheat_Sheet#main-sections-11",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Symfony_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-csp",
+   "group": "concept",
+   "query": "Content Security Policy dùng để làm gì?",
+   "gold_parents": [
+    "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+   ],
+   "key_points": [
+    "header",
+    "script|source|nguồn"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-41",
+     "rerank": 0.9979,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#security-headers-10",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#policy-delivery-1",
+     "rerank": 0.9962,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#csp-sample-policies-3",
+     "rerank": 0.9942,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#8-lack-of-content-security-policy-csp-1",
+     "rerank": 0.9863,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-csp",
+   "group": "remediation",
+   "query": "How to deploy a strict CSP?",
+   "gold_parents": [
+    "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+   ],
+   "key_points": [
+    "nonce|hash",
+    "report|unsafe-inline|script-src"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#csp-sample-policies-1",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#strict-csp-1",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#8-lack-of-content-security-policy-csp-1",
+     "rerank": 0.9896,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Micro_Frontend_Security_Cheat_Sheet#choose-and-enforce-runtime-boundaries-5",
+     "rerank": 0.9118,
+     "knowledge": true,
+     "parent": "owasp-cs:Micro_Frontend_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_Security_Cheat_Sheet#content-security-policy",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-clickjack",
+   "group": "concept",
+   "query": "Clickjacking là gì?",
+   "gold_parents": [
+    "owasp-cs:Clickjacking_Defense_Cheat_Sheet",
+    "CWE-1021"
+   ],
+   "key_points": [
+    "iframe|frame",
+    "click"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Clickjacking_Defense_Cheat_Sheet#introduction-1",
+     "rerank": 0.9946,
+     "knowledge": true,
+     "parent": "owasp-cs:Clickjacking_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Clickjacking_Defense_Cheat_Sheet#best-for-now-legacy-browser-frame-breaking-script",
+     "rerank": 0.986,
+     "knowledge": true,
+     "parent": "owasp-cs:Clickjacking_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-50",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Session_Management_Cheat_Sheet#introduction-5",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Session_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_Security_Cheat_Sheet#references",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-clickjack",
+   "group": "remediation",
+   "query": "Cách chống clickjacking?",
+   "gold_parents": [
+    "owasp-cs:Clickjacking_Defense_Cheat_Sheet",
+    "CWE-1021"
+   ],
+   "key_points": [
+    "frame-ancestors|x-frame-options",
+    "csp|samesite|header"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Clickjacking_Defense_Cheat_Sheet#best-for-now-legacy-browser-frame-breaking-script",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Clickjacking_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Clickjacking_Defense_Cheat_Sheet#introduction-1",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "owasp-cs:Clickjacking_Defense_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Content_Security_Policy_Cheat_Sheet#context-1",
+     "rerank": 0.9427,
+     "knowledge": true,
+     "parent": "owasp-cs:Content_Security_Policy_Cheat_Sheet"
+    },
+    {
+     "doc_id": "capec:CAPEC-103#mitigation",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CAPEC-103"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-50",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-headers",
+   "group": "concept",
+   "query": "HTTP security headers là gì?",
+   "gold_parents": [
+    "owasp-cs:HTTP_Headers_Cheat_Sheet"
+   ],
+   "key_points": [
+    "header",
+    "browser|trình duyệt|response"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:HTML5_Security_Cheat_Sheet#http-headers-to-enhance-security",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:HTML5_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#introduction",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#security-headers-8",
+     "rerank": 0.9944,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9878,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-38",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-headers",
+   "group": "remediation",
+   "query": "Những HTTP security header nào nên bật?",
+   "gold_parents": [
+    "owasp-cs:HTTP_Headers_Cheat_Sheet"
+   ],
+   "key_points": [
+    "x-content-type-options|nosniff",
+    "strict-transport-security|hsts|content-security-policy"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:HTML5_Security_Cheat_Sheet#http-headers-to-enhance-security",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:HTML5_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#security-headers-8",
+     "rerank": 0.9967,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#introduction",
+     "rerank": 0.9966,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-38",
+     "rerank": 0.996,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9857,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-hsts",
+   "group": "concept",
+   "query": "HSTS là gì?",
+   "gold_parents": [
+    "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "https",
+    "browser|trình duyệt"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9987,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:User_Privacy_Protection_Cheat_Sheet#guidelines-3",
+     "rerank": 0.9979,
+     "knowledge": true,
+     "parent": "owasp-cs:User_Privacy_Protection_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#security-headers-8",
+     "rerank": 0.9957,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-39",
+     "rerank": 0.9828,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet#threats",
+     "rerank": 0.9513,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-hsts",
+   "group": "remediation",
+   "query": "Cấu hình HSTS thế nào cho đúng?",
+   "gold_parents": [
+    "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "max-age",
+    "includesubdomains|preload"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:HTTP_Headers_Cheat_Sheet#security-headers-8",
+     "rerank": 0.997,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Headers_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9898,
+     "knowledge": true,
+     "parent": "owasp-cs:HTTP_Strict_Transport_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:User_Privacy_Protection_Cheat_Sheet#guidelines-3",
+     "rerank": 0.9894,
+     "knowledge": true,
+     "parent": "owasp-cs:User_Privacy_Protection_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#asp-net-web-forms-guidance-6",
+     "rerank": 0.9865,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-39",
+     "rerank": 0.9769,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-tls",
+   "group": "concept",
+   "query": "TLS dùng để làm gì?",
+   "gold_parents": [
+    "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "encrypt|mã hóa",
+    "transport|truyền|network|mạng"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Transport_Layer_Security_Cheat_Sheet#introduction-1",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transport_Layer_Security_Cheat_Sheet#application-1",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:gRPC_Security_Cheat_Sheet#transport-security-1",
+     "rerank": 0.98,
+     "knowledge": true,
+     "parent": "owasp-cs:gRPC_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authentication_Cheat_Sheet#authentication-general-guidelines-17",
+     "rerank": 0.976,
+     "knowledge": true,
+     "parent": "owasp-cs:Authentication_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:M1020#overview-1",
+     "rerank": 0.9436,
+     "knowledge": true,
+     "parent": "M1020"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-tls",
+   "group": "remediation",
+   "query": "Which TLS versions and settings should I use?",
+   "gold_parents": [
+    "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "tls 1.2|tls 1.3|1.2|1.3",
+    "cipher|certificate|chứng chỉ|hsts"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-12.1.1",
+     "rerank": 0.9947,
+     "knowledge": true,
+     "parent": "owasp-asvs:12.1"
+    },
+    {
+     "doc_id": "owasp-cs:Transport_Layer_Security_Cheat_Sheet#introduction-2",
+     "rerank": 0.9891,
+     "knowledge": true,
+     "parent": "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "capec:CAPEC-217#mitigation",
+     "rerank": 0.9877,
+     "knowledge": true,
+     "parent": "CAPEC-217"
+    },
+    {
+     "doc_id": "owasp-cs:gRPC_Security_Cheat_Sheet#transport-security-1",
+     "rerank": 0.9831,
+     "knowledge": true,
+     "parent": "owasp-cs:gRPC_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Transport_Layer_Security_Cheat_Sheet#server-configuration-2",
+     "rerank": 0.9551,
+     "knowledge": true,
+     "parent": "owasp-cs:Transport_Layer_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-cryptostore",
+   "group": "concept",
+   "query": "Lưu trữ dữ liệu nhạy cảm bằng mã hóa nghĩa là gì?",
+   "gold_parents": [
+    "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+   ],
+   "key_points": [
+    "encrypt|mã hóa",
+    "key|khóa"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-311#mitigation-3",
+     "rerank": 0.9762,
+     "knowledge": true,
+     "parent": "CWE-311"
+    },
+    {
+     "doc_id": "owasp-cs:Web_Service_Security_Cheat_Sheet#message-confidentiality",
+     "rerank": 0.9394,
+     "knowledge": true,
+     "parent": "owasp-cs:Web_Service_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Mobile_Application_Security_Cheat_Sheet#data-storage-privacy-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Mobile_Application_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1114.003#M1041",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1114.003"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-selection-11",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    }
+   ],
+   "rank": null,
+   "hit5": false,
+   "rr": 0.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-cryptostore",
+   "group": "remediation",
+   "query": "Which encryption algorithms are recommended for data at rest?",
+   "gold_parents": [
+    "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+   ],
+   "key_points": [
+    "aes",
+    "key management|quản lý khóa|gcm|authenticated"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:M1041#overview-1",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "M1041"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-selection-1",
+     "rerank": 0.9925,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#introduction",
+     "rerank": 0.981,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#7-encryption-2",
+     "rerank": 0.9741,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A04#how-to-prevent-2",
+     "rerank": 0.9577,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A04"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-keymgmt",
+   "group": "concept",
+   "query": "Key management gồm những công việc gì?",
+   "gold_parents": [
+    "owasp-cs:Key_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "key|khóa",
+    "lifecycle|vòng đời|generate|sinh"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#key-management-1",
+     "rerank": 0.9958,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#introduction",
+     "rerank": 0.9937,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-management-lifecycle-best-practices-19",
+     "rerank": 0.9928,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#4-cloud-providers-12",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#2-general-secrets-management-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-keymgmt",
+   "group": "remediation",
+   "query": "Best practices for cryptographic key rotation and storage?",
+   "gold_parents": [
+    "owasp-cs:Key_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "rotation|xoay vòng|rotate",
+    "hsm|vault|kms|separate|tách"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-management-lifecycle-best-practices-8",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-management-lifecycle-best-practices-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#key-management-1",
+     "rerank": 0.9987,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Cryptographic_Storage_Cheat_Sheet#key-storage-3",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Cryptographic_Storage_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1530#M1041",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1530"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-secrets",
+   "group": "concept",
+   "query": "Secrets management là gì?",
+   "gold_parents": [
+    "owasp-cs:Secrets_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "secret|bí mật|credential",
+    "api key|password|token|mật khẩu"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#1-introduction",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#10-secrets-management-in-a-multi-cloud-environment-4",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Infrastructure_as_Code_Security_Cheat_Sheet#introduction-3",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:Infrastructure_as_Code_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-4-kubernetes-security-best-practices-deploy-phase-30",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-secrets",
+   "group": "remediation",
+   "query": "Làm sao quản lý secrets như API key, mật khẩu DB an toàn?",
+   "gold_parents": [
+    "owasp-cs:Secrets_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "vault|kms|secret manager",
+    "hard-?code|rotation|xoay vòng|source|git"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#1-introduction",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Key_Management_Cheat_Sheet#key-management-lifecycle-best-practices-2",
+     "rerank": 0.9985,
+     "knowledge": true,
+     "parent": "owasp-cs:Key_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Infrastructure_as_Code_Security_Cheat_Sheet#introduction-3",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Infrastructure_as_Code_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#2-general-secrets-management-1",
+     "rerank": 0.9968,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NoSQL_Security_Cheat_Sheet#practical-defenses-examples-5",
+     "rerank": 0.9871,
+     "knowledge": true,
+     "parent": "owasp-cs:NoSQL_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-docker",
+   "group": "concept",
+   "query": "Docker container bảo mật khác máy ảo ở điểm nào?",
+   "gold_parents": [
+    "owasp-cs:Docker_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "container",
+    "image|host|kernel"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-1",
+     "rerank": 0.9936,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#podman-as-an-alternative-to-docker-2",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-3-kubernetes-security-best-practices-build-phase-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1059.013#M1026",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1059.013"
+    },
+    {
+     "doc_id": "attack:T1612#M1035",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1612"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-docker",
+   "group": "remediation",
+   "query": "Hardening Docker containers: cần làm gì?",
+   "gold_parents": [
+    "owasp-cs:Docker_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "non-root|user|không dùng root|root",
+    "privileged|read-only|capabilit|cap-drop"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-6",
+     "rerank": 0.9968,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-5",
+     "rerank": 0.9655,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#mitigations-and-security-best-practices-18",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#5-containers-orchestrators-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NodeJS_Docker_Cheat_Sheet#1-use-explicit-and-deterministic-docker-base-image-tags-4",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:NodeJS_Docker_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-k8s",
+   "group": "concept",
+   "query": "Các lớp bảo mật chính của Kubernetes?",
+   "gold_parents": [
+    "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "cluster|pod",
+    "api|node"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-2-securing-kubernetes-components-1",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#overview",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-k8s",
+   "group": "remediation",
+   "query": "How to harden a Kubernetes cluster?",
+   "gold_parents": [
+    "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "rbac",
+    "network polic|pod security|secrets"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-9",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-1-securing-kubernetes-hosts-1",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-7",
+     "rerank": 0.9896,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-1-securing-kubernetes-hosts-3",
+     "rerank": 0.936,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1612#M1026",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1612"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-cicd",
+   "group": "concept",
+   "query": "Rủi ro bảo mật của pipeline CI/CD?",
+   "gold_parents": [
+    "owasp-cs:CI_CD_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "pipeline",
+    "build|deploy|triển khai"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:CI_CD_Security_Cheat_Sheet#integrity-assurance-1",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-cs:CI_CD_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:CI_CD_Security_Cheat_Sheet#iam-2",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:CI_CD_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#treat-your-ci-cd-pipeline-as-a-critical-production-code",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#3-continuous-integration-ci-and-continuous-deployment-cd-2",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#3-continuous-integration-ci-and-continuous-deployment-cd-3",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-cicd",
+   "group": "remediation",
+   "query": "Làm sao bảo vệ pipeline CI/CD?",
+   "gold_parents": [
+    "owasp-cs:CI_CD_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "least privilege|đặc quyền tối thiểu|permission|quyền",
+    "secret|branch|review|signed|ký"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:CI_CD_Security_Cheat_Sheet#integrity-assurance-1",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "owasp-cs:CI_CD_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#treat-your-ci-cd-pipeline-as-a-critical-production-code",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:CI_CD_Security_Cheat_Sheet#secure-configuration-7",
+     "rerank": 0.9987,
+     "knowledge": true,
+     "parent": "owasp-cs:CI_CD_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#3-continuous-integration-ci-and-continuous-deployment-cd-2",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#3-continuous-integration-ci-and-continuous-deployment-cd-3",
+     "rerank": 0.9945,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-ghactions",
+   "group": "concept",
+   "query": "GitHub Actions có những rủi ro bảo mật nào?",
+   "gold_parents": [
+    "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "workflow",
+    "action|secret|token"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#introduction-1",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#restrict-egress-traffic-from-github-hosted-runners",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Workload_Identity_Federation_Cheat_Sheet#restrict-which-jobs-are-trusted-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Workload_Identity_Federation_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:T1195.001#M1013",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1195.001"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-ghactions",
+   "group": "remediation",
+   "query": "Best practices to secure GitHub Actions workflows?",
+   "gold_parents": [
+    "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "pin|sha|commit",
+    "permissions|github_token|least privilege"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#enable-static-analysis-for-github-actions-workflows-3",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet#write-secure-github-workflows-10",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-cs:GitHub_Actions_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NPM_Security_Cheat_Sheet#6-artifact-governance-and-supply-chain-protections-4",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:NPM_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Workload_Identity_Federation_Cheat_Sheet#limit-credential-exposure-and-permissions-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Workload_Identity_Federation_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-supplychain",
+   "group": "concept",
+   "query": "Software supply chain attack là gì?",
+   "gold_parents": [
+    "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "dependency|phụ thuộc|thư viện|package",
+    "build|attack|tấn công"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-top10:2025:A03#example-attack-scenarios-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A03"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A03#example-attack-scenarios-1",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A03"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#overview-of-threat-landscape-1",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Kubernetes_Security_Cheat_Sheet#section-6-supply-chain-security-1",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:Kubernetes_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#mitigations-and-security-best-practices-25",
+     "rerank": 0.9926,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-supplychain",
+   "group": "remediation",
+   "query": "Cách giảm rủi ro chuỗi cung ứng phần mềm?",
+   "gold_parents": [
+    "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "sbom",
+    "verify|signature|ký|pin|lock|provenance"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1195#M1018",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "T1195"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#mitigations-and-security-best-practices-25",
+     "rerank": 0.9978,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#introduction-2",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A03#how-to-prevent-1",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A03"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A03#description-3",
+     "rerank": 0.9786,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A03"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-vulndep",
+   "group": "concept",
+   "query": "Vulnerable dependency là gì?",
+   "gold_parents": [
+    "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "dependency|phụ thuộc|thư viện|library",
+    "vulnerab|lỗ hổng|cve"
+   ],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet#cases-11",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet#cases-15",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A06#description-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A06"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Coding_with_AI_Cheat_Sheet#section-2-outdated-dependencies-with-known-cves-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Coding_with_AI_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A03#how-to-prevent-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A03"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-vulndep",
+   "group": "remediation",
+   "query": "How to manage vulnerable third-party dependencies?",
+   "gold_parents": [
+    "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+   ],
+   "key_points": [
+    "scan|quét|sca|dependabot|audit",
+    "update|cập nhật|patch|upgrade"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet#introduction",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#7-third-party-dependencies",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1395#detection",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "CWE-1395"
+    },
+    {
+     "doc_id": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet#context-1",
+     "rerank": 0.9987,
+     "knowledge": true,
+     "parent": "owasp-cs:Vulnerable_Dependency_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet#mitigations-and-security-best-practices-14",
+     "rerank": 0.9811,
+     "knowledge": true,
+     "parent": "owasp-cs:Software_Supply_Chain_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-inputval",
+   "group": "concept",
+   "query": "Input validation để làm gì?",
+   "gold_parents": [
+    "owasp-cs:Input_Validation_Cheat_Sheet"
+   ],
+   "key_points": [
+    "input|đầu vào",
+    "validat|kiểm tra"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-13",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Input_Validation_Cheat_Sheet#introduction",
+     "rerank": 0.9966,
+     "knowledge": true,
+     "parent": "owasp-cs:Input_Validation_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-2.2.1",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "owasp-asvs:2.2"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#input-validation-1",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-20#mitigation-3",
+     "rerank": 0.9908,
+     "knowledge": true,
+     "parent": "CWE-20"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-inputval",
+   "group": "remediation",
+   "query": "Nguyên tắc validate dữ liệu đầu vào đúng cách?",
+   "gold_parents": [
+    "owasp-cs:Input_Validation_Cheat_Sheet"
+   ],
+   "key_points": [
+    "allow|danh sách cho phép|whitelist",
+    "server-side|phía server|syntactic|semantic|regex"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-20#mitigation-3",
+     "rerank": 0.9942,
+     "knowledge": true,
+     "parent": "CWE-20"
+    },
+    {
+     "doc_id": "cwe:CWE-113#mitigation-1",
+     "rerank": 0.9942,
+     "knowledge": true,
+     "parent": "CWE-113"
+    },
+    {
+     "doc_id": "owasp-cs:Input_Validation_Cheat_Sheet#introduction",
+     "rerank": 0.9941,
+     "knowledge": true,
+     "parent": "owasp-cs:Input_Validation_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1288#mitigation-1",
+     "rerank": 0.994,
+     "knowledge": true,
+     "parent": "CWE-1288"
+    },
+    {
+     "doc_id": "cwe:CWE-1285#mitigation-1",
+     "rerank": 0.9934,
+     "knowledge": true,
+     "parent": "CWE-1285"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-errors",
+   "group": "concept",
+   "query": "Error handling an toàn là gì?",
+   "gold_parents": [
+    "owasp-cs:Error_Handling_Cheat_Sheet"
+   ],
+   "key_points": [
+    "error|lỗi",
+    "exception|ngoại lệ|message|thông báo"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Error_Handling_Cheat_Sheet#introduction",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "owasp-cs:Error_Handling_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A10#references-1",
+     "rerank": 0.9471,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A10"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#error-handling",
+     "rerank": 0.9241,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Code_Review_Cheat_Sheet#review-checklists-6",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Code_Review_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:gRPC_Security_Cheat_Sheet#error-handling-and-information-disclosure-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:gRPC_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-errors",
+   "group": "remediation",
+   "query": "Xử lý lỗi thế nào để không lộ thông tin nhạy cảm?",
+   "gold_parents": [
+    "owasp-cs:Error_Handling_Cheat_Sheet"
+   ],
+   "key_points": [
+    "generic|chung|không lộ|stack trace|không hiển thị",
+    "log|ghi"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-209#mitigation-3",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "CWE-209"
+    },
+    {
+     "doc_id": "cwe:CWE-537#mitigation",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "CWE-537"
+    },
+    {
+     "doc_id": "cwe:CWE-211#mitigation-1",
+     "rerank": 0.9963,
+     "knowledge": true,
+     "parent": "CWE-211"
+    },
+    {
+     "doc_id": "cwe:CWE-209#mitigation-2",
+     "rerank": 0.9961,
+     "knowledge": true,
+     "parent": "CWE-209"
+    },
+    {
+     "doc_id": "cwe:CWE-203#mitigation-2",
+     "rerank": 0.9921,
+     "knowledge": true,
+     "parent": "CWE-203"
+    }
+   ],
+   "rank": null,
+   "hit5": false,
+   "rr": 0.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-logging",
+   "group": "concept",
+   "query": "Tại sao cần ghi log bảo mật?",
+   "gold_parents": [
+    "owasp-cs:Logging_Cheat_Sheet"
+   ],
+   "key_points": [
+    "log|nhật ký",
+    "event|sự kiện"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Secrets_Management_Cheat_Sheet#9-incident-response-3",
+     "rerank": 0.9907,
+     "knowledge": true,
+     "parent": "owasp-cs:Secrets_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Logging_Cheat_Sheet#attacks-on-logs-1",
+     "rerank": 0.9892,
+     "knowledge": true,
+     "parent": "owasp-cs:Logging_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Authorization_Cheat_Sheet#recommendations-32",
+     "rerank": 0.9888,
+     "knowledge": true,
+     "parent": "owasp-cs:Authorization_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Logging_Cheat_Sheet#purpose-1",
+     "rerank": 0.968,
+     "knowledge": true,
+     "parent": "owasp-cs:Logging_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Cloud_Architecture_Cheat_Sheet#security-tooling-3",
+     "rerank": 0.9678,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Cloud_Architecture_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-logging",
+   "group": "remediation",
+   "query": "What should and should not be logged for security?",
+   "gold_parents": [
+    "owasp-cs:Logging_Cheat_Sheet"
+   ],
+   "key_points": [
+    "sensitive|nhạy cảm|password|mật khẩu|pii",
+    "integrity|tamper|toàn vẹn|timestamp|time"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Logging_Vocabulary_Cheat_Sheet#exclusions",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Logging_Vocabulary_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:DotNet_Security_Cheat_Sheet#net-general-guidance-40",
+     "rerank": 0.9955,
+     "knowledge": true,
+     "parent": "owasp-cs:DotNet_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A09#how-to-prevent-2",
+     "rerank": 0.9943,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A09"
+    },
+    {
+     "doc_id": "owasp-cs:WebSocket_Security_Cheat_Sheet#primary-defenses-11",
+     "rerank": 0.9942,
+     "knowledge": true,
+     "parent": "owasp-cs:WebSocket_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Cloud_Architecture_Cheat_Sheet#security-tooling-3",
+     "rerank": 0.9907,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Cloud_Architecture_Cheat_Sheet"
+    }
+   ],
+   "rank": null,
+   "hit5": false,
+   "rr": 0.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-threatmodel",
+   "group": "concept",
+   "query": "Threat modeling là gì?",
+   "gold_parents": [
+    "owasp-cs:Threat_Modeling_Cheat_Sheet"
+   ],
+   "key_points": [
+    "threat|mối đe dọa",
+    "model|mô hình|system|hệ thống"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Threat_Modeling_Cheat_Sheet#introduction",
+     "rerank": 0.9982,
+     "knowledge": true,
+     "parent": "owasp-cs:Threat_Modeling_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Threat_Modeling_Cheat_Sheet#overview-1",
+     "rerank": 0.9973,
+     "knowledge": true,
+     "parent": "owasp-cs:Threat_Modeling_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Legacy_Application_Management_Cheat_Sheet#inventory-and-asset-management-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Legacy_Application_Management_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-threatmodel",
+   "group": "remediation",
+   "query": "Cách thực hiện threat modeling cho một hệ thống mới?",
+   "gold_parents": [
+    "owasp-cs:Threat_Modeling_Cheat_Sheet"
+   ],
+   "key_points": [
+    "stride|data flow|dfd|luồng dữ liệu",
+    "mitigat|giảm thiểu|asset|tài sản"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Threat_Modeling_Cheat_Sheet#addressing-each-question-2",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:Threat_Modeling_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Threat_Modeling_Cheat_Sheet#overview-1",
+     "rerank": 0.9936,
+     "knowledge": true,
+     "parent": "owasp-cs:Threat_Modeling_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Legacy_Application_Management_Cheat_Sheet#inventory-and-asset-management-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Legacy_Application_Management_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_AI_Model_Ops_Cheat_Sheet#security-recommendations-5",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_AI_Model_Ops_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-rest",
+   "group": "concept",
+   "query": "REST API có những rủi ro bảo mật phổ biến nào?",
+   "gold_parents": [
+    "owasp-cs:REST_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "api",
+    "http|rest"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#sensitive-information-in-http-requests",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#api-keys",
+     "rerank": 0.9969,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_REST_Framework_Cheat_Sheet#other-security-risks",
+     "rerank": 0.9943,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_REST_Framework_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_REST_Framework_Cheat_Sheet#owasp-api-security-top-10-2019-1",
+     "rerank": 0.9842,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_REST_Framework_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-18",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-rest",
+   "group": "remediation",
+   "query": "Best practices for securing REST APIs?",
+   "gold_parents": [
+    "owasp-cs:REST_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "https|tls",
+    "authentic|jwt|api key|rate|validat"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#https",
+     "rerank": 0.9975,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_REST_Framework_Cheat_Sheet#owasp-api-security-top-10-2019-1",
+     "rerank": 0.9968,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_REST_Framework_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:REST_Security_Cheat_Sheet#references",
+     "rerank": 0.9947,
+     "knowledge": true,
+     "parent": "owasp-cs:REST_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#application-and-data-protection-1",
+     "rerank": 0.9923,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Django_REST_Framework_Cheat_Sheet#other-security-risks",
+     "rerank": 0.9899,
+     "knowledge": true,
+     "parent": "owasp-cs:Django_REST_Framework_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-graphql",
+   "group": "concept",
+   "query": "GraphQL có điểm yếu bảo mật nào đặc thù?",
+   "gold_parents": [
+    "owasp-cs:GraphQL_Cheat_Sheet"
+   ],
+   "key_points": [
+    "query|truy vấn",
+    "schema|introspection|resolver"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#common-attacks-2",
+     "rerank": 0.9976,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#best-practices-and-recommendations-27",
+     "rerank": 0.9952,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.0
+  },
+  {
+   "id": "r-graphql",
+   "group": "remediation",
+   "query": "How to secure a GraphQL API?",
+   "gold_parents": [
+    "owasp-cs:GraphQL_Cheat_Sheet"
+   ],
+   "key_points": [
+    "depth|complexity|độ sâu|limit|giới hạn",
+    "introspection|authoriz|quyền"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#best-practices-and-recommendations-29",
+     "rerank": 0.998,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#best-practices-and-recommendations-27",
+     "rerank": 0.9977,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-4.3.2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-asvs:4.3"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-websocket",
+   "group": "concept",
+   "query": "WebSocket khác HTTP thế nào về bảo mật?",
+   "gold_parents": [
+    "owasp-cs:WebSocket_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "websocket|ws",
+    "connection|kết nối"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:WebSocket_Security_Cheat_Sheet#introduction-1",
+     "rerank": 0.9905,
+     "knowledge": true,
+     "parent": "owasp-cs:WebSocket_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:WebSocket_Security_Cheat_Sheet#primary-defenses-1",
+     "rerank": 0.9841,
+     "knowledge": true,
+     "parent": "owasp-cs:WebSocket_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1385#mitigation-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-1385"
+    },
+    {
+     "doc_id": "owasp-cs:HTML5_Security_Cheat_Sheet#communication-apis-6",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:HTML5_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Webhook_Security_Cheat_Sheet#authenticating-deliveries-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Webhook_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-websocket",
+   "group": "remediation",
+   "query": "Cách bảo mật kết nối WebSocket?",
+   "gold_parents": [
+    "owasp-cs:WebSocket_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "origin",
+    "wss|tls|authenticat|xác thực"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:WebSocket_Security_Cheat_Sheet#primary-defenses-5",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "owasp-cs:WebSocket_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:WebSocket_Security_Cheat_Sheet#primary-defenses-1",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "owasp-cs:WebSocket_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1385#mitigation-1",
+     "rerank": 0.9917,
+     "knowledge": true,
+     "parent": "CWE-1385"
+    },
+    {
+     "doc_id": "owasp-cs:Web_Service_Security_Cheat_Sheet#transport-confidentiality",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Web_Service_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:HTML5_Security_Cheat_Sheet#communication-apis-6",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:HTML5_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-dos",
+   "group": "concept",
+   "query": "Denial of service là gì?",
+   "gold_parents": [
+    "owasp-cs:Denial_of_Service_Cheat_Sheet",
+    "CWE-400"
+   ],
+   "key_points": [
+    "service|dịch vụ",
+    "resource|tài nguyên|availability|sẵn sàng"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-49",
+     "rerank": 0.9944,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Nodejs_Security_Cheat_Sheet#recommendations-50",
+     "rerank": 0.9923,
+     "knowledge": true,
+     "parent": "owasp-cs:Nodejs_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Denial_of_Service_Cheat_Sheet#introduction-1",
+     "rerank": 0.9824,
+     "knowledge": true,
+     "parent": "owasp-cs:Denial_of_Service_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A11#denial-of-service-1",
+     "rerank": 0.9564,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A11"
+    },
+    {
+     "doc_id": "owasp-cs:Drone_Security_Cheat_Sheet#summary-7",
+     "rerank": 0.9507,
+     "knowledge": true,
+     "parent": "owasp-cs:Drone_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-dos",
+   "group": "remediation",
+   "query": "How to mitigate DoS attacks on an application?",
+   "gold_parents": [
+    "owasp-cs:Denial_of_Service_Cheat_Sheet",
+    "CWE-400"
+   ],
+   "key_points": [
+    "rate|giới hạn|limit",
+    "cdn|scal|timeout|cache|filter"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#best-practices-and-recommendations-25",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Denial_of_Service_Cheat_Sheet#application-attacks-4",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "owasp-cs:Denial_of_Service_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-770#mitigation-2",
+     "rerank": 0.9944,
+     "knowledge": true,
+     "parent": "CWE-770"
+    },
+    {
+     "doc_id": "cwe:CWE-400#mitigation-1",
+     "rerank": 0.9925,
+     "knowledge": true,
+     "parent": "CWE-400"
+    },
+    {
+     "doc_id": "owasp-cs:GraphQL_Cheat_Sheet#best-practices-and-recommendations-6",
+     "rerank": 0.9918,
+     "knowledge": true,
+     "parent": "owasp-cs:GraphQL_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-llminj",
+   "group": "concept",
+   "query": "Prompt injection trong LLM là gì?",
+   "gold_parents": [
+    "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "prompt",
+    "llm|model|mô hình"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet#introduction",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet#additional-defenses-7",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_AI_Model_Ops_Cheat_Sheet#common-security-issues-1",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_AI_Model_Ops_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A05#description-2",
+     "rerank": 0.9969,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A05"
+    },
+    {
+     "doc_id": "owasp-cs:AI-Powered_Advertising_Systems_Security_Cheat_Sheet#3-protect-inference-and-the-prompt-boundary-3",
+     "rerank": 0.9845,
+     "knowledge": true,
+     "parent": "owasp-cs:AI-Powered_Advertising_Systems_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-llminj",
+   "group": "remediation",
+   "query": "Cách giảm thiểu prompt injection cho ứng dụng LLM?",
+   "gold_parents": [
+    "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "input|filter|validat|lọc",
+    "privilege|quyền|human|output|đầu ra"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet#additional-defenses-7",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet#additional-defenses-3",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:LLM_Prompt_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:AI-Powered_Advertising_Systems_Security_Cheat_Sheet#3-protect-inference-and-the-prompt-boundary-3",
+     "rerank": 0.9883,
+     "knowledge": true,
+     "parent": "owasp-cs:AI-Powered_Advertising_Systems_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1427#mitigation-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-1427"
+    },
+    {
+     "doc_id": "cwe:CWE-1427#mitigation-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-1427"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-ssti",
+   "group": "concept",
+   "query": "Server-side template injection là gì?",
+   "gold_parents": [
+    "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "template",
+    "server"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet#introduction-1",
+     "rerank": 1.0,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet#user-supplied-templates-1",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A03#references-2",
+     "rerank": 0.9883,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A03"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A05#references-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A05"
+    },
+    {
+     "doc_id": "attack:T1221#M1049",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1221"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-ssti",
+   "group": "remediation",
+   "query": "How to prevent SSTI?",
+   "gold_parents": [
+    "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "sandbox|logic-less|không cho|avoid|tránh",
+    "validat|allow|escap"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet#introduction-1",
+     "rerank": 0.9971,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet#prevention-2",
+     "rerank": 0.9931,
+     "knowledge": true,
+     "parent": "owasp-cs:Server_Side_Template_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A05#how-to-prevent-1",
+     "rerank": 0.9044,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A05"
+    },
+    {
+     "doc_id": "owasp-cs:User_Privacy_Protection_Cheat_Sheet#guidelines-3",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:User_Privacy_Protection_Cheat_Sheet"
+    },
+    {
+     "doc_id": "attack:M1040#overview-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "M1040"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-protopoll",
+   "group": "concept",
+   "query": "Prototype pollution trong JavaScript là gì?",
+   "gold_parents": [
+    "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet",
+    "CWE-1321"
+   ],
+   "key_points": [
+    "prototype",
+    "object|javascript"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet#explanation",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet#object-and-property-safety-including-prototype-pollution-1",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet#suggested-protection-mechanisms-3",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet#object-and-property-safety-including-prototype-pollution-2",
+     "rerank": 0.9949,
+     "knowledge": true,
+     "parent": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet#12-prototype-based-data-skimming-2",
+     "rerank": 0.994,
+     "knowledge": true,
+     "parent": "owasp-cs:Browser_Extension_Vulnerabilities_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-protopoll",
+   "group": "remediation",
+   "query": "Cách ngăn chặn prototype pollution?",
+   "gold_parents": [
+    "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet",
+    "CWE-1321"
+   ],
+   "key_points": [
+    "freeze|map|null|object.create",
+    "validat|schema|allow|__proto__"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet#suggested-protection-mechanisms-2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet#suggested-protection-mechanisms-3",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:Prototype_Pollution_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "cwe:CWE-1321#mitigation-1",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "CWE-1321"
+    },
+    {
+     "doc_id": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet#object-and-property-safety-including-prototype-pollution-1",
+     "rerank": 0.9978,
+     "knowledge": true,
+     "parent": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet#object-and-property-safety-including-prototype-pollution-2",
+     "rerank": 0.9958,
+     "knowledge": true,
+     "parent": "owasp-cs:JavaScript_and_TypeScript_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-zerotrust",
+   "group": "concept",
+   "query": "Zero trust là gì?",
+   "gold_parents": [
+    "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+   ],
+   "key_points": [
+    "trust|tin cậy",
+    "verify|xác minh|identity|danh tính"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Secure_Product_Design_Cheat_Sheet#security-principles-4",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Product_Design_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#introduction",
+     "rerank": 0.9958,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#how-zero-trust-addresses-modern-security-challenges-1",
+     "rerank": 0.986,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    }
+   ],
+   "rank": 2,
+   "hit5": true,
+   "rr": 0.5,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-zerotrust",
+   "group": "remediation",
+   "query": "Các bước triển khai kiến trúc zero trust?",
+   "gold_parents": [
+    "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+   ],
+   "key_points": [
+    "least privilege|đặc quyền tối thiểu|microsegment|phân đoạn",
+    "continuous|liên tục|device|thiết bị|policy|chính sách"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#implementation-steps-1",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet#implementation-steps-2",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-cs:Zero_Trust_Architecture_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Secure_Product_Design_Cheat_Sheet#security-principles-4",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Secure_Product_Design_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "c-webhook",
+   "group": "concept",
+   "query": "Webhook là gì và rủi ro bảo mật?",
+   "gold_parents": [
+    "owasp-cs:Webhook_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "webhook",
+    "request|callback|http"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Webhook_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:Webhook_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Webhook_Security_Cheat_Sheet#authenticating-deliveries-6",
+     "rerank": 0.9941,
+     "knowledge": true,
+     "parent": "owasp-cs:Webhook_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Docker_Security_Cheat_Sheet#rules-18",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Docker_Security_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-webhook",
+   "group": "remediation",
+   "query": "How do I verify and secure incoming webhooks?",
+   "gold_parents": [
+    "owasp-cs:Webhook_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "signature|hmac|chữ ký",
+    "replay|timestamp|ip|https"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:Webhook_Security_Cheat_Sheet#authenticating-deliveries-1",
+     "rerank": 0.9987,
+     "knowledge": true,
+     "parent": "owasp-cs:Webhook_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Webhook_Security_Cheat_Sheet#introduction",
+     "rerank": 0.9983,
+     "knowledge": true,
+     "parent": "owasp-cs:Webhook_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Third_Party_Payment_Gateway_Integration_Cheat_Sheet#references",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Third_Party_Payment_Gateway_Integration_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Third_Party_Payment_Gateway_Integration_Cheat_Sheet#what-can-go-wrong-at-each-step-and-how-to-prevent-it-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Third_Party_Payment_Gateway_Integration_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "c-nosql",
+   "group": "concept",
+   "query": "NoSQL injection là gì?",
+   "gold_parents": [
+    "owasp-cs:NoSQL_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "nosql|mongodb",
+    "query|truy vấn"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "capec:CAPEC-676#mitigation-2",
+     "rerank": 0.9901,
+     "knowledge": true,
+     "parent": "CAPEC-676"
+    },
+    {
+     "doc_id": "capec:CAPEC-676#mitigation-1",
+     "rerank": 0.9888,
+     "knowledge": true,
+     "parent": "CAPEC-676"
+    },
+    {
+     "doc_id": "owasp-cs:NoSQL_Security_Cheat_Sheet#practical-defenses-examples-1",
+     "rerank": 0.9837,
+     "knowledge": true,
+     "parent": "owasp-cs:NoSQL_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NoSQL_Security_Cheat_Sheet#threats-common-failure-modes-1",
+     "rerank": 0.9756,
+     "knowledge": true,
+     "parent": "owasp-cs:NoSQL_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A03#description-2",
+     "rerank": 0.9698,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A03"
+    }
+   ],
+   "rank": 3,
+   "hit5": true,
+   "rr": 0.3333333333333333,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "r-nosql",
+   "group": "remediation",
+   "query": "Cách bảo mật cơ sở dữ liệu NoSQL?",
+   "gold_parents": [
+    "owasp-cs:NoSQL_Security_Cheat_Sheet"
+   ],
+   "key_points": [
+    "authenticat|xác thực|access control",
+    "validat|sanitiz|encrypt|parameter"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-cs:NoSQL_Security_Cheat_Sheet#quick-nosql-security-checklist",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-cs:NoSQL_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:NoSQL_Security_Cheat_Sheet#do-s-and-don-ts",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-cs:NoSQL_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Database_Security_Cheat_Sheet#database-configuration-and-hardening-3",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-cs:Database_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:Database_Security_Cheat_Sheet#introduction",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Database_Security_Cheat_Sheet"
+    },
+    {
+     "doc_id": "capec:CAPEC-676#mitigation-2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CAPEC-676"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "e-cwe89",
+   "group": "entity_remediation",
+   "query": "Cách khắc phục CWE-89 là gì?",
+   "gold_parents": [
+    "CWE-89",
+    "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "parameterized|prepared|tham số hóa",
+    "validat|input"
+   ],
+   "lang": "vi",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-89#mitigation-14",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "CWE-89"
+    },
+    {
+     "doc_id": "cwe:CWE-89#mitigation-6",
+     "rerank": 0.9981,
+     "knowledge": true,
+     "parent": "CWE-89"
+    },
+    {
+     "doc_id": "cwe-top25:2025-1",
+     "rerank": 0.9357,
+     "knowledge": true,
+     "parent": "cwe-top25:2025"
+    },
+    {
+     "doc_id": "cwe-top25:2019-1",
+     "rerank": 0.9335,
+     "knowledge": true,
+     "parent": "cwe-top25:2019"
+    },
+    {
+     "doc_id": "cwe-top25:2023-1",
+     "rerank": 0.9285,
+     "knowledge": true,
+     "parent": "cwe-top25:2023"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "e-cwe79",
+   "group": "entity_remediation",
+   "query": "How to mitigate CWE-79?",
+   "gold_parents": [
+    "CWE-79",
+    "owasp-cs:Cross_Site_Scripting_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "encod|escap",
+    "validat|csp|framework"
+   ],
+   "lang": "en",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-79#mitigation-8",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "CWE-79"
+    },
+    {
+     "doc_id": "cwe:CWE-79#mitigation-15",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "CWE-79"
+    },
+    {
+     "doc_id": "cwe-top25:2020-1",
+     "rerank": 0.9724,
+     "knowledge": true,
+     "parent": "cwe-top25:2020"
+    },
+    {
+     "doc_id": "cwe-top25:2025-1",
+     "rerank": 0.9709,
+     "knowledge": true,
+     "parent": "cwe-top25:2025"
+    },
+    {
+     "doc_id": "cwe-top25:2024-1",
+     "rerank": 0.9665,
+     "knowledge": true,
+     "parent": "cwe-top25:2024"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "e-cwe22",
+   "group": "entity_remediation",
+   "query": "Biện pháp phòng chống CWE-22 path traversal?",
+   "gold_parents": [
+    "CWE-22"
+   ],
+   "key_points": [
+    "validat|canonical|chuẩn hóa|allow",
+    "path|đường dẫn"
+   ],
+   "lang": "vi",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-22#mitigation-6",
+     "rerank": 0.999,
+     "knowledge": true,
+     "parent": "CWE-22"
+    },
+    {
+     "doc_id": "cwe:CWE-22#mitigation-13",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "CWE-22"
+    },
+    {
+     "doc_id": "cwe:CWE-23#mitigation-5",
+     "rerank": 0.9964,
+     "knowledge": true,
+     "parent": "CWE-23"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A01#list-of-mapped-cwes-1",
+     "rerank": 0.9912,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A01"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A01#list-of-mapped-cwes-1",
+     "rerank": 0.9857,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A01"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "e-cwe78",
+   "group": "entity_remediation",
+   "query": "Mitigations for CWE-78 OS command injection?",
+   "gold_parents": [
+    "CWE-78",
+    "owasp-cs:OS_Command_Injection_Defense_Cheat_Sheet"
+   ],
+   "key_points": [
+    "avoid|library|parameter",
+    "validat|allow"
+   ],
+   "lang": "en",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-78#mitigation-13",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "CWE-78"
+    },
+    {
+     "doc_id": "cwe:CWE-78#mitigation-9",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "CWE-78"
+    },
+    {
+     "doc_id": "cwe-top25:2023-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "cwe-top25:2023"
+    },
+    {
+     "doc_id": "cwe-top25:2021-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "cwe-top25:2021"
+    },
+    {
+     "doc_id": "cwe:CWE-77#mitigation-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "CWE-77"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "e-capec66",
+   "group": "entity_remediation",
+   "query": "Cách phòng chống CAPEC-66 SQL injection?",
+   "gold_parents": [
+    "CAPEC-66",
+    "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+   ],
+   "key_points": [
+    "parameter|prepared|validat",
+    "privilege|least|quyền"
+   ],
+   "lang": "vi",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "capec:CAPEC-66#mitigation",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "CAPEC-66"
+    },
+    {
+     "doc_id": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet#what-is-a-sql-injection-attack",
+     "rerank": 0.9735,
+     "knowledge": true,
+     "parent": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet#primary-defenses-12",
+     "rerank": 0.9642,
+     "knowledge": true,
+     "parent": "owasp-cs:SQL_Injection_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A05#how-to-prevent-2",
+     "rerank": 0.9436,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A05"
+    },
+    {
+     "doc_id": "owasp-cs:Laravel_Cheat_Sheet#sql-injection-1",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-cs:Laravel_Cheat_Sheet"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "e-t1190",
+   "group": "entity_remediation",
+   "query": "How to mitigate T1190 exploit public-facing application?",
+   "gold_parents": [
+    "T1190"
+   ],
+   "key_points": [
+    "patch|update|scan|vulnerab",
+    "segment|waf|application isolation|exploit protection"
+   ],
+   "lang": "en",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1190#M1037",
+     "rerank": 1.0,
+     "knowledge": true,
+     "parent": "T1190"
+    },
+    {
+     "doc_id": "attack:T1190#M1051",
+     "rerank": 1.0,
+     "knowledge": true,
+     "parent": "T1190"
+    },
+    {
+     "doc_id": "attack:T1189#M1050",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "T1189"
+    },
+    {
+     "doc_id": "attack:T1203#M1050",
+     "rerank": 0.9789,
+     "knowledge": true,
+     "parent": "T1203"
+    },
+    {
+     "doc_id": "attack:T1593#M1013",
+     "rerank": 0.9785,
+     "knowledge": true,
+     "parent": "T1593"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "e-t1059",
+   "group": "entity_remediation",
+   "query": "Biện pháp giảm thiểu cho T1059 command and scripting interpreter?",
+   "gold_parents": [
+    "T1059"
+   ],
+   "key_points": [
+    "execution|signed|code signing|allow|disable|restrict",
+    "antivirus|behavior|privileged"
+   ],
+   "lang": "vi",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1059#M1042",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "T1059"
+    },
+    {
+     "doc_id": "attack:T1059#M1038",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "T1059"
+    },
+    {
+     "doc_id": "attack:T1059.011#M1038",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "T1059.011"
+    },
+    {
+     "doc_id": "attack:T1059.013#M1038",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "T1059.013"
+    },
+    {
+     "doc_id": "attack:T1059.003#M1038",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "T1059.003"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 0.5
+  },
+  {
+   "id": "e-t1566",
+   "group": "entity_remediation",
+   "query": "How can organizations mitigate T1566 phishing?",
+   "gold_parents": [
+    "T1566"
+   ],
+   "key_points": [
+    "training|awareness|đào tạo|user",
+    "email|antivirus|filter|network"
+   ],
+   "lang": "en",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1566#M1017",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "T1566"
+    },
+    {
+     "doc_id": "attack:T1566#M1047",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "T1566"
+    },
+    {
+     "doc_id": "attack:T1566.002#M1054",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "T1566.002"
+    },
+    {
+     "doc_id": "attack:T1566.001#M1054",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "T1566.001"
+    },
+    {
+     "doc_id": "attack:T1598#M1054",
+     "rerank": 0.9985,
+     "knowledge": true,
+     "parent": "T1598"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "e-t1078",
+   "group": "entity_remediation",
+   "query": "Mitigation for T1078 valid accounts?",
+   "gold_parents": [
+    "T1078"
+   ],
+   "key_points": [
+    "mfa|multi-factor|password|privileged|least",
+    "audit|policy|account"
+   ],
+   "lang": "en",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "attack:T1078#M1032",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "T1078"
+    },
+    {
+     "doc_id": "attack:T1078#M1018",
+     "rerank": 0.9999,
+     "knowledge": true,
+     "parent": "T1078"
+    },
+    {
+     "doc_id": "attack:T1098#M1042",
+     "rerank": 0.9959,
+     "knowledge": true,
+     "parent": "T1098"
+    },
+    {
+     "doc_id": "attack:T1036#M1047",
+     "rerank": 0.9913,
+     "knowledge": true,
+     "parent": "T1036"
+    },
+    {
+     "doc_id": "attack:T1036.010#M1047",
+     "rerank": 0.9908,
+     "knowledge": true,
+     "parent": "T1036.010"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "e-cwe502",
+   "group": "entity_remediation",
+   "query": "Cách khắc phục CWE-502 deserialization of untrusted data?",
+   "gold_parents": [
+    "CWE-502",
+    "owasp-cs:Deserialization_Cheat_Sheet"
+   ],
+   "key_points": [
+    "untrusted|không tin cậy|avoid|tránh",
+    "integrity|signature|allow|validat"
+   ],
+   "lang": "vi",
+   "route": "entity",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "cwe:CWE-502#mitigation-1",
+     "rerank": 0.9989,
+     "knowledge": true,
+     "parent": "CWE-502"
+    },
+    {
+     "doc_id": "cwe:CWE-502#mitigation-3",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "CWE-502"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A08#list-of-mapped-cwes-1",
+     "rerank": 0.998,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A08"
+    },
+    {
+     "doc_id": "owasp-top10:2025:A08#background-1",
+     "rerank": 0.998,
+     "knowledge": true,
+     "parent": "owasp-top10:2025:A08"
+    },
+    {
+     "doc_id": "owasp-top10:2021:A08#overview-1",
+     "rerank": 0.9979,
+     "knowledge": true,
+     "parent": "owasp-top10:2021:A08"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-pwlen",
+   "group": "asvs",
+   "query": "ASVS yêu cầu độ dài mật khẩu tối thiểu là bao nhiêu?",
+   "gold_parents": [
+    "owasp-asvs:6.2"
+   ],
+   "key_points": [
+    "8",
+    "15"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.2.1",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.2.9",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.5.2",
+     "rerank": 0.9935,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.5"
+    },
+    {
+     "doc_id": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet#defense-in-depth-metrics-15",
+     "rerank": 0.9429,
+     "knowledge": true,
+     "parent": "owasp-cs:Credential_Stuffing_Prevention_Cheat_Sheet"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.7.2",
+     "rerank": null,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.7"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-session",
+   "group": "asvs",
+   "query": "What does ASVS require for session token generation and logout?",
+   "gold_parents": [
+    "owasp-asvs:7.2",
+    "owasp-asvs:7.4",
+    "owasp-asvs:7.1"
+   ],
+   "key_points": [
+    "session|token",
+    "random|entropy|terminat|logout|invalid"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-7.2.4",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:7.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.5.5",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-7.2.3",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-asvs:7.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-7.4.1",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-asvs:7.4"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-7.4.4",
+     "rerank": 0.9974,
+     "knowledge": true,
+     "parent": "owasp-asvs:7.4"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-crypto",
+   "group": "asvs",
+   "query": "ASVS 5.0 có yêu cầu gì về thuật toán mã hóa cho dữ liệu?",
+   "gold_parents": [
+    "owasp-asvs:11.3",
+    "owasp-asvs:11.2",
+    "owasp-asvs:11.4",
+    "owasp-asvs:11.1"
+   ],
+   "key_points": [
+    "algorithm|thuật toán|cipher",
+    "aes|key|khóa|approved"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-11.1.3",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-asvs:11.1"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-11.2.2",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:11.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.5.4",
+     "rerank": 0.9986,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.5.2",
+     "rerank": 0.9984,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-6.7.2",
+     "rerank": 0.9972,
+     "knowledge": true,
+     "parent": "owasp-asvs:6.7"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-fileup",
+   "group": "asvs",
+   "query": "What are the ASVS requirements for file upload handling?",
+   "gold_parents": [
+    "owasp-asvs:5.2",
+    "owasp-asvs:5.3",
+    "owasp-asvs:5.1",
+    "owasp-asvs:5.4"
+   ],
+   "key_points": [
+    "file",
+    "size|type|extension|scan|content|storage"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-5.2.4",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:5.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-5.2.3",
+     "rerank": 0.9993,
+     "knowledge": true,
+     "parent": "owasp-asvs:5.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-5.3.1",
+     "rerank": 0.9992,
+     "knowledge": true,
+     "parent": "owasp-asvs:5.3"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-5.4.2",
+     "rerank": 0.9991,
+     "knowledge": true,
+     "parent": "owasp-asvs:5.4"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-5.4.1",
+     "rerank": 0.9988,
+     "knowledge": true,
+     "parent": "owasp-asvs:5.4"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-oauth",
+   "group": "asvs",
+   "query": "ASVS yêu cầu gì với OAuth và OIDC?",
+   "gold_parents": [
+    "owasp-asvs:10.4",
+    "owasp-asvs:10.2",
+    "owasp-asvs:10.3",
+    "owasp-asvs:10.1",
+    "owasp-asvs:10.5",
+    "owasp-asvs:10.6",
+    "owasp-asvs:10.7"
+   ],
+   "key_points": [
+    "oauth|oidc",
+    "client|redirect|token|pkce|authorization"
+   ],
+   "lang": "vi",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.5.2",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.2.3",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.2"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.1.2",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.1"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.5.1",
+     "rerank": 0.9998,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-10.4.1",
+     "rerank": 0.9997,
+     "knowledge": true,
+     "parent": "owasp-asvs:10.4"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "a-logging",
+   "group": "asvs",
+   "query": "ASVS says what about security logging and error handling?",
+   "gold_parents": [
+    "owasp-asvs:16.2",
+    "owasp-asvs:16.3",
+    "owasp-asvs:16.5",
+    "owasp-asvs:16.1",
+    "owasp-asvs:16.4"
+   ],
+   "key_points": [
+    "log",
+    "sensitive|error|event|tamper|protect"
+   ],
+   "lang": "en",
+   "route": "concept_kb",
+   "knowledge_route": true,
+   "hits": [
+    {
+     "doc_id": "owasp-asvs:v5.0.0-16.5.1",
+     "rerank": 0.9996,
+     "knowledge": true,
+     "parent": "owasp-asvs:16.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-16.4.3",
+     "rerank": 0.9995,
+     "knowledge": true,
+     "parent": "owasp-asvs:16.4"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-16.5.3",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:16.5"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-16.3.4",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:16.3"
+    },
+    {
+     "doc_id": "owasp-asvs:v5.0.0-16.3.3",
+     "rerank": 0.9994,
+     "knowledge": true,
+     "parent": "owasp-asvs:16.3"
+    }
+   ],
+   "rank": 1,
+   "hit5": true,
+   "rr": 1.0,
+   "kp_coverage": 1.0
+  },
+  {
+   "id": "x-01",
+   "group": "control",
+   "query": "xin chào",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-02",
+   "group": "control",
+   "query": "hôm nay trời thế nào nhỉ",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-03",
+   "group": "control",
+   "query": "bạn là ai",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-04",
+   "group": "control",
+   "query": "bạn có thể giúp được những gì",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-05",
+   "group": "control",
+   "query": "dữ liệu của hệ thống cập nhật đến khi nào",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-06",
+   "group": "control",
+   "query": "viết giúp tôi một bài thơ về mùa thu",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-07",
+   "group": "control",
+   "query": "công thức nấu phở bò",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-08",
+   "group": "control",
+   "query": "1+1 bằng mấy",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-09",
+   "group": "control",
+   "query": "cảm ơn bạn nhé",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  },
+  {
+   "id": "x-10",
+   "group": "control",
+   "query": "tôi đang buồn quá",
+   "gold_parents": [],
+   "key_points": [],
+   "lang": "vi",
+   "route": "concept",
+   "knowledge_route": false
+  }
+ ]
+}

@@ -45,11 +45,11 @@ class ProjectFakeRunner:
         # "stamped only on completion" without needing a real client disconnect.
         self.stream_start_titles: list[str | None] = []
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, *, grounding_context: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
         return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, *, grounding_context: str | None = None):
         self.calls.append((profile_name, prompt, session_id))
         title = None
         if session_id is not None:

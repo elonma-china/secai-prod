@@ -57,6 +57,32 @@ class Settings(BaseSettings):
     qdrant_kb_supplemental_collections: str = ""
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
+    # Knowledge KB (cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations): docs/plans/kb-knowledge-grounding.md.
+    # Off by default: chat then routes exactly as before. knowledge_min_rerank 0 = no cut-off (sec-rerank scores saturate near 1: relevant hits >=0.97, measured 2026-10-06).
+    chat_knowledge_grounding_enabled: bool = False
+    # Open-ended CVE questions with no id ("Lỗ hổng Log4Shell là gì?"): pre-fetch the CVE KB server-side. On by default.
+    chat_cve_search_prefetch_enabled: bool = True
+    # "Which <product> bug lets …?" questions go to the CVE search, and the search adds KEV-only candidates + vendor
+    # synonyms to its pool (retrieval/discovery.py). Off by default: routing and search then equal the previous release.
+    chat_discovery_enabled: bool = False
+    knowledge_top_k: int = 4
+    knowledge_min_rerank: float = 0.9
+    knowledge_min_dense: float = 0.55  # cosine of the best dense hit (measured 2026-10-06: 0.55 keeps 97.7% of relevant questions and drops ~62% of unrelated probes); 0 = off
+    knowledge_prefetch_timeout_s: float = 3.0
+    # Semantic routing: decide from what the knowledge KB actually holds, not from keywords alone. A keyword hit must be
+    # confirmed by the reranker (knowledge_confirm_min_rerank) and a question with NO keyword still gets reference text when
+    # its best chunk is an unmistakable match (rerank >= semantic_route_min_rerank, cosine >= semantic_route_min_dense).
+    # Off = the previous keyword-only routing and the previous (leaky) rerank gate.
+    chat_semantic_routing_enabled: bool = False
+    knowledge_confirm_min_rerank: float = 0.5
+    semantic_route_min_rerank: float = 0.99
+    semantic_route_min_dense: float = 0.62
+    semantic_route_min_rerank_cve: float = 0.998  # a CVE record has to answer the question this clearly to be fetched without a keyword
+    semantic_route_min_dense_cve: float = 0.60  # …and be at least this close (cosine), else the reranker is not even called
+    # Serving host is ~240 ms away: reuse connections to embedding/rerank, and keep the vector of a prompt the input
+    # classifier already embedded. Off = previous behaviour (docs/test-results/kb-knowledge-followups-2026-10-07.md).
+    embedding_keepalive_enabled: bool = False
+    embedding_cache_ttl_s: float = 0.0
     embedding_api_url: str = ""
     reranker_api_url: str = ""
     embedding_model: str = "BAAI/bge-m3"
