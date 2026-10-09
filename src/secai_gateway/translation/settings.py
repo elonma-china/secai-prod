@@ -50,6 +50,7 @@ class TranslationSettings(BaseSettings):
     converter_timeout_seconds: float = 60
     llm_timeout_seconds: float = 120
     llm_max_retries: int = 1
+    literal_integrity_max_retries: int = 2
     job_deadline_seconds: int = 30 * 60
     storage_quota_bytes: int = 5 * 1024 * 1024 * 1024
     artifact_cleanup_seconds: int = 5 * 60
