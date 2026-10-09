@@ -19,6 +19,7 @@ async def one(q):
     rel=set(c.upper() for c in q.get("relevant_cves") or [])
     rank=next((i+1 for i,c in enumerate(got) if c in rel),None) if rel else None
     return {**q,"got":got[:10],"rank":rank,"hit5":bool(rank and rank<=5),"hit10":bool(rank and rank<=10),"rr":1.0/rank if rank else 0.0}
+OUT=Path(sys.argv[sys.argv.index("--out")+1]) if "--out" in sys.argv[:-1] else HERE/"eval_set_results.json"
 async def main():
     qs=[json.loads(l) for l in open(HERE/"eval_set.jsonl") if l.strip()]
     rows=[await one(q) for q in qs]
@@ -33,5 +34,5 @@ async def main():
         a=agg(bycat[cat]); print(f"  {cat:12s} n={len(bycat[cat]):2d}: recall@5={a[0]:.3f} recall@10={a[1]:.3f} MRR={a[2]:.3f}")
     print(f"  aggregate    n={len(bycat['aggregate'])}: answer-level (đếm/cũ-mới nhất) — cần kb_stats tool, không tính recall")
     print(f"  edge         n={len(bycat['edge'])}: answer-level ('không tìm thấy') — không tính recall")
-    (HERE/"eval_set_results.json").write_text(json.dumps({"overall":{"recall@5":r5,"recall@10":r10,"MRR":mrr,"n":len(scored)},"rows":rows},ensure_ascii=False,indent=2))
+    OUT.write_text(json.dumps({"overall":{"recall@5":r5,"recall@10":r10,"MRR":mrr,"n":len(scored)},"rows":rows},ensure_ascii=False,indent=2))
 asyncio.run(main())

@@ -58,7 +58,7 @@ def test_scroll_error_falls_back_to_hybrid(monkeypatch) -> None:
     monkeypatch.setattr(qdrant, "_scroll_by_filter", broken_scroll)
     monkeypatch.setattr(qdrant, "EMBEDDING_URL", "")  # dense skipped
 
-    async def empty_bm25(q, k):
+    async def empty_bm25(q, k, qfilter=None):
         return []
 
     monkeypatch.setattr(qdrant, "bm25_search", empty_bm25)
@@ -74,7 +74,7 @@ def test_cwe_query_does_not_use_fastpath(monkeypatch) -> None:
     monkeypatch.setattr(qdrant, "_scroll_by_filter", boom_scroll)
     monkeypatch.setattr(qdrant, "EMBEDDING_URL", "")  # dense skipped
 
-    async def empty_bm25(q, k):
+    async def empty_bm25(q, k, qfilter=None):
         return []
 
     monkeypatch.setattr(qdrant, "bm25_search", empty_bm25)
