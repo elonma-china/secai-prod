@@ -5,6 +5,8 @@ import json
 import re
 import secrets
 from datetime import datetime, timezone
+from email.errors import HeaderParseError
+from email.header import decode_header, make_header
 from pathlib import PurePath
 
 from fastapi import APIRouter, Request
@@ -20,6 +22,16 @@ router = APIRouter(prefix="/ai/v2/translate", include_in_schema=True)
 _HEX = re.compile(r"[0-9a-f]{32}\Z")
 _OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _LANGUAGES = frozenset({"vi", "en", "zh", "ja", "ko", "fr", "de", "es", "ru", "ar"})
+# v3's capability list and the IAS UI built against it use the canonical
+# "zh-Hans" code; v2 has only ever accepted "zh". Without this alias, a
+# client that reuses the v3 code for a v2 upload gets INVALID_LANGUAGE/400
+# before a job is even created (production case ids FILE-vi-zh-Hans /
+# FILE-zh-Hans-vi, 2026-10-09).
+_LANGUAGE_ALIASES = {"zh-hans": "zh"}
+
+
+def _normalize_lang(code: str) -> str:
+    return _LANGUAGE_ALIASES.get(code.strip().lower(), code)
 _STATUS = {
     "INVALID_REQUEST": 400, "INVALID_LANGUAGE": 400,
     "UNSUPPORTED_LANGUAGE_PAIR": 400, "EMPTY_FILE": 400,
@@ -123,8 +135,8 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
         if any(not isinstance(fields[name], str) or len(fields[name].encode()) > settings.max_text_field_bytes
                for name in fields if name != "file"):
             raise TranslationError("INVALID_REQUEST", "Multipart fields are invalid.")
-        source = fields.get("source_lang", "auto")
-        target = fields["target_lang"]
+        source = _normalize_lang(fields.get("source_lang", "auto"))
+        target = _normalize_lang(fields["target_lang"])
         if source not in _LANGUAGES | {"auto"} or target not in _LANGUAGES:
             raise TranslationError("INVALID_LANGUAGE", "Language is invalid.")
         if source != "auto" and source != target and source != "vi" and target != "vi":
@@ -134,6 +146,12 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
             raise TranslationError("INVALID_REQUEST", "Idempotency key is invalid.")
         upload: UploadFile = fields["file"]
         filename = upload.filename or ""
+        # .NET encodes non-ASCII filenames as MIME encoded-words.
+        if filename.startswith("=?") and filename.endswith("?="):
+            try:
+                filename = str(make_header(decode_header(filename)))
+            except (HeaderParseError, LookupError, UnicodeError, ValueError) as exc:
+                raise TranslationError("INVALID_REQUEST", "Filename encoding is invalid.") from exc
         if not filename or len(filename) > 255 or any(c in filename for c in "/\\\x00"):
             raise TranslationError("INVALID_REQUEST", "Filename is invalid.")
         extension = PurePath(filename).suffix.lower()
