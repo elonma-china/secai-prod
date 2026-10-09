@@ -110,19 +110,25 @@ async def _retrieve_by_ids(client: httpx.AsyncClient, ids: list[str]) -> dict[st
 
 
 async def _scroll_by_filter(client: httpx.AsyncClient, qfilter: dict[str, Any] | None,
-                            limit: int) -> list[tuple[str, dict[str, Any]]]:
+                            limit: int, collection: str | None = None) -> list[tuple[str, dict[str, Any]]]:
     """Fetch payloads matching ``qfilter`` directly (no vector, no rerank) — the exact-lookup
     fast path. Returns ``[(point_id, payload)]`` in scroll order."""
     if not qfilter:
         return []
     resp = await client.post(
-        f"{QDRANT_URL}/collections/{COLLECTION}/points/scroll",
+        f"{QDRANT_URL}/collections/{collection or COLLECTION}/points/scroll",
         json={"filter": qfilter, "limit": limit, "with_payload": True, "with_vector": False},
         timeout=20,
     )
     resp.raise_for_status()
+    data = resp.json()
+    if isinstance(data.get("status"), dict) and "error" in data["status"]:
+        raise ValueError(f"Qdrant error: {data['status']['error']}")
+    result = data.get("result")
+    if not isinstance(result, dict) or "points" not in result or not isinstance(result["points"], list):
+        raise ValueError("Malformed Qdrant response")
     return [(str(p["id"]), apply_cve_override(p.get("payload") or {}))
-            for p in resp.json().get("result", {}).get("points", [])]
+            for p in result["points"]]
 
 
 async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[str, list[str]]) -> dict[str, dict[str, Any]]:

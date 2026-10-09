@@ -102,7 +102,7 @@ def test_interrupted_test_claim_still_retires_holdout(tmp_path, monkeypatch):
     original_open = os.open
 
     def interrupt_before_run_claim(path, flags, mode=0o777, *, dir_fd=None):
-        if str(path).endswith(".json") and "/run-" in str(path):
+        if str(path).endswith(".json") and os.path.basename(str(path)).startswith("run-"):
             raise OSError("injected interruption after holdout retirement")
         return original_open(path, flags, mode, dir_fd=dir_fd)
 
