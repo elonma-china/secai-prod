@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 from linch import InMemoryRunStore, InMemorySessionStore
 from linch.events import ErrorEvent, LoopGuardEvent, ResultEvent, ToolCallEndEvent
 from linch.errors import ProviderError
+from linch.session import RunOptions
 from linch.sessions.sqlite import SqliteSessionStore
 from linch.tools.registry import empty_tools
 from linch.types import SystemBlock
@@ -18,7 +19,7 @@ from linch.types import SystemBlock
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
 from ..retrieval import build_reference_tools, neo4j_search, qdrant_search, web_fetch, web_search
-from ..state import ProjectStore, RedisSessionStore, SqliteLedger
+from ..state import ConversationStore, ProjectStore, RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
 from .factory import make_gateway_agent
@@ -172,6 +173,10 @@ class LinchRunner:
         root.mkdir(parents=True, exist_ok=True)
         self.ledger = SqliteLedger(database_path)
         self.project_store = ProjectStore(database_path)
+        # Durable multi-conversation index + transcript (shares the same sqlite file as the
+        # ledger). System of record for the /ai/conversations/* endpoints; the linch session
+        # store below stays the LIVE working memory (24h + compaction).
+        self.conversations = ConversationStore(database_path)
         # PoC (searchsploit/Exploit-DB) runs in-process as a plain tool.
         self.poc = LocalPocBackend()
         self.tools: dict[str, Any] = {
@@ -196,13 +201,6 @@ class LinchRunner:
                 and translation_settings.specialist_api_key):
             from ..translation.tool import build_translation_tool
             self.tools["translation_specialist"] = build_translation_tool(translation_settings)
-        # Conversation memory backend is config-selectable (SESSION_STORE_BACKEND):
-        #   sqlite (default) — linch's own SqliteSessionStore, durable on local disk, no
-        #     expiry. Fixes the old "24h TTL loses the thread on restart" behavior.
-        #   redis — legacy back-compat; falls back to in-memory if REDIS_URL is unset.
-        #   memory (or anything else) — in-memory only, dev/test.
-        # The run-event trace is not persisted (prod: traces not retained) — the run store
-        # is telemetry-only regardless of the session backend chosen above.
         settings = get_settings()
         backend = settings.session_store_backend
         if backend == "sqlite":
@@ -211,7 +209,10 @@ class LinchRunner:
             self.session_store = SqliteSessionStore(session_db_path)
         elif backend == "redis":
             redis_url = settings.redis_url
-            self.session_store = RedisSessionStore(redis_url) if redis_url else InMemorySessionStore()
+            self.session_store = (
+                RedisSessionStore(redis_url, ttl_seconds=settings.session_ttl_seconds)
+                if redis_url else InMemorySessionStore()
+            )
         else:
             self.session_store = InMemorySessionStore()
         # InMemory is enough for Phase 0 journal; durable SQLite can land with Phase 4 resume.
@@ -299,6 +300,15 @@ class LinchRunner:
             if self._session_locks.get(session_id) is lock:
                 del self._session_locks[session_id]
 
+    def _run_opts(self, profile_name: str) -> RunOptions:
+        """Per-turn GENERATION cap (RunOptions.max_output_tokens), decoupled from the agent-level
+        compaction reserve. Generous per profile so nothing is truncated — exploit_research gets
+        the largest budget because a synthesized PoC can be long. See config.py for the values."""
+        s = get_settings()
+        cap = (s.llm_exploit_max_output_tokens if profile_name == "exploit_research"
+               else s.llm_max_output_tokens)
+        return RunOptions(max_output_tokens=cap)
+
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
                         *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
         if (profile_name == "translation_orchestrator" and
@@ -308,13 +318,14 @@ class LinchRunner:
             profile = PROFILES[profile_name]
             session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
+            opts = self._run_opts(profile_name)
             final = ""
             delegated = None
             run_id = None
             # `prompt` is the caller's ORIGINAL, unwrapped text — date + any KB grounding
             # reach the model via session.meta["ephemeral_context"] (set just above), never
             # via this string, so linch persists exactly this clean prompt as the user turn.
-            async for event in session.run(prompt):
+            async for event in session.run(prompt, opts):
                 run_id = session.active_run_id or run_id
                 if (profile_name == "translation_orchestrator" and
                         isinstance(event, ToolCallEndEvent) and
@@ -340,7 +351,7 @@ class LinchRunner:
                 # Loop exhausted its turns without a document → force one tool-less
                 # synthesis turn so the endpoint returns content, not a blank body.
                 session.tools_override = empty_tools()
-                async for event in session.run(_SALVAGE_INSTRUCTION):
+                async for event in session.run(_SALVAGE_INSTRUCTION, opts):
                     run_id = session.active_run_id or run_id
                     if isinstance(event, ResultEvent):
                         final = event.final_text or ""
@@ -374,12 +385,13 @@ class LinchRunner:
             profile = PROFILES[profile_name]
             session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
             self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
+            opts = self._run_opts(profile_name)
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
             turn_limited = False
             # See complete()'s comment: `prompt` is the caller's original text; date/KB
             # grounding are delivered via session.meta["ephemeral_context"], not this string.
-            async for event in session.run(prompt):
+            async for event in session.run(prompt, opts):
                 got_text = got_text or _has_text(event)
                 if salvageable and _is_turn_limit(event):
                     # Swallow the max_turns terminal (guard → error → empty result);
@@ -391,7 +403,7 @@ class LinchRunner:
                 yield event
             if turn_limited and not got_text:
                 session.tools_override = empty_tools()
-                async for event in session.run(_SALVAGE_INSTRUCTION):
+                async for event in session.run(_SALVAGE_INSTRUCTION, opts):
                     yield event
 
     def stream_bughunt(

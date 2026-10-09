@@ -1,0 +1,7 @@
+"""Finite limits for the opt-in document-agent scope store."""
+
+CONTEXT_TTL_SECONDS = 24 * 60 * 60
+CONTEXT_TOMBSTONE_SECONDS = 24 * 60 * 60
+MAX_CONTEXTS_PER_PEER = 20
+TURN_LEASE_SECONDS = 120
+MAX_TURN_RESPONSE_BYTES = 64 * 1024

@@ -343,13 +343,13 @@ class _ExploitConsolidateRunner:
         self.poc = poc
         self.ledger = ledger
 
-    async def complete(self, profile_name: str, prompt: str, session_id=None):
+    async def complete(self, profile_name: str, prompt: str, session_id=None, **kwargs):
         if profile_name == "poc_consolidate":
             return self.MERGED, {"run_id": "cc", "profile": profile_name}
         return ("## 2. Cách chạy PoC\n\n- python3 cve-2026-31431.py\n\n"
                 "## 3. Tổng quan Lỗ hổng\n\n- SSRF\n"), {"run_id": "rr", "profile": profile_name}
 
-    async def stream(self, profile_name: str, prompt: str, session_id=None):
+    async def stream(self, profile_name: str, prompt: str, session_id=None, **kwargs):
         text, _ = await self.complete(profile_name, prompt, session_id)
         yield PartialAssistantEvent(delta={"kind": "text", "text": text})
 
@@ -380,8 +380,17 @@ def _catalog_with_github_code(tmp_db: str):
 
 
 @pytest.mark.asyncio
-async def test_exploit_endpoint_consolidated_tier(monkeypatch) -> None:
+async def test_exploit_endpoint_consolidated_tier(monkeypatch, tmp_path) -> None:
     from secai_gateway.state import SqliteLedger
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setattr("secai_gateway.retrieval.kb_context.get_cve_context", AsyncMock(
+        return_value={"status": "not_found", "content": "", "cwe_refs": []}))
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "false")
+    monkeypatch.setenv("POC_EXPLOIT_ENABLED", "false")
+    monkeypatch.setenv("POC_GITHUB_ONDEMAND_ENABLED", "false")
+    monkeypatch.setenv("POC_ONDEMAND_CACHE_DIR", str(tmp_path / "ondemand-cache"))
+    monkeypatch.setenv("POC_FIXED_DIR", str(tmp_path / "fixed-pocs"))
 
     poc = _catalog_with_github_code(tempfile.mktemp(suffix=".db"))
     ledger = SqliteLedger(tempfile.mktemp(suffix=".db"))

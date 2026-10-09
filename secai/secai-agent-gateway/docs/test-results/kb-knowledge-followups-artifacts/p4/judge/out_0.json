@@ -1,0 +1,1058 @@
+{
+ "core-001": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE. Also claims Spring Framework/WebLogic affected."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  }
+ },
+ "core-002": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-003": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-004": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-005": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Vector given C:H/I:N/A:H inconsistent with 9.8 score."
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-006": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-007": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-008": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-009": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-010": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-011": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-012": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-013": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant MITRE ATT&CK technique list (T1574.006, T1553.002...) not plausible for this CVE."
+  }
+ },
+ "core-014": {
+  "A": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Identifies EternalBlue as CVE-2017-12638 (IMail), wrong CVE."
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVSS 9.8 contradicts 8.8; lists Windows XP/2003 as affected."
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Maps EternalBlue to CVE-2017-12638, then CVSS 10.0 for 0144; contradicts facts."
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-015": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Vector AV:L/PR:L/C:H/I:N/A:N inconsistent with 10.0; wrong low-privilege claim."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Vector AV:L/PR:L/C:H/I:N/A:N inconsistent with 10.0."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 10/11 clients as affected; wrong."
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 10/11 clients as affected; wrong."
+  }
+ },
+ "core-016": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1574.010 attached."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1574.010 attached."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1574.010 attached."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1574.010 attached."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1574.010 attached."
+  }
+ },
+ "core-017": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-018": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 8 as affected by BlueKeep; wrong."
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 8/Server 2012 as affected by BlueKeep; wrong."
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-019": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 11/22H2 as affected; PrintNightmare predates them."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 11/22H2 as affected; PrintNightmare predates them."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 11/22H2 as affected; PrintNightmare predates them."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK T1078/T1098.005 attached."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 11/22H2 as affected; PrintNightmare predates them."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Lists Windows 11/22H2 as affected; PrintNightmare predates them."
+  }
+ },
+ "core-020": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Invented registry mitigation (DisableWinRE under SupportDiagnosticTool)."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVSS 9.8 contradicts 7.8; calls it Office flaw."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Wrong CVE-2021-30460 (DDE) and CVSS 9.8; not Follina."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "No CVSS; invented 'Support Diagnostic Telemetry'; calls it Office flaw, severity vague."
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-021": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Attributes CVE-2018-13379 to FortiWeb/FortiProxy; minor product slip."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-022": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Claims all listed CVEs (incl. CVE-2017-6167, CVE-2021-22974) are in KEV; wrong."
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-023": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Names no relevant CVE (CVE-2017-5638, CVE-2018-11776); lists other Struts OGNL CVEs."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Names no relevant CVE (CVE-2017-5638, CVE-2018-11776); lists other Struts OGNL CVEs."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "No CVE-2017-5638/2018-11776; Confluence CVEs wrongly tied to Struts; CVE-2017-9791 not OGNL."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Names no relevant CVE (CVE-2017-5638, CVE-2018-11776); lists other Struts OGNL CVEs."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Names no relevant CVE (CVE-2017-5638, CVE-2018-11776); lists other Struts OGNL CVEs."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Names no relevant CVE (CVE-2017-5638, CVE-2018-11776); lists other Struts OGNL CVEs."
+  }
+ },
+ "core-024": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2023-42791 is FortiManager, wrongly applied to FortiOS versions."
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-025": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-026": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Vector C:H/I:H/A:L inconsistent with CVSS 7.5 (should be C:H/I:N/A:N)."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-027": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists real/KB CWE-78 CVEs but none of CVE-2014-6271, CVE-2024-3400, CVE-2023-2868."
+  }
+ },
+ "core-028": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Lists CWE-502 CVEs but none of CVE-2021-44228, CVE-2017-9805, CVE-2015-4852."
+  }
+ },
+ "core-029": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2026-42897 given CVSS 6.1 MEDIUM, inconsistent with 8.1 HIGH elsewhere."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-030": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK list (T1556, T1542.002, T1211, T1083) for SQLi."
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Irrelevant ATT&CK list (T1556, T1542.002, T1211, T1083) for SQLi."
+  }
+ },
+ "core-031": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-032": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "OWASP URL OS_Command_Injection_Prevention_Cheat_Sheet.html appears invented."
+  },
+  "E": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "OWASP URL likely invented; irrelevant defusedxml/DOCTYPE (XXE) advice."
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-033": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "D": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "E": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "F": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ }
+}

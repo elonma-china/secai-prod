@@ -164,7 +164,7 @@ async def test_orchestrator_keeps_specialist_tool_result_with_strict_ocr_errors(
     class Session:
         active_run_id = "run-1"
 
-        async def run(self, prompt):
+        async def run(self, prompt, *args, **kwargs):
             yield ToolCallEndEvent(tool_use_id="tool-1", tool_name="translation_specialist",
                                    result="Xin chào", is_error=False)
 

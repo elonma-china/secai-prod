@@ -1,0 +1,603 @@
+{
+  "info": {
+    "name": "SecAI Translation — Public Docker 8131",
+    "description": "API dịch qua gateway Docker cổng 8131. IP public xác định ngày 2026-10-09: 123.16.179.18. Import, mở Variables và gửi từng request. Không Run toàn bộ collection vì chứa request hủy và test lỗi có chủ đích. Upload: chọn file trong Body > form-data; không tự đặt Content-Type. job_id tự lưu từ upload gần nhất. Các endpoint dịch không yêu cầu token ở tầng API. Timeout Postman nên đặt 180000 ms. IP public có thể thay đổi: cập nhật base_url. Có 2 request chẩn đoán TXT sẵn, không cần chọn file.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://123.16.179.18:8131",
+      "type": "string"
+    },
+    {
+      "key": "text",
+      "value": "Kiểm tra nhật ký bảo mật.",
+      "type": "string"
+    },
+    {
+      "key": "source_lang",
+      "value": "vi",
+      "type": "string"
+    },
+    {
+      "key": "target_lang",
+      "value": "en",
+      "type": "string"
+    },
+    {
+      "key": "job_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "file_idempotency_key",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "image_idempotency_key",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 — Health và ngôn ngữ",
+      "item": [
+        {
+          "name": "Health Docker gateway",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/health",
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Các cặp ngôn ngữ v3 đang bật",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/ai/v3/translate/languages",
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAPI riêng v3",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/ai/v3/translate/openapi.json",
+            "description": ""
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 — Dịch text",
+      "item": [
+        {
+          "name": "Text v3 — JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v3/translate",
+            "description": "Một đầu phải là vi, hai ngôn ngữ khác nhau. Xem capabilities trước khi chọn cặp. Trung: zh-Hans.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"{{text}}\",\n  \"source_lang\": \"{{source_lang}}\",\n  \"target_lang\": \"{{target_lang}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { pm.test(\"Có translated_text\", () => pm.expect(pm.response.json().translated_text).to.be.a(\"string\").and.not.empty); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Text v3 — SSE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v3/translate/stream",
+            "description": "HTTP 200 chưa đủ: phải có event final, không có event error. Postman có thể hiển thị response sau khi stream kết thúc.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"{{text}}\",\n  \"source_lang\": \"{{source_lang}}\",\n  \"target_lang\": \"{{target_lang}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"SSE Content-Type\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/event-stream\"));",
+                  "pm.test(\"Có final, DONE và không có event error\", () => {",
+                  "    const text = pm.response.text();",
+                  "    pm.expect(text).to.match(/event:\\s*final/);",
+                  "    pm.expect(text).to.include(\"[DONE]\");",
+                  "    pm.expect(text).not.to.match(/event:\\s*error/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Text legacy — JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/translate",
+            "description": "Ví dụ Anh–Việt cũ.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Check the security log.\",\n  \"source_lang\": \"en\",\n  \"target_lang\": \"vi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { pm.test(\"Có translated_text\", () => pm.expect(pm.response.json().translated_text).to.be.a(\"string\").and.not.empty); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Text legacy — SSE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/translate/stream",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Check the security log.\",\n  \"source_lang\": \"en\",\n  \"target_lang\": \"vi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"SSE Content-Type\", () => pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/event-stream\"));",
+                  "pm.test(\"Có final, DONE và không có event error\", () => {",
+                  "    const text = pm.response.text();",
+                  "    pm.expect(text).to.match(/event:\\s*final/);",
+                  "    pm.expect(text).to.include(\"[DONE]\");",
+                  "    pm.expect(text).not.to.match(/event:\\s*error/);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 — Upload tệp và ảnh",
+      "item": [
+        {
+          "name": "Upload TXT / DOCX / DOC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{file_idempotency_key}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v2/translate/files",
+            "description": "Chọn file; hỗ trợ .txt, .docx, .doc, tối đa mặc định 10 MiB. DOC cần converter. Không nhận PDF. Không tự đặt Content-Type: Postman tự thêm multipart boundary. Key giữ nguyên khi retry; xóa giá trị biến key khi gửi tệp/ngôn ngữ mới. 202 chỉ xác nhận nhận job.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Chọn tệp trên máy bạn sau khi import."
+                },
+                {
+                  "key": "source_lang",
+                  "type": "text",
+                  "value": "{{source_lang}}"
+                },
+                {
+                  "key": "target_lang",
+                  "type": "text",
+                  "value": "{{target_lang}}"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"file_idempotency_key\")) {",
+                  "    const key = pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").toLowerCase();",
+                  "    pm.collectionVariables.set(\"file_idempotency_key\", key);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202 — upload được nhận\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) {",
+                  "    const job = pm.response.json();",
+                  "    pm.test(\"Job ID hợp lệ\", () => pm.expect(job.job_id).to.match(/^[0-9a-f]{32}$/));",
+                  "    pm.collectionVariables.set(\"job_id\", job.job_id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload PNG / JPG / JPEG",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Idempotency-Key",
+                "value": "{{image_idempotency_key}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v2/translate/images",
+            "description": "Chọn ảnh; cần OCR đang hoạt động. Trung ở v2 dùng zh, không phải zh-Hans. Không tự đặt Content-Type: Postman tự thêm multipart boundary. Key giữ nguyên khi retry; xóa giá trị biến key khi gửi tệp/ngôn ngữ mới. 202 chỉ xác nhận nhận job.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Chọn tệp trên máy bạn sau khi import."
+                },
+                {
+                  "key": "source_lang",
+                  "type": "text",
+                  "value": "{{source_lang}}"
+                },
+                {
+                  "key": "target_lang",
+                  "type": "text",
+                  "value": "{{target_lang}}"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"image_idempotency_key\")) {",
+                  "    const key = pm.variables.replaceIn(\"{{$guid}}\").replace(/-/g, \"\").toLowerCase();",
+                  "    pm.collectionVariables.set(\"image_idempotency_key\", key);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202 — upload được nhận\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) {",
+                  "    const job = pm.response.json();",
+                  "    pm.test(\"Job ID hợp lệ\", () => pm.expect(job.job_id).to.match(/^[0-9a-f]{32}$/));",
+                  "    pm.collectionVariables.set(\"job_id\", job.job_id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 — Job: tiến độ, kết quả, hủy",
+      "item": [
+        {
+          "name": "Xem tiến độ — gọi lại đến khi succeeded",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/ai/v2/translate/jobs/{{job_id}}",
+            "description": "job_id tự lưu từ upload gần nhất. failed: xem error.code; cancelled: đã hủy. Không upload lại để polling."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!/^[0-9a-f]{32}$/.test(pm.collectionVariables.get(\"job_id\") || \"\")) {",
+                  "    throw new Error(\"Chưa có job_id: gửi upload thành công trước hoặc điền job_id trong Variables.\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { pm.test(\"Job chưa thất bại\", () => pm.expect(pm.response.json().status).not.to.eql(\"failed\")); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lấy kết quả — chỉ khi succeeded",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/ai/v2/translate/jobs/{{job_id}}/result",
+            "description": "Trả 409 nếu chưa sẵn sàng hoặc job lỗi/đã hủy. Kết quả lưu mặc định 24 giờ sau khi kết thúc."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!/^[0-9a-f]{32}$/.test(pm.collectionVariables.get(\"job_id\") || \"\")) {",
+                  "    throw new Error(\"Chưa có job_id: gửi upload thành công trước hoặc điền job_id trong Variables.\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) { pm.test(\"Có translated_text\", () => pm.expect(pm.response.json().translated_text).to.be.a(\"string\").and.not.empty); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Hủy job — chỉ gửi khi muốn hủy",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/ai/v2/translate/jobs/{{job_id}}",
+            "description": "Hủy job_id hiện tại. Job succeeded/failed trả 409. queued/running/cancelled nhận 202."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!/^[0-9a-f]{32}$/.test(pm.collectionVariables.get(\"job_id\") || \"\")) {",
+                  "    throw new Error(\"Chưa có job_id: gửi upload thành công trước hoặc điền job_id trong Variables.\");",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202 — ghi nhận hủy\", () => pm.response.to.have.status(202));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 — Chẩn đoán lỗi tên tệp (chạy từng request)",
+      "item": [
+        {
+          "name": "Tên đúng aaa.txt — kỳ vọng 202",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data; boundary=secai-postman-diagnostic-boundary",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v2/translate/files",
+            "description": "Không cần chọn tệp: có sẵn 15 byte TXT, header mô phỏng .NET. Tạo job thật và lưu job_id. Xem tiến độ/kết quả hoặc hủy sau thử.",
+            "body": {
+              "mode": "raw",
+              "raw": "--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=file; filename=aaa.txt; filename*=utf-8''aaa.txt\r\nContent-Type: text/plain\r\n\r\nHello world !!!\r\n--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=\"source_lang\"\r\n\r\nen\r\n--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=\"target_lang\"\r\n\r\nvi\r\n--secai-postman-diagnostic-boundary--\r\n"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 202 — upload được nhận\", () => pm.response.to.have.status(202));",
+                  "if (pm.response.code === 202) {",
+                  "    const job = pm.response.json();",
+                  "    pm.test(\"Job ID hợp lệ\", () => pm.expect(job.job_id).to.match(/^[0-9a-f]{32}$/));",
+                  "    pm.collectionVariables.set(\"job_id\", job.job_id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tên chứa thêm dấu ngoặc kép — kỳ vọng 415",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "multipart/form-data; boundary=secai-postman-diagnostic-boundary",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/ai/v2/translate/files",
+            "description": "Cố ý gửi giá trị tên tệp chứa dấu ngoặc kép, để tái hiện UNSUPPORTED_FILE_TYPE. Không phải request dùng để dịch.",
+            "body": {
+              "mode": "raw",
+              "raw": "--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\\\"aaa.txt\\\"\"\r\nContent-Type: text/plain\r\n\r\nHello world !!!\r\n--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=\"source_lang\"\r\n\r\nen\r\n--secai-postman-diagnostic-boundary\r\nContent-Disposition: form-data; name=\"target_lang\"\r\n\r\nvi\r\n--secai-postman-diagnostic-boundary--\r\n"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 415\", () => pm.response.to.have.status(415));",
+                  "pm.test(\"UNSUPPORTED_FILE_TYPE\", () => pm.expect(pm.response.json().error.code).to.eql(\"UNSUPPORTED_FILE_TYPE\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

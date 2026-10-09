@@ -1,0 +1,15 @@
+{
+  "collection": "cve_kb_hybrid",
+  "batch": "knowledge-2026-10-07",
+  "chunks": 8386,
+  "skipped_unchanged": 0,
+  "embedding_model": "DuyTa/sec-embedding",
+  "embedding_url": "http://192.165.134.28:10466",
+  "embed_clipped": {
+    "owasp-cs:C-Based_Toolchain_Hardening_Cheat_Sheet#compiler-and-linker-11": 800,
+    "owasp-cs:XML_Security_Cheat_Sheet#dealing-with-invalid-xml-documents-38": 600,
+    "owasp-cs:XML_Security_Cheat_Sheet#dealing-with-invalid-xml-documents-40": 800,
+    "owasp-cs:XSS_Filter_Evasion_Cheat_Sheet#character-escape-sequences-2": 800
+  },
+  "finished": "2026-10-07T09:39:06"
+}
