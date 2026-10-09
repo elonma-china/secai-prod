@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     # Dense+sparse hybrid collection (legacy dense-only: cve_kb).
     qdrant_collection: str = "cve_kb_hybrid"
+    # Optional advisory/patch collections queried only for exact, linked CVE refs.
+    # Empty by default so deployments opt in after provisioning the collection.
+    qdrant_kb_supplemental_collections: str = ""
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
     embedding_api_url: str = ""

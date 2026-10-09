@@ -20,7 +20,8 @@ from ..config import get_settings
 from ..poc.inject import has_real_code_evidence, has_synthesis_evidence, section1_has_body
 from ..poc.prefetch import (
     COVERAGE_CLOSES_SEARCH_HOOK, get_session_coverage, get_session_cve_known,
-    get_session_real_code_evidence, get_session_synthesis_evidence,
+    get_session_kb_searched, get_session_real_code_evidence,
+    get_session_synthesis_evidence,
 )
 from ..security import wrap_untrusted_content
 
@@ -221,24 +222,19 @@ class RequireSearchBeforeAnswerHook:
         return HookResult.force_continue(feedback, reason="search_before_answer_unsatisfied")
 
 
-class RequireKbSearchBeforeSynthesisHook:
-    """Require an exploit-research run to have called `qdrant_search` or `neo4j_search` at
-    least once before answering — UNLESS deterministic prefetch already confirmed real
-    fetched PoC code (coverage == "enough": Mục 1 will be the real-code tier regardless of
-    what the model looks up, see poc/inject.py::enforce_section1's T1).
+_EXPLOIT_KB_SEARCH_EXHAUSTED = (
+    "## 1. Mã Khai thác (PoC) và Payload\n\n"
+    "Không thể xác thực thông tin lỗ hổng từ cơ sở dữ liệu nội bộ (KB). "
+    "Hệ thống không thể sinh mã khai thác khi chưa có bằng chứng xác thực từ cơ sở dữ liệu."
+)
 
-    Closes a gap `RequireSearchBeforeAnswerHook` (poc_search-only) doesn't cover: when the
-    PoC catalog is empty, `prefetch_evidence`'s own deterministic search already satisfies
-    THAT hook's requirement (coverage in COVERAGE_CLOSES_SEARCH_HOOK), so a model that skips
-    its own tool calls entirely was free to finalize straight from parametric memory. That
-    was safe under the old binary Section-1 contract (always deterministic — real code or a
-    fixed sentence, never the model's own words). It stopped being safe once
-    `enforce_section1` started trusting the model's own Section 1 text whenever the CVE is
-    confirmed real (T3, synthesize-from-CVE-definition) — observed live: with nothing
-    forcing a KB lookup, the model fabricated CWE/CVSS content in Mục 3 without calling ANY
-    tool. This hook is the floor for that: it doesn't verify the model's synthesized content
-    is faithful to what the KB actually said (same trust boundary as everywhere else in this
-    module — see evidence_policy in prompts/exploit.md), only that it looked at all."""
+
+class RequireKbSearchBeforeSynthesisHook:
+    """Require usable internal KB context before trusting synthesized exploit content.
+
+    Real fetched PoC code can bypass this synthesis requirement. Metadata-only
+    prefetch and failed or empty tool attempts cannot.
+    """
 
     name = "require_kb_search_before_synthesis"
 
@@ -250,17 +246,36 @@ class RequireKbSearchBeforeSynthesisHook:
         self._attempts: OrderedDict[str, int] = OrderedDict()
 
     async def on_pre_tool_use(self, ctx: PreToolUseContext) -> None:
-        if ctx.tool_name in self.tools:
-            self._searched[ctx.run_id] = True
-            self._searched.move_to_end(ctx.run_id)
-            _trim(self._searched)
+        # Attempts do not establish evidence; inspect the actual tool result instead.
+        return None
+
+    async def on_post_tool_use(self, ctx: PostToolUseContext) -> None:
+        if ctx.tool_name not in self.tools or ctx.result is None or ctx.result.is_error:
+            return None
+        content = (ctx.result.content or "").strip()
+        if not content or content.startswith((
+            "Không tìm thấy kết quả trong knowledge base.",
+            "No results returned from the graph database.",
+            "No results found",
+            "No CVE/CWE/CAPEC/Technique/Tactic ID or product name found",
+        )):
+            return None
+        from secai_gateway.retrieval.kb_context import has_technical_description
+        if not has_technical_description(content):
+            return None
+        self._searched[ctx.run_id] = True
+        self._searched.move_to_end(ctx.run_id)
+        _trim(self._searched)
         return None
 
     async def on_before_final_answer(self, ctx: BeforeFinalAnswerContext) -> HookResult | None:
         if _profile_of(ctx) != self.profile:
             return None
-        if get_session_coverage(_session_id_of(ctx)) == "enough":
+        session_id = _session_id_of(ctx)
+        if get_session_real_code_evidence(session_id):
             return None  # real fetched PoC code already confirmed — T1 applies regardless
+        if get_session_kb_searched(session_id):
+            return None  # deterministic prefetch already supplied usable internal KB context
 
         run_id = ctx.run_id
         if run_id in self._searched:
@@ -269,7 +284,10 @@ class RequireKbSearchBeforeSynthesisHook:
 
         attempts = self._attempts.get(run_id, 0)
         if attempts >= self.max_retries:
-            return None
+            return HookResult.mutate(
+                final_text=_EXPLOIT_KB_SEARCH_EXHAUSTED,
+                reason="kb_search_before_synthesis_exhausted",
+            )
         self._attempts[run_id] = attempts + 1
         self._attempts.move_to_end(run_id)
         _trim(self._attempts)
