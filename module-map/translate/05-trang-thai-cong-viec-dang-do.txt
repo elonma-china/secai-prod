@@ -1,0 +1,112 @@
+Trạng thái công việc kiểm thử + sửa lỗi dịch — cập nhật lúc 2026-10-09 18:xx UTC
+Mục đích file này: cho người/agent sau đọc biết đang làm tới đâu, phần nào xong, phần nào CHƯA xử lý — để không phải dò lại từ đầu results/2026-10-09-03.txt (922 dòng).
+
+================================================================
+1. ĐÃ XONG — xác nhận thật qua UI, có bằng chứng
+================================================================
+
+a) Phiên test đầy đủ 68/68 case: results/2026-10-09-03.txt
+   Đạt 35 | Không đạt 23 | Bị chặn 10 (thiếu fixture) | Chưa chạy 0
+
+b) Fix round 1 (nhánh fix/translate-bugs-2026-10-09, 3 commit 0656088/b77a464/5493394)
+   — deploy lên secai-translation-gateway + secai-translation-worker lúc ~17:21 UTC
+   — hồ sơ: /home/ict/secai-releases/translate-bugfix-20261010/
+   Kết quả retest 8 case:
+     FILE-vi-zh-Hans: FAIL -> PASS (fix zh-Hans alias ĐÚNG, khắc phục triệt để lỗi 400 upload file)
+     FILE-zh-Hans-vi: FAIL(400 upload) -> FAIL(lý do khác: TOKEN_INTEGRITY_FAILED) — hết lỗi 400 nhưng còn lỗi khác
+     TXT-DIRECT-vi-ja, TXT-DIRECT-vi-zh-Hans, FILE-vi-en, FILE-ja-vi, FILE-ko-vi, FILE-vi-fr: không cải thiện
+
+c) Agent Opus điều tra sâu — tìm đúng nguyên nhân gốc (khác hẳn giả thuyết ban đầu):
+   - Bug A (TOKEN_INTEGRITY_FAILED): lỗi so sánh literal span bị dính từ ASCII đứng trước IP/version
+     ("from 198.51.100.23" bị coi là 1 literal) -> bản dịch ĐÚNG vẫn luôn fail y hệt mọi lần ở đúng
+     chunk có literal. KHÔNG phải do model không ổn định như fix round 1 (b77a464) tưởng.
+   - Bug B (mất chữ Hán vi->ja/zh-Hans): IAS KHÔNG gọi v3 cho ô dịch trực tiếp — gọi /ai/translate
+     legacy trên secai-docker-gateway (gateway chat chính), nơi có bộ lọc remove_chinese_content()
+     xóa sạch mọi ký tự Hán, kể cả khi người dùng chủ động chọn đích zh/ja.
+   Nhánh: fix/translate-bugs-round2-2026-10-10, 2 commit 79628a3 (bug A) + fd5444f (bug B)
+
+d) Fix round 2 — CHỈ bug A (79628a3), deploy lên secai-translation-worker lúc ~18:05 UTC
+   — hồ sơ: /home/ict/secai-releases/translate-bugfix-round2-20261010/
+   Retest 5 case (có ảnh chụp UI thật, không chỉ API):
+     FILE-vi-en: PASS (hết hẳn)
+     FILE-vi-fr: PASS (hết hẳn)
+     FILE-ko-vi: PASS (hết hẳn)
+     FILE-ja-vi: VẪN FAIL (TOKEN_INTEGRITY_FAILED ở chunk 2/18)
+     FILE-zh-Hans-vi: VẪN FAIL (TOKEN_INTEGRITY_FAILED ở chunk 2/18)
+   Ảnh chụp: module-map/translate/results/retest-FILE-{vi-en,vi-fr,ja-vi,ko-vi,zh-Hans-vi}-round2.png
+   Nhận xét của agent test: không có pattern ngôn ngữ rõ ràng (ko-vi nguồn không phải tiếng Việt
+   vẫn PASS, ja-vi cùng cấu trúc vẫn FAIL) — CHƯA rõ nguyên nhân phần còn lại.
+
+================================================================
+2. CHƯA XỬ LÝ / CÒN TỒN ĐỌNG — việc cần làm tiếp
+================================================================
+
+a) TOKEN_INTEGRITY_FAILED vẫn còn ở FILE-ja-vi và FILE-zh-Hans-vi sau fix round 2.
+   Chưa điều tra lý do vì sao 2 case này khác biệt (không rõ pattern). Cần giao tiếp cho agent
+   Opus (hoặc tương đương) điều tra sâu thêm — CHƯA làm.
+
+b) 5 case FILE-* khác từng FAIL vì TOKEN_INTEGRITY_FAILED ở phiên gốc (trước fix round 2) nhưng
+   CHƯA được retest sau khi deploy round 2:
+     FILE-fr-vi, FILE-vi-de, FILE-de-vi, FILE-vi-es, FILE-es-vi
+   Chưa biết các case này đã PASS theo fix round 2 hay vẫn FAIL như FILE-ja-vi/FILE-zh-Hans-vi.
+   CẦN RETEST — chưa làm.
+
+c) IMG-vi-zh-Hans, IMG-zh-Hans-vi — lỗi HTTP 400 lúc upload ẢNH (cùng họ lỗi với FILE-vi-zh-Hans
+   đã fix ở file, nhưng phần ẢNH CHƯA được retest sau fix #1/round 1). Nhiều khả năng đã hết lỗi
+   400 giống file, nhưng CHƯA xác nhận thật — CẦN RETEST qua UI, chưa làm.
+
+d) Bug B (fd5444f, mất chữ Hán ở /ai/translate legacy) — ĐÃ SỬA CODE, COMMIT, nhưng
+   CHỦ ĐỘNG CHƯA BUILD/DEPLOY theo đúng yêu cầu người dùng (gác nhóm lỗi "chất lượng" lại đợt
+   sau). Thêm lý do kỹ thuật: cần build lại secai-docker-gateway (gateway chat chính, KHÁC 2
+   container dịch), và working tree hiện có code CHƯA COMMIT của một phiên/agent khác trong
+   src/secai_gateway/api/messages.py (cũng về chủ đề alias zh-Hans cho endpoint legacy) — không
+   động vào để tránh giẫm lên việc người khác đang làm dở. Khi nào được giao tiếp tục, PHẢI kiểm
+   tra lại git status khu vực messages.py trước, xem code đó đã được commit/xử lý xong chưa.
+
+e) Nhóm lỗi "chất lượng" khác — CHỦ ĐỘNG CHƯA ĐỘNG TỚI theo yêu cầu người dùng, chưa điều tra:
+   - OCR sai trên ocr-vi.png: "khỏi mạng" -> "khởi mang", lặp ở 8/8 case IMG-vi-* (nguồn Việt),
+     lan sang dịch sai nghĩa ở 6/8 ngôn ngữ đích (en/fr/de/es/ru/ar); ja/ko vẫn giữ nghĩa chấp
+     nhận được nhưng vẫn tính FAIL theo tiêu chí khớp OCR.
+   - OCR sai trên ocr-ar.png: "يجب" -> "ي Jeb" (lẫn ký tự Latin), lan sang dịch tiếng Việt thành
+     "trên Jeb" vô nghĩa.
+   - LƯU Ý: cả 2 ảnh trên là ẢNH TỰ RENDER bằng Pillow (không phải ảnh thật), nên trước khi báo
+     đây là bug OCR engine, cần loại trừ khả năng chính ảnh test render chưa đủ rõ nét ở đúng 2
+     từ đó (lỗi fixture, không phải lỗi sản phẩm) — CHƯA kiểm tra giả thuyết này.
+   - vi->ja/vi->zh-Hans dịch trực tiếp mất nội dung: NGUYÊN NHÂN ĐÃ RÕ (mục 1c Bug B), fix đã có
+     sẵn (fd5444f) nhưng chưa deploy — xem mục d) ở trên.
+
+f) 10 case BLOCKED do thiếu fixture, CHƯA chuẩn bị dữ liệu:
+     FILE-04-UNSUPPORTED (pdf/xls/xlsx/ppt/pptx), IMG-03-NOTEXT (ảnh không chữ),
+     BATCH-01, BATCH-02, CANCEL-01, RESTORE-01, NEG-01, NEG-02, NEG-03, NEG-04
+   Xem 04-test-data.json để biết input cần cấp (preparation_status: needs_file/needs_files).
+
+================================================================
+3. GIT / RELEASE — tra cứu nhanh
+================================================================
+
+Nhánh:
+  fix/translate-bugs-2026-10-09       — 3 commit, round 1, ĐÃ DEPLOY (gateway + worker)
+  fix/translate-bugs-round2-2026-10-10 — 2 commit:
+      79628a3 (bug A, TOKEN_INTEGRITY_FAILED)  — ĐÃ DEPLOY (chỉ worker)
+      fd5444f (bug B, mất chữ Hán)             — CHƯA DEPLOY, cố ý gác lại
+
+Release/rollback (private, ngoài Git, /home/ict/secai-releases/):
+  translate-bugfix-20261010/          — rollback.sh cho round 1 (gateway+worker)
+  translate-bugfix-round2-20261010/   — rollback.sh cho round 2 (chỉ worker)
+
+Container đang chạy thật (production):
+  secai-docker-gateway        — KHÔNG đổi, vẫn bản cũ (chưa có bug B fix)
+  secai-translation-gateway   — bản round 1 (zh-Hans alias + guard gần-rỗng v3, không áp dụng
+                                 cho /ai/translate legacy nên không liên quan bug B)
+  secai-translation-worker    — bản round 2 (có cả fix round 1 lẫn bug A round 2)
+
+================================================================
+4. GỢI Ý THỨ TỰ LÀM TIẾP (không bắt buộc, chỉ để tham khảo)
+================================================================
+1. Retest 5 case FILE-fr-vi/vi-de/de-vi/vi-es/es-vi (mục 2b) — nhanh, tận dụng luôn lần deploy
+   round 2 đã có, chỉ cần test qua UI thật + chụp ảnh.
+2. Retest IMG-vi-zh-Hans/zh-Hans-vi (mục 2c) — cũng nhanh, dùng lần deploy round 1 đã có.
+3. Giao Opus điều tra tiếp vì sao FILE-ja-vi/zh-Hans-vi vẫn TOKEN_INTEGRITY_FAILED sau fix round 2
+   (mục 2a) — việc sâu hơn, cần thời gian.
+4. Các mục d/e/f (bug B deploy, OCR, fixture thiếu) — đợi người dùng chỉ định rõ mới làm, vì đã
+   bị gác lại có chủ đích hoặc cần quyết định/dữ liệu từ người dùng.

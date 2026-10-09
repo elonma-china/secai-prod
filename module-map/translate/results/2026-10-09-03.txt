@@ -1,0 +1,922 @@
+PHIÊN KIỂM THỬ DỊCH SECAI — 2026-10-09 (phiên 03)
+
+Môi trường: https://ias.id.vn (production)
+Tài khoản: dev201
+Công cụ: mcp__playwright__browser_* (trình duyệt riêng, đăng nhập 1 lần, giữ session suốt phiên)
+Trang: https://ias.id.vn/ai/translate (tab Dịch trực tiếp / Dịch tệp và hình ảnh)
+Dữ liệu case: 04-test-data.json (68 case)
+Quy tắc PASS: 03-tieu-chi-pass.txt
+
+TỔNG KẾT PHIÊN (ĐÃ HOÀN TẤT 68/68 CASE)
+Đạt: 35/68 UC (PASS)
+Không đạt: 23/68 UC (FAIL)
+Bị chặn: 10/68 UC (BLOCKED, thiếu fixture)
+Chưa chạy: 0/68 UC
+35 + 23 + 10 = 68
+(Số liệu tính theo kết quả CUỐI CÙNG mỗi case: với 8 case có retest sau deploy fix, dùng kết quả retest; FILE-vi-zh-Hans là case duy nhất đổi FAIL->PASS nhờ fix #1, 7 case retest còn lại vẫn FAIL như trước)
+
+Giữa phiên, điều phối deploy 3 fix lên production (2026-10-09 ~17:21 UTC) và yêu cầu RETEST ngay 8 case liên quan — xem các block "(RETEST)" trong chi tiết bên dưới, giữ nguyên cả kết quả gốc lẫn kết quả retest. Số liệu tổng kết ở trên tính theo kết quả CUỐI CÙNG (retest) cho 8 case đó; 1/8 case (FILE-vi-zh-Hans) đổi từ FAIL->PASS nhờ fix, 7/8 case còn lại vẫn FAIL sau fix (ghi nhận trung thực, không suy diễn đã hết lỗi).
+
+Danh sách UC lỗi (FAIL/BLOCKED) — cập nhật dần:
+  TXT-DIRECT-vi-zh-Hans — BE (nghi vấn) — mất gần như toàn bộ nội dung dịch, chỉ còn dấu câu + literal (metadata.chunks=4)
+  TXT-DIRECT-vi-ja — BE (nghi vấn) — mất phần lớn nội dung + 1 đoạn hỏng thành dấu câu tiếng Trung sai ngôn ngữ (cùng pattern với case trên, nghi vấn chunk thứ 3 lỗi cố định)
+  FILE-vi-en — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED (tái diễn, đã thấy ở phiên trước)
+  FILE-vi-zh-Hans — ĐÃ SỬA, không còn trong danh sách lỗi — ban đầu HTTP 400 ngay lúc upload, nhưng RETEST sau fix #1 (2026-10-09 ~17:21 UTC) cho kết quả PASS hoàn toàn, xem block RETEST
+  FILE-zh-Hans-vi — BE (xác nhận) — ban đầu HTTP 400 lúc upload; sau fix #1 upload đã thành công nhưng job rơi vào lỗi khác (TOKEN_INTEGRITY_FAILED) — xem block RETEST, vẫn tính FAIL
+  FILE-ja-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk (lần thứ 3 quan sát lỗi này trên fixture ja-1000.txt)
+  FILE-ko-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  FILE-vi-fr — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  FILE-fr-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  FILE-vi-de — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk, retest lần 2 cũng fail giống hệt (lỗi đã trở thành thường trực từ ~16:48)
+  FILE-de-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  FILE-vi-es — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  FILE-es-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED, dừng 2/18 chunk
+  (Ghi chú tổng hợp: TOKEN_INTEGRITY_FAILED xảy ra 11 lần trong phiên, tất cả dừng đúng 2/18 chunk; 3 job đầu phiên (FILE-en-vi/vi-ja/vi-ko) PASS, nhưng từ ~16:48 trở đi (FILE-ko-vi tới FILE-es-vi) fail liên tục kể cả retest — nghi vấn lỗi hệ thống/tài nguyên server theo thời điểm, không phải do ngôn ngữ cụ thể. FILE-vi-ru/ru-vi/vi-ar/ar-vi chạy sau đó lại PASS, nên không phải downtime toàn phần mà có thể là race condition khi nhiều job liên tiếp)
+  IMG-vi-en — BE (nghi vấn, OCR) — OCR đọc nhầm "khỏi mạng" thành "khởi mang" trên ảnh ocr-vi.png, lan sang bản dịch sai nghĩa hoàn toàn ("initiate an internal shutdown" thay vì "isolate...from network")
+  IMG-vi-zh-Hans — BE (xác nhận) — HTTP 400 ngay lúc upload ở endpoint /api/ais/v2/translate/images (cùng họ lỗi với FILE-vi-zh-Hans, chưa retest ảnh sau fix #1)
+  IMG-zh-Hans-vi — BE (xác nhận) — HTTP 400 ngay lúc upload, zh-Hans là nguồn, cùng họ lỗi trên
+  IMG-vi-ja — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang" (ảnh ocr-vi.png), bản dịch tiếng Nhật lần này vẫn giữ nghĩa gần đúng nhưng vẫn tính FAIL ở bước OCR theo quy tắc
+  IMG-vi-ko — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang"
+  IMG-vi-fr — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang", dịch sai nghĩa ("lancer...une procédure interne" thay vì cô lập khỏi mạng)
+  IMG-vi-de — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang", dịch sai nghĩa ("den internen Betrieb einstellen" thay vì cô lập khỏi mạng)
+  IMG-vi-es — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang", dịch sai nghĩa ("iniciar...las medidas internas" thay vì cô lập khỏi mạng)
+  IMG-vi-ru — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang", dịch sai nghĩa ("начать внутренние действия" thay vì cô lập khỏi mạng)
+  IMG-vi-ar — BE (nghi vấn, OCR) — cùng lỗi OCR "khởi mang", dịch sai nghĩa ("تشغيل النظام الداخلي" thay vì cô lập khỏi mạng)
+  IMG-ar-vi — BE (nghi vấn, OCR) — lỗi OCR MỚI/khác trên ảnh ocr-ar.png: từ "يجب" (phải) bị đọc nhầm thành "ي Jeb" (ký tự Latin vô nghĩa), lan sang bản dịch tạo cụm "trên Jeb" sai/vô nghĩa
+  (Ghi chú tổng hợp ảnh: ảnh dùng chung ocr-vi.png có lỗi OCR xác định "khỏi mạng"->"khởi mang" ở MỌI case có vi làm nguồn (8/8 case IMG-vi-*), hậu quả dịch sai nghĩa khác nhau tùy ngôn ngữ đích — 6/8 sai nghĩa rõ ràng (en/fr/de/es/ru/ar), 2/8 vẫn giữ được nghĩa chấp nhận được (ja/ko) nhưng vẫn FAIL theo tiêu chí khớp OCR. Đây là lỗi OCR cố định/deterministic trên 1 ảnh cụ thể, khác hẳn TOKEN_INTEGRITY_FAILED (lỗi flaky theo thời điểm) — cần đội BE xử lý riêng biệt, không gộp chung nguyên nhân.)
+  FILE-04-UNSUPPORTED, IMG-03-NOTEXT, BATCH-01, BATCH-02, CANCEL-01, RESTORE-01, NEG-01, NEG-02, NEG-03, NEG-04 — Dữ liệu test — thiếu file/ảnh mẫu (preparation_status needs_file/needs_files), xem 04-test-data.json
+
+=== CHI TIẾT TỪNG CASE ===
+
+Case id / type: TXT-01 / dịch trực tiếp en-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: "Hello"
+output_gold: "Xin chào" (accepted_variants: Xin chào, Chào)
+Output thực tế quan sát trên UI (nguyên văn): "Xin chào"
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-02 / dịch trực tiếp vi-en
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: "Xin chào"
+output_gold: "Hello" (accepted_variants: Hello, Hi)
+Output thực tế quan sát trên UI (nguyên văn): "Hello"
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-03 / dịch trực tiếp en-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: "Do not delete the logs. Check CVE-2024-12345 on 192.0.2.10, version 1.2.3. Open https://example.com/security and run `curl -I https://example.com`. The timeout is 30 seconds."
+output_gold: preserve_literals=[CVE-2024-12345, 192.0.2.10, 1.2.3, https://example.com/security, curl -I https://example.com], nghĩa câu đúng
+Output thực tế quan sát trên UI (nguyên văn): "Đừng xóa nhật ký. Kiểm tra CVE-2024-12345 trên 192.0.2.10, phiên bản 1.2.3. Mở https://example.com/security và chạy `curl -I https://example.com`. Thời gian chờ là 30 giây."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (toàn bộ 5 literal giữ nguyên 100%, nghĩa câu đúng)
+
+Case id / type: TXT-05-EMPTY / dịch trực tiếp en-vi (validation)
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: "   " (chỉ khoảng trắng)
+output_gold: text=null, match_rule="Phải bị chặn/báo lỗi, không tạo bản dịch nào."
+Output thực tế quan sát trên UI (nguyên văn): Bấm Dịch không phát sinh request mới tới /api/ais/translate (xác nhận qua browser_network_requests — vẫn chỉ 3 request translate của TXT-01/02/03, không có request thứ 4); ô Kết quả dịch giữ nguyên nội dung của case TXT-03 trước đó, không tạo bản dịch mới. console_messages: 0 message (không có log lỗi hiển thị).
+Có lỗi/overlay trên màn hình không: Không thấy thông báo lỗi hiển thị trên UI (chặn âm thầm ở FE, không gửi lên BE)
+Kết luận: PASS
+Lý do: thỏa điều kiện "không tạo bản dịch nào" của output_gold; ghi chú UX: không có toast/message báo lý do cho người dùng, nên cân nhắc cải thiện nhưng không làm FAIL theo quy tắc hiện tại.
+
+Case id / type: TXT-DIRECT-vi-en / dịch trực tiếp vi-en
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt về quy trình ứng cứu sự cố 5 bước (giữ IP 198.51.100.23, CVE-2024-21412, version 3.4.1, URL https://portal.noi-bo.example.com/api/v1/upload)
+output_gold: bản dịch tiếng Anh tương ứng (xem 04-test-data.json)
+Output thực tế quan sát trên UI (nguyên văn, 2670 ký tự): "When a small or medium-sized enterprise detects abnormal signs on its network system, the incident response team must follow a five-step process: identification, containment, eradication, recovery, and lessons learned... No system is absolutely secure, but a clear and regularly practiced incident response process will help minimize downtime and damage when an incident actually occurs." (toàn văn khớp nghĩa đầy đủ 5 đoạn, xem evaluate log)
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ, giữ đúng literal IP/CVE/version/URL, đúng ngôn ngữ đích, không thiếu đoạn)
+
+Case id / type: TXT-DIRECT-en-vi / dịch trực tiếp en-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Anh về quy trình ứng cứu sự cố 5 bước (cùng nội dung IP/CVE/version/URL)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2782 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện hoạt động bất thường trên mạng của mình... Không hệ thống nào hoàn toàn an toàn, nhưng một quy trình phản ứng sự cố rõ ràng được diễn tập thường xuyên giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ 5 đoạn, giữ đúng IP/CVE/version/URL, đúng tiếng Việt, không thiếu ý)
+
+Case id / type: TXT-DIRECT-vi-zh-Hans / dịch trực tiếp vi-zh-Hans
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt về quy trình ứng cứu sự cố 5 bước (cùng văn bản đã dùng cho vi-en)
+output_gold: bản dịch tiếng Trung giản thể tương ứng (xem 04-test-data.json)
+Output thực tế quan sát trên UI (nguyên văn, 160 ký tự, kiểm bằng codePointAt xác nhận KHÔNG có ký tự Hán nào, chỉ có dấu câu Trung + literal còn giữ): "，：、、、。，、Web ，，。，、 IP ，。\n\n， 198.51.100.23  3.4.1  CVE-2024-21412。 https://portal.noi-bo.example.com/api/v1/upload 。，， IP ，，，。\n\n：。，，，，。，。\n\n，、，。，。\n\n，：、、、。，，。、，。，，。"
+Có lỗi/overlay trên màn hình không: Không có lỗi/overlay hiển thị trên UI — job báo hoàn tất bình thường, nhưng nội dung trả về gần như mất trắng (chỉ còn dấu câu tiếng Trung + các literal IP/CVE/version/URL/"Web", không còn một từ tiếng Trung nào)
+Kết luận: FAIL
+Lý do: Mất gần như toàn bộ nội dung dịch — output không truyền đạt được nghĩa gốc, chỉ còn khung dấu câu trống và vài literal, hoàn toàn không khớp output_gold.
+Nguyên nhân:
+  - Loại: BE (nghi vấn — có endpoint cụ thể nhưng không có error.code; response 200 "thành công" nhưng nội dung hỏng)
+  - Endpoint: POST https://ias.id.vn/api/ais/translate (request thứ 28 trong phiên, response 200)
+  - Response body nguyên văn: {"translated_text":"，：、、、。，、Web ，，。，、 IP ，。\n\n， 198.51.100.23  3.4.1  CVE-2024-21412。 https://portal.noi-bo.example.com/api/v1/upload 。，， IP ，，，。\n\n：。，，，，。，。\n\n，、，。，。\n\n，：、、、。，，。、，。，，。","metadata":{"run_id":null,"profile":"translate","tool_registry":[],"chunks":4}}
+  - Ghi chú: metadata.chunks=4 (input dài bị chia 4 chunk để dịch) và metadata.run_id=null — nghi vấn lỗi xảy ra trong bước ghép/dịch từng chunk sang zh-Hans làm rơi mất nội dung thực, chỉ giữ lại dấu câu/literal. Cần agent sửa tra tiếp trong code dịch chunk (multilang/routes.py hoặc dispatcher liên quan theo 01-api-va-luong-xu-ly.txt).
+
+Case id / type: TXT-DIRECT-zh-Hans-vi / dịch trực tiếp zh-Hans-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Trung giản thể (bản dịch tham chiếu của văn bản ứng cứu sự cố)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2855 ký tự): "Khi một doanh nghiệp vừa và nhỏ phát hiện dấu hiệu bất thường trong hệ thống mạng... Không có hệ thống nào là tuyệt đối an toàn, nhưng một quy trình phản ứng sự kiện rõ ràng và được diễn tập định kỳ sẽ giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự kiện thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ 5 đoạn, giữ đúng IP/CVE/version/URL, đúng tiếng Việt, không thiếu ý — xác nhận lỗi TXT-DIRECT-vi-zh-Hans chỉ xảy ra một chiều vi→zh-Hans, chiều ngược lại bình thường)
+
+Case id / type: TXT-DIRECT-vi-ja / dịch trực tiếp vi-ja
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt về quy trình ứng cứu sự cố 5 bước (cùng văn bản)
+output_gold: bản dịch tiếng Nhật tương ứng (xem 04-test-data.json)
+Output thực tế quan sát trên UI (689 ký tự, rất ngắn so với bản gốc ~2670 ký tự): "がネットワークシステムになをした、インシデントチームは5のプロセス（、じめ、、、）にうがある。...（mất rất nhiều từ nội dung, chỉ còn trợ từ/khung câu）...\n\n。，，，，。，。\n\n，、，。 72 ，。\n\nついに、のステップでは、すべてのインシデントがなレポートとしてされます：、じめ、、、そしてすべきです。..."
+Có lỗi/overlay trên màn hình không: Không có lỗi/overlay hiển thị — job báo hoàn tất, nhưng nội dung dịch mất phần lớn từ nội dung (danh từ/động từ bị rơi, chỉ còn trợ từ), và đoạn thứ 3 (tương ứng đoạn "Bước loại bỏ...") bị thay hoàn toàn bằng dấu câu tiếng Trung "。，，，，。，。\n\n，、，。 72 ，。" giống hệt lỗi quan sát ở TXT-DIRECT-vi-zh-Hans.
+Kết luận: FAIL
+Lý do: Output không truyền đạt được nghĩa gốc — mất phần lớn nội dung ở mọi đoạn, và một đoạn bị hỏng hoàn toàn thành dấu câu sai ngôn ngữ (tiếng Trung lẫn vào bản tiếng Nhật).
+Nguyên nhân:
+  - Loại: BE (nghi vấn — response 200, không có error.code, nhưng nội dung hỏng)
+  - Endpoint: POST https://ias.id.vn/api/ais/translate (request thứ 30 trong phiên)
+  - metadata.chunks=4, metadata.run_id=null — giống hệt case TXT-DIRECT-vi-zh-Hans. Đáng chú ý: đoạn hỏng (thay bằng dấu câu Trung) ở CẢ HAI case đều rơi vào cùng vị trí (đoạn thứ 3 "Bước loại bỏ..."/"Eradication"), nghi vấn chunk thứ 3 của văn bản 500-từ này có lỗi xử lý cố định trong pipeline dịch chunk (không phụ thuộc ngôn ngữ đích) — đây là manh mối quan trọng cho agent sửa.
+  - Response body nguyên văn (rút gọn, đủ để tái hiện): {"translated_text":"がネットワークシステムに...（như trên）...えることができます。","metadata":{"run_id":null,"profile":"translate","tool_registry":[],"chunks":4}}
+
+Case id / type: TXT-DIRECT-ja-vi / dịch trực tiếp ja-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Nhật (bản dịch tham chiếu của văn bản ứng cứu sự cố)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2862 ký tự): "Khi phát hiện các dấu hiệu bất thường trong hệ thống mạng của doanh nghiệp vừa và nhỏ... Không tồn tại một hệ thống hoàn toàn an toàn, nhưng một quy trình ứng phó sự cố rõ ràng và được huấn luyện thường xuyên sẽ giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ 5 đoạn, giữ đúng IP/CVE/version/URL, đúng tiếng Việt, không thiếu ý — xác nhận lỗi TXT-DIRECT-vi-ja chỉ xảy ra một chiều vi→ja, chiều ngược lại bình thường, củng cố nghi vấn lỗi nằm ở bước dịch chunk theo input gốc tiếng Việt chứ không phải theo ngôn ngữ đích)
+
+Case id / type: TXT-DIRECT-vi-ko / dịch trực tiếp vi-ko
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Hàn tương ứng
+Output thực tế quan sát trên UI (1297 ký tự): "중소 기업이 네트워크 시스템에 비정상 징후를 발견했을 때... 명확하고 정기적으로 훈련된 대응 절차는 실제 사고 발생 시 중단 시간과 피해를 최소화하는 데 도움이 됩니다." — đầy đủ 5 đoạn, giữ nguyên IP 198.51.100.23, CVE-2024-21412, version 3.4.1, URL.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS — lưu ý: case này KHÔNG tái hiện lỗi mất nội dung như TXT-DIRECT-vi-zh-Hans/vi-ja, dù input nguồn giống hệt và cũng được chunk; vậy lỗi không xảy ra với mọi hướng vi→X, cần agent sửa khoanh vùng kỹ hơn (có thể liên quan ngôn ngữ đích cụ thể chứ không chỉ do input/chunk).
+
+Case id / type: TXT-DIRECT-ko-vi / dịch trực tiếp ko-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Hàn (bản dịch tham chiếu)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2768 ký tự): "Khi doanh nghiệp vừa và nhỏ phát hiện dấu hiệu bất thường trong hệ thống mạng... Mặc dù không tồn tại một hệ thống hoàn toàn an toàn, nhưng các quy trình ứng phó sự cố rõ ràng và được đào tạo định kỳ sẽ giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ 5 đoạn, giữ đúng literal, đúng tiếng Việt)
+
+Case id / type: TXT-DIRECT-vi-fr / dịch trực tiếp vi-fr
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Pháp tương ứng
+Output thực tế quan sát trên UI (3215 ký tự): "Lorsqu'une petite ou moyenne entreprise détecte des signes anormaux sur son réseau... Aucun système n'est absolument sûr, mais un processus de réponse clair et régulièrement exercé permettra de minimiser les temps d'interruption et les dommages lorsque l'incident se produira réellement." — đầy đủ 5 đoạn, giữ literal.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-fr-vi / dịch trực tiếp fr-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Pháp (bản dịch tham chiếu)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2826 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện hoạt động bất thường trên mạng của mình... Không có hệ thống nào hoàn toàn an toàn, nhưng một quy trình phản ứng sự cố rõ ràng và được thực hiện thường xuyên giúp giảm thiểu gián đoạn và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-vi-de / dịch trực tiếp vi-de
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Đức tương ứng
+Output thực tế quan sát trên UI (3208 ký tự): "Wenn ein kleines oder mittleres Unternehmen Anomalien im Netzwerk erkennt... Kein System ist absolut sicher, aber ein klarer und regelmäßig geübter Response-Prozess hilft, Ausfallzeiten und Schäden zu minimieren, wenn ein Vorfall tatsächlich eintritt." — đầy đủ 5 đoạn, giữ literal; lưu ý nhỏ "siebzig zwei Stunden" (thay vì "zweiundsiebzig") nhưng vẫn đúng nghĩa 72 giờ, không tính là FAIL.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-de-vi / dịch trực tiếp de-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Đức (bản dịch tham chiếu)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2799 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện các hoạt động bất thường trong mạng của mình... Không hệ thống nào hoàn toàn an toàn, nhưng một quy trình phản ứng sự cố rõ ràng và được diễn tập định kỳ góp phần giảm thiểu thời gian ngừng hoạt động và thiệt hại khi thực sự xảy ra sự cố."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-vi-es / dịch trực tiếp vi-es
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Tây Ban Nha tương ứng
+Output thực tế quan sát trên UI (3133 ký tự): "Cuando una empresa pequeña y mediana detecta señales inusuales en su sistema de red... No existe ningún sistema absolutamente seguro, pero un proceso de respuesta claro y practicado regularmente ayudará a minimizar el tiempo de interrupción y los daños cuando ocurra un incidente real." — đầy đủ 5 đoạn, giữ literal.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-es-vi / dịch trực tiếp es-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Tây Ban Nha (bản dịch tham chiếu)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2809 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện hoạt động bất thường trong mạng của mình... Không hệ thống nào hoàn toàn an toàn, nhưng một quy trình phản ứng sự cố rõ ràng và được thực hành thường xuyên giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-vi-ru / dịch trực tiếp vi-ru
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Nga tương ứng
+Output thực tế quan sát trên UI (3073 ký tự): "Когда малое или среднее предприятие обнаруживает аномальные признаки в сетевой системе... Ни одна система не является абсолютно безопасной, но четкий и регулярно отработанный процесс реагирования поможет минимизировать время простоя и ущерб в случае реального возникновения инцидента." — đầy đủ 5 đoạn, giữ literal.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+
+Case id / type: TXT-DIRECT-ru-vi / dịch trực tiếp ru-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Nga (bản dịch tham chiếu)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI (2861 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện hoạt động bất thường trong mạng của mình... Không có hệ thống nào hoàn toàn được bảo vệ, nhưng quy trình phản ứng với sự cố rõ ràng và được diễn tập thường xuyên giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi sự cố thực sự xảy ra."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS — lưu ý nhỏ: đoạn 2 dịch "tải xuống tệp thực thi trái phép" thay vì "tải lên" (upload); nguyên nhân là từ tiếng Nga "загрузить" trong input vốn mơ hồ cả hai nghĩa upload/download (tồn tại sẵn trong fixture tham chiếu ru-500.txt, không phải lỗi mới của bước dịch này), các ý còn lại đều đúng và đầy đủ.
+
+Case id / type: TXT-DIRECT-vi-ar / dịch trực tiếp vi-ar
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Việt (cùng văn bản)
+output_gold: bản dịch tiếng Ả Rập tương ứng + tiêu chí P-RTL (hướng chữ hiển thị đúng RTL)
+Output thực tế quan sát trên UI (2297 ký tự): "عندما تكتشف شركة صغيرة أو متوسطة علامات غير طبيعية على الشبكة... لا يوجد نظام آمن تمامًا، لكن وجود إجراء استجابة واضح وممارسته بانتظام سيساعد في تقليل وقت التعطل والأضرار عند وقوع حوادث فعلية." — đầy đủ 5 đoạn, giữ literal.
+Kiểm P-RTL: computed CSS của textarea/các thẻ cha báo dir mặc định "ltr" (không set thuộc tính dir=rtl rõ ràng), nhưng chụp màn hình thực tế (txt-direct-vi-ar-result.png) cho thấy text căn phải và đọc đúng thứ tự RTL — trình duyệt tự nhận diện Unicode bidi theo ký tự Ả Rập mạnh trong nội dung, hiển thị đúng về mặt trực quan.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (khớp nghĩa đầy đủ 5 đoạn, giữ literal, hiển thị RTL đúng trực quan dù thuộc tính dir không được set tường minh trong DOM)
+
+Case id / type: TXT-DIRECT-ar-vi / dịch trực tiếp ar-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate, playwright
+input: đoạn ~400 từ tiếng Ả Rập (bản dịch tham chiếu), kiểm RTL trước khi bấm Dịch: ô nguồn hiển thị đúng RTL (căn phải, đọc đúng hướng)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Lần bấm Dịch đầu tiên: console ghi lỗi thật "[ERROR] Failed to load resource: net::ERR_NETWORK_CHANGED @ https://ias.id.vn/api/ais/translate:0" — ô kết quả giữ nguyên output cũ của case trước (không cập nhật), đây là lỗi mạng tạm thời phía client chạy test (không phải lỗi sản phẩm, không có error.code từ BE). Bấm lại Dịch lần 2 thành công.
+Output thực tế quan sát trên UI (lần 2, 2808 ký tự): "Khi một doanh nghiệp nhỏ hoặc vừa phát hiện hoạt động bất thường trong mạng của mình... Không có hệ thống nào an toàn tuyệt đối, nhưng một quy trình phản ứng sự cố rõ ràng và được diễn tập thường xuyên sẽ giúp giảm thiểu thời gian ngừng hoạt động và thiệt hại khi xảy ra sự cố thực tế."
+Có lỗi/overlay trên màn hình không: Lần 1 có lỗi console ERR_NETWORK_CHANGED (môi trường test, không phải BE); lần 2 không lỗi.
+Kết luận: PASS (sau khi thử lại lần 2; lần 1 ghi nhận riêng là lỗi mạng môi trường test, không tính vào kết luận case)
+
+Case id / type: FILE-vi-en / dịch file vi-en
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (6.3 KB, vi→en)
+output_gold: bản dịch tiếng Anh tương ứng (xem 04-test-data.json, 4789 ký tự tham chiếu en-1000.txt)
+Output thực tế quan sát trên UI: job chuyển trạng thái "running"→"failed" ở 2/18 chunk, không có Xem trước/kết quả nào được tạo.
+Có lỗi/overlay trên màn hình không: UI hiển thị trạng thái lỗi (nút Xem trước vẫn disabled, job status=failed)
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận — có error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/8e5c9e2bfd3d453c45b5ca3ca5752c57 (request thứ 79 trong phiên)
+  - Response body: {"job_id":"8e5c9e2bfd3d453c45b5ca3ca5752c57","kind":"file","status":"failed","stage":"done","progress":{"completed":2,"total":18},"source_lang":"vi","target_lang":"en","warnings":[],"error":{"code":"TOKEN_INTEGRITY_FAILED","message":"Processing failed.","request_id":"009586b3e327c78499ddb53c"}}
+  - request_id: 009586b3e327c78499ddb53c
+  - Dừng ở block 2/18. Lỗi TOKEN_INTEGRITY_FAILED đã từng được ghi nhận ở phiên trước (results/2026-10-09-02.txt, case FILE-ja-vi, request_id khác 8196dba1943fb4f6b62936f2) — xác nhận đây là lỗi tái diễn, không phải ngẫu nhiên.
+  - Vị trí code: `src/secai_gateway/translation/technical_tokens.py:181` (raise TranslationError("TOKEN_INTEGRITY_FAILED", "Technical literal integrity check failed")) và `src/secai_gateway/translation/service.py:291,294` (nơi lỗi được raise lại/retry trong luồng job). Cần đội BE tra log server theo request_id để xác định đoạn literal/token cụ thể trong vi-1000.txt gây lỗi integrity check.
+
+Case id / type: FILE-en-vi / dịch file en-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/en-1000.txt (en→vi)
+output_gold: bản dịch tiếng Việt tương ứng (xem 04-test-data.json)
+Output thực tế quan sát trên UI: job status="succeeded", 18/18 block hoàn tất, lấy qua GET .../result. translated_text đầy đủ toàn bộ nội dung (gồm cả phần mở rộng patch management dài hơn 5 đoạn gốc do file ~1000 từ), giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS — lưu ý nhỏ không ảnh hưởng kết luận: lặp từ "địa chỉ address 198.51.100.23" (dư từ "address"), vài chỗ ngắt câu hơi lạ bằng dấu "…", nhưng nghĩa đầy đủ, không thiếu đoạn, không sai ngôn ngữ đích.
+
+Case id / type: FILE-vi-zh-Hans / dịch file vi-zh-Hans
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi→zh-Hans)
+output_gold: bản dịch tiếng Trung giản thể tương ứng
+Output thực tế quan sát trên UI: Thử 2 lần liên tiếp (cùng file, cùng cặp ngôn ngữ) đều thất bại NGAY LÚC UPLOAD với "Dịch thất bại", KHÔNG có job_id nào được tạo (khác với lỗi TOKEN_INTEGRITY_FAILED ở case trước — case đó có job_id và fail lúc đang dịch, case này fail ngay khi upload).
+Có lỗi/overlay trên màn hình không: Có — console log 2 lỗi liên tiếp "[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ias.id.vn/api/ais/v2/translate/files:0" kèm "[ERROR] Translate file error: ce @ https://ias.id.vn/js/ai.65f23219.js:0"
+Kết luận: FAIL
+Lý do: Không upload/tạo job được, 0 bản dịch tạo ra, lỗi tái diễn 2/2 lần thử.
+Nguyên nhân:
+  - Loại: BE (xác nhận — HTTP 400 cụ thể, dù response body chỉ là text thường "Bad Request" không có JSON error.code)
+  - Endpoint: POST https://ias.id.vn/api/ais/v2/translate/files → 400 (request thứ 152 và 153 trong phiên)
+  - Response body cả 2 lần: "Bad Request" (text/plain, không có JSON/error.code/request_id)
+  - Bằng chứng đối chứng quan trọng: NGAY SAU 2 lần fail này, thử lại upload CÙNG FILE vi-1000.txt nhưng đổi target sang `ja` (request thứ 154) → THÀNH CÔNG 200, trả về job_id=7ee2db9271f89b3c611eeccf78eb4106 bình thường. Vậy lỗi 400 gắn chặt với tham số target_lang=zh-Hans ở endpoint POST /api/ais/v2/translate/files (route v2 file upload), không phải do file hỏng hay quota phiên. Cần đội BE tra `src/secai_gateway/api/translate_v2/routes.py` (endpoint upload file) xem có validate/whitelist ngôn ngữ đích thiếu `zh-Hans` hoặc dùng sai mã ngôn ngữ (v2 dùng `zh` thay vì `zh-Hans`?) gây 400 — đối chiếu mục "V2 dùng zh, v3 trả mã chuẩn zh-Hans" trong readme.md.
+
+Case id / type: FILE-vi-ja / dịch file vi-ja
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi→ja) — dùng để kiểm chứng đối chứng ngay sau lỗi FILE-vi-zh-Hans
+output_gold: bản dịch tiếng Nhật tương ứng
+Output thực tế quan sát trên UI: job status="succeeded", 18/18 block, lấy qua GET .../result. translated_text đầy đủ toàn bộ nội dung (gồm phần patch management mở rộng), giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS — lưu ý nhỏ không ảnh hưởng kết luận: 1 ký tự lạc "ラ。" cuối đoạn 9, nghĩa vẫn đầy đủ không thiếu đoạn. Đáng chú ý: khác với case TXT-DIRECT-vi-ja (tab Dịch trực tiếp) bị FAIL mất nội dung nghiêm trọng, case FILE-vi-ja (tab Dịch tệp, cùng nội dung nguồn) chạy tốt — xác nhận 2 pipeline xử lý khác nhau, lỗi mất nội dung ở TXT-DIRECT không tái diễn ở FILE.
+
+Case id / type: FILE-zh-Hans-vi / dịch file zh-Hans-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh, phiên mới sau reload), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/zh-Hans-1000.txt (zh-Hans→vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng (chính là vi-1000.txt)
+Output thực tế quan sát trên UI: Upload thất bại NGAY LẬP TỨC, không tạo job_id. Console log lỗi "[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ias.id.vn/api/ais/v2/translate/files:0" + "[ERROR] Translate file error: ce @ https://ias.id.vn/js/ai.65f23219.js:0"
+Có lỗi/overlay trên màn hình không: Có, lỗi hiển thị "Dịch thất bại" ngay sau upload
+Kết luận: FAIL
+Lý do: Không tạo được job, 0 bản dịch.
+Nguyên nhân:
+  - Loại: BE (xác nhận — HTTP 400 cụ thể)
+  - Endpoint: POST https://ias.id.vn/api/ais/v2/translate/files → 400 (request thứ 26 trong phiên mới)
+  - Response body: "Bad Request" (text/plain, không JSON/error.code)
+  - Đây là bằng chứng THỨ HAI cho cùng giả thuyết ở case FILE-vi-zh-Hans: lỗi 400 xảy ra bất kể `zh-Hans` là NGUỒN hay ĐÍCH (lần trước target=zh-Hans FAIL, lần này source=zh-Hans FAIL). Rất có khả năng endpoint `POST /api/ais/v2/translate/files` không chấp nhận giá trị tham số `zh-Hans` ở cả 2 chiều — đối chiếu readme.md: "V2 dùng zh, v3 trả mã chuẩn zh-Hans" — route v2 file có thể đang validate theo whitelist cũ chỉ chấp nhận `zh` chứ không phải `zh-Hans` mà FE gửi lên. Vị trí nghi vấn: `src/secai_gateway/api/translate_v2/routes.py` (validate ngôn ngữ) — cần đội BE xác nhận.
+
+Case id / type: FILE-ja-vi / dịch file ja-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/ja-1000.txt (ja->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/173960d2d06ac0b933b34c867e7e6df0, error.code=TOKEN_INTEGRITY_FAILED, request_id=cd2d4c885d17bb27a1020c9b
+  - Dừng ở 2/18 chunk - ĐÂY LÀ LẦN THỨ 3 case FILE-ja-vi fail với đúng lỗi này (đã ghi nhận ở results/2026-10-09-02.txt với request_id khác 8196dba1943fb4f6b62936f2, và FILE-vi-en ở phiên này cũng cùng lỗi) - xác nhận lỗi TOKEN_INTEGRITY_FAILED tái diễn ổn định trên nhiều input khác nhau (vi-1000.txt và ja-1000.txt), không phải ngẫu nhiên.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294 (như case FILE-vi-en).
+
+Case id / type: FILE-vi-ko / dịch file vi-ko
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->ko)
+output_gold: bản dịch tiếng Hàn tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS -- lưu ý nhỏ: 1 chữ lạc "라." cuối đoạn 9 (giống pattern lạc ký tự ở FILE-vi-ja), không ảnh hưởng nghĩa.
+
+Case id / type: FILE-ko-vi / dịch file ko-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/ko-1000.txt (ko->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/9643e77a4c04206f9828eb9bbdbcdab5, error.code=TOKEN_INTEGRITY_FAILED, request_id=4b579ca47ee085408873026b
+  - Dừng ở 2/18 chunk, GIỐNG HỆT pattern FILE-vi-en và FILE-ja-vi (cùng phiên này) + FILE-ja-vi phiên trước. Đây là lần thứ 4 quan sát cùng lỗi TOKEN_INTEGRITY_FAILED trên các input khác nhau (vi-1000, ja-1000, ko-1000), luôn dừng ở 2/18 chunk - rất có khả năng lỗi nằm ở bước xử lý chunk thứ 2 hoặc thứ 3 (constant), không phụ thuộc ngôn ngữ nguồn.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-vi-fr / dịch file vi-fr
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->fr)
+output_gold: bản dịch tiếng Pháp tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/2028faabf34fe10aec0ad69945733c84, error.code=TOKEN_INTEGRITY_FAILED, request_id=4d74636df38310b6b7647438
+  - Dừng ở 2/18 chunk - lần thứ 5 quan sát cùng lỗi trong phiên test này (FILE-vi-en, FILE-ja-vi, FILE-ko-vi, FILE-vi-fr đều fail giống hệt; FILE-en-vi, FILE-vi-ja, FILE-vi-ko lại PASS) -> lỗi có vẻ KHÔNG hoàn toàn quyết định bởi ngôn ngữ, giống pattern ngẫu nhiên/không ổn định (flaky) xảy ra ở khoảng chunk 2-3, có thể liên quan race condition khi 2 job chạy đồng thời hoặc retry logic trong service.py. Cần đội BE xem log server theo các request_id đã liệt kê để tìm điểm chung.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-fr-vi / dịch file fr-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh, phiên mới), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/fr-1000.txt (fr->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/783c097345ec338e8ea703d4c76c7843, error.code=TOKEN_INTEGRITY_FAILED, request_id=f2987e1e65aaff4e3e67eb42
+  - Dừng ở 2/18 chunk - lần thứ 6 quan sát cùng lỗi trong phiên test này, luôn dừng ở 2/18. Xác nhận thêm giả thuyết lỗi flaky không phụ thuộc ngôn ngữ cụ thể.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-vi-de / dịch file vi-de
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->de)
+output_gold: bản dịch tiếng Đức tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/79f3496b3f025d3736cbb4855542e134, error.code=TOKEN_INTEGRITY_FAILED, request_id=eadf59a478682413adb8b18e
+  - Dừng ở 2/18 chunk - lần thứ 7 quan sát cùng lỗi. ĐÁNG CHÚ Ý: 4 job file gần nhất liên tiếp (FILE-ko-vi, FILE-vi-fr, FILE-fr-vi, FILE-vi-de) đều FAIL cùng lỗi này, trong khi 3 job đầu phiên test (FILE-en-vi, FILE-vi-ja, FILE-vi-ko) đều PASS -> nghi vấn lỗi KHÔNG ngẫu nhiên hoàn toàn mà có thể trở nên thường trực hơn theo thời gian/tải hệ thống (có thể liên quan trạng thái server tích lũy, cache, hoặc rate-limit nội bộ sau nhiều job liên tiếp). Cần đội BE kiểm tra log server quanh khung giờ 16:48-16:56 UTC ngày 2026-10-09 để tìm nguyên nhân hệ thống (không phải do dữ liệu từng ngôn ngữ cụ thể).
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Retest FILE-vi-de (lần 2, cùng phiên, cùng file): kết quả FAIL giống hệt lần 1.
+  job_id=f32268c1e6220361ccc52cd2483b9aee, error.code=TOKEN_INTEGRITY_FAILED, request_id=232c7ca441885443920a051e, dừng ở 2/18 chunk.
+  Kết luận retest: Lỗi KHÔNG phải một lần ngẫu nhiên đối với vi-de — đã fail 2/2 lần thử liên tiếp ở thời điểm này của phiên test (~16:56-16:57). Kết hợp với FILE-ko-vi/vi-fr/fr-vi cũng fail ngay trước đó, cho thấy từ khoảng 16:48 trở đi lỗi TOKEN_INTEGRITY_FAILED xảy ra RẤT thường xuyên trên server, nhiều khả năng là vấn đề hệ thống/tài nguyên tại thời điểm test hơn là lỗi riêng từng cặp ngôn ngữ.
+
+Case id / type: FILE-de-vi / dịch file de-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/de-1000.txt (de->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/3c437107f76db1824fce465704486942, error.code=TOKEN_INTEGRITY_FAILED, request_id=cd8fc058cd67aa75a5726123
+  - Dừng ở 2/18 chunk - lần thứ 9 quan sát cùng lỗi trong phiên test, củng cố giả thuyết lỗi hệ thống thường trực từ ~16:48 trở đi.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-vi-es / dịch file vi-es
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->es)
+output_gold: bản dịch tiếng Tây Ban Nha tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/91ab0aaf82dd9d614a6e356b966a8b94, error.code=TOKEN_INTEGRITY_FAILED, request_id=28b300df9180d70eed2dcc74
+  - Dừng ở 2/18 chunk - lần thứ 10 quan sát cùng lỗi liên tiếp kể từ ~16:48. Từ thời điểm này server dường như lỗi 100% các job file, bất kể ngôn ngữ.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-es-vi / dịch file es-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh, phiên mới), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/es-1000.txt (es->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào.
+Nguyên nhân:
+  - Loại: BE (xác nhận - error.code cụ thể)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/e9a2f6542b679b97e708f6f671f40b92, error.code=TOKEN_INTEGRITY_FAILED, request_id=2157222a3700fdfb79aee86a
+  - Dừng ở 2/18 chunk - lần thứ 11 liên tiếp (tính từ 16:48), lỗi hệ thống thường trực tiếp diễn sang phiên browser mới (đã reload page), nên không phải do session/state của trình duyệt mà là phía server.
+  - Vị trí code: src/secai_gateway/translation/technical_tokens.py:181, src/secai_gateway/translation/service.py:291,294.
+
+Case id / type: FILE-vi-ru / dịch file vi-ru
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->ru)
+output_gold: bản dịch tiếng Nga tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS -- lưu ý nhỏ: vài chỗ diễn đạt hơi gượng (vd "границевом" thay vì từ chuẩn hơn, 1-2 câu ngắt hơi lủng củng) nhưng không sai nghĩa, không thiếu đoạn.
+
+Case id / type: FILE-ru-vi / dịch file ru-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/ru-1000.txt (ru->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS -- lưu ý nhỏ vài chỗ ngắt câu hơi gượng (vd "Người ta nhận thấy rằng...") nhưng không sai nghĩa, không thiếu đoạn.
+
+Case id / type: FILE-vi-ar / dịch file vi-ar
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/vi-1000.txt (vi->ar)
+output_gold: bản dịch tiếng Ả Rập tương ứng + tiêu chí P-RTL
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS. Khung xem trước hiển thị văn bản Ả Rập đọc đúng chiều RTL (giống quan sát P-RTL ở case TXT-DIRECT-vi-ar trước đó -- trình duyệt tự nhận diện Unicode bidi).
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS -- lưu ý nhỏ: 1 cụm từ linh tinh "رضي الله عنه" (cụm tôn giáo không liên quan) chen vào cuối đoạn 5, có thể là nhiễu từ model dịch, không ảnh hưởng tới các đoạn còn lại; nên lưu ý agent sửa xem đây có phải lỗi hallucination của model dịch ko.
+
+Case id / type: FILE-ar-vi / dịch file ar-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/ar-1000.txt (ar->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS -- lưu ý nhỏ vài chỗ ngắt câu hơi gượng (vd đoạn 1 có từ thừa "Khe hở." cuối đoạn 15) nhưng không sai nghĩa chính, không thiếu đoạn. Hoàn tất toàn bộ 18/18 cặp ngôn ngữ FILE-*.
+
+Case id / type: FILE-04-UNSUPPORTED / dịch file en-vi (validation loại không hỗ trợ)
+output_gold: UI phải báo không hỗ trợ định dạng PDF/XLS/XLSX/PPT/PPTX
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có file mẫu PDF/XLS/XLSX/PPT/PPTX trong fixtures/files/. Không có file để test, không suy diễn kết quả.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: IMG-03-NOTEXT / dịch ảnh en-vi (validation ảnh không chữ)
+output_gold: UI phải báo không nhận dạng được chữ
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có ảnh mẫu không chữ trong fixtures/images/.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: BATCH-01 / dịch file vi-en (batch 5 tệp)
+output_gold: không so khớp bản dịch, kiểm hành vi batch 5 file
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_files, chưa có bộ 5 file_paths chỉ định riêng cho batch test trong 04-test-data.json (input.file_paths=null).
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: BATCH-02 / dịch file vi-en (batch 6 tệp, vượt quota)
+output_gold: UI phải báo vượt giới hạn 5 tệp/phiên
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_files, chưa có bộ 6 file mẫu.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: CANCEL-01 / dịch file vi-en (hủy job)
+output_gold: kiểm hành vi hủy job đang chờ/chạy
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_files, cần file riêng để tái hiện tình huống job đang chờ/chạy rồi hủy theo kịch bản chuẩn bị sẵn, chưa có trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: RESTORE-01 / dịch file vi-en (reload khôi phục)
+output_gold: kiểm hành vi khôi phục job sau khi reload trang
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_files, cần file riêng chuẩn bị sẵn kịch bản reload, chưa có trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: NEG-01 / dịch file en-vi (validation lỗi input)
+output_gold: kiểm hành vi với file 0 byte
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có file 0 byte mẫu trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: NEG-02 / dịch file en-vi (validation lỗi input)
+output_gold: kiểm hành vi với file >10 MiB
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có file >10MiB mẫu trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: NEG-03 / dịch file en-vi (validation lỗi input)
+output_gold: kiểm hành vi với file hỏng/sai signature
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có file hỏng/sai signature mẫu trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: NEG-04 / dịch file en-vi (validation lỗi input)
+output_gold: kiểm hành vi lỗi input khác (xem chi tiết 04-test-data.json)
+Kết luận: BLOCKED
+Lý do: preparation_status=needs_file, chưa có file mẫu tương ứng trong fixtures.
+Nguyên nhân: Thiếu file/ảnh mẫu, xem 04-test-data.json.
+
+Case id / type: IMG-vi-en / dịch ảnh vi-en
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/images/ocr-vi.png (vi->en)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="When unusual activity is detected, the response team must isolate the server from the internal network immediately."
+Output thực tế quan sát trên UI:
+  OCR (nguyên văn): "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức."
+  Bản dịch (nguyên văn): "Upon detecting abnormal signs, the rescue team must immediately isolate the server and initiate an internal shutdown."
+Có lỗi/overlay trên màn hình không: Không có lỗi hiển thị, nhưng job trả warning OCR_CORRECTION_REJECTED ("Automatic OCR correction is unavailable; review raw text."), ocr.needs_review=true
+Kết luận: FAIL
+Lý do: OCR nhận dạng sai cụm "khỏi mạng" (isolate from network) thành "khởi mang" (vô nghĩa), dẫn tới bản dịch sai nghĩa hoàn toàn đoạn cuối: gold yêu cầu "isolate the server from the internal network" nhưng output thực tế dịch thành "initiate an internal shutdown" (khởi động tắt nội bộ) -- SAI Ý CHÍNH của câu (hành động cô lập khỏi mạng biến thành hành động tắt máy).
+Nguyên nhân:
+  - Loại: BE (nghi vấn -- lỗi OCR model, có warning code cụ thể)
+  - Warning: OCR_CORRECTION_REJECTED, needs_review=true, qua endpoint GET /api/ais/v2/translate/jobs/5ee3f3a95a347c6923e7c184cd7d6ceb/result (job thành công status=succeeded nhưng nội dung OCR sai)
+  - Đây là lỗi OCR model đọc nhầm "khỏi mạng" thành "khởi mang" dù ảnh render rõ ràng bằng Pillow+font Noto (theo readme, không nhiễu/không nghiêng) -- đáng lẽ OCR phải chính xác gần như tuyệt đối. Cảnh báo OCR_CORRECTION_REJECTED cho thấy bước tự sửa lỗi OCR không chạy được, nên lỗi nhận dạng không được khắc phục trước khi đưa vào dịch.
+
+Case id / type: IMG-en-vi / dịch ảnh en-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/images/ocr-en.png (en->vi)
+output_gold: ocr_text="When unusual activity is detected, the response team must isolate the server from the internal network immediately."; translated_text="Khi phát hiện hoạt động bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR (nguyên văn): "When unusual activity is detected, the response team must isolate the server from the internal network immediately." -- khớp chính xác 100% với gold.
+  Bản dịch (nguyên văn): "Khi phát hiện hoạt động bất thường, đội phản ứng phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không (cũng có warning OCR_CORRECTION_REJECTED nhưng OCR vẫn đúng tuyệt đối trong case này)
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ (chỉ khác cách diễn đạt "đội phản ứng" thay vì "đội ứng cứu" -- đồng nghĩa, và đổi vị trí "ngay lập tức" -- không đổi nghĩa).
+
+Case id / type: IMG-vi-zh-Hans / dịch ảnh vi-zh-Hans
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/images/ocr-vi.png (vi->zh-Hans)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="发现异常活动时,响应团队必须立即将服务器从内部网络中隔离。"
+Output thực tế quan sát trên UI: Upload thất bại NGAY LẬP TỨC, không tạo job_id. Console log "[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://ias.id.vn/api/ais/v2/translate/images:0"
+Có lỗi/overlay trên màn hình không: Có, "Dịch thất bại" ngay sau upload
+Kết luận: FAIL
+Lý do: Không tạo job được, 0 bản dịch.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- HTTP 400)
+  - Endpoint: POST https://ias.id.vn/api/ais/v2/translate/images -> 400 (request thứ 58 trong phiên), response body "Bad Request" (text/plain, không JSON/error.code)
+  - XÁC NHẬN LỖI CÙNG HỌ với FILE-vi-zh-Hans/FILE-zh-Hans-vi (endpoint .../translate/files) -- cả hai endpoint v2 upload (files VÀ images) đều 400 khi tham số liên quan tới zh-Hans. Củng cố thêm giả thuyết validate ngôn ngữ v2 có vấn đề chung với mã zh-Hans (có thể route dùng chung 1 hàm validate ngôn ngữ cho cả 2 endpoint) -- xem readme.md mục "V2 dùng zh, v3 trả mã chuẩn zh-Hans".
+
+Case id / type: IMG-zh-Hans-vi / dịch ảnh zh-Hans-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/images/ocr-zh-Hans.png (zh-Hans->vi)
+output_gold: ocr_text="发现异常活动时,响应团队必须立即将服务器从内部网络中隔离。"; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI: Upload thất bại NGAY LẬP TỨC, không tạo job_id. Console log 400 lần 2 "@ https://ias.id.vn/api/ais/v2/translate/images:0"
+Có lỗi/overlay trên màn hình không: Có, "Dịch thất bại" ngay sau upload
+Kết luận: FAIL
+Lý do: Không tạo job được, 0 bản dịch.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- HTTP 400)
+  - Endpoint: POST https://ias.id.vn/api/ais/v2/translate/images -> 400, response "Bad Request"
+  - Lần này zh-Hans là NGUỒN (source_lang) chứ không phải đích -- xác nhận lỗi 400 xảy ra bất kể zh-Hans ở vị trí nguồn hay đích, giống hệt pattern đã thấy ở FILE-vi-zh-Hans/FILE-zh-Hans-vi.
+
+Case id / type: IMG-vi-ja / dịch ảnh vi-ja
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->ja)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="異常な活動が検出された場合、対応チームは直ちにサーバーを社内ネットワークから隔離する必要がある。"
+Output thực tế quan sát trên UI:
+  OCR (nguyên văn): "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang" thay vì "khỏi mạng" như case IMG-vi-en (dùng chung ảnh ocr-vi.png, lỗi tái diễn xác định -- deterministic).
+  Bản dịch (nguyên văn): "異常な兆候が検出された場合、救助チームは直ちにサーバーを隔離し、内部ネットワークから切り離さなければならない。"
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (sai "khỏi mạng" thành "khởi mang", lỗi tái diễn xác định trên ảnh ocr-vi.png). Đáng chú ý: ở case này bản dịch cuối cùng vẫn giữ được nghĩa gần đúng với gold (có nhắc tới "cô lập"+"ngắt kết nối khỏi mạng nội bộ"), khác với case IMG-vi-en cùng lỗi OCR nhưng dịch sai hẳn nghĩa -- cho thấy mức độ ảnh hưởng của lỗi OCR lên bản dịch cuối cùng không ổn định giữa các ngôn ngữ đích. Theo quy tắc mục 1 file 03 ("OCR phải khớp gần như chính xác"), case này vẫn tính FAIL ở bước OCR dù bản dịch bù đắp được.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định, cùng ảnh cùng lỗi với IMG-vi-en)
+  - Cùng cơ chế lỗi với IMG-vi-en: OCR model đọc nhầm "khỏi mạng" thành "khởi mang" trên ảnh ocr-vi.png.
+
+Case id / type: IMG-ja-vi / dịch ảnh ja-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-ja.png (ja->vi)
+output_gold: ocr_text="異常な活動が検出された場合、対応チームは直ちにサーバーを社内ネットワークから隔離する必要がある。"; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "異常な活動が検出された場合、
+対応チームは直ちにサーバーを
+社内ネットワークから隔離する必要がある。" -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường,
+đội ngũ xử lý cần ngay lập tức cô lập máy chủ
+khỏi mạng nội bộ của công ty."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-ko / dịch ảnh vi-ko
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->ko)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="이상 활동이 감지되면, 대응팀은 즉시 서버를 내부 네트워크에서 격리해야 한다."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang" (ảnh ocr-vi.png, lỗi tái diễn xác định lần thứ 3).
+  Bản dịch: "이상 징후가 발견되면,
+구조팀은 즉시 서버를 고립시키고
+내부 네트워크를 차단해야 합니다."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn "khỏi mạng"->"khởi mang" trên ảnh ocr-vi.png, lần thứ 3 quan sát). Bản dịch tiếng Hàn lần này giữ được nghĩa chấp nhận được ("고립시키고...차단해야" = cô lập + chặn mạng nội bộ) dù input OCR bị lỗi.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png, đã quan sát ở IMG-vi-en và IMG-vi-ja)
+
+Case id / type: IMG-ko-vi / dịch ảnh ko-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-ko.png (ko->vi)
+output_gold: ocr_text="이상 활동이 감지되면, 대응팀은 즉시 서버를 내부 네트워크에서 격리해야 한다."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "이상 활동이 감지되면,
+대응팀은 즉시 서버를
+내부 네트워크에서 격리해야 한다." -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện các hoạt động bất thường như vậy,
+đội ngũ xử lý sự cố phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-fr / dịch ảnh vi-fr
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->fr)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="Lorsqu'une activité anormale est détectée, l'équipe doit isoler immédiatement le serveur du réseau interne."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang" (ảnh ocr-vi.png).
+  Bản dịch: "Lorsqu'un signe anormal est détecté, l'équipe de secours doit isoler le serveur et lancer immédiatement une procédure interne."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn "khỏi mạng"->"khởi mang"). Bản dịch SAI NGHĨA giống case IMG-vi-en: "lancer immédiatement une procédure interne" (khởi động một quy trình nội bộ) thay vì "isoler...du réseau interne" (cô lập khỏi mạng nội bộ) -- mất đúng ý "mạng"/"network" do lỗi OCR lan sang bản dịch.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png, lần thứ 4 quan sát, lần này gây sai nghĩa bản dịch giống IMG-vi-en)
+
+=== RETEST sau deploy 2026-10-09 17:21 UTC (3 fix: zh-Hans alias admission v2, retry budget literal-integrity, guard output gan-rong o v3 text) ===
+Case id / type: TXT-DIRECT-vi-ja / dịch trực tiếp vi-ja (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:24, https://ias.id.vn/ai/translate, playwright
+input: cùng đoạn ~400 từ tiếng Việt như lần test đầu
+output_gold: bản dịch tiếng Nhật tương ứng
+Output thực tế quan sát trên UI (666 ký tự, vẫn rất ngắn so với gold ~700+ từ): "がネットワークシステムになをした、インシデントチームは5のプロセスにうがあります：..." -- vẫn mất phần lớn từ nội dung (chỉ còn trợ từ/khung câu), và đoạn thứ 3 VẪN bị thay bằng dấu câu tiếng Trung sai ngôn ngữ: "。，，，，。，。
+
+，、，。，。" -- giống hệt lỗi quan sát ở lần test đầu (trước deploy).
+Có lỗi/overlay trên màn hình không: Không hiển thị lỗi trên UI, job báo hoàn tất bình thường
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Guard "output gần-rỗng-chỉ-dấu-câu" mô tả trong fix #3 KHÔNG bắt được/khắc phục trường hợp này -- output vẫn mất nội dung nghiêm trọng và vẫn còn đoạn dấu câu tiếng Trung lẫn vào bản tiếng Nhật y hệt trước khi fix. Ghi nhận trung thực theo yêu cầu điều phối: KHÔNG tự suy diễn lỗi đã hết, vì bằng chứng thực tế cho thấy vẫn còn y nguyên.
+Nguyên nhân: BE (xác nhận tái diễn) -- cùng cơ chế lỗi với lần test đầu, chunk xử lý vi->ja vẫn hỏng giống hệt sau deploy. Cần đội BE kiểm tra lại fix #3 có thực sự áp dụng cho pipeline multilang v3 chunk hay chưa (có thể guard chỉ check output rỗng hoàn toàn, không bắt được trường hợp "gần rỗng nhưng còn literal + trợ từ" như quan sát ở đây).
+
+Case id / type: TXT-DIRECT-vi-zh-Hans / dịch trực tiếp vi-zh-Hans (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:24, https://ias.id.vn/ai/translate, playwright
+input: cùng đoạn ~400 từ tiếng Việt như lần test đầu
+output_gold: bản dịch tiếng Trung giản thể tương ứng
+Output thực tế quan sát trên UI (162 ký tự, gần như không đổi so với lần đầu 160 ký tự): "，：、、、。，、Web ，，。，、 IP ，。
+
+， 198.51.100.23  3.4.1  CVE-2024-21412。 https://portal.noi-bo.example.com/api/v1/upload ，。，， IP ，，，。
+
+：。，，，，。，。
+
+，、，。，。
+
+，：、、、。，，，。、，。，，。"
+Có lỗi/overlay trên màn hình không: Không hiển thị lỗi, job báo hoàn tất
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Output vẫn gần như hoàn toàn mất nội dung (chỉ còn dấu câu tiếng Trung + vài literal), gần như giống hệt lần test đầu trước deploy. Guard output gần-rỗng không khắc phục được case này.
+Nguyên nhân: BE (xác nhận tái diễn) -- cùng lỗi với lần test đầu, không có thay đổi đáng kể sau deploy 3 fix. Cần đội BE xem lại vì fix #3 (guard output gần-rỗng) có vẻ không áp dụng cho pipeline dịch chunk sang zh-Hans/ja từ nguồn vi.
+
+Case id / type: FILE-vi-en / dịch file vi-en (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:26, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/vi-1000.txt (vi->en)
+output_gold: bản dịch tiếng Anh tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở ĐÚNG 2/18 chunk, giống hệt lần test đầu.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Job dịch file thất bại hoàn toàn, không trả về bản dịch nào, giống hệt lần test đầu.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- error.code cụ thể, tái diễn sau deploy)
+  - Endpoint: GET https://ias.id.vn/api/ais/v2/translate/jobs/eb2311157bfb32321a2aedcae30ad989, error.code=TOKEN_INTEGRITY_FAILED, request_id=4cb4640d7f24c404a0f8690d
+  - Đúng như điều phối đã cảnh báo trước: fix #2 (retry budget cho literal-integrity check) CHỈ giảm nhẹ tần suất flaky, KHÔNG đảm bảo hết hẳn lỗi. Ghi nhận trung thực: lỗi VẪN xảy ra sau deploy, không tự suy diễn đã hết.
+
+Case id / type: FILE-vi-zh-Hans / dịch file vi-zh-Hans (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:25-17:28, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/vi-1000.txt (vi->zh-Hans)
+output_gold: bản dịch tiếng Trung giản thể tương ứng
+Output thực tế quan sát trên UI: Upload THÀNH CÔNG (không còn lỗi 400 như lần đầu) -- console 0 lỗi. Job ead6ce2470c69acd6e4e843556c4c1dd chạy target_lang hiển thị là "zh" (xác nhận BE đã map zh-Hans->zh). Job status=succeeded, 18/18 block, lấy qua GET .../result. translated_text đầy đủ toàn bộ nội dung, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (RETEST -- CẢI THIỆN THẬT SỰ, lỗi 400 ĐÃ ĐƯỢC KHẮC PHỤC)
+Lý do: Fix #1 (zh-Hans alias cho zh ở admission v2) đã giải quyết triệt để lỗi HTTP 400 ở case này -- xác nhận bằng chứng: trước deploy fail 2/2 lần ngay lúc upload; sau deploy, upload thành công ngay lần đầu thử, job chạy hoàn tất PASS với bản dịch đầy đủ chính xác. Đây là CẢI THIỆN THẬT, không phải suy diễn.
+
+Case id / type: FILE-zh-Hans-vi / dịch file zh-Hans-vi (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:29, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/zh-Hans-1000.txt (zh-Hans->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: Upload THÀNH CÔNG lần này (source_lang hiển thị "zh", xác nhận fix #1 hoạt động, không còn lỗi 400 ngay lúc upload như lần đầu). Tuy nhiên job sau đó chuyển running->failed ở 2/18 chunk với error.code=TOKEN_INTEGRITY_FAILED, request_id=a4c9a618354cdb78d0d023c2.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại (ở bước dịch, không phải lúc upload)
+Kết luận: FAIL (RETEST -- CẢI THIỆN MỘT PHẦN)
+Lý do: Lỗi upload 400 (fix #1) ĐÃ ĐƯỢC KHẮC PHỤC -- đây là cải thiện thật. Nhưng case này sau đó rơi vào lỗi TOKEN_INTEGRITY_FAILED khác (thuộc phạm vi fix #2, vốn chỉ giảm nhẹ flaky chứ không đảm bảo hết hẳn theo đúng cảnh báo của điều phối) -- nên tổng thể case vẫn FAIL, nhưng vì lý do KHÁC với lần test đầu (lần đầu fail ngay lúc upload do 400; lần này fail ở bước dịch do TOKEN_INTEGRITY_FAILED).
+Nguyên nhân: BE (xác nhận) -- endpoint GET .../jobs/4d0fa0c53b00ba83e53a13f714e5ca07, error.code=TOKEN_INTEGRITY_FAILED.
+
+Case id / type: FILE-ja-vi / dịch file ja-vi (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:29-17:30, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/ja-1000.txt (ja->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: Upload thành công (ja không liên quan fix #1), job chuyển running->failed ở 2/18 chunk với error.code=TOKEN_INTEGRITY_FAILED, request_id=fb993ca79a418d51b805ed80.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra y hệt lần test đầu (và lần trước đó nữa -- đây là lần thứ 4 quan sát đúng lỗi này trên fixture ja-1000.txt qua các lần test khác nhau). Fix #2 không khắc phục được case này. Ghi nhận trung thực theo yêu cầu điều phối.
+Nguyên nhân: BE (xác nhận tái diễn) -- cùng cơ chế lỗi với các lần trước.
+
+Case id / type: FILE-ko-vi / dịch file ko-vi (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:31-17:32, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/ko-1000.txt (ko->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed, error.code=TOKEN_INTEGRITY_FAILED, request_id=2714dd4c376baf5e11e76e76, dừng ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra, lần thứ 2 quan sát trên fixture ko-1000.txt (cả trước và sau deploy).
+Nguyên nhân: BE (xác nhận tái diễn).
+
+Case id / type: FILE-vi-fr / dịch file vi-fr (RETEST)
+Ngày giờ / URL / browser: 2026-10-09 ~17:34-17:35, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/vi-1000.txt (vi->fr)
+output_gold: bản dịch tiếng Pháp tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed, error.code=TOKEN_INTEGRITY_FAILED, request_id=982ac3c9e46399b33a29ac67, dừng ở 2/18 chunk.
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST -- KHÔNG CẢI THIỆN)
+Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra y hệt lần test đầu.
+Nguyên nhân: BE (xác nhận tái diễn).
+
+=== TỔNG KẾT 8 CASE RETEST SAU DEPLOY 17:21 UTC ===
+1. TXT-DIRECT-vi-ja: FAIL -> FAIL (không cải thiện, guard #3 không bắt được case này)
+2. TXT-DIRECT-vi-zh-Hans: FAIL -> FAIL (không cải thiện, guard #3 không bắt được case này)
+3. FILE-vi-en: FAIL -> FAIL (TOKEN_INTEGRITY_FAILED vẫn còn, fix #2 không đủ)
+4. FILE-vi-zh-Hans: FAIL -> PASS (fix #1 khắc phục triệt để lỗi 400 upload -- CẢI THIỆN THẬT)
+5. FILE-zh-Hans-vi: FAIL(400 upload) -> FAIL khác lý do (upload thành công nhờ fix #1, nhưng rơi vào TOKEN_INTEGRITY_FAILED -- CẢI THIỆN MỘT PHẦN, còn 1 lớp lỗi khác)
+6. FILE-ja-vi: FAIL -> FAIL (TOKEN_INTEGRITY_FAILED vẫn còn)
+7. FILE-ko-vi: FAIL -> FAIL (TOKEN_INTEGRITY_FAILED vẫn còn)
+8. FILE-vi-fr: FAIL -> FAIL (TOKEN_INTEGRITY_FAILED vẫn còn)
+KẾT LUẬN CHUNG: Fix #1 (zh-Hans alias) hoạt động tốt, xác nhận khắc phục triệt để lỗi HTTP 400 ở cả 2 trường hợp test (FILE-vi-zh-Hans PASS hoàn toàn, FILE-zh-Hans-vi hết lỗi 400 dù vẫn fail vì lý do khác). Fix #2 (retry budget literal-integrity) và fix #3 (guard output gần-rỗng) KHÔNG cho thấy cải thiện quan sát được trong 6/6 case liên quan đã retest -- đúng như điều phối đã cảnh báo trước, đây được ghi nhận trung thực là CHƯA giải quyết, không suy diễn đã hết lỗi.
+
+Case id / type: IMG-fr-vi / dịch ảnh fr-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-fr.png (fr->vi)
+output_gold: ocr_text="Lorsqu'une activité anormale est détectée, l'équipe doit isoler immédiatement le serveur du réseau interne."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "Lorsqu'une activité anormale est détectée, l'équipe doit isoler immédiatement le serveur du réseau interne." -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường, nhóm phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-de / dịch ảnh vi-de
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->de)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="Wenn ungewöhnliche Aktivität erkannt wird, muss das Team den Server sofort vom internen Netzwerk isolieren."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang" (ảnh ocr-vi.png).
+  Bản dịch: "Bei Auftreten von Anomalien muss das Rettungsteam den Server umgehend isolieren und den internen Betrieb einstellen."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn "khỏi mạng"->"khởi mang"). Bản dịch SAI NGHĨA giống case IMG-vi-en/vi-fr: "den internen Betrieb einstellen" (dừng hoạt động nội bộ) thay vì "vom internen Netzwerk isolieren" (cô lập khỏi mạng nội bộ).
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png)
+
+Case id / type: IMG-de-vi / dịch ảnh de-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-de.png (de->vi)
+output_gold: ocr_text="Wenn ungewöhnliche Aktivität erkannt wird, muss das Team den Server sofort vom internen Netzwerk isolieren."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "Wenn ungewöhnliche Aktivität erkannt wird, muss das Team den Server sofort vom internen Netzwerk isolieren." -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường, nhóm phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-es / dịch ảnh vi-es
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->es)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="Cuando se detecta actividad inusual, el equipo debe aislar el servidor de la red interna de inmediato."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang".
+  Bản dịch: "Cuando se detectan signos anormales, el equipo de rescate debe aislar el servidor e iniciar inmediatamente las medidas internas."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn). Bản dịch SAI NGHĨA: "iniciar...las medidas internas" (khởi động các biện pháp nội bộ) thay vì "aislar...de la red interna" (cô lập khỏi mạng nội bộ).
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png)
+
+Case id / type: IMG-es-vi / dịch ảnh es-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-es.png (es->vi)
+output_gold: ocr_text="Cuando se detecta actividad inusual, el equipo debe aislar el servidor de la red interna de inmediato."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "Cuando se detecta actividad inusual, el equipo debe aislar el servidor de la red interna de inmediato." -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường, nhân viên kỹ thuật cần ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-ru / dịch ảnh vi-ru
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->ru)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="При обнаружении необычной активности группа должна немедленно изолировать сервер от внутренней сети."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang".
+  Bản dịch: "При обнаружении признаков аномалий команда по ликвидации чрезвычайных ситуаций должна немедленно изолировать сервер и начать внутренние действия по устранению проблемы."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn). Bản dịch SAI NGHĨA: "начать внутренние действия" (bắt đầu các hành động nội bộ) thay vì "изолировать...от внутренней сети" (cô lập khỏi mạng nội bộ).
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png)
+
+Case id / type: IMG-ru-vi / dịch ảnh ru-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-ru.png (ru->vi)
+output_gold: ocr_text="При обнаружении необычной активности группа должна немедленно изолировать сервер от внутренней сети."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR: "При обнаружении необычной активности группа должна немедленно изолировать сервер от внутренней сети." -- khớp 100% với gold.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường, nhóm phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ."
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS
+Lý do: OCR khớp chính xác, bản dịch đúng nghĩa đầy đủ.
+
+Case id / type: IMG-vi-ar / dịch ảnh vi-ar
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-vi.png (vi->ar)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."; translated_text="عند اكتشاف نشاط غير معتاد، يجب على الفريق عزل الخادم فورًا عن الشبكة الداخلية."
+Output thực tế quan sát trên UI:
+  OCR: "Khi phát hiện dấu hiệu bất thường,
+đội ứng cứu phải cô lập máy chủ
+khởi mang nội bộ ngay lập tức." -- CÙNG lỗi OCR "khởi mang".
+  Bản dịch: "عند اكتشاف علامات غير طبيعية، يجب على فريق الإنقاذ عزل الخادم وتشغيل النظام الداخلي فورًا."
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi tái diễn). Bản dịch SAI NGHĨA: "تشغيل النظام الداخلي" (khởi động hệ thống nội bộ) thay vì "عزل...عن الشبكة الداخلية" (cô lập khỏi mạng nội bộ) -- cùng pattern lỗi với mọi ngôn ngữ đích khác dùng ảnh ocr-vi.png (en/ja/ko/fr/de/es/ru).
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR tái diễn xác định trên ảnh ocr-vi.png, đã quan sát ở 7 ngôn ngữ đích khác nhau với cùng cơ chế lỗi)
+
+Case id / type: IMG-ar-vi / dịch ảnh ar-vi
+Ngày giờ / URL / browser: 2026-10-09, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: image_path=fixtures/images/ocr-ar.png (ar->vi)
+output_gold: ocr_text="عند اكتشاف نشاط غير معتاد، يجب على الفريق عزل الخادم فورًا عن الشبكة الداخلية."; translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Output thực tế quan sát trên UI:
+  OCR (nguyên văn): "، عند اكتشاف نشاط غير معتاد ي Jeb على الفريق عزل الخادم فوّراً عن الشبكة الداخلية." -- LỖI OCR MỚI (khác pattern "khởi mang"): từ tiếng Ả Rập "يجب" (phải/must) bị đọc nhầm thành "ي" + chữ Latin vô nghĩa "Jeb"; dấu phẩy cũng bị dịch chuyển ra đầu câu.
+  Bản dịch: "Khi phát hiện ra hoạt động bất thường trên Jeb, nhóm đã ngay lập tức cô lập máy chủ khỏi mạng nội bộ." -- cụm "trên Jeb" là nhiễu từ lỗi OCR, không có trong gold, khiến câu dịch có chi tiết sai/vô nghĩa chen vào.
+Có lỗi/overlay trên màn hình không: Không, có warning OCR_CORRECTION_REJECTED
+Kết luận: FAIL
+Lý do: OCR không khớp gold (lỗi nhận dạng mới: "يجب" -> "ي Jeb"), lỗi OCR lan sang bản dịch tạo ra cụm "trên Jeb" sai/vô nghĩa không có trong gold.
+Nguyên nhân:
+  - Loại: BE (xác nhận -- lỗi OCR cụ thể trên ảnh ocr-ar.png, khác với lỗi "khởi mang" ở ảnh ocr-vi.png nhưng cùng loại: engine OCR gặp khó khi nhận dạng ký tự Ả Rập liền kề/nối chữ, có thể do font Noto Arabic dùng để render ảnh gốc).
+
+=== RETEST ROUND 2 sau deploy translate-bugfix-round2-20261010 (~18:05 UTC) ===
+Case id / type: FILE-vi-en / dịch file vi-en (RETEST ROUND 2)
+Ngày giờ / URL / browser: 2026-10-09 ~18:15-18:17, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/vi-1000.txt (vi->en)
+output_gold: bản dịch tiếng Anh tương ứng (xem 04-test-data.json)
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, KHÔNG còn error TOKEN_INTEGRITY_FAILED (khác hẳn 2 lần test trước đều fail đúng ở 2/18 chunk). translated_text đầy đủ toàn bộ nội dung, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL https://portal.noi-bo.example.com/api/v1/upload, CVSS.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-vi-en-round2.png
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (RETEST ROUND 2 -- CẢI THIỆN THẬT SỰ, lỗi TOKEN_INTEGRITY_FAILED ĐÃ HẾT ở lần chạy này)
+Lý do: Fix round 2 (sửa đúng gốc rễ lỗi so sánh literal span dính từ tiếng Anh/Việt đứng trước IP/version) đã giải quyết được trường hợp này -- bằng chứng: lần 1 và lần 2 (RETEST ROUND 1) đều fail TOKEN_INTEGRITY_FAILED ở đúng 2/18 chunk; sau fix round 2, job chạy trọn 18/18 không lỗi. Lưu ý nhỏ không ảnh hưởng kết luận: vài chỗ có từ thừa/lạc ("sang took steps to restore", "ra." cuối 1 đoạn) nhưng không sai nghĩa chính, không thiếu đoạn.
+
+Case id / type: FILE-vi-fr / dịch file vi-fr (RETEST ROUND 2)
+Ngày giờ / URL / browser: 2026-10-09 ~18:15-18:20, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/vi-1000.txt (vi->fr)
+output_gold: bản dịch tiếng Pháp tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, KHÔNG còn TOKEN_INTEGRITY_FAILED (2 lần test trước đều fail đúng 2/18 chunk). translated_text đầy đủ, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-vi-fr-round2.png
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (RETEST ROUND 2 -- CẢI THIỆN THẬT SỰ)
+Lý do: Fix round 2 đã giải quyết được lỗi TOKEN_INTEGRITY_FAILED cho case này -- 2 lần trước đều fail ở đúng 2/18 chunk, lần này chạy trọn 18/18. Lưu ý nhỏ không ảnh hưởng kết luận: vài từ thừa/lạc ("Sang entreprend la restauration", "la fois suivante", "ra." cuối đoạn) nhưng không sai nghĩa chính, không thiếu đoạn.
+
+Case id / type: FILE-ja-vi / dịch file ja-vi (RETEST ROUND 2)
+Ngày giờ / URL / browser: 2026-10-09 ~18:20-18:21, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/ja-1000.txt (ja->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk, error.code=TOKEN_INTEGRITY_FAILED, request_id=9abfdadd00889849011457e0.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-ja-vi-round2.png
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST ROUND 2 -- KHÔNG CẢI THIỆN)
+Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra y hệt 2 lần test trước (test đầu + retest round 1), dừng đúng 2/18 chunk. Fix round 2 KHÔNG khắc phục được case này -- ghi nhận trung thực theo yêu cầu điều phối, không suy diễn đã hết lỗi dù fix round 2 đã sửa được FILE-vi-en/FILE-vi-fr.
+Nguyên nhân: BE (xác nhận tái diễn lần thứ 3 trên fixture ja-1000.txt qua 3 lần test khác nhau) -- đây là file NGUỒN tiếng Nhật (không phải đích), khác với FILE-vi-en/FILE-vi-fr đã hết lỗi (đều có vi là NGUỒN). Nghi vấn: fix round 2 có thể chỉ sửa literal span khi NGUỒN là tiếng Việt, chưa xử lý trường hợp NGUỒN là ngôn ngữ khác (ja/ko/zh-Hans) có cấu trúc token khác biệt quanh literal IP/version/CVE.
+
+Case id / type: FILE-ko-vi / dịch file ko-vi (RETEST ROUND 2)
+Ngày giờ / URL / browser: 2026-10-09 ~18:20-18:22, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/ko-1000.txt (ko->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job status=succeeded, 18/18 block, KHÔNG còn TOKEN_INTEGRITY_FAILED (2 lần test trước đều fail ở 2/18 chunk). translated_text đầy đủ toàn bộ nội dung, giữ đúng literal CVE-2024-21412, 198.51.100.23, URL, CVSS.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-ko-vi-round2.png
+Có lỗi/overlay trên màn hình không: Không
+Kết luận: PASS (RETEST ROUND 2 -- CẢI THIỆN THẬT SỰ)
+Lý do: Fix round 2 đã giải quyết được lỗi cho case này -- 2 lần trước đều fail ở đúng 2/18 chunk, lần này chạy trọn 18/18, nội dung đầy đủ đúng nghĩa.
+GHI CHÚ ĐÍNH CHÍNH: giả thuyết nêu ở case FILE-ja-vi retest round 2 (fix chỉ hoạt động khi NGUỒN là tiếng Việt) KHÔNG đúng -- case này nguồn là tiếng Hàn (không phải tiếng Việt) nhưng vẫn PASS sau fix. Vậy sự khác biệt PASS/FAIL giữa FILE-ja-vi (vẫn FAIL) và FILE-ko-vi (PASS) không giải thích được bằng hướng ngôn ngữ nguồn/đích -- có thể do đặc điểm riêng của fixture ja-1000.txt (vị trí literal cụ thể trong file) hoặc vẫn còn flaky theo thời điểm/tải hệ thống. Cần đội BE điều tra thêm, không kết luận vội.
+
+Case id / type: FILE-zh-Hans-vi / dịch file zh-Hans-vi (RETEST ROUND 2)
+Ngày giờ / URL / browser: 2026-10-09 ~18:23, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh), playwright
+input: file_path=fixtures/files/zh-Hans-1000.txt (zh-Hans->vi)
+output_gold: bản dịch tiếng Việt gốc tương ứng
+Output thực tế quan sát trên UI: job chuyển running->failed ở 2/18 chunk, error.code=TOKEN_INTEGRITY_FAILED, request_id=67087eb81c471312a19aa56e. JSON job status đầy đủ: {"job_id":"53f3f33ed8e46f02830fa303887a3024","kind":"file","status":"failed","stage":"done","progress":{"completed":2,"total":18},"source_lang":"zh","target_lang":"vi","warnings":[],"error":{"code":"TOKEN_INTEGRITY_FAILED","message":"Processing failed.","request_id":"67087eb81c471312a19aa56e"}}. source_lang trả "zh" xác nhận fix #1 (zh-Hans alias) vẫn hoạt động đúng (upload không còn lỗi 400), chỉ riêng TOKEN_INTEGRITY_FAILED còn tái diễn.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-zh-Hans-vi-round2.png (card zh-Hans-1000.txt hiển thị rõ badge đỏ "! Dịch thất bại", đối chiếu cạnh ja-1000.txt cũng "! Dịch thất bại" và ko-1000.txt "✓ Dịch hoàn tất" trong cùng ảnh)
+Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
+Kết luận: FAIL (RETEST ROUND 2 -- KHÔNG CẢI THIỆN)
+Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra y hệt các lần test trước, dừng đúng 2/18 chunk. Fix round 2 KHÔNG khắc phục được case này -- ghi nhận trung thực theo yêu cầu điều phối, không suy diễn đã hết lỗi dù fix round 2 đã sửa được FILE-vi-en/FILE-vi-fr/FILE-ko-vi.
+Nguyên nhân: BE, cùng pattern TOKEN_INTEGRITY_FAILED dừng ở 2/18 chunk như FILE-ja-vi (vẫn FAIL). Cả 2 case còn FAIL sau fix round 2 (ja-vi, zh-Hans-vi) đều có nguồn KHÔNG phải tiếng Việt và đích LÀ tiếng Việt; 3 case đã PASS (vi-en, vi-fr có nguồn=vi; ko-vi có nguồn=ko nhưng PASS) không cho thấy quy luật ngôn ngữ rõ ràng -- khớp với ghi chú đính chính đã nêu ở case FILE-ko-vi, cần BE điều tra thêm theo đặc điểm fixture/token cụ thể, không kết luận vội theo hướng ngôn ngữ.

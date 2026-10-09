@@ -1,0 +1,102 @@
+Kết quả kiểm thử dịch — phiên 2026-10-09-02
+Phạm vi: FULL luồng cặp ngôn ngữ Việt-Nhật (6 case: text 2 chiều, file 2 chiều, ảnh 2 chiều)
+Đây KHÔNG phải phiên chạy đầy đủ 68/68 case (xem 03-tieu-chi-pass.txt mục 6); đây là chạy có chủ đích theo yêu cầu "thử 1 luồng full đối với cặp việt-Nhật".
+Môi trường: https://ias.id.vn/ai/translate (đăng nhập https://ias.id.vn/login, tài khoản dev201)
+Công cụ: phần text dùng mcp__t3-code__preview_*; phần file/ảnh dùng mcp__playwright__browser_* (đăng nhập lại độc lập trong browser riêng của playwright — browser t3-code preview không có thao tác upload file/dialog, xem ghi chú cuối file).
+
+TỔNG KẾT
+Đạt: 4/6 UC (PASS)
+Không đạt: 2/6 UC (FAIL)
+Bị chặn: 0/6 UC
+Chưa chạy: 0/6 UC
+
+Danh sách UC lỗi:
+  TXT-DIRECT-vi-ja — BE (nghi vấn, path v3) — bản dịch mất gần hết nội dung, chỉ còn trợ từ/ngữ pháp tiếng Nhật
+  FILE-ja-vi — BE (xác nhận) — job failed, error.code=TOKEN_INTEGRITY_FAILED
+
+--------------------------------------------------------------------
+Case id: TXT-DIRECT-vi-ja
+Type: dịch trực tiếp vi-ja
+Ngày giờ / URL: 09/10/2026 ~15:35-15:36 UTC, https://ias.id.vn/ai/translate (tab Dịch trực tiếp)
+input: toàn văn fixtures/text/vi-500.txt (581 từ)
+output_gold: fixtures/text/ja-500.txt
+Output thực tế (trích đầu): "がネットワークシステムになをした、インシデントチームは5の（、じめ、、、）にうがある。..." — mất gần hết danh từ/động từ, một đoạn giữa gần như toàn dấu câu: "。，，，，。，。"
+Có lỗi/overlay trên màn hình: Không — UI hiển thị như dịch thành công bình thường, không cảnh báo
+Kết luận: FAIL
+Nguyên nhân:
+  Loại: BE (nghi vấn)
+  FE: không có log lỗi console/network liên quan trong phiên quan sát qua t3-code preview
+  BE: path nghi vấn `/ai/v3/translate` hoặc `/ai/v3/translate/stream` qua proxy IAS (chưa bắt được request v3 thật trong Network để xác nhận tuyệt đối, khác với v2 đã xác nhận — xem 01-api-va-luong-xu-ly.txt mục "Đã xác minh qua Network thật")
+  Ghi chú quan trọng: CÙNG nội dung vi-1000.txt (chứa đúng đoạn văn 500 từ này) dịch bằng FILE-vi-ja (job v2) lại PASS hoàn hảo — vậy lỗi không phải do bản thân cặp ngôn ngữ vi→ja hay nội dung nguồn, mà đặc thù theo pipeline v3/text trực tiếp.
+
+--------------------------------------------------------------------
+Case id: TXT-DIRECT-ja-vi
+Type: dịch trực tiếp ja-vi
+Ngày giờ / URL: 09/10/2026 ~15:38 UTC, https://ias.id.vn/ai/translate
+input: toàn văn fixtures/text/ja-500.txt
+output_gold: fixtures/text/vi-500.txt
+Output thực tế: đầy đủ 5 đoạn, đúng nghĩa, giữ nguyên 198.51.100.23 / CVE-2024-21412 / 3.4.1 / URL / "bảy mươi hai giờ"
+Có lỗi/overlay: Không
+Kết luận: PASS
+
+--------------------------------------------------------------------
+Case id: FILE-vi-ja
+Type: dịch file vi-ja
+Ngày giờ / URL: 09/10/2026 15:51:18-15:55:24 UTC, https://ias.id.vn/ai/translate (tab Dịch tệp và hình ảnh)
+input: fixtures/files/vi-1000.txt (6.3 KB, upload qua mcp__playwright__browser_file_upload)
+output_gold: fixtures/files/ja-1000.txt
+Job: a4e0c5f12ac9b0488cfcf0fd084217db — status succeeded, 18/18 block, thời gian xử lý ~4 phút
+Output thực tế: translated_text đầy đủ 18 block, đúng nghĩa so với output_gold, giữ nguyên 100% literal (198.51.100.23, CVE-2024-21412, 3.4.1, portal.noi-bo.example.com/api/v1/upload — đã kiểm bằng substring match), warnings=[]
+Có lỗi/overlay: Không (dù lúc polling có gặp chuỗi HTTP 400 ngắt quãng — xem mục "Phát hiện phụ" cuối file; không ảnh hưởng tới job tự chạy ở backend)
+Kết luận: PASS
+
+--------------------------------------------------------------------
+Case id: FILE-ja-vi
+Type: dịch file ja-vi
+Ngày giờ / URL: 09/10/2026 15:51:45-15:56:09 UTC, https://ias.id.vn/ai/translate
+input: fixtures/files/ja-1000.txt (6.3 KB, upload qua mcp__playwright__browser_file_upload)
+output_gold: fixtures/files/vi-1000.txt
+Job: 91c62e13105a9852bbc74570a6c6e612 — status FAILED, dừng ở 2/18 block
+Response job status đầy đủ:
+  "error": {"code": "TOKEN_INTEGRITY_FAILED", "message": "Processing failed.", "request_id": "8196dba1943fb4f6b62936f2"}
+Có lỗi/overlay trên UI: cần đối chiếu — tại thời điểm quan sát qua curl trực tiếp API thấy error rõ ràng; chưa chụp lại đúng lúc UI hiển thị trạng thái failed (đã rời màn hình để kiểm job khác). Không coi đây là "không lỗi" — job đã thất bại thật ở BE, UI phải phản ánh đúng khi tải lại trang Xem trước.
+Kết luận: FAIL
+Nguyên nhân:
+  Loại: BE (xác nhận, có mã lỗi cụ thể)
+  BE: endpoint `GET https://ias.id.vn/api/ais/v2/translate/jobs/91c62e13105a9852bbc74570a6c6e612`, error.code=TOKEN_INTEGRITY_FAILED, request_id=8196dba1943fb4f6b62936f2. Dừng ở block 2/18 — nghi vấn lỗi xảy ra khi xử lý một đoạn cụ thể trong file nguồn tiếng Nhật (ja-1000.txt), có thể liên quan tới cách chia token/chunk cho văn bản CJK dài. Cần đội BE tra log server theo đúng request_id này để xác định dòng code gây lỗi.
+  Ghi chú: TXT-DIRECT-ja-vi (text trực tiếp, cùng ngôn ngữ nguồn ja, đoạn ngắn hơn 500 từ) PASS hoàn hảo — nghi vấn liên quan tới độ dài nội dung/số lượng chunk (18 block) trong pipeline v2 file, không phải lỗi chung của tiếng Nhật làm nguồn.
+
+--------------------------------------------------------------------
+Case id: IMG-vi-ja
+Type: dịch ảnh vi-ja
+Ngày giờ / URL: 09/10/2026 ~15:52-15:56 UTC
+input: fixtures/images/ocr-vi.png (upload qua playwright)
+output_gold: ocr_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức.", translated_text (tiếng Nhật tương ứng)
+Job: 1cb1bce8588af145857f3ad028eefc8e — succeeded
+OCR nhận dạng (raw_text): khớp 100% với ảnh gốc, giữ đúng dấu câu/xuống dòng
+Bản dịch: "異常な兆候が検出された場合、救助チームは直ちにサーバーを隔離し、内部ネットワークから切り離さなければならない。" — đúng nghĩa so với output_gold.translated_text (diễn đạt khác nhưng cùng ý: phát hiện bất thường → cô lập server khỏi mạng nội bộ ngay lập tức)
+Cảnh báo: warnings=[{"code":"OCR_CORRECTION_REJECTED","message":"Automatic OCR correction is unavailable; review raw text."}], ocr.needs_review=true — không ảnh hưởng PASS vì raw_text đã đúng, không cần hiệu chỉnh
+Có lỗi/overlay: Không (job succeeded)
+Kết luận: PASS
+
+--------------------------------------------------------------------
+Case id: IMG-ja-vi
+Type: dịch ảnh ja-vi
+Ngày giờ / URL: 09/10/2026 ~15:52-15:56 UTC
+input: fixtures/images/ocr-ja.png
+output_gold: ocr_text (câu tiếng Nhật tương ứng), translated_text="Khi phát hiện dấu hiệu bất thường, đội ứng cứu phải cô lập máy chủ khỏi mạng nội bộ ngay lập tức."
+Job: fea58adc1f9fba8641ebde5c4442a829 — succeeded
+OCR nhận dạng: khớp 100% với ảnh gốc
+Bản dịch: "Khi phát hiện ra hoạt động bất thường, đội ngũ xử lý cần ngay lập tức cô lập máy chủ khỏi mạng nội bộ của công ty." — đúng nghĩa so với output_gold
+Cảnh báo: cùng OCR_CORRECTION_REJECTED như trên, không ảnh hưởng PASS
+Kết luận: PASS
+
+--------------------------------------------------------------------
+
+PHÁT HIỆN PHỤ — lỗi hạ tầng polling (không tính vào 6 case trên, ghi để BE/FE xử lý riêng)
+
+Khi 4 job (2 file + 2 ảnh) chạy đồng thời trong cùng phiên trình duyệt, polling GET /api/ais/v2/translate/jobs/{job_id} xuất hiện các đợt 12-50 request liên tiếp trả HTTP 400 (text/plain, body gần rỗng) rồi tự phục hồi về 200 sau vài giây, lặp lại theo chu kỳ suốt quá trình chờ job FILE-vi-ja (job lâu nhất, ~4 phút). Header request lúc 400 vẫn có Bearer hợp lệ. FE không hiện bất kỳ cảnh báo nào cho người dùng trong các đợt 400 này — console chỉ log "Get translate job error", UI vẫn hiển thị "Đang chờ xử lý..." bình thường. Job vẫn tiếp tục chạy đúng ở backend bất kể các lần poll bị 400 (xác nhận qua progress tăng dần đều). Nghi vấn: rate-limit/WAF phía proxy IAS khi poll nhiều job cùng lúc, trả sai mã 400 thay vì 429 theo đúng contract lỗi đã ghi ở 01-api-va-luong-xu-ly.txt mục 5. Chi tiết đầy đủ đã cập nhật vào 01-api-va-luong-xu-ly.txt.
+
+GHI CHÚ VỀ CÔNG CỤ TEST
+
+mcp__t3-code__preview_* không có cách nào chọn file qua dialog hệ điều hành cho tab đã đăng nhập. Giải pháp dùng được: đăng nhập lại bằng mcp__playwright__browser_* (browser riêng biệt), điều hướng/thiết lập ngôn ngữ y hệt, bấm "Chọn tệp" trong browser đó để playwright bắt được modal file-chooser thật, rồi gọi mcp__playwright__browser_file_upload với đường dẫn tuyệt đối. Đã thử một cách khác (set thẳng .files của input qua JS/base64) nhưng bị hệ thống an toàn chặn giữa chừng — không dùng lại cách đó. Cách dùng playwright-login-riêng này cần áp dụng cho toàn bộ 36 case FILE/IMG còn lại trong ma trận 68 case.
