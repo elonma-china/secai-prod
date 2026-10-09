@@ -241,7 +241,15 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
         chunk_count += len(chunks)
         if chunk_count > 300:
             raise TranslationError("TEXT_TOO_LONG", "Document needs too many model chunks.")
-        for attempt in range(2):
+        # The literal-integrity check is deterministic per attempt but the model's
+        # chunk translation is not: a resend can preserve the placeholder markers
+        # even when a prior sample garbled or dropped one. Give it a dedicated,
+        # configurable retry budget instead of the single hardcoded resend, since
+        # production shows this check tripping intermittently on the same input
+        # (TOKEN_INTEGRITY_FAILED, case ids FILE-ja-vi/FILE-vi-en/FILE-ko-vi/FILE-vi-fr,
+        # 2026-10-09). This does not relax what the check rejects.
+        integrity_max_attempt = getattr(context, "literal_integrity_max_retries", 1)
+        for attempt in range(integrity_max_attempt + 1):
             pieces: list[tuple[str, str, str]] = []
             for chunk in chunks:
                 if len(chunk) > 6000:
@@ -291,7 +299,7 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                         raise TranslationError("TOKEN_INTEGRITY_FAILED",
                                                "Technical literal integrity check failed.")
                 except TranslationError as exc:
-                    if exc.code != "TOKEN_INTEGRITY_FAILED" or attempt:
+                    if exc.code != "TOKEN_INTEGRITY_FAILED" or attempt >= integrity_max_attempt:
                         raise
                     continue
                 translated.append(TranslatedBlock(source=block, translated_text=output))

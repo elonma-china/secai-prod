@@ -19,6 +19,10 @@ from .specialist import TranslationAgent
 from .types import ProcessingContext, TranslationError
 
 
+class _JobStopped(asyncio.CancelledError):
+    """The job was cancelled or this worker no longer owns its claim."""
+
+
 class WorkerContext(ProcessingContext):
     def __init__(self, store: JobStore, settings: TranslationSettings, runner: Any,
                  row: dict, llm_gate: asyncio.Semaphore):
@@ -28,6 +32,7 @@ class WorkerContext(ProcessingContext):
         self.row = row
         self.llm_gate = llm_gate
         self.model_context_tokens = settings.specialist_context_tokens
+        self.literal_integrity_max_retries = settings.literal_integrity_max_retries
 
     async def checkpoint(self, stage: str, completed: int = 0, total: int | None = None) -> None:
         if time.time() >= self.row["deadline"]:
@@ -35,7 +40,7 @@ class WorkerContext(ProcessingContext):
         ok = await asyncio.to_thread(self.store.progress, self.row["job_id"],
                                      self.row["generation"], stage, completed, total)
         if not ok:
-            raise asyncio.CancelledError
+            raise _JobStopped
 
     async def complete(self, profile: str, prompt: str) -> tuple[str, dict[str, Any]]:
         if profile != "ocr_correction" or not self.settings.ocr_correction_supported or self.runner is None:
@@ -83,7 +88,7 @@ class WorkerContext(ProcessingContext):
             while True:
                 await asyncio.sleep(0.5)
                 state = await asyncio.to_thread(self.store.get, self.row["job_id"])
-                if state["status"] != "running":
+                if state["status"] != "running" or state["generation"] != self.row["generation"]:
                     return
 
         watcher = asyncio.create_task(watch_cancel())
@@ -92,7 +97,7 @@ class WorkerContext(ProcessingContext):
                 {call, watcher}, timeout=min(remaining, timeout) if timeout else remaining,
                 return_when=asyncio.FIRST_COMPLETED)
             if watcher in done:
-                raise asyncio.CancelledError
+                raise _JobStopped
             if call in done:
                 return call.result()
             if time.time() >= self.row["deadline"]:
@@ -175,8 +180,13 @@ class Worker:
                 "ocr": ocr,
             }
             await asyncio.to_thread(self.store.finish, row["job_id"], row["generation"], result=result)
-        except asyncio.CancelledError:
+        except _JobStopped:
             await asyncio.to_thread(self.store.finish, row["job_id"], row["generation"])
+        except asyncio.CancelledError:
+            # A concurrent DELETE may be acknowledged, but a running claim
+            # without a result stays recoverable when its lease expires.
+            await asyncio.to_thread(self.store.finish, row["job_id"], row["generation"])
+            raise
         except TranslationError as exc:
             await asyncio.to_thread(self.store.finish, row["job_id"], row["generation"],
                                     error_code=exc.code)
@@ -185,10 +195,7 @@ class Worker:
                                     error_code="INTERNAL_ERROR")
         finally:
             heartbeat.cancel()
-            try:
-                await heartbeat
-            except asyncio.CancelledError:
-                pass
+            await asyncio.gather(heartbeat, return_exceptions=True)
         return True
 
     async def serve(self) -> None:
