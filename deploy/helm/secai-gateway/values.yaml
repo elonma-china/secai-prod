@@ -13,6 +13,7 @@ gateway:
     GATEWAY_DB_PATH: /app/data/gateway.db
     INPUT_CLASSIFIER_ENABLED: "true"
     INPUT_CLASSIFIER_BLOCK_OFFTOPIC: "false"
+    # CHAT_KNOWLEDGE_GROUNDING_ENABLED: "true"   # knowledge KB grounding, off by default (docs/plans/kb-knowledge-grounding.md)
   resources:
     requests: { cpu: "1", memory: 2Gi }
     limits: { cpu: "4", memory: 8Gi }

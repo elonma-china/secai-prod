@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
+import hashlib
+import json
+import os
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -12,6 +15,38 @@ from secai_gateway.app import create_app
 from secai_gateway.agent import registry_for
 
 
+@pytest.fixture(autouse=True)
+def offline_gateway_services(monkeypatch, tmp_path):
+    monkeypatch.setattr("secai_gateway.retrieval.kb_context.get_cve_context", AsyncMock(
+        return_value={"status": "not_found", "content": "", "cwe_refs": []}))
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "false")
+    monkeypatch.setenv("POC_EXPLOIT_ENABLED", "false")
+    monkeypatch.setenv("HEALTH_DEEP_CHECKS", "false")
+    monkeypatch.setenv("POC_GITHUB_ONDEMAND_ENABLED", "false")
+    monkeypatch.setenv("POC_ONDEMAND_CACHE_DIR", str(tmp_path / "ondemand-cache"))
+    monkeypatch.setenv("POC_FIXED_DIR", str(tmp_path / "fixed-pocs"))
+    real_client = httpx.AsyncClient
+
+    def provider_health(request):
+        assert request.method == "GET" and request.url.path.endswith("/models"), request.url
+        return httpx.Response(200, json={"data": []})
+
+    def offline_client(*args, **kwargs):
+        kwargs.setdefault("transport", httpx.MockTransport(provider_health))
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", offline_client)
+
+
+@pytest.fixture
+def known_cve_context(monkeypatch):
+    async def context(cve_id):
+        return {"status": "found", "content": f"{cve_id}: The affected service permits remote code execution through unsafe input processing.",
+                "cwe_refs": []}
+
+    monkeypatch.setattr("secai_gateway.retrieval.kb_context.get_cve_context", context)
+
+
 class FakeRunner:
     """Implements both interfaces the routes use: complete() for the non-stream endpoints
     and stream() for the SSE endpoints. Records each call so tests can assert routing."""
@@ -19,11 +54,11 @@ class FakeRunner:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str | None]] = []
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         self.calls.append((profile_name, prompt, session_id))
         return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         self.calls.append((profile_name, prompt, session_id))
         yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
 
@@ -101,7 +136,7 @@ def test_health_status_pure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_streaming_endpoints() -> None:
+async def test_streaming_endpoints(known_cve_context) -> None:
     fake = FakeRunner()
     stream_paths = {
         "/ai/chat/stream": "chat",
@@ -121,7 +156,17 @@ async def test_streaming_endpoints() -> None:
             response = await client.post(path, json=body)
             assert response.status_code == 200, path
             assert "event: token" in response.text
-            assert f"{profile}:" in response.text
+            assert fake.calls[-1][0] == profile
+            if path == "/ai/exploit/stream":
+                events = [block.split("\n", 1) for block in response.text.split("\n\n")
+                          if block.startswith("event: ")]
+                final = next(json.loads(data.removeprefix("data: "))
+                             for event, data in events if event == "event: final")
+                tokens = "".join(json.loads(data.removeprefix("data: "))["delta"]
+                                 for event, data in events if event == "event: token")
+                assert tokens == final["content"]
+            else:
+                assert f"{profile}:" in response.text
             assert "event: final" in response.text
             assert "data: [DONE]" in response.text
 
@@ -196,7 +241,7 @@ def test_consolidated_prompt_appendix_spotlights_code_and_readme_as_untrusted() 
 
 
 @pytest.mark.asyncio
-async def test_exploit_chitchat_returns_cve_guide() -> None:
+async def test_exploit_chitchat_returns_cve_guide(known_cve_context) -> None:
     """A greeting on the exploit endpoints returns a short "nhập CVE" guide WITHOUT running
     the model or forcing the "## 1. …" report scaffolding."""
     fake = FakeRunner()
@@ -220,7 +265,7 @@ async def test_exploit_chitchat_returns_cve_guide() -> None:
         assert "## 1." not in stream.text
         assert fake.calls == []
 
-        # A malformed CVE is NOT chitchat — it reaches the model (normalized to canonical).
+        # A malformed CVE reaches the model after normalization and usable KB grounding.
         await client.post("/ai/exploit", json={"user_id": "u1", "message": "cve 2024 1234"})
         assert fake.calls, "malformed CVE should have run the model"
         assert "CVE-2024-1234" in fake.calls[-1][1]  # prompt normalized before the model
@@ -318,10 +363,10 @@ async def test_translate_chunks_long_input_preserving_literals_across_chunks() -
 class FailingRunner:
     """A runner whose stream dies mid-run — models the live 'session not found' case."""
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         raise RuntimeError("boom: session not found: chat:deadbeef")
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         raise RuntimeError("boom: session not found: chat:deadbeef")
         yield  # pragma: no cover — makes this an async generator
 
@@ -355,10 +400,10 @@ class SlowRunner:
         self.ledger = ledger
         self.delay = delay
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         return f"{profile_name}: {prompt}", {"run_id": "run-test", "profile": profile_name}
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         await asyncio.sleep(self.delay)
         yield PartialAssistantEvent(delta={"kind": "text", "text": "Mục 2. Phân tích..."})
 
@@ -370,21 +415,42 @@ class FailingExploitRunner:
     poc = None
     ledger = None
 
-    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def complete(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         raise RuntimeError("boom: session not found: exploit:deadbeef")
 
-    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None):
+    async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         raise RuntimeError("boom: session not found: exploit:deadbeef")
         yield  # pragma: no cover — makes this an async generator
 
 
 @pytest.mark.asyncio
-async def test_exploit_stream_section1_preview_arrives_before_final() -> None:
+async def test_exploit_stream_section1_preview_arrives_before_final(tmp_path, monkeypatch) -> None:
     from secai_gateway.poc.backend import LocalPocBackend
+    from secai_gateway.poc.catalog import PocCatalog
+    from secai_gateway.poc.models import NormalizedPoc
     from secai_gateway.state import SqliteLedger
 
-    poc = LocalPocBackend()
-    ledger = SqliteLedger(tempfile.mktemp(suffix=".db"))
+    # Keep the endpoint/prefetch/ledger path real while making its evidence fully owned by
+    # this test. The catalog contains a small synthetic artifact, not an external CVE snapshot.
+    source = "# synthetic offline fixture\n# CVE-2021-41773\nimport socket\n"
+    root = tmp_path / "poc-artifacts"
+    digest = hashlib.sha256(source.encode()).hexdigest()
+    relpath = f"sha256/{digest}"
+    artifact = root / relpath
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(source, encoding="utf-8")
+    catalog = PocCatalog(tmp_path / "poc-catalog.db")
+    catalog.upsert(NormalizedPoc(
+        source="poc_github", source_ref="fixture/secai-quality/synthetic.py",
+        kind="exploit", title="Synthetic offline CVE-2021-41773 fixture",
+        description="Test-owned content for exploit-stream preview ordering.",
+        cve_ids=["CVE-2021-41773"], language="py", verified=True, rank=100,
+        url="https://example.invalid/synthetic-fixture", license="test-only",
+        redistributable=False, artifact_sha256=digest, artifact_path=relpath,
+    ))
+    catalog.commit()
+    poc = LocalPocBackend(catalog=catalog, source_roots={"poc_github": root})
+    ledger = SqliteLedger(str(tmp_path / "ledger.db"))
     runner = SlowRunner(poc, ledger, delay=0.3)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(runner)), base_url="http://test") as client:
         resp = await client.post("/ai/exploit/stream", json={"vulnerability_type": "CVE-2021-41773"})
@@ -396,7 +462,32 @@ async def test_exploit_stream_section1_preview_arrives_before_final() -> None:
 
 
 @pytest.mark.asyncio
-async def test_exploit_stream_failure_is_visible_not_silent() -> None:
+@pytest.mark.skipif(
+    os.environ.get("RUN_POC_CATALOG_EXTERNAL_SMOKE") != "1",
+    reason="external catalog integration; set RUN_POC_CATALOG_EXTERNAL_SMOKE=1 to verify SSE against real CVE-2021-41773 source data",
+)
+async def test_external_exploit_stream_has_section1_when_real_source_exists(tmp_path, monkeypatch) -> None:
+    from pathlib import Path
+
+    from secai_gateway.poc.backend import LocalPocBackend
+    from secai_gateway.config import get_settings
+    from secai_gateway.state import SqliteLedger
+
+    catalog_path = Path(get_settings().poc_catalog_db)
+    assert catalog_path.is_file(), f"external PoC catalog is missing: {catalog_path}"
+
+    runner = SlowRunner(LocalPocBackend(), SqliteLedger(str(tmp_path / "ledger.db")), delay=0.3)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(runner)), base_url="http://test") as client:
+        resp = await client.post("/ai/exploit/stream", json={"vulnerability_type": "CVE-2021-41773"})
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: section1" in body, "real source evidence must produce the preview"
+    assert body.index("event: section1") < body.index("event: final")
+    assert "data: [DONE]" in body
+
+
+@pytest.mark.asyncio
+async def test_exploit_stream_failure_is_visible_not_silent(known_cve_context) -> None:
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(FailingExploitRunner())), base_url="http://test") as client:
         resp = await client.post("/ai/exploit/stream", json={"vulnerability_type": "CVE-0000-0000"})
     assert resp.status_code == 200
@@ -407,6 +498,28 @@ async def test_exploit_stream_failure_is_visible_not_silent() -> None:
     assert "data: [DONE]" in body
     assert "Xin lỗi" in body
     assert "session not found" not in body
+
+
+@pytest.mark.asyncio
+async def test_old_chat_contract_shape_locked() -> None:
+    """Regression fence: the new multi-conversation feature must NOT alter the old chat
+    contract the Japanese system depends on — exact top-level keys, no leaked conversation_id,
+    and no new SSE frame types on the old /ai/chat/stream."""
+    import json as _json
+
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)), base_url="http://test") as client:
+        body = (await client.post("/ai/chat", json={"user_id": "u1", "message": "hi"})).json()
+        assert set(body.keys()) == {"response", "answer", "message", "metadata"}
+        assert "conversation_id" not in body           # old endpoint must not gain the new field
+
+        stream = await client.post("/ai/chat/stream", json={"user_id": "u1", "message": "hi", "text": "hi"})
+        text = stream.text
+        assert "event: conversation" not in text        # no new frame leaked onto the old stream
+        assert "event: compaction" not in text
+        final_line = [ln for ln in text.splitlines() if ln.startswith("data: ") and '"content"' in ln][-1]
+        payload = _json.loads(final_line[len("data: "):])
+        assert set(payload.keys()) == {"content", "answer", "message", "metadata"}
 
 
 def test_chat_session_id_scoping() -> None:

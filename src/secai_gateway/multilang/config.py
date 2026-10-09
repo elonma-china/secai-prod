@@ -104,7 +104,7 @@ class MultilangSettings(BaseSettings):
     # Attested upper bound for serving chat-template role/special-token overhead.
     chat_template_overhead_tokens: int = Field(0, ge=0, le=4096)
     backend: Literal["incumbent", "specialist"] = "incumbent"
-    specialist_profile: Literal["madlad_t5", "hymt2_7b_gguf"] = "madlad_t5"
+    specialist_profile: Literal["madlad_t5", "hymt2_7b_gguf", "hymt2_7b_gguf_gpu"] = "madlad_t5"
     specialist_base_url: str = ""
     specialist_api_key: str = ""
     specialist_model: str = ""
@@ -147,7 +147,7 @@ def verified_counter(settings: MultilangSettings) -> Callable[[str], int] | None
 
 def verified_specialist_counter(settings: MultilangSettings) -> Callable[[str], int] | None:
     """Load only the selected specialist's locally pinned tokenization recipe."""
-    if settings.specialist_profile == "hymt2_7b_gguf":
+    if settings.specialist_profile in {"hymt2_7b_gguf", "hymt2_7b_gguf_gpu"}:
         return _verified_hymt_counter(settings)
     if not settings.specialist_context_tokens:
         return None
@@ -155,8 +155,9 @@ def verified_specialist_counter(settings: MultilangSettings) -> Callable[[str], 
 
 
 def _verified_hymt_counter(settings: MultilangSettings) -> HyMtCounter | None:
+    required_context = 2048 if settings.specialist_profile == "hymt2_7b_gguf_gpu" else 4096
     if (settings.specialist_model != HYMT_MODEL or
-            settings.specialist_context_tokens != 4096 or
+            settings.specialist_context_tokens != required_context or
             settings.specialist_max_output_tokens != 512 or
             settings.specialist_chunk_input_tokens > 1024 or
             settings.specialist_tokenizer_sha256.lower() != HYMT_TOKENIZER_SHA256 or

@@ -1,0 +1,69 @@
+{
+  "batch": "knowledge-2026-10-07",
+  "total": 8386,
+  "dup_doc_id": 1,
+  "dup_text": 0,
+  "by_source": {
+    "owasp-cheatsheet": 3750,
+    "owasp-asvs": 345,
+    "cwe": 1961,
+    "capec": 436,
+    "attack": 1577,
+    "owasp-top10": 317
+  },
+  "by_kind": {
+    "cheatsheet": 3750,
+    "requirement": 345,
+    "mitigation": 3960,
+    "taxonomy": 331
+  },
+  "by_sensitivity": {
+    "defensive": 8330,
+    "contains_attack_example": 56
+  },
+  "text_chars": {
+    "min": 71,
+    "p1": 133,
+    "p50": 623,
+    "p99": 1066,
+    "max": 1158
+  },
+  "empty_text": 0,
+  "over_max": 0,
+  "missing_provenance": 0,
+  "versions": [
+    "ATT&CK-19.2",
+    "CAPEC-3.9",
+    "CWE-4.20",
+    "git:29994dd8a2e6f50fa3d5607b046b54d7c6945afd",
+    "git:3a31f35346c3f4e90f350395124382fa53af2afe",
+    "git:9b5da3168d5079248abfb6adb77bebc2b5fcf321"
+  ],
+  "raw_sources": {
+    "owasp-cheatsheet": {
+      "git_sha": "29994dd8a2e6f50fa3d5607b046b54d7c6945afd",
+      "url": "https://github.com/OWASP/CheatSheetSeries"
+    },
+    "owasp-asvs": {
+      "git_sha": "9b5da3168d5079248abfb6adb77bebc2b5fcf321",
+      "url": "https://github.com/OWASP/ASVS"
+    },
+    "cwe": {
+      "file": "cwec_v4.20.xml",
+      "sha256": "99da273c076086ffed3779be039564265d19766107c17fdc6396871773daa493",
+      "url": "https://cwe.mitre.org/data/downloads.html"
+    },
+    "owasp-top10": {
+      "git_sha": "3a31f35346c3f4e90f350395124382fa53af2afe",
+      "url": "https://github.com/OWASP/Top10"
+    },
+    "capec": {
+      "sha256": "70279a2dff0cb0ad79e546adb07828335a704ad5210e047e09e986172fc9e34d",
+      "url": "https://capec.mitre.org/data/downloads.html"
+    },
+    "attack": {
+      "sha256": "dc1639caa5501d720e280cf1cbd8fbe009884a0c9b3e6e9ed9d0c25166c3d8f4",
+      "url": "https://github.com/mitre-attack/attack-stix-data"
+    }
+  }
+}
