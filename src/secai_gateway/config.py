@@ -243,6 +243,24 @@ class Settings(BaseSettings):
     # simple queries to 1-2 turns. Override per-deploy via STEP_CAP.
     step_cap: int = 16
     tool_timeout_ms: int = 30000
+    # ── LLM output budgets — DECOUPLED into two independent knobs ────────────────────────────
+    # In linch a single value is overloaded: the GENERATION cap (max tokens a turn may emit) is
+    # `RunOptions.max_output_tokens or agent.max_output_tokens`, while the COMPACTION reserve is
+    # `agent.max_output_tokens` only (compaction fires when est(context)+reserve >= 0.8*window).
+    # Coupling them was dangerous: a reserve small enough to keep compaction healthy at any window
+    # ALSO capped generation → an exploit PoC could be truncated. So we split them: agent-level
+    # holds only the (small) compaction reserve, and each run passes its own generous per-profile
+    # generation cap via RunOptions (agent/runner.py).
+    #
+    # Compaction reserve (agent-level). Small → compaction fires rarely + as one big fact-
+    # preserving pass at ANY context window (fixes the qwen_context_window=32768 default which,
+    # with the old ~32768 reserve, made compaction re-fire every turn and erode early facts —
+    # measured 2026-09-02). Never used as a generation cap (every run overrides that below).
+    llm_compaction_reserve_tokens: int = 4096
+    # Per-turn GENERATION cap, per profile (RunOptions.max_output_tokens). Generous so nothing is
+    # truncated. exploit_research gets the largest budget because a synthesized PoC can be long.
+    llm_max_output_tokens: int = 16384          # chat/translate/report/statistical/bughunt (~64KB)
+    llm_exploit_max_output_tokens: int = 32768  # exploit_research — long PoC headroom (~128KB)
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     report_feature_enabled: bool = False
@@ -263,6 +281,30 @@ class Settings(BaseSettings):
     # dev/test-only and never persists. See agent/runner.py's LinchRunner.__init__.
     session_store_backend: str = "sqlite"
     session_db_path: str = "./data/sessions.db"
+    # ── Chat history / multi-conversation (new /ai/conversations/* endpoints) ────
+    # Live-memory window in the linch Redis session store, refreshed on every write.
+    # Default = the legacy 24h so old /ai/chat behavior is untouched. Durable history
+    # (conversation index + full transcript) is a separate SQLite store that never expires,
+    # so widening this only affects how long the *live* compacted context survives idle.
+    session_ttl_seconds: int = 86400
+    # Master flag for the durable multi-conversation feature (endpoints stay registered;
+    # this gates the durable-store bookkeeping and rehydrate). Fail-open when off.
+    chat_history_enabled: bool = True
+    # When a conversation is reopened after its Redis live window expired, seed the linch
+    # session with this many of the most recent durable transcript messages before running
+    # (0 = disable rehydrate). linch compacts further if the seed is large.
+    chat_history_rehydrate_turns: int = 12
+    # Surface a `compaction` object in the NEW stream endpoint's final metadata (and an
+    # additive `compaction` SSE frame) when linch compacts mid-run. Observational only.
+    conversation_compaction_meta: bool = True
+    # Swap linch's coding-flavored ENGLISH compaction summary for a fact-preserving Vietnamese
+    # one (agent/factory.py::CHAT_SUMMARY_PROMPT_VI). Default OFF (conservative — the Agent is
+    # shared by every profile). Live-test (2026-09-02) note: enabling it makes summaries VI and
+    # asks to keep user facts, but the small summarizer (Cyber-F1) still does NOT reliably retain
+    # an out-of-domain early fact across compaction — the durable SQLite transcript + rehydrate
+    # are the real safety net, and in production (32k window) compaction only fires on very long
+    # threads. Flag is now functional (it was previously inert — factory never read it).
+    chat_general_summary_prompt: bool = False
 
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào

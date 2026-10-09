@@ -87,6 +87,15 @@ injection_judge:
   base: false
   max_turns: 2
 
+# Single-shot conversation auto-title (api/routes.py::_maybe_autotitle): summarizes the first
+# Q&A pair of a new /ai/conversations/* thread into a short display title. Runs in the
+# background after the first turn — never blocks the chat response. No tools, pure text→text.
+conversation_title:
+  prompt: conversation_title.md
+  tools: []
+  base: false
+  max_turns: 2
+
 # Single-shot PoC consolidation: merge a fetched PoC's full source (1+ files) into ONE
 # self-contained runnable file for Section 1. No tools, no RAG — pure text→code transform.
 poc_consolidate:

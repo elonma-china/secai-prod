@@ -79,3 +79,42 @@ async def test_update_meta_and_skills_autocreate(store: RedisSessionStore) -> No
     await store.set_invoked_skills("chat:new2", [{"name": "x", "substituted_body": ""}])
     loaded = await store.load("chat:new2")
     assert loaded is not None and loaded.invoked_skills
+
+
+class _TtlRecordingRedis(_FakeRedis):
+    """Records the ex/ttl passed to each key so the TTL parametrization can be asserted."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ttl_by_key: dict[str, int] = {}
+
+    async def set(self, k, v, ex=None):  # noqa: ANN001
+        self.ttl_by_key[k] = ex
+        await super().set(k, v)
+
+    async def expire(self, k, ttl):  # noqa: ANN001
+        self.ttl_by_key[k] = ttl
+
+
+def _recording_store(monkeypatch, **kwargs) -> tuple[RedisSessionStore, _TtlRecordingRedis]:
+    import redis.asyncio as raio
+
+    rec = _TtlRecordingRedis()
+    monkeypatch.setattr(raio.Redis, "from_url",
+                        classmethod(lambda cls, url, decode_responses=True: rec))
+    return RedisSessionStore("redis://fake", **kwargs), rec
+
+
+@pytest.mark.asyncio
+async def test_ttl_parametrized(monkeypatch) -> None:
+    store, rec = _recording_store(monkeypatch, ttl_seconds=1234)
+    await store.append_messages("chat:conv:h:cid", [_msg("user", "hi")])
+    assert rec.ttl_by_key["linch:sess:chat:conv:h:cid"] == 1234       # record
+    assert rec.ttl_by_key["linch:sess:chat:conv:h:cid:msgs"] == 1234  # messages list
+
+
+@pytest.mark.asyncio
+async def test_ttl_defaults_to_legacy_24h(monkeypatch) -> None:
+    store, rec = _recording_store(monkeypatch)   # no ttl_seconds → legacy default
+    await store.update_meta("chat:abc", {"profile": "chat"})
+    assert rec.ttl_by_key["linch:sess:chat:abc"] == 86400
