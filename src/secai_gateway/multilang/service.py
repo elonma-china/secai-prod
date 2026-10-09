@@ -123,7 +123,18 @@ def _output_check(source: str, masked_source: str, output: str, masked_output: s
                                  for i in range(0, min(len(output) - 11, 48), 12)):
         raise TranslationError("OUTPUT_VALIDATION_FAILED")
     compact_source = _compact_prose(masked_source)
-    if len(compact_source) >= 12 and compact_source == _compact_prose(masked_output):
+    compact_output = _compact_prose(masked_output)
+    if len(compact_source) >= 12 and compact_source == compact_output:
+        raise TranslationError("OUTPUT_VALIDATION_FAILED")
+    # A chunk that keeps the ⟦ML-...⟧ markers but turns its actual prose into
+    # near-nothing (e.g. a run of CJK punctuation) passes every check above:
+    # it is not empty, not an untranslated copy, not a prompt leak, not a
+    # repeated loop. Require the output to retain a minimum share of letter
+    # content once literals/punctuation/whitespace are stripped. Production
+    # observed this silently dropping whole paragraphs on vi-source direct
+    # text translation (TXT-DIRECT-vi-ja / TXT-DIRECT-vi-zh-Hans, 2026-10-09;
+    # job reported success, metadata.chunks>1, no error surfaced).
+    if len(compact_source) >= 12 and len(compact_output) < max(2, len(compact_source) // 20):
         raise TranslationError("OUTPUT_VALIDATION_FAILED")
     evidence = _script_evidence(prose_output, target)
     if evidence == "unknown":

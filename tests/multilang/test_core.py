@@ -220,6 +220,23 @@ async def test_untranslated_copy_and_wrong_script_rejected():
 
 
 @pytest.mark.asyncio
+async def test_near_empty_cjk_punctuation_output_is_rejected():
+    # Production (2026-10-09, TXT-DIRECT-vi-ja / TXT-DIRECT-vi-zh-Hans): one
+    # chunk of a multi-chunk vi-source translation came back as a run of CJK
+    # punctuation with almost no actual letters, and every prior guard (not
+    # empty, not a copy, not a leak, not a repeat) let it through as a
+    # success with only a TARGET_LANGUAGE_UNCERTAIN warning.
+    class PunctuationOnly:
+        async def generate(self, request):
+            return GenerationResult("。，，，，。，。\n\n，、，。 72 ，。", "stop", EXPECTED_MODEL)
+
+    with pytest.raises(TranslationError, match="OUTPUT_VALIDATION_FAILED"):
+        await translate(TranslationRequest(
+            "Bước loại bỏ hoàn toàn nguyên nhân gốc của sự cố trước khi khôi phục dịch vụ.",
+            "vi", "zh"), llm=PunctuationOnly(), settings=settings(), token_count=count)
+
+
+@pytest.mark.asyncio
 async def test_cancellation_releases_model_slot():
     gate = asyncio.Event()
 
