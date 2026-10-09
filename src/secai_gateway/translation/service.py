@@ -9,7 +9,7 @@ from functools import lru_cache
 from lingua import Language, LanguageDetectorBuilder
 import regex
 
-from .technical_tokens import literal_spans, protect_literals, restore_literals
+from .technical_tokens import _VERSION, literal_spans, protect_literals, restore_literals
 from .types import (DocumentBlock, ProcessingContext, SourceLang, TargetLang,
                     TranslatedBlock, TranslationError)
 
@@ -174,6 +174,31 @@ def detect_source_language(blocks: tuple[DocumentBlock, ...]) -> TargetLang | No
     return _LANGUAGE_CODES[primary]
 
 
+def _technical_cores(text: str) -> list[str]:
+    """Technical tokens in ``text`` without the prose word a version match absorbs.
+
+    ``_VERSION`` treats any preceding ASCII word as a product name, so the span
+    found around a literal depends on the target-language prose next to it
+    ("from 198.51.100.23", "IP 198.51.100.23", "bản 3.4.1"). Comparing whole
+    spans between source and translation therefore failed deterministically on
+    correct output; the number itself is the token that must not change.
+    """
+    cores: list[str] = []
+    for start, end in literal_spans(text):
+        token = text[start:end]
+        match = _VERSION.fullmatch(token)
+        if match:
+            token = token[match.end("product") + 1:]
+        cores.append(token)
+    return cores
+
+
+def _occurs_as_token(core: str, source: str) -> bool:
+    """True when ``core`` appears in ``source`` as a whole token, not a fragment."""
+    return re.search(r"(?<![A-Za-z0-9_.:/\\-])" + re.escape(core) +
+                     r"(?![A-Za-z0-9_:/\\-]|\.[A-Za-z0-9])", source) is not None
+
+
 def _chunks(text: str, maximum: int = 3000) -> tuple[str, ...]:
     """Split at word boundaries without cutting a technical placeholder."""
     pieces: list[str] = []
@@ -241,13 +266,11 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
         chunk_count += len(chunks)
         if chunk_count > 300:
             raise TranslationError("TEXT_TOO_LONG", "Document needs too many model chunks.")
-        # The literal-integrity check is deterministic per attempt but the model's
-        # chunk translation is not: a resend can preserve the placeholder markers
-        # even when a prior sample garbled or dropped one. Give it a dedicated,
-        # configurable retry budget instead of the single hardcoded resend, since
-        # production shows this check tripping intermittently on the same input
-        # (TOKEN_INTEGRITY_FAILED, case ids FILE-ja-vi/FILE-vi-en/FILE-ko-vi/FILE-vi-fr,
-        # 2026-10-09). This does not relax what the check rejects.
+        # A resend can recover when a model sample garbles or drops a placeholder
+        # marker. Note: the repeatable 2/18 TOKEN_INTEGRITY_FAILED on the fixtures
+        # (FILE-ja-vi/FILE-vi-en/FILE-ko-vi/FILE-vi-fr/FILE-zh-Hans-vi) was not
+        # model noise but the context-dependent span comparison fixed in
+        # _technical_cores; retries cannot fix a deterministic check.
         integrity_max_attempt = getattr(context, "literal_integrity_max_retries", 1)
         for attempt in range(integrity_max_attempt + 1):
             pieces: list[tuple[str, str, str]] = []
@@ -293,9 +316,8 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                         previous = core
                     joined.append(pending_whitespace)
                     output = restore_literals("".join(joined), protected)
-                    source_literals = [block.text[start:end] for start, end in literal_spans(block.text)]
-                    output_literals = [output[start:end] for start, end in literal_spans(output)]
-                    if output_literals != source_literals:
+                    if not all(_occurs_as_token(core, block.text)
+                               for core in _technical_cores(output)):
                         raise TranslationError("TOKEN_INTEGRITY_FAILED",
                                                "Technical literal integrity check failed.")
                 except TranslationError as exc:
