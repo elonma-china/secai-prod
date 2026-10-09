@@ -78,6 +78,27 @@ async def test_multilingual_pair_admission(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_zh_hans_alias_is_accepted_as_target_and_source(tmp_path, monkeypatch):
+    # IAS reuses v3's canonical "zh-Hans" code for v2 uploads too; v2 has only
+    # ever recognized "zh". Before the alias, this got rejected with a 400 at
+    # upload time, before a job_id even existed (production case ids
+    # FILE-vi-zh-Hans / FILE-zh-Hans-vi, 2026-10-09).
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(FakeRunner())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        as_target = await client.post("/ai/v2/translate/files", files={"file": ("x.txt", "Xin chào".encode())},
+                                      data={"source_lang": "vi", "target_lang": "zh-Hans"})
+        assert as_target.status_code == 202, as_target.text
+        assert as_target.json()["target_lang"] == "zh"
+        as_source = await client.post("/ai/v2/translate/files", files={"file": ("y.txt", "你好".encode())},
+                                      data={"source_lang": "zh-Hans", "target_lang": "vi"})
+        assert as_source.status_code == 202, as_source.text
+        assert as_source.json()["source_lang"] == "zh"
+
+
+@pytest.mark.asyncio
 async def test_unavailable_v2_storage_does_not_break_legacy_health(tmp_path, monkeypatch):
     from secai_gateway.translation import jobs
 
@@ -185,3 +206,53 @@ async def test_web_reaper_terminalizes_idle_deadline_without_worker_or_request(t
                 break
             await asyncio.sleep(0.05)
         assert (status, input_path, path.exists()) == ("failed", None, False)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("filename_header", [
+    'filename="xin chào.txt"',
+    'filename="=?utf-8?B?eGluIGNow6BvLnR4dA==?="',
+    'filename="=?utf-8?Q?xin_ch=C3=A0o.txt?="',
+    'filename="=?utf-8?B?eGluIGNow6BvLnR4dA==?="; filename*=utf-8\'\'xin%20ch%C3%A0o.txt',
+])
+async def test_unicode_filename_admission(tmp_path, monkeypatch, filename_header):
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(FakeRunner())
+    body = (
+        '--boundary\r\nContent-Disposition: form-data; name="file"; '
+        + filename_header
+        + '\r\nContent-Type: text/plain\r\n\r\nHello\r\n'
+        '--boundary\r\nContent-Disposition: form-data; name="target_lang"\r\n\r\nvi\r\n'
+        '--boundary--\r\n'
+    ).encode()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.post("/ai/v2/translate/files", content=body,
+                                    headers={"Content-Type": "multipart/form-data; boundary=boundary"})
+    assert response.status_code == 202, response.text
+    row = app.state.translation_v2_store.get(response.json()["job_id"])
+    assert row["extension"] == ".txt"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("encoded_filename, expected_status, expected_code", [
+    ("=?utf-8?Q?folder=2Fxin_ch=C3=A0o.txt?=", 400, "INVALID_REQUEST"),
+    ("=?utf-8?Q?xin_ch=C3=A0o.pdf?=", 415, "UNSUPPORTED_FILE_TYPE"),
+    ("=?unknown-charset?B?YWJjLnR4dA==?=", 400, "INVALID_REQUEST"),
+    ("=?utf-8?B?a?=", 400, "INVALID_REQUEST"),
+    ("=?utf-8?B?/w==?=", 400, "INVALID_REQUEST"),
+    ("=?utf-8?Q?xin=00chao.txt?=", 400, "INVALID_REQUEST"),
+])
+async def test_encoded_filename_validation(tmp_path, monkeypatch, encoded_filename,
+                                           expected_status, expected_code):
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(FakeRunner())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        response = await client.post("/ai/v2/translate/files",
+                                     files={"file": (encoded_filename, b"Hello", "text/plain")},
+                                     data={"target_lang": "vi"})
+    assert response.status_code == expected_status, response.text
+    assert response.json()["error"]["code"] == expected_code
