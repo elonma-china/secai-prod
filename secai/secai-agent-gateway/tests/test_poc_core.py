@@ -174,3 +174,98 @@ def test_prefetch_rank_prefers_github_then_exploit_over_nuclei() -> None:
     assert ranked[0]["source"] == "poc_github"
     assert ranked[1]["source"] == "exploitdb"
     assert ranked[2]["source"] == "nuclei"
+
+
+def test_prefetch_rank_prefers_artifact_over_link_only_github() -> None:
+    """A link-only poc_github must NOT outrank an exploitdb row that carries a real artifact
+    in the same exploit tier — otherwise the top-2 fetch budget is spent on a row that cannot
+    be served in air-gap (the CVE-2026-33017/85706 regression)."""
+    from secai_gateway.poc.prefetch import _rank
+
+    github_link_only = {"kind": "exploit", "source": "poc_github", "verified": False,
+                        "has_artifact": False}
+    edb_artifact = {"kind": "exploit", "source": "exploitdb", "verified": False,
+                    "has_artifact": True}
+    ranked = sorted([github_link_only, edb_artifact], key=_rank)
+    assert ranked[0]["source"] == "exploitdb"
+
+
+def test_prefetch_rank_prefers_vetted_source_when_both_have_artifact() -> None:
+    """When both rows carry an artifact, the vetted exploit source (exploitdb/metasploit)
+    wins over a community poc_github repo (the CVE-2026-24061/2025-24813 regression)."""
+    from secai_gateway.poc.prefetch import _rank
+
+    github_artifact = {"kind": "exploit", "source": "poc_github", "verified": True,
+                       "has_artifact": True, "language": "py"}
+    edb_artifact = {"kind": "exploit", "source": "exploitdb", "verified": False,
+                    "has_artifact": True, "language": "py"}
+    ranked = sorted([github_artifact, edb_artifact], key=_rank)
+    assert ranked[0]["source"] == "exploitdb"
+
+
+def test_search_prefers_artifact_row_over_link_only_github(tmp_path: Path) -> None:
+    """CVE-exact catalog search must surface a row WITH a stored artifact before a link-only
+    poc_github row in the same exploit tier."""
+    from secai_gateway.poc.models import NormalizedPoc
+
+    cat = PocCatalog(tmp_path / "artifact_rank.db")
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/link-only", kind="exploit",
+        title="GitHub link-only", cve_ids=["CVE-2021-44228"], language="py",
+        verified=False, rank=5, url="https://github.com/alice/link-only",
+        redistributable=False))
+    cat.upsert(NormalizedPoc(
+        source="exploitdb", source_ref="EDB-1", kind="exploit",
+        title="EDB artifact", cve_ids=["CVE-2021-44228"], language="py",
+        verified=False, rank=25, url="https://edb/1", redistributable=True,
+        artifact_sha256="a" * 64, artifact_path="exploits/1.py"))
+    cat.commit()
+    hits = cat.search("CVE-2021-44228")
+    assert hits[0]["source"] == "exploitdb"
+    assert hits[0]["artifact_sha256"] == "a" * 64
+
+
+def test_search_artifact_outranks_link_only_across_languages(tmp_path: Path) -> None:
+    """Artifact status must outrank language: a link-only poc_github in a RUNNABLE language
+    (py) must not displace an artifact-bearing exploitdb row in a doc language (txt) — the
+    CVE-2026-33017/85706 regression where the candidate window surfaced the wrong row."""
+    from secai_gateway.poc.models import NormalizedPoc
+
+    cat = PocCatalog(tmp_path / "lang_rank.db")
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/link-only", kind="exploit",
+        title="GitHub link-only py", cve_ids=["CVE-2026-33017"], language="py",
+        verified=False, rank=5, url="https://github.com/alice/link-only",
+        redistributable=False))
+    cat.upsert(NormalizedPoc(
+        source="exploitdb", source_ref="EDB-33017", kind="exploit",
+        title="EDB artifact txt", cve_ids=["CVE-2026-33017"], language="txt",
+        verified=False, rank=25, url="https://edb/33017", redistributable=True,
+        artifact_sha256="b" * 64, artifact_path="exploits/33017.txt"))
+    cat.commit()
+    hits = cat.search("CVE-2026-33017")
+    assert hits[0]["source"] == "exploitdb"
+    assert hits[0]["artifact_sha256"] == "b" * 64
+
+
+def test_search_vetted_source_outranks_poc_github_across_languages(tmp_path: Path) -> None:
+    """When BOTH rows carry an artifact, the vetted exploit source (exploitdb) must win even
+    if the poc_github sibling has the more runnable language (source preference outranks
+    language) — the CVE-2026-24061/2025-24813 fix."""
+    from secai_gateway.poc.models import NormalizedPoc
+
+    cat = PocCatalog(tmp_path / "vetted_rank.db")
+    cat.upsert(NormalizedPoc(
+        source="poc_github", source_ref="alice/poc", kind="exploit",
+        title="GitHub artifact py", cve_ids=["CVE-2025-24813"], language="py",
+        verified=True, rank=5, url="https://github.com/alice/poc", redistributable=False,
+        artifact_sha256="c" * 64, artifact_path="poc/24813.py"))
+    cat.upsert(NormalizedPoc(
+        source="exploitdb", source_ref="EDB-24813", kind="exploit",
+        title="EDB artifact rb", cve_ids=["CVE-2025-24813"], language="rb",
+        verified=False, rank=25, url="https://edb/24813", redistributable=True,
+        artifact_sha256="d" * 64, artifact_path="exploits/24813.rb"))
+    cat.commit()
+    hits = cat.search("CVE-2025-24813")
+    assert hits[0]["source"] == "exploitdb"
+    assert hits[0]["artifact_sha256"] == "d" * 64

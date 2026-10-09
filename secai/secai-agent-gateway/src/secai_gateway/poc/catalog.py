@@ -39,6 +39,16 @@ CREATE TABLE IF NOT EXISTS poc (
 CREATE INDEX IF NOT EXISTS idx_poc_artifact_sha ON poc(artifact_sha256) WHERE artifact_sha256 IS NOT NULL;
 CREATE TABLE IF NOT EXISTS poc_cve (poc_id INTEGER, cve_id TEXT, PRIMARY KEY(poc_id, cve_id));
 CREATE INDEX IF NOT EXISTS idx_poc_cve_cve ON poc_cve(cve_id);
+-- Operator/verifier-designated CANONICAL PoC per CVE: the one public PoC that was actually
+-- EXECUTED and exploited a vulnerable instance (lab/target). /ai/exploit serves this row
+-- verbatim and first, so a CVE with a verified PoC always returns the known-working artifact
+-- instead of a same-CVE sibling that merely ranks higher. Populated offline by a verifier
+-- (scripts/), never by the request path. NOT backfilled from the pocs-fixed file store.
+CREATE TABLE IF NOT EXISTS poc_canonical (
+  cve_id TEXT PRIMARY KEY, poc_id INTEGER NOT NULL, verified_at TEXT,
+  success_signal TEXT, target TEXT, source TEXT, sha256 TEXT, note TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_poc_canonical_poc ON poc_canonical(poc_id);
 CREATE TABLE IF NOT EXISTS artifact (
   sha256 TEXT PRIMARY KEY, size INTEGER, language TEXT, license TEXT,
   stored INTEGER DEFAULT 0, storage_path TEXT, first_source TEXT
@@ -164,21 +174,52 @@ class PocCatalog:
             # Exploit PoCs before detection templates (nuclei YAML rank~20 + verified used
             # to bury GitHub/EDB exploits at rank~5). kind=exploit first, then rank/verified.
             rows = self._db.execute(
-                f"""SELECT p.* FROM poc p JOIN poc_cve c ON c.poc_id=p.id
+                f"""SELECT p.*,
+                           EXISTS(SELECT 1 FROM poc_canonical pc WHERE pc.poc_id = p.id) AS is_canonical
+                    FROM poc p JOIN poc_cve c ON c.poc_id=p.id
                     WHERE c.cve_id IN ({marks}) AND p.duplicate_of IS NULL
-                    ORDER BY CASE WHEN p.kind = 'exploit' THEN 0 ELSE 1 END ASC,
-                             -- Prefer RUNNABLE-CODE entries over doc-primary (md/rst/txt) rows:
-                             -- a README-first poc_github "exploit" is not a runnable PoC in
-                             -- air-gap (served docs, not code — observed serving CVE-2021-41773 /
-                             -- CVE-2022-22947 READMEs as the PoC).
-                             CASE WHEN LOWER(COALESCE(p.language,'')) IN
-                                  ('md','markdown','rst','txt','') THEN 1 ELSE 0 END ASC,
-                             -- Prefer GitHub PoCs within the exploit tier (requested): a repo
-                             -- PoC is what the consolidation step merges into one runnable file.
-                             CASE WHEN p.source = 'poc_github' THEN 0 ELSE 1 END ASC,
+                    ORDER BY is_canonical DESC,
+                             CASE WHEN p.kind = 'exploit' THEN 0 ELSE 1 END ASC,
                              -- Entries WITH stored real code before link-only rows (a link-only
-                             -- poc_github with no artifact is not servable in air-gap).
-                             (p.artifact_sha256 IS NULL) ASC,
+                             -- poc_github with no artifact is not servable in air-gap). Checks
+                             -- artifact_path too: exploitdb/metasploit rows carry a path but a
+                             -- NULL sha256 until backfilled. This outranks language/source so a
+                             -- link-only script never displaces a servable artifact (mirrors
+                             -- prefetch._rank).
+                             (p.artifact_path IS NULL AND p.artifact_sha256 IS NULL) ASC,
+                             -- Within the same artifact status: when BOTH rows carry an artifact,
+                             -- prefer the vetted exploit sources (exploitdb/metasploit) over a
+                             -- community poc_github repo; when neither does, keep the legacy
+                             -- poc_github-first order (a repo PoC feeds the consolidation step).
+                             -- Also outranks language (mirrors prefetch._rank).
+                             CASE
+                               WHEN p.artifact_path IS NOT NULL OR p.artifact_sha256 IS NOT NULL
+                                 THEN CASE WHEN p.source IN ('exploitdb','metasploit') THEN 0 ELSE 1 END
+                               ELSE CASE WHEN p.source = 'poc_github' THEN 0 ELSE 1 END
+                             END ASC,
+                             -- Prefer RUNNABLE SCRIPT languages the air-gap runner can execute
+                             -- directly (python/shell/ruby/php/perl/js) over compiled/binary and
+                             -- doc-primary rows. A poc_github C++/Java/HTML (often Windows-only)
+                             -- PoC "runs" nowhere on the Linux lab even though it is a real
+                             -- exploit, so it must not outrank a script sibling: observed serving
+                             -- a C++ Struts2 Windows PoC for CVE-2017-5638 while the Python
+                             -- struts-pwn sibling exploited the lab (uid=0). Doc-primary
+                             -- (md/rst/txt) stays lowest, as before (READMEs are not a PoC).
+                             CASE
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('py','python','python3') THEN 0
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('sh','bash') THEN 1
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('php','pl','perl','js','javascript','node') THEN 2
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('rb','ruby') THEN 3
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('md','markdown','rst','txt','') THEN 5
+                               WHEN LOWER(COALESCE(p.language,'')) IN
+                                    ('json','yaml','yml') THEN 6
+                               ELSE 4
+                             END ASC,
                              p.rank DESC, p.verified DESC,
                              -- DETERMINISTIC tiebreak: identical (kind,source,rank,verified) rows
                              -- otherwise return in arbitrary SQLite order → a DIFFERENT PoC served
@@ -210,6 +251,50 @@ class PocCatalog:
         if not r:
             return None
         return self._rows_to_dicts([r])[0]
+
+    # ── canonical PoC (operator-verified, per CVE) ──────────────────────────
+    def get_canonical_poc_id(self, cve_id: str | None) -> int | None:
+        """The verified-canonical poc.id for ``cve_id``, or ``None``."""
+        key = normalize_cve_ids((cve_id or "").strip()) or (cve_id or "").strip().upper()
+        if not _CVE.fullmatch(key):
+            return None
+        row = self._db.execute(
+            "SELECT poc_id FROM poc_canonical WHERE cve_id=?", (key,)).fetchone()
+        return int(row[0]) if row else None
+
+    def set_canonical(self, cve_id: str, poc_id: int, *, success_signal: str = "",
+                      target: str = "", note: str = "") -> bool:
+        """Mark ``poc_id`` as the verified-canonical PoC for ``cve_id``. Refuses (returns False)
+        when the row is missing or does not actually carry that CVE — never write a mapping that
+        would make `/ai/exploit` serve an unrelated artifact. Idempotent upsert."""
+        key = normalize_cve_ids((cve_id or "").strip()) or (cve_id or "").strip().upper()
+        if not _CVE.fullmatch(key):
+            return False
+        row = self._db.execute(
+            """SELECT p.id, p.source, p.artifact_sha256,
+                      (SELECT 1 FROM poc_cve c WHERE c.poc_id=p.id AND c.cve_id=?) AS linked
+               FROM poc p WHERE p.id=?""", (key, int(poc_id))).fetchone()
+        if row is None or not row["linked"]:
+            return False
+        self._db.execute(
+            """INSERT INTO poc_canonical(cve_id,poc_id,verified_at,success_signal,target,source,sha256,note)
+               VALUES(?,?,datetime('now'),?,?,?,?,?)
+               ON CONFLICT(cve_id) DO UPDATE SET
+                 poc_id=excluded.poc_id, verified_at=excluded.verified_at,
+                 success_signal=excluded.success_signal, target=excluded.target,
+                 source=excluded.source, sha256=excluded.sha256, note=excluded.note""",
+            (key, int(poc_id), success_signal, target, row["source"], row["artifact_sha256"], note))
+        self._db.commit()
+        return True
+
+    def clear_canonical(self, cve_id: str) -> None:
+        key = (cve_id or "").strip().upper()
+        self._db.execute("DELETE FROM poc_canonical WHERE cve_id=?", (key,))
+        self._db.commit()
+
+    def canonical_count(self) -> int:
+        r = self._db.execute("SELECT COUNT(*) FROM poc_canonical").fetchone()
+        return int(r[0]) if r else 0
 
     # ── content-hash lookup (full-artifact serving) ─────────────────────────
     # Address a stored file by its sha256 so the /poc/file endpoint can serve the full,

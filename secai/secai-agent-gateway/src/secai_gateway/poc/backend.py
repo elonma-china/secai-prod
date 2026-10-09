@@ -318,7 +318,9 @@ class LocalPocBackend:
             hits.append(SearchHit(
                 ref=ref, title=r["title"], source=r["source"], kind=r["kind"],
                 cve_ids=r["cve_ids"], verified=bool(r["verified"]), url=r["url"] or "",
-                platform=r.get("platform"), language=r.get("language")).to_dict())
+                platform=r.get("platform"), language=r.get("language"),
+                canonical=bool(r.get("is_canonical")),
+                has_artifact=bool(r.get("artifact_sha256") or r.get("artifact_path"))).to_dict())
         return {"hits": hits}
 
     def _check_fetch_budget(self, run_id: str) -> None:
