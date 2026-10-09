@@ -148,7 +148,7 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                     on_chunk: Callable[[dict], Awaitable[None]] | None = None) -> TranslationResult:
     source, target = resolve_pair(request.source_lang, request.target_lang, settings)
     specialist = settings.backend == "specialist"
-    hymt = specialist and settings.specialist_profile == "hymt2_7b_gguf"
+    hymt = specialist and settings.specialist_profile in {"hymt2_7b_gguf", "hymt2_7b_gguf_gpu"}
     expected_model = settings.specialist_model if specialist else EXPECTED_MODEL
     chunk_budget = settings.specialist_chunk_input_tokens if specialist else settings.chunk_input_tokens
     output_budget = settings.specialist_max_output_tokens if specialist else settings.max_output_tokens
