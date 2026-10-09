@@ -414,15 +414,22 @@ def neutralize_active_content(text: str) -> str:
     return out
 
 
-def sanitize_output_language(text: str, *, max_ratio: float = 0.15) -> str:
+def sanitize_output_language(text: str, *, max_ratio: float = 0.15,
+                             keep_cjk: bool = False) -> str:
     """Clean assistant output before it reaches the user: drop leaked reasoning/meta
     planning, strip CJK ideographs (VI/EN-only), then defang active HTML/JS (anti-XSS).
 
-    Always strips. ``max_ratio`` is unused (kept for call-site compatibility);
-    use ``cjk_ratio`` separately if you need contamination metrics.
+    Always strips unless ``keep_cjk``. ``max_ratio`` is unused (kept for call-site
+    compatibility); use ``cjk_ratio`` separately if you need contamination metrics.
+
+    ``keep_cjk=True`` is for a translation whose requested target language is written
+    with Han ideographs (zh, ja): there the ideographs ARE the content, and stripping
+    them left only kana/punctuation (TXT-DIRECT-vi-ja / TXT-DIRECT-vi-zh-Hans, 2026-10-09).
     """
-    return neutralize_active_content(remove_chinese_content(
-        strip_meta_narration(strip_tool_call_echoes(strip_reasoning_leak(text)))))
+    cleaned = strip_meta_narration(strip_tool_call_echoes(strip_reasoning_leak(text)))
+    if not keep_cjk:
+        cleaned = remove_chinese_content(cleaned)
+    return neutralize_active_content(cleaned)
 
 
 # ── Untrusted-content spotlighting (indirect prompt-injection defense) ──────────
