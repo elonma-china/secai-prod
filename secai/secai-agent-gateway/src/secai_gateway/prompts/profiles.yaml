@@ -74,6 +74,12 @@ translation_orchestrator:
   base: false
   max_turns: 3
 
+document_ocr:
+  prompt: document_ocr.md
+  tools: [ocr_extract, ocr_result]
+  base: false
+  max_turns: 3
+
 # lane1 ReAct: mỗi lượt LLM xuất MỘT action JSON có cấu trúc; code (poc/lane1.py) parse + điều phối
 # tool trong sandbox. KHÔNG native tool-call (Cyber-F1 gãy) → tools rỗng, base false (pure transform).
 lane1_react:
