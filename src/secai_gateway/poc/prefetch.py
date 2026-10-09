@@ -39,7 +39,9 @@ import logging
 import re
 import unicodedata
 from collections import OrderedDict
-from typing import Any, Literal
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Literal
 
 import httpx
 
@@ -55,7 +57,16 @@ _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 # Exploit-capable redistributable sources first. nuclei is intentionally absent — detection
 # YAML is T2 synthesis grounding, not a T1 PoC; prefetch must prefer EDB/MSF/GitHub exploit
 # rows over nuclei even when nuclei is verified and higher-ranked by source tier alone.
-_PRIORITY_SOURCES = {"exploitdb", "metasploit", "ghsa"}
+_PRIORITY_SOURCES = {"exploitdb", "metasploit", "poc_github"}
+# Declared languages the air-gap runner executes directly (prefetch ranking, `_lang_rank`).
+# Ordered by how universally the interpreter is available on a Linux host: Python first (always
+# present), then shell, then php/perl/node, then ruby (often absent — the eval host has no ruby).
+_LANG_PY = {"py", "python", "python3"}
+_LANG_SH = {"sh", "bash"}
+_LANG_ALT = {"php", "pl", "perl", "js", "javascript", "node"}
+_LANG_RB = {"rb", "ruby"}
+_DOC_LANGS = {"md", "markdown", "rst", "txt", ""}
+_RUNNABLE_LANGS = _LANG_PY | _LANG_SH | _LANG_ALT | _LANG_RB
 _MAX_PREFETCH = 2  # matches poc/backend.py's _MAX_FETCH_PER_RUN — same evidence budget
 
 Coverage = Literal["enough", "empty", "partial", "failed"]
@@ -64,33 +75,81 @@ COVERAGE_CLOSES_SEARCH_HOOK: frozenset[str] = frozenset({"enough", "empty"})
 
 _MAX_TRACKED_SESSIONS = 20000
 _session_coverage: "OrderedDict[str, Coverage]" = OrderedDict()
+_session_cve_known: "OrderedDict[str, bool]" = OrderedDict()
+_session_synthesis_evidence: "OrderedDict[str, bool]" = OrderedDict()
+_session_real_code_evidence: "OrderedDict[str, bool]" = OrderedDict()
+_session_kb_searched: "OrderedDict[str, bool]" = OrderedDict()
+_session_kb_docs: "OrderedDict[str, str]" = OrderedDict()
+
+# asyncio tasks inherit the same request storage; independent scopes start empty.
+SessionCoverageState = dict[str, OrderedDict[str, Any]]
+_session_coverage_state: ContextVar[SessionCoverageState | None] = ContextVar(
+    "session_coverage_state", default=None
+)
+_legacy_session_stores: SessionCoverageState = {
+    "coverage": _session_coverage,
+    "cve_known": _session_cve_known,
+    "synthesis_evidence": _session_synthesis_evidence,
+    "real_code_evidence": _session_real_code_evidence,
+    "kb_searched": _session_kb_searched,
+    "kb_docs": _session_kb_docs,
+}
+
+
+def capture_session_coverage() -> SessionCoverageState | None:
+    """Capture request storage for a stream that resumes after the route returns."""
+    return _session_coverage_state.get()
+
+
+@contextmanager
+def session_coverage_scope(
+    state: SessionCoverageState | None = None,
+) -> Iterator[SessionCoverageState]:
+    """Use fresh request evidence, or resume captured storage; always restore the caller.
+
+    A captured scope is retained only by its request/stream, never by the global caches.
+    Child asyncio tasks share this scope so prefetch and hook callbacks see the same data.
+    """
+    if state is None:
+        state = {name: OrderedDict() for name in _legacy_session_stores}
+    token = _session_coverage_state.set(state)
+    try:
+        yield state
+    finally:
+        _session_coverage_state.reset(token)
+
+
+def _session_store(name: str) -> OrderedDict[str, Any]:
+    state = _session_coverage_state.get()
+    return (state if state is not None else _legacy_session_stores)[name]
 
 
 def set_session_coverage(session_id: str | None, coverage: Coverage) -> None:
     """Record prefetch coverage for an exploit session (routes → hook)."""
+    store = _session_store("coverage")
     if not session_id:
         return
-    _session_coverage[session_id] = coverage
-    _session_coverage.move_to_end(session_id)
-    while len(_session_coverage) > _MAX_TRACKED_SESSIONS:
-        _session_coverage.popitem(last=False)
+    store[session_id] = coverage
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_coverage(session_id: str | None) -> Coverage | None:
+    store = _session_store("coverage")
     if not session_id:
         return None
-    return _session_coverage.get(session_id)
+    return store.get(session_id)
 
 
 def clear_session_coverage(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
-    if session_id is None:
-        _session_coverage.clear()
-        return
-    _session_coverage.pop(session_id, None)
-
-
-_session_cve_known: "OrderedDict[str, bool]" = OrderedDict()
+    """Clear one session or all evidence in the active request (legacy store unscoped)."""
+    for name in _legacy_session_stores:
+        store = _session_store(name)
+        if session_id is None:
+            store.clear()
+        else:
+            store.pop(session_id, None)
 
 
 def set_session_cve_known(session_id: str | None, known: bool) -> None:
@@ -98,29 +157,29 @@ def set_session_cve_known(session_id: str | None, known: bool) -> None:
     hook) — same shape as `set_session_coverage`, but for the T3 (synthesize-from-CVE)
     signal, which RequireSection1SynthesisHook (agent/hooks.py) needs and can't compute
     itself (it has no CVE-KB access)."""
+    store = _session_store("cve_known")
     if not session_id:
         return
-    _session_cve_known[session_id] = known
-    _session_cve_known.move_to_end(session_id)
-    while len(_session_cve_known) > _MAX_TRACKED_SESSIONS:
-        _session_cve_known.popitem(last=False)
+    store[session_id] = known
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_cve_known(session_id: str | None) -> bool:
+    store = _session_store("cve_known")
     if not session_id:
         return False
-    return bool(_session_cve_known.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_cve_known(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("cve_known")
     if session_id is None:
-        _session_cve_known.clear()
+        store.clear()
         return
-    _session_cve_known.pop(session_id, None)
-
-
-_session_synthesis_evidence: "OrderedDict[str, bool]" = OrderedDict()
+    store.pop(session_id, None)
 
 
 def set_session_synthesis_evidence(session_id: str | None, has_evidence: bool) -> None:
@@ -134,29 +193,29 @@ def set_session_synthesis_evidence(session_id: str | None, has_evidence: bool) -
     turn. Without this, the hook silently under-fires exactly when prefetch is the only
     reason synthesis evidence exists at all (the same gap prefetch.py's module docstring
     already documents for search-skipping, just one layer further down at the retry-hook)."""
+    store = _session_store("synthesis_evidence")
     if not session_id:
         return
-    _session_synthesis_evidence[session_id] = has_evidence
-    _session_synthesis_evidence.move_to_end(session_id)
-    while len(_session_synthesis_evidence) > _MAX_TRACKED_SESSIONS:
-        _session_synthesis_evidence.popitem(last=False)
+    store[session_id] = has_evidence
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_synthesis_evidence(session_id: str | None) -> bool:
+    store = _session_store("synthesis_evidence")
     if not session_id:
         return False
-    return bool(_session_synthesis_evidence.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_synthesis_evidence(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("synthesis_evidence")
     if session_id is None:
-        _session_synthesis_evidence.clear()
+        store.clear()
         return
-    _session_synthesis_evidence.pop(session_id, None)
-
-
-_session_real_code_evidence: "OrderedDict[str, bool]" = OrderedDict()
+    store.pop(session_id, None)
 
 
 def set_session_real_code_evidence(session_id: str | None, has_real_code: bool) -> None:
@@ -169,26 +228,83 @@ def set_session_real_code_evidence(session_id: str | None, has_real_code: bool) 
     was description-only, which silently let a description-only CVE fall through to
     `synthesis_failed` on the model's very first reticent turn, never getting the forced
     retry it needed. This flag is the precise signal that check actually wanted."""
+    store = _session_store("real_code_evidence")
     if not session_id:
         return
-    _session_real_code_evidence[session_id] = has_real_code
-    _session_real_code_evidence.move_to_end(session_id)
-    while len(_session_real_code_evidence) > _MAX_TRACKED_SESSIONS:
-        _session_real_code_evidence.popitem(last=False)
+    store[session_id] = has_real_code
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_real_code_evidence(session_id: str | None) -> bool:
+    store = _session_store("real_code_evidence")
     if not session_id:
         return False
-    return bool(_session_real_code_evidence.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_real_code_evidence(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("real_code_evidence")
     if session_id is None:
-        _session_real_code_evidence.clear()
+        store.clear()
         return
-    _session_real_code_evidence.pop(session_id, None)
+    store.pop(session_id, None)
+
+
+def set_session_kb_searched(session_id: str | None, searched: bool) -> None:
+    """Record whether this request retrieved usable internal KB context."""
+    store = _session_store("kb_searched")
+    if not session_id:
+        return
+    store[session_id] = searched
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
+
+
+def get_session_kb_searched(session_id: str | None) -> bool:
+    store = _session_store("kb_searched")
+    if not session_id:
+        return False
+    return bool(store.get(session_id))
+
+
+def clear_session_kb_searched(session_id: str | None = None) -> None:
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("kb_searched")
+    if session_id is None:
+        store.clear()
+        return
+    store.pop(session_id, None)
+
+
+def set_session_kb_docs(session_id: str | None, docs: str) -> None:
+    """Record the retrieved KB context text for this request/session."""
+    store = _session_store("kb_docs")
+    if not session_id:
+        return
+    store[session_id] = docs
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
+
+
+def get_session_kb_docs(session_id: str | None) -> str | None:
+    store = _session_store("kb_docs")
+    if not session_id:
+        return None
+    return store.get(session_id)
+
+
+def clear_session_kb_docs(session_id: str | None = None) -> None:
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("kb_docs")
+    if session_id is None:
+        store.clear()
+        return
+    store.pop(session_id, None)
 
 
 def extract_cve_id(prompt: str) -> str | None:
@@ -304,12 +420,35 @@ async def exploit_relevance_ok(prompt: str) -> bool | None:
     return score >= s.exploit_rerank_min_score
 
 
-def _rank(hit: dict[str, Any]) -> tuple[int, bool, bool, bool]:
-    """Lower sorts first. Prefer real exploit PoCs over detection templates, GitHub PoCs
-    first within the exploit tier (they are what the consolidation step merges into one
-    runnable file), then verified, then license-friendly sources. Catalog CVE-exact already
-    puts kind=exploit + poc_github first; this re-sorts the hit window so prefetch's top-2
-    budget is not eaten by nuclei YAML."""
+def _lang_rank(hit: dict[str, Any]) -> int:
+    """Runnability tier by declared language: scriptable (0) < other code (1) < doc (2) < data (3).
+    The air-gap runner executes python/shell/ruby/php/perl/js directly; a compiled/binary PoC
+    (cpp/cs/java/go/html — frequently Windows-only) does not run on the Linux lab, so it must not
+    win the top-2 fetch budget over a script sibling."""
+    lang = str(hit.get("language") or "").strip().lower()
+    if lang in _LANG_PY:
+        return 0
+    if lang in _LANG_SH:
+        return 1
+    if lang in _LANG_ALT:
+        return 2
+    if lang in _LANG_RB:
+        return 3
+    if lang in _DOC_LANGS:
+        return 5
+    if lang in ("json", "yaml", "yml"):
+        return 6
+    return 4
+
+
+def _rank(hit: dict[str, Any]) -> tuple[int, int, bool, bool, bool, int, bool, str]:
+    """Lower sorts first. A VERIFIED-CANONICAL row always wins (the operator already executed it
+    against a lab/target), then the existing order: real exploit over detection, a row WITH a
+    stored artifact over a link-only row, then a vetted exploit source (exploitdb/metasploit)
+    over poc_github when both carry an artifact, verified, a runnable-script language,
+    license-friendly sources."""
+    if hit.get("canonical"):
+        return (0, 0, False, False, False, 0, False, str(hit.get("ref") or ""))
     kind = str(hit.get("kind") or "").strip().lower()
     source = str(hit.get("source") or "").strip().lower()
     if kind == "exploit" or source in {"exploitdb", "metasploit", "poc_github", "vendor"}:
@@ -318,7 +457,16 @@ def _rank(hit: dict[str, Any]) -> tuple[int, bool, bool, bool]:
         tier = 2
     else:
         tier = 1  # advisory / lab — between exploit and detection
-    return (tier, source != "poc_github", not hit.get("verified"),
+    has_artifact = bool(hit.get("has_artifact"))
+    # Within the exploit tier a row with a stored artifact (runnable offline) beats a link-only
+    # row. When BOTH carry an artifact, prefer the vetted exploit sources (exploitdb/metasploit)
+    # over a community poc_github repo; when neither does, keep the legacy poc_github-first order
+    # (a repo PoC is what the consolidation step merges into one runnable file).
+    if has_artifact:
+        source_pref = source not in {"exploitdb", "metasploit"}
+    else:
+        source_pref = source != "poc_github"
+    return (1, tier, not has_artifact, source_pref, not hit.get("verified"), _lang_rank(hit),
             hit.get("source") not in _PRIORITY_SOURCES,
             # DETERMINISTIC tiebreak so re-ranking identical-tier hits picks the SAME top-2 every
             # run (Python sort is stable, but the input order from poc.search is not for ties).
@@ -351,6 +499,10 @@ async def prefetch_evidence(poc: LocalPocBackend, ledger: SqliteLedger, prompt: 
             fr = await poc.fetch(hit["ref"], run_id)
         except PocError:
             continue
+        if hit.get("canonical"):
+            # Verified-canonical PoC: served VERBATIM (routes skips the lossy LLM
+            # slice/consolidate for it) so /ai/exploit returns the exact known-working bytes.
+            fr["canonical"] = True
         record_fetch_evidence(ledger, run_id, f"{run_id}:prefetch:{i}", fr)
         fetched += 1
     coverage: Coverage = "enough" if fetched >= 1 else "partial"

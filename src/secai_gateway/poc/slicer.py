@@ -586,6 +586,27 @@ _LANG_CANON = {"py": "python", "python3": "python", "rb": "ruby", "js": "javascr
                "golang": "go", "ps1": "powershell"}
 
 
+# Strong Python-2-only markers. A served PoC carrying any of these cannot run under the
+# python3 interpreter the air-gap runner uses (observed: CVE-2014-6271 served a `urllib2`
+# PoC → ImportError → no exploit). Presence is a signal to route the entry through the
+# consolidate LLM (which ports it) instead of serving the verbatim/sliced py2 bytes.
+_PY2_RE = re.compile(
+    r"(?m)^\s*(?:import\s+urllib2|from\s+urllib2|import\s+urlparse|from\s+urlparse"
+    r"|import\s+httplib|from\s+httplib|import\s+ConfigParser|from\s+ConfigParser"
+    r"|import\s+StringIO|from\s+StringIO|import\s+cPickle\b)"
+    r"|\braw_input\s*\(|\bxrange\s*\(|\bbasestring\b|\bunicode\s*\("
+    r"|\.iteritems\s*\(|\.iterkeys\s*\(|\.itervalues\s*\(|\.has_key\s*\("
+    r"|except\s+[A-Za-z_][\w.]*\s*,\s*[A-Za-z_]",
+)
+
+
+def looks_like_python2(code: str) -> bool:
+    """True when ``code`` carries a strong Python-2-only marker (``urllib2``, ``urlparse``
+    import, ``raw_input``, ``xrange``, ``.iteritems()``, ``except X, e`` …). Conservative:
+    only markers that are invalid/absent in Python 3 — never triggers on ordinary py3 code."""
+    return bool(code and _PY2_RE.search(code))
+
+
 def sniff_language(code: str, path: str = "", declared: str = "") -> str:
     """Best-effort TRUE language of a PoC blob. exploitdb keeps real python/ruby/perl exploits
     with a ``.txt`` extension and ``language=txt`` — so a downstream syntax-check / runner keyed

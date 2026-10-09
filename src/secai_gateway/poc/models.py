@@ -42,6 +42,15 @@ class SearchHit:
     url: str
     platform: str | None = None
     language: str | None = None
+    # True when this row is the operator-verified "canonical" PoC for its CVE (see
+    # catalog.poc_canonical). Prefetch/ranking puts it FIRST so /ai/exploit always serves the
+    # known-working PoC instead of a same-CVE sibling that happens to rank higher.
+    canonical: bool = False
+    # True when the catalog row has stored real code (artifact_sha256/artifact_path) — i.e. it
+    # is runnable offline, not a link-only row. Prefetch ranking prefers these within a tier so
+    # a link-only poc_github cannot consume the top-2 fetch budget over an exploitdb/metasploit
+    # artifact. Boolean only — never a path.
+    has_artifact: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
