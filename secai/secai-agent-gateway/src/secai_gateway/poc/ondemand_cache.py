@@ -1,14 +1,14 @@
 """Persistent per-CVE cache for PoC code fetched on-demand from the internet.
 
 The exploit endpoint acquires real PoC code in priority order **DB → temp cache → internet**
-(GitHub tarball / web raw script). This module is the "temp cache" tier: the FIRST time a
+(web raw script). This module is the "temp cache" tier: the FIRST time a
 CVE's code is pulled from the internet it is saved here as one JSON file, so every later
 request for the same CVE reuses the saved copy instead of re-downloading — faster and less
 network egress on the request path.
 
 Design notes:
 - One file per CVE (``CVE-YYYY-NNNN.json``) holding exactly the evidence dict the injector /
-  consolidation consume (``_github_evidence_from_fetch`` shape). PoC files are small text, so
+  consolidation consume (the same shape ``poc_fetch`` produces). PoC files are small text, so
   the whole set is stored inline as UTF-8 — no separate blob store, no catalog mutation (the
   authoritative catalog is built by the offline batch pipeline; this stays a throwaway cache).
 - Fail-open everywhere: a missing/corrupt/oversize file simply misses, and any write error is

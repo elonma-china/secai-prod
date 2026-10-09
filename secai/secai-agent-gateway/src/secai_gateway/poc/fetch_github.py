@@ -32,7 +32,6 @@ from typing import Any
 
 import httpx
 
-from ..airgap import airgap_enabled
 from .backend import LocalPocBackend
 
 _CODE_EXT = (".py", ".rb", ".c", ".cpp", ".sh", ".pl", ".php", ".js", ".go", ".java",
@@ -300,28 +299,6 @@ def _owner_repo(source_ref: str, url: str = "") -> tuple[str, str] | None:
         if len(parts) >= 2 and ":" not in parts[0]:
             return parts[0], parts[1]
     return None
-
-
-def fetch_repo_code(source_ref: str, url: str = "", branch: str = "",
-                    cve: str = "", timeout: int = _REPO_TIMEOUT
-                    ) -> tuple[bytes, str, list[tuple[str, bytes]], bool] | None:
-    """On-demand, READ-ONLY code fetch for a link-only GitHub PoC — the request-path twin of
-    ``run()``'s per-row body, WITHOUT any store/catalog writes.
-
-    Given a catalog row's ``source_ref``/``url`` (and optionally the recorded default
-    ``branch`` + the ``cve`` for entry-file picking), download the repo tarball and return
-    ``(entry_bytes, entry_rel, file_set, truncated)`` exactly like ``_fetch_one`` — or ``None``
-    on any miss (bad url, 404, no picked PoC). Never raises, never touches disk beyond the
-    in-memory tarball, never executes code — same safety envelope as ``run()``. The caller
-    turns the bytes into ledger evidence; nothing is persisted to the poc catalog/store."""
-    if airgap_enabled():  # air-gap: no codeload.github.com fetch (offline build sets AIRGAP=false)
-        return None
-    parsed = _owner_repo(str(source_ref or ""), str(url or ""))
-    if not parsed:
-        return None
-    owner, repo = parsed
-    return _fetch_one(_tarball_urls(owner, repo, branch or "master"),
-                      cve or repo, timeout)
 
 
 def _fetch_row(args: tuple[tuple[str, str], str, str, int]

@@ -36,7 +36,7 @@ def test_airgap_on_coerces_every_internet_flag_off_even_when_env_sets_true(monke
     _airgap_on(monkeypatch)
     # Adversarially set every flag ON — coercion must still win.
     for var in ("WEB_FETCH_ENABLED", "FETCH_REFERENCE_ENABLED", "WEB_SEARCH_ENABLED",
-                "GITHUB_ADVISORY_ENABLED", "POC_GITHUB_ONDEMAND_ENABLED"):
+                "GITHUB_ADVISORY_ENABLED"):
         monkeypatch.setenv(var, "true")
     monkeypatch.setenv("SEARXNG_URL", "http://searx.internal:8888")
     s = get_settings()
@@ -45,18 +45,15 @@ def test_airgap_on_coerces_every_internet_flag_off_even_when_env_sets_true(monke
     assert s.fetch_reference_enabled is False
     assert s.web_search_enabled is False
     assert s.github_advisory_enabled is False
-    assert s.poc_github_ondemand_enabled is False
     assert s.searxng_url == ""
 
 
 def test_airgap_off_leaves_flags_as_configured(monkeypatch) -> None:
     _airgap_off(monkeypatch)
     monkeypatch.setenv("WEB_FETCH_ENABLED", "true")
-    monkeypatch.setenv("POC_GITHUB_ONDEMAND_ENABLED", "true")
     s = get_settings()
     assert s.airgap is False
     assert s.web_fetch_enabled is True
-    assert s.poc_github_ondemand_enabled is True
 
 
 def test_airgap_does_not_touch_internal_service_endpoints(monkeypatch) -> None:
@@ -140,12 +137,6 @@ def test_gather_web_hints_returns_empty_under_airgap(monkeypatch, tmp_path) -> N
     from secai_gateway.state import SqliteLedger
     ledger = SqliteLedger(tmp_path / "ledger.db")
     assert asyncio.run(gather_web_hints("CVE-2021-44228", ledger, "run-airgap")) == []
-
-
-def test_fetch_repo_code_returns_none_under_airgap(monkeypatch) -> None:
-    _airgap_on(monkeypatch)
-    from secai_gateway.poc.fetch_github import fetch_repo_code
-    assert fetch_repo_code("owner/repo", "https://github.com/owner/repo") is None
 
 
 def test_tools_registry_excludes_internet_tools_under_airgap(monkeypatch, tmp_path) -> None:
