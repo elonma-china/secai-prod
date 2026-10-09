@@ -39,7 +39,9 @@ import logging
 import re
 import unicodedata
 from collections import OrderedDict
-from typing import Any, Literal
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Literal
 
 import httpx
 
@@ -55,7 +57,7 @@ _CVE = re.compile(r"CVE-\d{4}-\d{3,7}", re.I)
 # Exploit-capable redistributable sources first. nuclei is intentionally absent — detection
 # YAML is T2 synthesis grounding, not a T1 PoC; prefetch must prefer EDB/MSF/GitHub exploit
 # rows over nuclei even when nuclei is verified and higher-ranked by source tier alone.
-_PRIORITY_SOURCES = {"exploitdb", "metasploit", "ghsa"}
+_PRIORITY_SOURCES = {"exploitdb", "metasploit", "poc_github"}
 _MAX_PREFETCH = 2  # matches poc/backend.py's _MAX_FETCH_PER_RUN — same evidence budget
 
 Coverage = Literal["enough", "empty", "partial", "failed"]
@@ -64,33 +66,81 @@ COVERAGE_CLOSES_SEARCH_HOOK: frozenset[str] = frozenset({"enough", "empty"})
 
 _MAX_TRACKED_SESSIONS = 20000
 _session_coverage: "OrderedDict[str, Coverage]" = OrderedDict()
+_session_cve_known: "OrderedDict[str, bool]" = OrderedDict()
+_session_synthesis_evidence: "OrderedDict[str, bool]" = OrderedDict()
+_session_real_code_evidence: "OrderedDict[str, bool]" = OrderedDict()
+_session_kb_searched: "OrderedDict[str, bool]" = OrderedDict()
+_session_kb_docs: "OrderedDict[str, str]" = OrderedDict()
+
+# asyncio tasks inherit the same request storage; independent scopes start empty.
+SessionCoverageState = dict[str, OrderedDict[str, Any]]
+_session_coverage_state: ContextVar[SessionCoverageState | None] = ContextVar(
+    "session_coverage_state", default=None
+)
+_legacy_session_stores: SessionCoverageState = {
+    "coverage": _session_coverage,
+    "cve_known": _session_cve_known,
+    "synthesis_evidence": _session_synthesis_evidence,
+    "real_code_evidence": _session_real_code_evidence,
+    "kb_searched": _session_kb_searched,
+    "kb_docs": _session_kb_docs,
+}
+
+
+def capture_session_coverage() -> SessionCoverageState | None:
+    """Capture request storage for a stream that resumes after the route returns."""
+    return _session_coverage_state.get()
+
+
+@contextmanager
+def session_coverage_scope(
+    state: SessionCoverageState | None = None,
+) -> Iterator[SessionCoverageState]:
+    """Use fresh request evidence, or resume captured storage; always restore the caller.
+
+    A captured scope is retained only by its request/stream, never by the global caches.
+    Child asyncio tasks share this scope so prefetch and hook callbacks see the same data.
+    """
+    if state is None:
+        state = {name: OrderedDict() for name in _legacy_session_stores}
+    token = _session_coverage_state.set(state)
+    try:
+        yield state
+    finally:
+        _session_coverage_state.reset(token)
+
+
+def _session_store(name: str) -> OrderedDict[str, Any]:
+    state = _session_coverage_state.get()
+    return (state if state is not None else _legacy_session_stores)[name]
 
 
 def set_session_coverage(session_id: str | None, coverage: Coverage) -> None:
     """Record prefetch coverage for an exploit session (routes → hook)."""
+    store = _session_store("coverage")
     if not session_id:
         return
-    _session_coverage[session_id] = coverage
-    _session_coverage.move_to_end(session_id)
-    while len(_session_coverage) > _MAX_TRACKED_SESSIONS:
-        _session_coverage.popitem(last=False)
+    store[session_id] = coverage
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_coverage(session_id: str | None) -> Coverage | None:
+    store = _session_store("coverage")
     if not session_id:
         return None
-    return _session_coverage.get(session_id)
+    return store.get(session_id)
 
 
 def clear_session_coverage(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
-    if session_id is None:
-        _session_coverage.clear()
-        return
-    _session_coverage.pop(session_id, None)
-
-
-_session_cve_known: "OrderedDict[str, bool]" = OrderedDict()
+    """Clear one session or all evidence in the active request (legacy store unscoped)."""
+    for name in _legacy_session_stores:
+        store = _session_store(name)
+        if session_id is None:
+            store.clear()
+        else:
+            store.pop(session_id, None)
 
 
 def set_session_cve_known(session_id: str | None, known: bool) -> None:
@@ -98,29 +148,29 @@ def set_session_cve_known(session_id: str | None, known: bool) -> None:
     hook) — same shape as `set_session_coverage`, but for the T3 (synthesize-from-CVE)
     signal, which RequireSection1SynthesisHook (agent/hooks.py) needs and can't compute
     itself (it has no CVE-KB access)."""
+    store = _session_store("cve_known")
     if not session_id:
         return
-    _session_cve_known[session_id] = known
-    _session_cve_known.move_to_end(session_id)
-    while len(_session_cve_known) > _MAX_TRACKED_SESSIONS:
-        _session_cve_known.popitem(last=False)
+    store[session_id] = known
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_cve_known(session_id: str | None) -> bool:
+    store = _session_store("cve_known")
     if not session_id:
         return False
-    return bool(_session_cve_known.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_cve_known(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("cve_known")
     if session_id is None:
-        _session_cve_known.clear()
+        store.clear()
         return
-    _session_cve_known.pop(session_id, None)
-
-
-_session_synthesis_evidence: "OrderedDict[str, bool]" = OrderedDict()
+    store.pop(session_id, None)
 
 
 def set_session_synthesis_evidence(session_id: str | None, has_evidence: bool) -> None:
@@ -134,29 +184,29 @@ def set_session_synthesis_evidence(session_id: str | None, has_evidence: bool) -
     turn. Without this, the hook silently under-fires exactly when prefetch is the only
     reason synthesis evidence exists at all (the same gap prefetch.py's module docstring
     already documents for search-skipping, just one layer further down at the retry-hook)."""
+    store = _session_store("synthesis_evidence")
     if not session_id:
         return
-    _session_synthesis_evidence[session_id] = has_evidence
-    _session_synthesis_evidence.move_to_end(session_id)
-    while len(_session_synthesis_evidence) > _MAX_TRACKED_SESSIONS:
-        _session_synthesis_evidence.popitem(last=False)
+    store[session_id] = has_evidence
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_synthesis_evidence(session_id: str | None) -> bool:
+    store = _session_store("synthesis_evidence")
     if not session_id:
         return False
-    return bool(_session_synthesis_evidence.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_synthesis_evidence(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("synthesis_evidence")
     if session_id is None:
-        _session_synthesis_evidence.clear()
+        store.clear()
         return
-    _session_synthesis_evidence.pop(session_id, None)
-
-
-_session_real_code_evidence: "OrderedDict[str, bool]" = OrderedDict()
+    store.pop(session_id, None)
 
 
 def set_session_real_code_evidence(session_id: str | None, has_real_code: bool) -> None:
@@ -169,26 +219,83 @@ def set_session_real_code_evidence(session_id: str | None, has_real_code: bool) 
     was description-only, which silently let a description-only CVE fall through to
     `synthesis_failed` on the model's very first reticent turn, never getting the forced
     retry it needed. This flag is the precise signal that check actually wanted."""
+    store = _session_store("real_code_evidence")
     if not session_id:
         return
-    _session_real_code_evidence[session_id] = has_real_code
-    _session_real_code_evidence.move_to_end(session_id)
-    while len(_session_real_code_evidence) > _MAX_TRACKED_SESSIONS:
-        _session_real_code_evidence.popitem(last=False)
+    store[session_id] = has_real_code
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
 
 
 def get_session_real_code_evidence(session_id: str | None) -> bool:
+    store = _session_store("real_code_evidence")
     if not session_id:
         return False
-    return bool(_session_real_code_evidence.get(session_id))
+    return bool(store.get(session_id))
 
 
 def clear_session_real_code_evidence(session_id: str | None = None) -> None:
-    """Test helper: clear one session or the whole store."""
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("real_code_evidence")
     if session_id is None:
-        _session_real_code_evidence.clear()
+        store.clear()
         return
-    _session_real_code_evidence.pop(session_id, None)
+    store.pop(session_id, None)
+
+
+def set_session_kb_searched(session_id: str | None, searched: bool) -> None:
+    """Record whether this request retrieved usable internal KB context."""
+    store = _session_store("kb_searched")
+    if not session_id:
+        return
+    store[session_id] = searched
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
+
+
+def get_session_kb_searched(session_id: str | None) -> bool:
+    store = _session_store("kb_searched")
+    if not session_id:
+        return False
+    return bool(store.get(session_id))
+
+
+def clear_session_kb_searched(session_id: str | None = None) -> None:
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("kb_searched")
+    if session_id is None:
+        store.clear()
+        return
+    store.pop(session_id, None)
+
+
+def set_session_kb_docs(session_id: str | None, docs: str) -> None:
+    """Record the retrieved KB context text for this request/session."""
+    store = _session_store("kb_docs")
+    if not session_id:
+        return
+    store[session_id] = docs
+    store.move_to_end(session_id)
+    while len(store) > _MAX_TRACKED_SESSIONS:
+        store.popitem(last=False)
+
+
+def get_session_kb_docs(session_id: str | None) -> str | None:
+    store = _session_store("kb_docs")
+    if not session_id:
+        return None
+    return store.get(session_id)
+
+
+def clear_session_kb_docs(session_id: str | None = None) -> None:
+    """Clear one session or this cache in the active request (legacy store unscoped)."""
+    store = _session_store("kb_docs")
+    if session_id is None:
+        store.clear()
+        return
+    store.pop(session_id, None)
 
 
 def extract_cve_id(prompt: str) -> str | None:

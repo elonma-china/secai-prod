@@ -8,6 +8,7 @@ import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,10 +20,12 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from linch.events import ResultEvent, SystemEvent
+from linch.events import PartialAssistantEvent, ResultEvent, SystemEvent
 
 from ..agent import registry_for
-from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding
+from ..agent.hooks import (
+    CHAT_PRE_FETCH_MARKER, _EXPLOIT_KB_SEARCH_EXHAUSTED, classify_chat_grounding,
+)
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -43,6 +46,8 @@ from ..poc import (
     strip_system_narration,
     strip_tool_name_mentions,
 )
+from ..poc.inject import has_synthesis_evidence
+from ..poc.prefetch import session_coverage_scope
 from ..poc.backend import PocBadRequest, PocError, PocForbidden, PocNotFound
 from ..poc.fixed_pocs import extract_target
 from ..poc.kt_client import KtClientError
@@ -389,6 +394,46 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
     )
 
 
+def _kb_prompt_appendix(kb_content: str | None) -> str:
+    """Feed deterministically-retrieved internal Knowledge Base (KB) context into the prompt
+    for CVEs present in the internal DB (Qdrant/Neo4j) but absent from the PoC catalog (T3 tier).
+    Gives the model exact technical details (CWE, CVSS, affected products, vulnerability description)
+    to synthesize Section 1, 2, and 3 without hallucination."""
+    if not kb_content or not kb_content.strip():
+        return ""
+    if "Không tìm thấy kết quả trong knowledge base" in kb_content:
+        return ""
+    return (
+        "\n\n[Hệ thống đã tìm thấy thông tin kỹ thuật của lỗ hổng trong Cơ sở dữ liệu nội bộ (KB):\n"
+        + wrap_untrusted_content(kb_content.strip()[:6000], source="kb_prefetch")
+        + "\n\nHãy căn cứ vào các thông tin kỹ thuật xác thực trên (CWE, vector tấn công, sản phẩm bị ảnh hưởng, mô tả cơ chế lỗi) "
+        "để phân tích và xây dựng mã khai thác PoC (Mục 1), Hướng dẫn chạy (Mục 2) và Tổng quan kỹ thuật (Mục 3). "
+        "Ưu tiên thông tin riêng của CVE; tài liệu CWE/CAPEC/ATT&CK chỉ là kiến thức bổ trợ, không xác nhận chi tiết khai thác. Nếu thiếu điều kiện hoặc phiên bản cần thiết, nêu rõ phần thiếu, không đoán payload. Giữ nguồn trích dẫn và ghi rõ mã tổng hợp chưa chạy xác minh.]\n"
+    )
+
+
+def _kb_unavailable_response(prefetch_result: dict[str, Any], evidence: list[dict[str, Any]]) -> tuple[str, dict[str, Any]] | None:
+    """Stop before generation when neither KB context nor artifact evidence supports it."""
+    cve_id = prefetch_result.get("cve_id")
+    usable_context = (prefetch_result.get("kb_status") == "found"
+                      and bool((prefetch_result.get("kb_content") or "").strip()))
+    if (not cve_id or usable_context
+            or has_real_code_evidence(evidence) or has_synthesis_evidence(evidence)):
+        return None
+    status = prefetch_result.get("kb_status", "error")
+    if status == "not_found":
+        return_text, metadata = enforce_section1("", [], cve_id=cve_id)
+        return return_text, {**metadata, "kb_status": status}
+    detail = (f"Đã tìm thấy {cve_id} nhưng chưa đủ thông tin kỹ thuật để sinh PoC. "
+              "Cần bổ sung mô tả cơ chế lỗi và điều kiện ảnh hưởng."
+              if status == "insufficient" else
+              f"Không thể truy vấn đầy đủ cơ sở dữ liệu nội bộ (KB) để xác thực {cve_id}. "
+              "Vui lòng thử lại; hệ thống không sinh PoC khi chưa có bằng chứng xác thực.")
+    return ("## 1. Mã Khai thác (PoC) và Payload\n\n" + detail,
+            {"candidate_status": "not_generated", "section1_tier": "synthesis_failed",
+             "reference_code_injected": False, "kb_status": status})
+
+
 async def _pad_to_floor(start: float, floor_s: float) -> None:
     """Sleep just enough so total elapsed since ``start`` reaches ``floor_s`` — the uniform
     exploit-latency floor (see Settings.poc_exploit_simulate_delay_s). No-op when the floor
@@ -399,6 +444,7 @@ async def _pad_to_floor(start: float, floor_s: float) -> None:
     remaining = floor_s - (time.monotonic() - start)
     if remaining > 0:
         await asyncio.sleep(remaining)
+
 
 
 async def _run_kt_if_applicable(settings: Any, body: LegacyRequest, text: str,
@@ -691,8 +737,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return []
 
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
-                       session_id: str | None = None) -> tuple[str, dict[str, Any]]:
-        grounding_context: str | None = None
+                       session_id: str | None = None,
+                       grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
         if prompt_override is not None:
             # Endpoint already built the task-specific user message (translate/report/…).
             prompt = prompt_override
@@ -1544,90 +1590,55 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return stream("statistical_report", statistical_prompt(body), None, build_final)
 
     async def exploit_prefetch(prompt: str, session_id: str | None = None) -> dict[str, Any]:
-        """Deterministic evidence gathering (see poc/prefetch.py) — runs independently of,
-        and concurrently with, the model's own agentic turn; its own scratch run_id keeps
-        it fully separate from whatever run_id the model's session ends up using, so it
-        can never collide with or be starved by the agentic path. Records prefetch
-        ``coverage`` on ``session_id`` so RequireSearchBeforeAnswerHook can skip
-        force_continue when coverage is already ``enough``|``empty``. Fail-open: any
-        error → coverage ``failed`` + empty evidence (hook + enforce_section1 backstop).
-
-        Also runs the CVE-KB existence check (``cve_exists_in_kb``) concurrently with the
-        catalog prefetch — same fail-open contract — so the T2/T3 synthesize-from-CVE tier
-        in ``enforce_section1`` knows whether the CVE is real even when the catalog has
-        nothing for it. Also records it on ``session_id`` (``set_session_cve_known``) so
-        RequireSection1SynthesisHook can force a retry when the model skipped Section 1
-        despite the CVE being confirmed real. Same for T2 catalog-description evidence
-        (``set_session_synthesis_evidence``) and T1 real-code evidence
-        (``set_session_real_code_evidence``) — prefetch's own fetches land in the ledger
-        under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
-        cannot see them any other way (see prefetch.py's own docstring on these functions).
-        Also fetches ``cwe_refs`` (H1, 2026-09-22) — the CWE ids this CVE's record links to
-        via ``cve_cwe_refs`` (retrieval/neo4j.py, same CVE-record KB lookup as
-        ``cve_exists_in_kb`` above, one hop further) — so ``/ai/exploit``'s
-        ``metadata.cwe_refs`` (populated alongside evidence_ids/edb_ids/provenance, see
-        exploit()/exploit_stream()) reflects the real KB record instead of always being
-        empty. ``[]`` whenever there's no CVE id or no CVE record (fail-open, same
-        contract as ``cve_known``).
-
-        Returns ``{"evidence", "cve_id", "cve_known", "cwe_refs"}``."""
-        from ..poc.inject import has_synthesis_evidence
+        """Gather catalog and exact KB context concurrently, scoped to this request."""
         from ..poc.prefetch import (
-            exploit_relevance_ok, set_session_coverage, set_session_cve_known,
+            clear_session_coverage, exploit_relevance_ok, set_session_coverage,
+            set_session_cve_known, set_session_kb_docs, set_session_kb_searched,
             set_session_real_code_evidence, set_session_synthesis_evidence,
         )
-        from ..retrieval.neo4j import cve_cwe_refs, cve_exists_in_kb
+        from ..retrieval.kb_context import get_cve_context
+
+        clear_session_coverage(session_id)
         cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
         ledger = getattr(state.runner, "ledger", None)
-        if poc is None or ledger is None:
-            set_session_coverage(session_id, "failed")
-            if cve_id:
-                cve_known, cwe_refs = await asyncio.gather(
-                    cve_exists_in_kb(cve_id), cve_cwe_refs(cve_id))
-            else:
-                cve_known, cwe_refs = False, []
-            set_session_cve_known(session_id, cve_known)
-            set_session_synthesis_evidence(session_id, False)
-            set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         run_id = f"prefetch:{uuid4().hex}"
-        try:
-            if cve_id:
-                report, cve_known, cwe_refs = await asyncio.gather(
-                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id),
-                    cve_cwe_refs(cve_id))
-            else:
-                report, cve_known, cwe_refs = await prefetch_evidence(poc, ledger, prompt, run_id), False, []
-                # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt
-                # (no CVE id) that maps to no sufficiently-relevant KB entry is treated as
-                # "nothing found" — so the exploit path does not build a PoC from a weak
-                # keyword match (the "nhập linh tinh vẫn ra PoC" gap). Inert by default; a
-                # named CVE keeps using cve_known above. Fail-open (None → not gated).
-                if await exploit_relevance_ok(prompt) is False:
-                    logger.info("exploit prefetch gated: low KB relevance for free-text prompt")
-                    set_session_coverage(session_id, "empty")
-                    set_session_cve_known(session_id, False)
-                    set_session_synthesis_evidence(session_id, False)
-                    set_session_real_code_evidence(session_id, False)
-                    return {"evidence": [], "cve_id": None, "cve_known": False, "cwe_refs": [],
-                            "coverage": "empty", "gated": "low_relevance"}
-            cov = report.get("coverage") or "failed"
-            if cov not in ("enough", "empty", "partial", "failed"):
-                cov = "failed"
-            set_session_coverage(session_id, cov)
-            set_session_cve_known(session_id, cve_known)
-            evidence = ledger.evidence_for_run(run_id)
-            set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
-            set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
-            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
-        except Exception:
-            logger.exception("deterministic PoC prefetch failed")
-            set_session_coverage(session_id, "failed")
-            set_session_cve_known(session_id, False)
-            set_session_synthesis_evidence(session_id, False)
-            set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": False, "cwe_refs": []}
+
+        async def catalog_search() -> dict[str, Any]:
+            if poc is None or ledger is None:
+                return {"coverage": "failed"}
+            return await prefetch_evidence(poc, ledger, prompt, run_id)
+
+        async def kb_search() -> dict[str, Any]:
+            if not cve_id:
+                return {"status": "not_queried", "content": "", "cwe_refs": []}
+            return await get_cve_context(cve_id)
+
+        report, kb = await asyncio.gather(catalog_search(), kb_search(), return_exceptions=True)
+        if isinstance(report, BaseException):
+            report = {"coverage": "failed"}
+        if isinstance(kb, BaseException):
+            kb = {"status": "error", "content": "", "cwe_refs": []}
+        status = kb.get("status", "error")
+        kb_content = str(kb.get("content") or "") if status == "found" else ""
+        cve_known = status == "found" and bool(kb_content.strip())
+        if status == "found" and not cve_known:
+            status = "insufficient"
+        evidence = ledger.evidence_for_run(run_id) if ledger is not None else []
+        coverage = report.get("coverage", "failed")
+        if coverage not in ("enough", "empty", "partial", "failed"):
+            coverage = "failed"
+        if not cve_id and poc is not None and await exploit_relevance_ok(prompt) is False:
+            coverage, evidence = "empty", []
+        set_session_coverage(session_id, coverage)
+        set_session_cve_known(session_id, cve_known)
+        set_session_kb_searched(session_id, cve_known)
+        set_session_kb_docs(session_id, kb_content)
+        set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
+        set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
+        return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known,
+                "cwe_refs": kb.get("cwe_refs") or [], "kb_content": kb_content,
+                "kb_status": status, "coverage": coverage}
 
     async def inject_reference_code(text: str, run_id: str | None,
                                     pre_evidence: list[dict[str, Any]] | None = None, *,
@@ -1659,6 +1670,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         both asked for a real CVE's PoC and named a live third-party host got that host
         baked verbatim into a runnable Mục 2 command with no authorization framing at all."""
         ledger = getattr(state.runner, "ledger", None)
+        if text.strip() == _EXPLOIT_KB_SEARCH_EXHAUSTED.strip():
+            return text, {"candidate_status": "not_generated", "section1_tier": "synthesis_failed",
+                          "reference_code_injected": False, "reason": "kb_search_before_synthesis_exhausted"}
         try:
             text = strip_system_narration(text)
             # Deterministic backstop for the sibling leak: internal TOOL identifiers
@@ -1856,11 +1870,16 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                "evidence": merge_evidence(base_evidence, extra_real)}
         pre_evidence = merge_evidence(base_evidence, extra_real, web_hints or [])
         appendix = (_prefetch_prompt_appendix(merged_for_appendix)
-                    + _web_hints_prompt_appendix(web_hints or []))
+                    + _web_hints_prompt_appendix(web_hints or [])
+                    + _kb_prompt_appendix(prefetch_result.get("kb_content")))
         return pre_evidence, appendix, False
 
     @app.post("/ai/exploit")
     async def exploit(body: LegacyRequest) -> dict[str, Any]:
+        with session_coverage_scope():
+            return await _exploit(body)
+
+    async def _exploit(body: LegacyRequest) -> dict[str, Any]:
         prompt_text = require_public_input(body.supplied_text())
         if _is_exploit_chitchat(prompt_text):
             return {"description": EXPLOIT_CVE_GUIDE, "exploit_guide": EXPLOIT_CVE_GUIDE,
@@ -1905,15 +1924,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
         pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
             prefetch_result, web_hints, session_id, target=exploit_target,
             strategy_override=getattr(body, "poc_strategy", None))
-        agent_prompt = (prompt_text
-                        + (_kt_prompt_appendix(kt_result) if kt_result else "")
-                        + grounding_appendix)
-        text, metadata = await complete("exploit_research", body, session_id=session_id,
-                                        prompt_override=agent_prompt)
-        text, injected = await inject_reference_code(
-            text, metadata.get("run_id"), pre_evidence,
-            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
-            prompt_text=prompt_text, target=exploit_target)
+        unavailable = _kb_unavailable_response(prefetch_result, pre_evidence)
+        if unavailable is not None:
+            text, injected = unavailable
+            metadata = exploit_final_meta(None)
+        else:
+            grounding_context = ((_kt_prompt_appendix(kt_result) if kt_result else "")
+                                 + grounding_appendix)
+            text, metadata = await complete("exploit_research", body, session_id=session_id,
+                                            prompt_override=prompt_text,
+                                            grounding_context=grounding_context)
+            text, injected = await inject_reference_code(
+                text, metadata.get("run_id"), pre_evidence,
+                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                prompt_text=prompt_text, target=exploit_target)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
@@ -1922,6 +1946,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # already did (cve_cwe_refs, retrieval/neo4j.py), not from PoC evidence — set
         # independently of `injected` (enforce_section1's report never carries this key).
         metadata["cwe_refs"] = prefetch_result.get("cwe_refs", [])
+        metadata["kb_status"] = prefetch_result.get("kb_status", "not_queried")
         metadata["poc_strategy"] = _resolve_poc_strategy(getattr(body, "poc_strategy", None), state.settings)
         if kt_result is not None:
             metadata["poc_kt_exploit"] = kt_result
@@ -1935,6 +1960,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     @app.post("/ai/exploit/stream")
     async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
+        with session_coverage_scope() as coverage_state:
+            response = await _exploit_stream(body)
+        iterator = response.body_iterator
+
+        async def scoped_stream():
+            with session_coverage_scope(coverage_state):
+                async with aclosing(iterator):
+                    async for frame in iterator:
+                        yield frame
+
+        response.body_iterator = scoped_stream()
+        return response
+
+    async def _exploit_stream(body: LegacyRequest) -> StreamingResponse:
         """Own generator (not the shared `stream()`) so it can emit a `section1` PREVIEW
         event as soon as the deterministic prefetch resolves — which runs concurrently
         with, and often finishes well before, the model's own turn. Without this, Section
@@ -2014,25 +2053,38 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         async def build_final(final: str, run_id: str | None,
                               kt_result: dict[str, Any] | None = None) -> dict[str, Any]:
+            if final == STREAM_ERROR_MESSAGE:
+                safe = neutralize_active_content(STREAM_ERROR_MESSAGE)
+                meta = exploit_final_meta(run_id)
+                meta.update({"candidate_status": "not_generated", "section1_tier": "error"})
+                if kt_result is not None:
+                    meta["poc_kt_exploit"] = kt_result
+                return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
+
             prefetch_result = await prefetch_task
             pre_evidence = grounding_holder.get("pre_evidence")
             if pre_evidence is None:  # prelude failed before grounding — fall back to raw merge
                 pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
-            final, injected = await inject_reference_code(
-                final, run_id, pre_evidence,
-                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
-                prompt_text=text, target=_exploit_target(body, text))
+            unavailable = _kb_unavailable_response(prefetch_result, pre_evidence)
+            if unavailable is not None:
+                final, injected = unavailable
+            else:
+                final, injected = await inject_reference_code(
+                    final, run_id, pre_evidence,
+                    cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                    prompt_text=text, target=_exploit_target(body, text))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
             # H1 (2026-09-22): see the non-stream exploit() endpoint's identical comment —
             # cwe_refs comes from the prefetch's CVE-record lookup, not from `injected`.
             meta["cwe_refs"] = prefetch_result.get("cwe_refs", [])
+            meta["kb_status"] = prefetch_result.get("kb_status", "not_queried")
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
             safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
             return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
 
-        async def gen() -> AsyncIterator[bytes]:
+        async def generate() -> AsyncIterator[bytes]:
             final = ""
             run_id = None
             failed = False
@@ -2058,7 +2110,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 logger.exception("prefetch appendix build failed")
             # Wait up to 2s for KT so we can append appendix before the model starts when
             # intent is clear; if slower, start model and emit tool SSE when KT finishes.
-            agent_text = text + prefetch_appendix
+            grounding_context = prefetch_appendix
             pending_kt: asyncio.Task | None = kt_task
             if pending_kt is not None:
                 done, _ = await asyncio.wait({pending_kt}, timeout=2.0)
@@ -2070,9 +2122,29 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         kt_result = None
                     pending_kt = None
                     if kt_result is not None:
-                        agent_text = text + _kt_prompt_appendix(kt_result) + prefetch_appendix
+                        grounding_context = _kt_prompt_appendix(kt_result) + prefetch_appendix
 
-            model_agen = state.runner.stream("exploit_research", agent_text, session_id).__aiter__()
+            _pf = await prefetch_task
+            unavailable = _kb_unavailable_response(
+                _pf, grounding_holder.get("pre_evidence", _pf.get("evidence") or []))
+
+            if unavailable is not None:
+                if pending_kt is not None:
+                    try:
+                        kt_result = await pending_kt
+                    except Exception:
+                        logger.exception("kt exploit task failed")
+                await _pad_to_floor(_start, _floor)
+                payload = await build_final(unavailable[0], None, kt_result)
+                yield sse_frame("token", {"delta": payload["content"]})
+                yield sse_frame("final", payload)
+                yield b"data: [DONE]\n\n"
+                return
+
+            model_agen = state.runner.stream(
+                "exploit_research", text, session_id,
+                **({"grounding_context": grounding_context} if grounding_context else {}),
+            ).__aiter__()
             model_next = asyncio.ensure_future(model_agen.__anext__())
             pending_prefetch: asyncio.Task | None = prefetch_task
             try:
@@ -2165,9 +2237,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             run_id = getattr(event, "run_id", None) or run_id
                         if isinstance(event, ResultEvent):
                             final = sanitize_output_language(event.final_text or "")
-                        frame = event_to_sse(event)
-                        if frame:
-                            yield frame
+                        if not isinstance(event, PartialAssistantEvent):
+                            frame = event_to_sse(event)
+                            if frame:
+                                yield frame
             except Exception:
                 failed = True
                 logger.exception("stream failed for profile=exploit_research")
@@ -2181,6 +2254,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 yield sse_frame("final", await build_final(STREAM_ERROR_MESSAGE, run_id, kt_result))
             finally:
                 model_next.cancel()
+                await asyncio.gather(model_next, return_exceptions=True)
+                close_model = getattr(model_agen, "aclose", None)
+                if close_model is not None:
+                    await close_model()
             if not failed:
                 # Ensure KT finished for metadata even if SSE already emitted
                 if pending_kt is not None:
@@ -2192,8 +2269,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 # tokens + Section-1 preview already streamed live above, so this only
                 # normalizes total wall-clock, it does not delay progressive delivery.
                 await _pad_to_floor(_start, _floor)
-                yield sse_frame("final", await build_final(final, run_id, kt_result))
+                payload = await build_final(final, run_id, kt_result)
+                yield sse_frame("token", {"delta": payload["content"]})
+                yield sse_frame("final", payload)
             yield b"data: [DONE]\n\n"
+
+        async def gen() -> AsyncIterator[bytes]:
+            try:
+                async with aclosing(generate()) as frames:
+                    async for frame in frames:
+                        yield frame
+            finally:
+                for task in (prefetch_task, kt_task):
+                    if task is not None and not task.done():
+                        task.cancel()
+                await asyncio.gather(*(task for task in (prefetch_task, kt_task) if task is not None),
+                                     return_exceptions=True)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
