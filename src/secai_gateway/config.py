@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     #   1. `_enforce_airgap` below hard-coerces every internet-feature flag to its off
     #      value (so the tools are never even built / the deterministic web steps skip);
     #   2. the low-level public-content fetchers (retrieval/http_fetch, reference_fetch,
-    #      websearch and routes.py's on-demand GitHub step) additionally call
+    #      websearch) additionally call
     #      `airgap.assert_online_fetch_allowed()` and refuse — the belt-and-suspenders
     #      backstop for any code path (now or future) that bypasses the flags.
     # It does NOT touch the internal service endpoints (Qdrant/Neo4j/Redis + the LLM/
@@ -343,7 +343,7 @@ class Settings(BaseSettings):
     github_diff_max_chars: int = 30000
 
     # ── PoC consolidation (single runnable file) ───────────────────────────────
-    # After fetching a PoC's real source (catalog / on-demand GitHub / web), an LLM pass
+    # After fetching a PoC's real source (catalog / web), an LLM pass
     # (profile `poc_consolidate`) merges it into ONE self-contained file for Section 1 —
     # replacing the verbatim multi-file dump. Off → verbatim injection (old behaviour).
     poc_consolidate_enabled: bool = True
@@ -366,13 +366,8 @@ class Settings(BaseSettings):
     # failures retry; a timeout/transport error does not (not a fidelity issue, don't burn
     # more of the request's time budget). 1 disables retries (old single-shot behaviour).
     poc_consolidate_max_attempts: int = 3
-    # Fetch a link-only GitHub PoC's code on demand (codeload tarball, in-memory, no exec) from
-    # the request path when the catalog row has a URL but no local artifact. Network egress —
-    # fail-open (a miss simply falls through to web/synthesis). Off → only pre-fetched rows.
-    poc_github_ondemand_enabled: bool = True
-    poc_github_ondemand_timeout_s: int = 30
-    # Persistent cache for PoC code fetched on-demand from the internet (GitHub tarball / web
-    # raw script), keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
+    # Persistent cache for PoC code fetched on-demand from the internet (web raw script),
+    # keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
     # Lookup order becomes DB → this cache → internet. Empty → "<poc_artifact_store>/../ondemand-cache".
     poc_ondemand_cache_dir: str = ""
 
@@ -500,7 +495,6 @@ class Settings(BaseSettings):
             self.fetch_reference_enabled = False
             self.web_search_enabled = False
             self.github_advisory_enabled = False
-            self.poc_github_ondemand_enabled = False
             self.searxng_url = ""
         return self
 

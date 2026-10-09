@@ -253,27 +253,6 @@ class PocCatalog:
                 (f["sha256"], f.get("size"), f["storage_path"], f.get("language")))
         self._db.commit()
 
-    # ── on-demand code acquisition (request path) ───────────────────────────
-    def github_candidates(self, cve_id: str, limit: int = 3) -> list[dict[str, Any]]:
-        """poc_github rows for ``cve_id`` worth fetching code from on the request path,
-        highest-star first — link-only rows (no local artifact yet) BEFORE already-fetched
-        ones, so the on-demand fetcher spends its budget on rows that would otherwise have no
-        code at all. Duplicates excluded. Returns id/source_ref/url/provenance/artifact_path
-        so the caller can derive owner/repo/branch and skip rows already served locally."""
-        cve = (cve_id or "").strip().upper()
-        if not cve:
-            return []
-        rows = self._db.execute(
-            "SELECT p.id, p.source_ref, p.url, p.provenance, p.artifact_path "
-            "FROM poc p JOIN poc_cve c ON c.poc_id=p.id "
-            "WHERE c.cve_id=? AND p.source='poc_github' AND p.duplicate_of IS NULL "
-            "AND (p.url IS NOT NULL AND p.url<>'') "
-            "ORDER BY (p.artifact_path IS NOT NULL) ASC, "
-            "         CAST(json_extract(p.provenance,'$.stars') AS INTEGER) DESC "
-            "LIMIT ?",
-            (cve, limit)).fetchall()
-        return [dict(r) for r in rows]
-
     # ── sandbox fetcher support (link-only sources) ─────────────────────────
     def pending_github(self, limit: int, min_stars: int = 0, refetch: bool = False) -> list[sqlite3.Row]:
         """poc_github rows to fetch, highest-star first. Fork-family duplicates (marked by
