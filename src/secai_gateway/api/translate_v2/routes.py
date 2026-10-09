@@ -5,6 +5,8 @@ import json
 import re
 import secrets
 from datetime import datetime, timezone
+from email.errors import HeaderParseError
+from email.header import decode_header, make_header
 from pathlib import PurePath
 
 from fastapi import APIRouter, Request
@@ -134,6 +136,12 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
             raise TranslationError("INVALID_REQUEST", "Idempotency key is invalid.")
         upload: UploadFile = fields["file"]
         filename = upload.filename or ""
+        # .NET encodes non-ASCII filenames as MIME encoded-words.
+        if filename.startswith("=?") and filename.endswith("?="):
+            try:
+                filename = str(make_header(decode_header(filename)))
+            except (HeaderParseError, LookupError, UnicodeError, ValueError) as exc:
+                raise TranslationError("INVALID_REQUEST", "Filename encoding is invalid.") from exc
         if not filename or len(filename) > 255 or any(c in filename for c in "/\\\x00"):
             raise TranslationError("INVALID_REQUEST", "Filename is invalid.")
         extension = PurePath(filename).suffix.lower()
