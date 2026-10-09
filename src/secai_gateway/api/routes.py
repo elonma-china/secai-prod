@@ -691,7 +691,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return []
 
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
-                       session_id: str | None = None) -> tuple[str, dict[str, Any]]:
+                       session_id: str | None = None,
+                       keep_cjk: bool = False) -> tuple[str, dict[str, Any]]:
         grounding_context: str | None = None
         if prompt_override is not None:
             # Endpoint already built the task-specific user message (translate/report/…).
@@ -753,7 +754,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "query": grounding.get("query"),
                 "summary": grounding.get("summary"),
             }]}
-        return sanitize_output_language(text), metadata
+        return sanitize_output_language(text, keep_cjk=keep_cjk), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
         # Bug #13/CQ4: only "chat" is gated (public tool_registry default → []); other
@@ -1389,6 +1390,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def _split_adaptive(text: str) -> list[tuple[str, str]]:
         return split_for_translation(text, _chunk_budget(len(text)))
 
+    def _target_writes_han(tgt: Any) -> bool:
+        """True when the requested translation target is written with Han ideographs.
+
+        The legacy endpoint is what the IAS text panel calls (``e.translation``), so the
+        chat-oriented CJK strip in sanitize_output_language() must not run on a zh/ja
+        target (TXT-DIRECT-vi-ja / TXT-DIRECT-vi-zh-Hans, 2026-10-09)."""
+        if not isinstance(tgt, str):
+            return False
+        code = tgt.strip().lower()
+        return code in {"zh", "ja"} or code.startswith("zh-")
+
     def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
         """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt).
 
@@ -1420,7 +1432,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         async def render(chunk_text: str) -> str:
             prompt, literals = build_translate_prompt(chunk_text, src, tgt)
-            out, _meta = await complete("translate", body, prompt_override=prompt)
+            out, _meta = await complete("translate", body, prompt_override=prompt,
+                                        keep_cjk=_target_writes_han(tgt))
             cleaned = _strip_prompt_echo(unmask_literals(out, literals))
             if not cleaned.strip():
                 # TR4 fix (2026-09-22): a blank/whitespace-only completion used to flow
@@ -1498,7 +1511,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
 
-        if len(chunks) <= 1:
+        if len(chunks) <= 1 and not _target_writes_han(tgt):
+            # A zh/ja target takes the assembled path below: the live token stream and
+            # stream()'s final both strip Han ideographs (chat's VI/EN-only filter), which
+            # would delete the translation itself.
             prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
 
             async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
