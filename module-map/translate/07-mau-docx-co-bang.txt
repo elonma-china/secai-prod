@@ -1,0 +1,24 @@
+MẪU DOCX CÓ BẢNG (~10 TRANG) — dịch từng khối, trả TXT theo dòng hoặc JSON — 2026-10-10
+Mục tiêu: nhận diện chữ trong ô bảng, dịch từng khối (paragraph | table_cell), trả về .txt (mỗi khối một dòng) hoặc .json.
+Dữ liệu: 04b-docx-bang-data.json (mô tả + từng ô: block_id, table, row, column, source_text, gold_<ngôn ngữ đích>, preserve_literals).
+File: fixtures/files/docx-tables/  (dữ liệu 100% giả; ước tính ~10 trang theo ký tự, môi trường không có công cụ đếm trang thật)
+
+| Mẫu | Nguồn -> đích | Nội dung bảng                                                    | Khối (ô bảng + đoạn)  | ~trang |
+| S1  | vi -> en      | 7 bảng đơn giản: tài sản, CVE, mốc thời gian, số liệu %, checklist, liên hệ | 201 (129 + 72) | 10,6 |
+| S2  | en -> vi      | ô gộp ngang (gridSpan) và gộp dọc (vMerge)                       | 184 (113 + 71)        | 10,7 |
+| S3  | en -> vi      | literal trong ô: IP, CVE, URL, lệnh ssh/curl, mã băm SHA-256     | 239 (168 + 71)        | 12,0 |
+| S4  | vi -> en      | ô nhiều đoạn + bảng lồng trong ô                                 | 134 (56 + 78)         | 9,7  |
+| S5  | ja -> vi      | bảng tiếng Nhật: nhãn, người phụ trách, thời hạn, IP             | 183 (112 + 71)        | 10,7 |
+
+CÁCH BỘ TRÍCH XUẤT ĐỌC BẢNG (đã kiểm offline với documents.extract_docx)
+ - Mỗi ô = 1 khối kind=table_cell, metadata {section, table, row, column}; thứ tự order theo hàng rồi cột.
+ - Ô gộp ngang chỉ cho 1 khối ở cột đầu của vùng gộp (không nhân đôi); ô gộp dọc chỉ cho 1 khối ở hàng đầu.
+ - Ô có nhiều đoạn: gộp thành 1 khối, các đoạn nối bằng xuống dòng. Bảng lồng trong ô được tính là bảng riêng (table tăng dần).
+ - Kết quả job: JSON có blocks[].{id, kind, order, source_text, translated_text, metadata}; TXT = translated_text mỗi khối một dòng theo order.
+TIÊU CHÍ PASS CHO MẪU NÀY (bổ sung 03 mục 1b)
+ 1. Số khối kết quả = số khối nguồn; mỗi table_cell có đúng 1 khối cùng (table,row,column).
+ 2. translated_text của ô khớp nghĩa gold_<ngôn ngữ> (khi có gold; ô số/ID/email không có gold thì phải giữ nguyên).
+ 3. preserve_literals giữ nguyên 100% (chuỗi con chính xác); không dấu che; không ô nào bị xóa/trống.
+ 4. Hạn chế đã biết: ô bị cảnh báo UNSUPPORTED_PART chỉ khi docx có endnote/bình luận thật.
+ĐÃ CHẠY THỬ THẬT: chưa chạy cả 5 mẫu qua UI (mỗi mẫu ~130-240 khối, ước ~6-12 phút/mẫu; chạy tuần tự vì máy chỉ xử lý 1 job một lúc).
+Tham chiếu tốc độ đã đo: docx en-long-20pages (221 khối, gồm 50 ô bảng) en->vi 680,6 s, literal 18/18 mỗi loại.

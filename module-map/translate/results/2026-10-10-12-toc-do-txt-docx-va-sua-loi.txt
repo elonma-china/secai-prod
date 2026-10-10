@@ -1,0 +1,15 @@
+TỐC ĐỘ TXT/DOCX TRÊN UI VÀ SỬA LỖI — 2026-10-10 (ias.id.vn, dev201; thời gian = updated_at - created_at của job)
+Lượt 1 (agent chạy tuần tự, trước sửa):
+ TXT   vi->en 27,8 s | en->vi: LỖI TẢI LÊN 400 "EBad Request" | ja->vi 74,5 s | vi->ko 37,0 s   (18/18 khối, literal 4/4)
+ DOCX  vi->en 29,2 s | en->vi 48,3 s | ja->vi 34,4 s | vi->ko 78,2 s  (10/10 khối, literal 4/4, cảnh báo UNSUPPORTED_PART nhầm)
+ DOCX ~20 trang (en-long-20pages.docx, 221 khối = 171 đoạn + 50 ô bảng, 10.001 từ): THẤT BẠI sau 700,6 s với TEXT_TOO_LONG ở khối 194/221.
+Lỗi và cách sửa (triển khai translate-longdoc-20261010; commit aa36712, 8e315cd):
+ 1. TEXT_TOO_LONG giữa chừng: giới hạn 300 khối model kiểm cộng dồn trong lúc dịch -> kiểm TRƯỚC khi dịch (không mất công), nâng max_chunks 300->600 (~20 trang), hạn mức job 30->50 phút.
+ 2. UNSUPPORTED_PART báo nhầm: mọi docx có endnotes.xml (chỉ dấu phân cách) bị cảnh báo -> chỉ cảnh báo khi endnote/bình luận có nội dung.
+ 3. TXT en->vi 400 "EBad Request": yêu cầu KHÔNG tới gateway (không có dòng POST trong log) -> lỗi lớp IAS/WAF phía trước, không phải code dịch; chạy lại thành công.
+Lượt 2 (sau sửa, tôi chạy tay qua UI):
+ TXT  en->vi (tải lại ca lỗi 400): 42,0 s, 18/18, không cảnh báo -> PASS
+ DOCX en->vi (en-1000.docx): 43,4 s, 10/10, warnings [] (hết UNSUPPORTED_PART) -> PASS
+ DOCX ~20 trang en->vi: 680,6 s (11 phút 21 s), 221/221 khối, 16.151 từ kết quả, warnings [], literal 18/18 mỗi loại (IP, CVE, phiên bản, URL), không dấu che -> PASS
+Còn: "địa chỉ address 198.51.100.23" / "tại địa chỉ CVE-2024-21412" (placeholder không có kiểu, chất lượng); tốc độ file dài ~3 s/khối.
+Ảnh/ghi chú thô lượt 1: results/speed-txt-docx-20261010/ (raw.txt + T1-T4, D1-D5 .png).
