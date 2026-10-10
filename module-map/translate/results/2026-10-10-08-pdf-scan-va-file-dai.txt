@@ -1,0 +1,35 @@
+KIỂM TRA & ĐÁNH GIÁ: PDF SCAN VÀ FILE DÀI — 2026-10-10
+Môi trường: https://ias.id.vn/ai/translate (UI thật, dev201), hướng en->vi. Tài liệu: PublicWaterMassMailing.pdf (8 trang scan Lexmark, không có lớp chữ, thư của Missouri DHSS).
+Fixture: fixtures/files/pdf/PublicWaterMassMailing.pdf, fixtures/images/pdf-pages/*-p1.png|p5.png (pdftoppm 110 dpi), fixtures/files/en-long-3000.txt (OCR trang 1+5 lặp 3 lần).
+
+CA 1 — Tải thẳng PDF scan (tab "Dịch tệp và hình ảnh")                            -> FAIL (theo thiết kế: không hỗ trợ PDF)
+   UI: "Dịch thất bại / EBad Request" ngay, không tạo job. Backend thật: HTTP 400 UNSUPPORTED_FILE_TYPE (curl :18185).
+   Console: "Failed to load resource: 400 .../api/ais/v2/translate/files". Lỗi UX: thông báo không cho biết "PDF không được hỗ trợ".
+   Ảnh: pdf-scan-upload-UNSUPPORTED-EBadRequest-20261010.png
+CA 2 — Trang 1 PDF (scan, thư ~430 từ) tải như ảnh                                -> job 060772b4…, 54 s, succeeded
+   OCR: văn bản dài đọc đúng gần hết. LỖI OCR (vi phạm "giữ nguyên thông tin"): 573-751-6400 đọc thành 573-751-8400;
+   VOICE 1-800-735-2466 đọc thành 2486; tên "Jeremiah W. (Jay) Nixon" đọc thành "Joromiah".
+   Lỗi dịch: "NEW SAMPLE BOTTLES" -> "CÁC THÙNG LỌAI MẪU MỚI" (thùng, sai chính tả "lọai"); "Missouri Public Water Systems" -> "Dịch vụ nước công cộng
+   bang Missouri Hệ thống" (rối); "report ... to you and the U.S. EPA" mất "và" ("...cho người dùng. Cơ quan Bảo vệ Môi trường Hoa Kỳ.");
+   "Sample volume MUST be within the two lines ... (100-120 mL)" bị diễn đạt sai nghĩa ("Các chai có dung tích từ 100 – 120 mL là phù hợp").
+   Warnings: OCR_CORRECTION_REJECTED (không có sửa OCR tự động).
+CA 3 — Trang 5 PDF (biểu mẫu 2 cột, có ảnh chai, khung liên hệ)                  -> job 16ea8b41…, 40,4 s, succeeded
+   OCR: 12/12 literal đúng (3334, 4032, email, website, địa chỉ, 100/120 mL, mã mẫu LAB 34...). Lỗi OCR: "MSPHL" -> "MSHL" (3 chỗ);
+   bỏ nhãn trong ảnh "Max. fill line" / "Min. fill line".
+   Dịch: literal 11/12 — "LAB 34 Public Water (R10-2015)" bị dịch thành "PHÒNG THÍ NGHIỆM 34 – Nước công cộng (R10-2015)" (mã biểu mẫu bị đổi: FAIL giữ nguyên).
+   LỖI NGHĨA NGHIÊM TRỌNG: "Samples below the 100 mL (lower) line WILL NOT BE TESTED ... Samples above the 120 mL (upper) line WILL NOT BE TESTED"
+   -> "Các mẫu có thể tích dưới 100 mL sẽ bị loại bỏ. Các mẫu nằm dưới mức 120 mL sẽ không được kiểm tra do thể tích mẫu quá ít." (sai ngưỡng, lặp);
+   "Shrink Wrap Seal:" -> "Đóng kín nắp:" (nhãn sai); "...accepted for testing" bị lặp "Sẽ được chấp nhận để kiểm tra."; ngoặc không cân "(từ Tem dán trên chai là bắt buộc."
+   ; "pour off water until ... between the two lines" -> "...về mức cần thiết. Giữa hai dòng trước khi gửi" (đứt câu).
+   Ảnh: pdf-scan-page5-image-en-vi-20261010.png
+CA 4 — File TXT dài en-long-3000.txt (2.676 từ, 16,4 KB, 152 khối)               -> job 8230bd6f…, 250 s (4 phút 10 giây), succeeded 152/152
+   ~1,65 s/khối (trước tối ưu ~8,7 s/khối). Literal giữ đủ số lần (SĐT, email, URL, địa chỉ, 100/120 mL, MSPHL, EPA); ngày "November 10, 2015" được dịch
+   thành "10 tháng 11 năm 2015" (dịch ngày, không mất). Kết quả ổn định giữa 3 lần lặp (732/507 từ mỗi phần). Không có dấu che.
+
+TỔNG KẾT
+   - Tốc độ: tốt (trang scan dày 40-54 s; file 2.700 từ 4 phút 10 giây).
+   - Giữ nguyên thông tin: ĐẠT với văn bản có sẵn; KHÔNG đạt ở ảnh scan do OCR đọc sai số/tên chữ nhỏ (SĐT, tên riêng), và mã biểu mẫu bị dịch.
+   - Chất lượng dịch: có lỗi nghĩa ở câu quy định (ngưỡng thể tích), lặp/đứt đoạn tại biên khối, nhãn mục bị dịch sai. Cần: kiểm tra biên khối (câu bị cắt đôi),
+     kiểm số liệu tự động so OCR<->bản dịch, hướng người dùng bật chế độ xem OCR gốc (needs_review) khi chữ nhỏ.
+   - UX: PDF cần thông báo rõ "không hỗ trợ PDF - hãy chuyển trang thành ảnh hoặc DOCX"; poll job thỉnh thoảng 400 thoáng qua (UI vẫn hoàn tất).
+   - Chưa kiểm: các trang 2-4, 6-8; pdf nhiều trang tự tách (chức năng chưa có); DOCX; hướng khác en->vi.
