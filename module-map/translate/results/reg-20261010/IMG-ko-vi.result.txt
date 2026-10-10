@@ -1,0 +1,1 @@
+" Khi phát hiện các hoạt động bất thường như vậy,\nđội ngũ xử lý sự cố phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ. "

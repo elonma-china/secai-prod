@@ -1,0 +1,1 @@
+" Khi phát hiện ra hoạt động bất thường, nhân viên kỹ thuật cần ngay lập tức cô lập máy chủ khỏi mạng nội bộ. "
