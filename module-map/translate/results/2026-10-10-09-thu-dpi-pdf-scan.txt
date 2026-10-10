@@ -1,0 +1,11 @@
+THỬ ĐỘ PHÂN TÍCH (DPI) KHI TÁCH TRANG PDF SCAN — 2026-10-10
+Tài liệu: PublicWaterMassMailing.pdf trang 1 (thư dày chữ, chữ nhỏ ở đầu thư). Hướng en->vi, qua UI ias.id.vn, tách bằng pdftoppm.
+So 11 giá trị đã biết đúng từ ảnh gốc: SĐT 573-751-6400, FAX 573-751-6010, RELAY 1-800-735-2966, VOICE 1-800-735-2466,
+tên "Jeremiah W. (Jay) Nixon", P.O. Box 570, 65102-0570, "100 – 120 mL", 8 ½" x 11", www.health.mo.gov, November 10, 2015.
+
+| DPI | Kích thước ảnh | Thời gian job | OCR đúng |
+| 110 | 935x1210 (~1,1 MP)  | 54 s  | 8/11 (sai: SĐT 8400, VOICE 2486, tên "Joromiah") |
+| 200 | 1700x2200 (3,7 MP)  | 55 s  | 11/11 |
+| 300 | 2550x3300 (8,4 MP)  | ~54 s (job báo 109 s gồm ~55 s chờ job trước) | 11/11 |
+Kết luận: 200 DPI đủ để sửa lỗi OCR chữ nhỏ ở bản 110 DPI, không chậm hơn; 300 DPI không cho thêm. Đề xuất mặc định tách trang 200 DPI.
+Lưu ý: chỉ 1 trang, 1 lần mỗi mức; chưa kiểm các trang còn lại. Ảnh: pdf-page1-200dpi-vs-300dpi-ocr-20261010.png
