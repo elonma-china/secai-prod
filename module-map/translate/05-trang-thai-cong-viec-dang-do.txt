@@ -2,6 +2,29 @@ Trạng thái công việc kiểm thử + sửa lỗi dịch — cập nhật l�
 Mục đích file này: cho người/agent sau đọc biết đang làm tới đâu, phần nào xong, phần nào CHƯA xử lý — để không phải dò lại từ đầu results/2026-10-09-03.txt (922 dòng).
 
 ================================================================
+0. SỰ CỐ 2026-10-10 00:15Z — gateway chính bị thay bằng image cũ, ĐÃ KHÔI PHỤC 00:59Z
+================================================================
+Triệu chứng (người dùng báo, có ảnh): UI Dịch tệp/ảnh báo "Dịch thất bại / EBad Request"
+(ocr-fr.png, fr->vi). Tái hiện: POST /api/ais/v2/translate/images => 400 ngay lúc upload.
+Nguyên nhân: container secai-docker-gateway (:8131) bị TẠO LẠI lúc 00:15:37Z bằng
+`docker compose` của /home/ict/AIEngines/secai/secai-docker/docker-compose.yml với image cũ
+0.5.13-classifier-topn (27/09, chạy secai_gateway.app:app, không có TRANSLATION_UPSTREAM_URL /
+REPORT_UPSTREAM_URL). Image cũ không forward /ai/v2|v3/translate -> 404 ở gateway, proxy IAS
+đổi thành 400. KHÔNG phải do 2 deploy dịch của phiên này (không đụng secai-docker-gateway).
+Không có hồ sơ release/rollback nào ghi sự kiện này; chưa biết ai làm.
+Khôi phục (người dùng xác nhận): về image e14f3c7b1c9e (ias-zh-hans-fix-20261009) theo
+profile cuối /home/ict/secai-releases/ias-zh-hans-fix-20261009/profile.json (đã copy làm
+profile-restore.json), dưới 2 lock, kiểm ownership trước khi đổi. Container 0.5.13 được GIỮ LẠI
+(đổi tên secai-docker-gateway-before-restore-20261010). Hồ sơ + rollback.sh:
+/home/ict/secai-releases/gateway-restore-20261010/
+Kiểm sau khôi phục: /health 200; /ai/v3/translate/languages 200 (forward sang :18185);
+reports 401 (cần auth, route sống); embedding/rerank 217.91.60.211 sống.
+Retest UI thật: IMG-fr-vi => POST /images 200, "Dịch hoàn tất", bản dịch đúng nghĩa.
+Ảnh: results/repro-IMG-fr-vi-EBadRequest-20261010.png (lỗi), results/retest-IMG-fr-vi-after-gateway-restore-20261010.png (đã sửa).
+LƯU Ý: nếu ai đó chạy lại compose cũ trong secai-docker/ thì sự cố sẽ lặp lại — cần người
+phụ trách biết. Các kết quả test sau 00:15Z và trước 00:59Z (nếu có) không đáng tin.
+
+================================================================
 1. ĐÃ XONG — xác nhận thật qua UI, có bằng chứng
 ================================================================
 
