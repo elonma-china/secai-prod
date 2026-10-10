@@ -169,8 +169,25 @@ def protect_literals(text: str) -> ProtectedText:
     return ProtectedText("".join(chunks), tuple(literals), prefix)
 
 
+# The specialist MT model sometimes re-renders the placeholder brackets next to CJK
+# text (observed on production: "⟦T…:0⟧" -> "⟨T…:0⟩" for ja/zh sources whose literal
+# touches ideographs; ko, which spaces its literals, is untouched). The token body is a
+# secret random prefix plus an index, so only the delimiter glyphs are normalised; a
+# token that is missing, reordered, duplicated or invented still fails the check below.
+_BRACKET_OPEN = "⟦⟨〈《「『【［[<＜(（"
+_BRACKET_CLOSE = "⟧⟩〉》」』】］]>＞)）"
+
+
+def _canonical_markers(output: str, prefix: str) -> str:
+    body = re.escape(prefix[1:])  # prefix == "⟦" + "T<hex>:"
+    loose = re.compile(
+        "[" + re.escape(_BRACKET_OPEN) + r"]\s*" + body + r"(\d+)\s*[" + re.escape(_BRACKET_CLOSE) + "]")
+    return loose.sub(lambda m: f"{prefix}{m.group(1)}⟧", output)
+
+
 def restore_literals(output: str, protected: ProtectedText) -> str:
     prefix = protected._prefix
+    output = _canonical_markers(output, prefix)
     marker = re.compile(re.escape(prefix) + r"(\d+)⟧")
     found = list(marker.finditer(output))
     if (

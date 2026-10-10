@@ -74,3 +74,47 @@ async def test_invented_or_mutated_token_beside_literal_still_rejected(invented)
         await translate_blocks((block(VI),), "vi", "en", context=model)
     assert exc.value.code == "TOKEN_INTEGRITY_FAILED"
     assert model.calls == 3
+
+
+class BracketRewritingModel(Model):
+    """Real MT behaviour on ja/zh sources: placeholder brackets re-rendered, token body intact."""
+
+    def __init__(self, template, opener, closer):
+        super().__init__(template)
+        self.opener, self.closer = opener, closer
+
+    async def translate(self, text, source_lang, target_lang):
+        self.calls += 1
+        marks = [m.replace("⟦", self.opener).replace("⟧", self.closer) for m in _MARK.findall(text)]
+        return self.template.format(*marks)
+
+
+ZH = ("在一个典型案例中,运维团队发现来自地址198.51.100.23的异常流量,正试图利用漏洞CVE-2024-21412。"
+      "攻击者反复向路径https://portal.noi-bo.example.com/api/v1/upload发送请求。")
+VI_OUT = "Đội vận hành phát hiện lưu lượng từ địa chỉ {0} khai thác {1}. Kẻ tấn công gửi tới {2}."
+
+
+@pytest.mark.parametrize("opener,closer", [("⟨", "⟩"), ("〈", "〉"), ("《", "》"), ("⟦ ", " ⟧")])
+@pytest.mark.parametrize("source,src", [(ZH, "zh"), (JA, "ja")], ids=["FILE-zh-Hans-vi", "FILE-ja-vi"])
+@pytest.mark.asyncio
+async def test_rewritten_placeholder_brackets_are_accepted(source, src, opener, closer):
+    model = BracketRewritingModel(VI_OUT, opener, closer)
+    result = await translate_blocks((block(source),), src, "vi", context=model)
+    out = result[0].translated_text
+    for literal in ("198.51.100.23", "CVE-2024-21412", "https://portal.noi-bo.example.com/api/v1/upload"):
+        assert out.count(literal) == 1
+    assert "⟨" not in out and "⟦" not in out
+    assert model.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_rewritten_brackets_do_not_excuse_missing_or_duplicated_token():
+    class Dropper(BracketRewritingModel):
+        async def translate(self, text, s, t):
+            self.calls += 1
+            m = [x.replace("⟦", "⟨").replace("⟧", "⟩") for x in _MARK.findall(text)]
+            return "Từ {0} và {0} qua {2}.".format(*m)   # token 1 mất, token 0 trùng
+    model = Dropper(VI_OUT, "⟨", "⟩")
+    with pytest.raises(TranslationError) as exc:
+        await translate_blocks((block(ZH),), "zh", "vi", context=model)
+    assert exc.value.code == "TOKEN_INTEGRITY_FAILED"
