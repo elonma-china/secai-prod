@@ -64,7 +64,9 @@ d) Fix round 2 — CHỈ bug A (79628a3), deploy lên secai-translation-worker l
 2. CHƯA XỬ LÝ / CÒN TỒN ĐỌNG — việc cần làm tiếp
 ================================================================
 
-a) TOKEN_INTEGRITY_FAILED vẫn còn ở FILE-ja-vi và FILE-zh-Hans-vi sau fix round 2.
+a) [ĐÃ XONG 10/10 ~01:20Z — round 3, commit 803e310, deploy worker, retest UI PASS cả 2 case]
+   Nguyên nhân: model dịch đổi ngoặc placeholder ⟦⟧->⟨⟩ khi literal dính chữ CJK (ja/zh). Hồ sơ:
+   /home/ict/secai-releases/translate-bugfix-round3-20261010/. Cũ: TOKEN_INTEGRITY_FAILED vẫn còn ở FILE-ja-vi và FILE-zh-Hans-vi sau fix round 2.
    Chưa điều tra lý do vì sao 2 case này khác biệt (không rõ pattern). Cần giao tiếp cho agent
    Opus (hoặc tương đương) điều tra sâu thêm — CHƯA làm.
 

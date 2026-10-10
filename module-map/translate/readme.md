@@ -24,6 +24,7 @@ Không hỏi lại người dùng "có nên chạy không" nếu đây đúng l�
 | [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) | Tiêu chí PASS/FAIL/BLOCKED, checklist và mẫu báo cáo |
 | [04-test-data.json](04-test-data.json) | Dữ liệu text và đường dẫn file/ảnh theo từng ID ca |
 | [05-trang-thai-cong-viec-dang-do.txt](05-trang-thai-cong-viec-dang-do.txt) | **Đọc file này trước nếu tiếp tục công việc dở** — đã xong gì, deploy gì, còn gì chưa xử lý |
+| [06-checklist-kiem-thu-theo-loai-dau-vao.txt](06-checklist-kiem-thu-theo-loai-dau-vao.txt) | **Checklist theo loại đầu vào (tệp / ảnh / văn bản)** — duyệt từng mục một lần thay vì thử case rời rạc; có trạng thái OK/LỖI/CHƯA |
 | [fixtures/](fixtures/) | Nội dung mẫu thật: `text/` 500 từ (dán trực tiếp), `files/` 1000 từ `.txt` (upload), `images/` ảnh OCR theo từng ngôn ngữ |
 | [results/](results/) | Kết quả mỗi lần chạy, mỗi phiên một file `.txt`, quy ước đặt tên ở [03](03-tieu-chi-pass.txt) mục 5 |
 

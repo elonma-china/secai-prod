@@ -920,3 +920,20 @@ Có lỗi/overlay trên màn hình không: UI báo lỗi job thất bại
 Kết luận: FAIL (RETEST ROUND 2 -- KHÔNG CẢI THIỆN)
 Lý do: Lỗi TOKEN_INTEGRITY_FAILED vẫn xảy ra y hệt các lần test trước, dừng đúng 2/18 chunk. Fix round 2 KHÔNG khắc phục được case này -- ghi nhận trung thực theo yêu cầu điều phối, không suy diễn đã hết lỗi dù fix round 2 đã sửa được FILE-vi-en/FILE-vi-fr/FILE-ko-vi.
 Nguyên nhân: BE, cùng pattern TOKEN_INTEGRITY_FAILED dừng ở 2/18 chunk như FILE-ja-vi (vẫn FAIL). Cả 2 case còn FAIL sau fix round 2 (ja-vi, zh-Hans-vi) đều có nguồn KHÔNG phải tiếng Việt và đích LÀ tiếng Việt; 3 case đã PASS (vi-en, vi-fr có nguồn=vi; ko-vi có nguồn=ko nhưng PASS) không cho thấy quy luật ngôn ngữ rõ ràng -- khớp với ghi chú đính chính đã nêu ở case FILE-ko-vi, cần BE điều tra thêm theo đặc điểm fixture/token cụ thể, không kết luận vội theo hướng ngôn ngữ.
+
+=== RETEST ROUND 3 sau deploy translate-bugfix-round3-20261010 (2026-10-10 ~01:16Z, chỉ secai-translation-worker) ===
+Fix: restore_literals chấp nhận ngoặc placeholder bị model dịch đổi (⟦⟧ -> ⟨⟩) khi literal dính liền chữ CJK (commit 803e310).
+Bằng chứng nguyên nhân (model thật, block 2): ko giữ ⟦⟧ (PASS), ja/zh đổi thành ⟨⟩ -> đếm 0 placeholder -> TOKEN_INTEGRITY_FAILED mọi lần thử.
+Người dùng cũng tái hiện trên máy khác: zh-Hans-1000.txt zh->vi, request_id cdf495164faba5fc498de2f4.
+
+Case id / type: FILE-ja-vi / dịch file ja-vi (RETEST ROUND 3)
+input: fixtures/files/ja-1000.txt (ja->vi), job 8fcc19e4e52d0c21b6a82e9ab3353d13
+Output thực tế: UI "Dịch hoàn tất"; status succeeded 18/18, warnings=[]; 198.51.100.23 / CVE-2024-21412 / URL / 3.4.1 mỗi cái đúng 1 lần; không còn ngoặc lạ.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-ja-vi-zh-Hans-vi-round3.png
+Kết luận: PASS (trước: FAIL TOKEN_INTEGRITY_FAILED ở 2/18, 4 lần quan sát)
+
+Case id / type: FILE-zh-Hans-vi / dịch file zh-Hans-vi (RETEST ROUND 3)
+input: fixtures/files/zh-Hans-1000.txt (zh-Hans->vi), job e7f4bb7274c1093eb3de322bd6efd046
+Output thực tế: UI "Dịch hoàn tất"; succeeded 18/18, warnings=[]; đủ 4 literal đúng 1 lần.
+Ảnh chụp UI: module-map/translate/results/retest-FILE-ja-vi-zh-Hans-vi-round3.png
+Kết luận: PASS (trước: FAIL; upload 400 đã hết từ round 1, TOKEN_INTEGRITY_FAILED hết ở round 3)
