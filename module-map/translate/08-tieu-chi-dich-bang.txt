@@ -1,0 +1,57 @@
+TIÊU CHÍ PASS CHO DỊCH BẢNG (DOCX ~20 TRANG: L1 en->vi, L2 ja->vi) — 2026-10-10
+Bổ sung cho 03-tieu-chi-pass.txt (mục 1, 1b) và 07-mau-docx-co-bang.txt. Dữ liệu 100% giả.
+Dữ liệu: 04c-docx-bang-20trang-data.json | File: fixtures/files/docx-tables/L1-en-20trang-bang.docx, L2-ja-20trang-bang.docx
+Công cụ chấm tự động: scripts/check_table_result.py (chỉ đọc file local, không gọi dịch, stdlib).
+
+0. CÁCH CHẤM
+  1) Chạy job dịch (UI hoặc API), tải JSON kết quả (result.json), tùy chọn TXT và job.json (trạng thái job).
+  2) python3 scripts/check_table_result.py --data module-map/translate/04c-docx-bang-20trang-data.json \
+       --sample L1 --result result.json [--job job.json] [--txt out.txt] [--json-out report.json]
+     (L2 tương tự với --sample L2). Mã thoát 0 = ĐẠT / ĐẠT CÓ LƯU Ý; 1 = KHÔNG ĐẠT.
+  3) Ô sentence bị nhận theo độ giống (fuzzy) hoặc bị loại nhưng người đọc thấy đúng nghĩa: ghi {"b000123":"ok"} vào review.json và chạy lại với --review review.json (ghi rõ trong báo cáo số ô duyệt tay).
+  Tự kiểm công cụ: python3 scripts/check_table_result.py --data ... --selftest
+
+1. CẤU TRÚC (mọi mục là điều kiện BẮT BUỘC; mã tiêu chí khớp báo cáo của checker)
+  A1  JSON kết quả có translated_text, blocks[], warnings; mỗi khối có id, kind, order, source_text, translated_text, metadata; ô bảng có metadata section, table, row, column (số nguyên); translated_text = các translated_text của blocks nối bằng "\n".
+  B1  Số khối kết quả = số khối nguồn (L1/L2: 333 khối = 237 ô bảng + 96 đoạn, kể cả đoạn rỗng).
+  B2  Mỗi ô table_cell nguồn có ĐÚNG 1 khối kết quả cùng (table,row,column); 0 ô mất, 0 ô nhân đôi, 0 ô thừa.
+  B3  Theo id: 0 khối mất, 0 khối nhân đôi, 0 khối thừa (cả đoạn văn).
+  B4  Ô gộp (gridSpan/vMerge): chỉ 1 khối tại ô đầu vùng gộp, không nhân đôi sang ô bị gộp (5 ô gộp trong mỗi mẫu).
+  B5  Bảng lồng được giữ: đủ 16 bảng (14 bảng ngoài + 2 bảng lồng), 14 ô nhãn "nested" đều có đúng 1 khối.
+  B6  Thứ tự giữ nguyên: id theo đúng thứ tự nguồn, order khớp vị trí nguồn, kind khớp nguồn.
+  B7  source_text của ô trong kết quả không bị sửa; metadata table/row/column khớp nguồn.
+  B8  (khi có file TXT) TXT = translated_text của JSON: mỗi khối một dòng theo thứ tự; ô nhiều đoạn (multiline) chiếm nhiều dòng vì các đoạn nối bằng xuống dòng; không thêm/bớt dòng.
+
+2. NỘI DUNG TỪNG Ô
+  C1  Không ô nào có kết quả rỗng khi nguồn có chữ.
+  C2  Không ô nào bị để nguyên tiếng nguồn, TRỪ ô chỉ gồm literal/số (gold_vi = null) hoặc ô mà bản dịch đúng trùng nguồn (vd. "SHA-256").
+  C3  Ngôn ngữ đích đúng: ô ja không còn chữ Nhật (ngoài literal cần giữ); ô câu dài từ en có dấu tiếng Việt.
+  C4  Khớp gold_vi: một ô "được nhận" nếu (a) bằng gold_vi sau chuẩn hoá (NFC, hoa/thường, khoảng trắng, dấu câu cuối, dấu thập phân . = ,) hoặc (b) bằng một giá trị trong accepted_variants, hoặc (c) chỉ với ô kind sentence/multiline: độ giống chuỗi >= 0,80 (liệt kê để người đọc soát), hoặc (d) được duyệt tay qua --review. Ô nhãn ngắn (label) CHỈ nhận (a)/(b)/(d).
+      Ngưỡng đo: >= 95% ô có gold được nhận (162 ô có gold mỗi mẫu).
+  C5  must_preserve: 100% chuỗi con phải xuất hiện NGUYÊN VĂN trong bản dịch của ô (IPv4, CVE, URL, lệnh ssh/curl/sha256sum, SHA-256, email, số điện thoại, phiên bản, ngày ISO, %, đơn vị mL/mg/L/NTU/°C, tên tệp, mã Q1..Q3, tên host).
+  C6  numbers: 100% chuỗi số của ô nguồn còn trong bản dịch sau khi chuẩn hoá dấu phân cách (18.5 = 18,5; 100 – 120 giữ cả hai số). Đổi giá trị (18.5 thành 18.6) là lỗi.
+  C7  Đoạn văn: không rỗng, không để nguyên tiếng nguồn, literal trong đoạn giữ 100%.
+  C8  0 dấu che/ký hiệu nội bộ: ⟦ ⟧, [REDACTED…], [L0], <L1>, ***, xxx, "[đã ẩn]", "[ẩn thông tin]" (kể cả trong translated_text tổng).
+  Không ô nào bị nhân đôi hoặc bị bỏ (đã gộp vào B2/B3, số đếm phải bằng 0).
+
+3. CẤP TÀI LIỆU
+  D1  Job status = succeeded; không có error; không lỗi/overlay trên màn hình, không kẹt loading (mục 1 của 03).
+  D2  Cảnh báo (warnings): tập cho phép = những mã nằm trong warnings_expected của mẫu (hiện RỖNG: hai file không có chú thích cuối, bình luận, content control nên UNSUPPORTED_PART/OCR không hợp lệ). NUMERIC_MISMATCH và OUTPUT_UNBALANCED_BRACKETS được ĐẾM và BÁO CÁO (không tự làm hỏng, nhưng hạ kết luận thành "CÓ LƯU Ý"). Mã khác = KHÔNG ĐẠT.
+  D3  Tốc độ (THAM KHẢO, không ảnh hưởng kết luận): giây/khối = (updated_at - created_at của job, hoặc --elapsed) / số khối. Mốc: <= 4 s/khối tốt; 4-6 chấp nhận được; > 6 chậm. Tham chiếu đã đo: en-long-20pages 680,6 s / 221 khối ≈ 3,1 s/khối (chưa có số đo cho L1/L2).
+
+4. KẾT LUẬN (checker in đúng 1 trong 3 nhãn cho mỗi mẫu)
+  KHÔNG ĐẠT  nếu có BẤT KỲ điều kiện sau:
+     - tiêu chí cứng A1, B1-B8 (B8 khi có TXT), C1, C2, C3, C5, C6, C7, C8, D1 không đạt;
+     - gold khớp < 95% (C4);
+     - cảnh báo ngoài tập cho phép (D2).
+  ĐẠT CÓ LƯU Ý  nếu mọi tiêu chí cứng đạt (gold >= 95%) nhưng có ít nhất một trong:
+     - gold khớp trong [95%, 100%) (còn ô bị loại, liệt kê trong báo cáo);
+     - có cảnh báo NUMERIC_MISMATCH / OUTPUT_UNBALANCED_BRACKETS (ghi số lượng).
+  ĐẠT  nếu mọi tiêu chí cứng đạt, gold khớp = 100%, không có cảnh báo cần báo cáo.
+  Ghi chú: số ô nhận theo fuzzy/duyệt tay luôn được in ra để người đánh giá soát; tốc độ không đổi kết luận.
+  Mỗi mẫu (L1, L2) được kết luận RIÊNG; phiên chỉ tính "ĐẠT" khi cả hai mẫu không KHÔNG ĐẠT, và ghi nhãn thấp nhất của hai mẫu.
+
+5. GIỚI HẠN ĐÃ BIẾT CỦA BỘ KIỂM
+  - gold_vi do người soạn bằng từ điển cho nhãn/câu ngắn; accepted_variants chỉ là tập biến thể hợp lý, không phủ hết cách dịch đúng. Nhãn bị loại nhưng đúng nghĩa: dùng --review và ghi rõ.
+  - Mốc trang là ước lượng (heuristic ký tự/khối và ngắt trang tường minh), chưa đếm bằng Word/LibreOffice thật.
+  - Chấm nghĩa của đoạn văn dài (96 khối paragraph) chỉ ở mức literal/không rỗng/không để nguyên; đánh giá chất lượng dịch đoạn văn dài vẫn cần người đọc.
