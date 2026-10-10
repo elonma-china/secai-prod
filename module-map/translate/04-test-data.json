@@ -1,7 +1,7 @@
 {
   "version": 2,
   "description": "Dữ liệu kiểm thử dịch. Mỗi case có type/input/output_gold tối thiểu để đối chiếu PASS: UI chạy không lỗi + kết quả khớp nghĩa output_gold. Không chứa credential.",
-  "pass_rule": "PASS = (1) không có lỗi/thông báo lỗi trên màn hình trong lúc chạy ca, VÀ (2) kết quả hiển thị/preview khớp nghĩa với output_gold tương ứng loại ca (text/translated_text/ocr_text). Không yêu cầu khớp từng ký tự, trừ các literal liệt kê trong preserve_literals.",
+  "pass_rule": "PASS = (1) không có lỗi/thông báo lỗi trên màn hình trong lúc chạy ca, VÀ (2) kết quả hiển thị/preview khớp nghĩa với output_gold tương ứng loại ca (text/translated_text/ocr_text). Không yêu cầu khớp từng ký tự, trừ các literal liệt kê trong preserve_literals. BỔ SUNG 10/10/2026 (mục 1b trong 03-tieu-chi-pass.txt): mọi ca dịch ảnh/file/text phải GIỮ NGUYÊN toàn bộ thông tin — không che, không xóa, không đổi giá trị; kiểm chuỗi con chính xác theo preserve_literals; bị từ chối vì thông tin nhạy cảm là FAIL.",
   "environment": {
     "login_url": "https://ias.id.vn/login",
     "translation_page_url": "https://ias.id.vn/ai/translate",
@@ -1550,6 +1550,110 @@
         "P-VALIDATION"
       ],
       "preparation_status": "needs_file"
+    }
+  ],
+  "integrity_cases": [
+    {
+      "id": "TXT-SENS-vi-en",
+      "type": "dịch trực tiếp vi-en (thông tin nhạy cảm)",
+      "mode": "text_direct",
+      "source_lang": "vi",
+      "target_lang": "en",
+      "input": {
+        "text": "Thông tin truy cập máy chủ quản trị (dữ liệu giả để kiểm thử).\nTài khoản: admin_demo, mật khẩu: Zk9#mPq2!vL7\nĐăng nhập SSH bằng lệnh ssh root@203.0.113.45 -p 2222 với password=Tr0ub4dor&3_demo\nKhóa API của dịch vụ giám sát là api_key=sk_live_51HqDemo0000AbCdEf1234567890 và token: eyJhbGciOiJIUzI1NiJ9.demo.payload123\nEmail liên hệ của quản trị viên là soc.team@example.com, số điện thoại 0912 345 678.\nChuỗi kết nối cơ sở dữ liệu: postgres://dbuser:S3cr3t_Pass@10.0.0.12:5432/appdb\nKhi phát hiện bất thường tại https://portal.noi-bo.example.com/login?next=/admin, đội phản ứng phải đổi mật khẩu ngay và thu hồi khóa trên.\nMã lỗ hổng liên quan là CVE-2024-21412, phiên bản bị ảnh hưởng là 3.4.1.\n"
+      },
+      "output_gold": {
+        "text": null,
+        "preserve_literals": [
+          "Zk9#mPq2!vL7",
+          "Tr0ub4dor&3_demo",
+          "sk_live_51HqDemo0000AbCdEf1234567890",
+          "eyJhbGciOiJIUzI1NiJ9.demo.payload123",
+          "S3cr3t_Pass",
+          "admin_demo",
+          "soc.team@example.com",
+          "0912 345 678",
+          "203.0.113.45",
+          "CVE-2024-21412",
+          "https://portal.noi-bo.example.com/login?next=/admin",
+          "postgres://dbuser:S3cr3t_Pass@10.0.0.12:5432/appdb"
+        ],
+        "match_rule": "100% literal giữ nguyên từng ký tự; không có ⟦⟧/[L0]/REDACTED; đủ 8 dòng; nghĩa đúng."
+      },
+      "criteria": [
+        "P-TEXT",
+        "P-LITERAL",
+        "P-COMPLETE",
+        "P-NOMASK"
+      ],
+      "preparation_status": "ready"
+    },
+    {
+      "id": "FILE-SENS-vi-en",
+      "type": "dịch file vi-en (thông tin nhạy cảm)",
+      "mode": "file",
+      "source_lang": "vi",
+      "target_lang": "en",
+      "input": {
+        "file_path": "/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/files/sensitive-vi.txt"
+      },
+      "output_gold": {
+        "text": null,
+        "preserve_literals": [
+          "Zk9#mPq2!vL7",
+          "Tr0ub4dor&3_demo",
+          "sk_live_51HqDemo0000AbCdEf1234567890",
+          "eyJhbGciOiJIUzI1NiJ9.demo.payload123",
+          "S3cr3t_Pass",
+          "admin_demo",
+          "soc.team@example.com",
+          "0912 345 678",
+          "203.0.113.45",
+          "CVE-2024-21412",
+          "https://portal.noi-bo.example.com/login?next=/admin",
+          "postgres://dbuser:S3cr3t_Pass@10.0.0.12:5432/appdb"
+        ],
+        "match_rule": "Job succeeded (không TOKEN_INTEGRITY_FAILED); 100% literal giữ nguyên; đủ 8 dòng."
+      },
+      "criteria": [
+        "P-TEXT",
+        "P-LITERAL",
+        "P-COMPLETE",
+        "P-NOMASK"
+      ],
+      "preparation_status": "ready",
+      "history": "10/10/2026 trước khi sửa: FAIL TOKEN_INTEGRITY_FAILED (job 3b84e728…)"
+    },
+    {
+      "id": "IMG-SENS-en-vi",
+      "type": "dịch ảnh en-vi (thông tin nhạy cảm)",
+      "mode": "image",
+      "source_lang": "en",
+      "target_lang": "vi",
+      "input": {
+        "image_path": "/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/images/ocr-sensitive-en.png",
+        "image_source": "Pillow + Noto Sans, dữ liệu giả"
+      },
+      "output_gold": {
+        "ocr_text": "Server access (fake test data) Account: admin_demo Password: Zk9#mPq2!vL7 API key: sk_live_51HqDemo0000AbCdEf1234567890 SSH: ssh root@203.0.113.45 -p 2222 Contact: soc.team@example.com CVE-2024-21412",
+        "translated_text": null,
+        "preserve_literals": [
+          "admin_demo",
+          "Zk9#mPq2!vL7",
+          "sk_live_51HqDemo0000AbCdEf1234567890",
+          "ssh root@203.0.113.45 -p 2222",
+          "soc.team@example.com",
+          "CVE-2024-21412"
+        ],
+        "match_rule": "OCR hiển thị đủ giá trị; bản dịch giữ nguyên 100% literal; không dấu che."
+      },
+      "criteria": [
+        "P-TEXT",
+        "P-LITERAL",
+        "P-COMPLETE",
+        "P-NOMASK"
+      ],
+      "preparation_status": "ready"
     }
   ]
 }

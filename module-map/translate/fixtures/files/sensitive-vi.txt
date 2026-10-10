@@ -1,0 +1,8 @@
+Thông tin truy cập máy chủ quản trị (dữ liệu giả để kiểm thử).
+Tài khoản: admin_demo, mật khẩu: Zk9#mPq2!vL7
+Đăng nhập SSH bằng lệnh ssh root@203.0.113.45 -p 2222 với password=Tr0ub4dor&3_demo
+Khóa API của dịch vụ giám sát là api_key=sk_live_51HqDemo0000AbCdEf1234567890 và token: eyJhbGciOiJIUzI1NiJ9.demo.payload123
+Email liên hệ của quản trị viên là soc.team@example.com, số điện thoại 0912 345 678.
+Chuỗi kết nối cơ sở dữ liệu: postgres://dbuser:S3cr3t_Pass@10.0.0.12:5432/appdb
+Khi phát hiện bất thường tại https://portal.noi-bo.example.com/login?next=/admin, đội phản ứng phải đổi mật khẩu ngay và thu hồi khóa trên.
+Mã lỗ hổng liên quan là CVE-2024-21412, phiên bản bị ảnh hưởng là 3.4.1.

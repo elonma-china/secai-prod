@@ -22,6 +22,8 @@ Không hỏi lại người dùng "có nên chạy không" nếu đây đúng l�
 | [01-api-va-luong-xu-ly.txt](01-api-va-luong-xu-ly.txt) | Toàn bộ endpoint dịch, request/response, SSE, job, lỗi và cấu hình |
 | [02-test-giao-dien-tung-buoc.txt](02-test-giao-dien-tung-buoc.txt) | Chuẩn bị và các bước bấm trên IAS (`ias.id.vn`): text, tệp, ảnh, hủy, tải lại, lỗi |
 | [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) | Tiêu chí PASS/FAIL/BLOCKED, checklist và mẫu báo cáo |
+
+> **Quy tắc bắt buộc (10/10/2026):** mọi ca dịch ảnh/file/text phải GIỮ NGUYÊN toàn bộ thông tin — không che, không xóa, không đổi giá trị (mật khẩu, tài khoản, khóa, token, IP, URL, email, CVE, chữ CJK…). Xem [03](03-tieu-chi-pass.txt) mục 1b; 3 ca bắt buộc ở khóa `integrity_cases` trong 04 (phiên đầy đủ = 68 + 3 = 71 ca). Bị từ chối vì thông tin nhạy cảm = FAIL.
 | [04-test-data.json](04-test-data.json) | Dữ liệu text và đường dẫn file/ảnh theo từng ID ca |
 | [05-trang-thai-cong-viec-dang-do.txt](05-trang-thai-cong-viec-dang-do.txt) | **Đọc file này trước nếu tiếp tục công việc dở** — đã xong gì, deploy gì, còn gì chưa xử lý |
 | [06-checklist-kiem-thu-theo-loai-dau-vao.txt](06-checklist-kiem-thu-theo-loai-dau-vao.txt) | **Checklist theo loại đầu vào (tệp / ảnh / văn bản)** — duyệt từng mục một lần thay vì thử case rời rạc; có trạng thái OK/LỖI/CHƯA |

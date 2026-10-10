@@ -20,6 +20,19 @@ Không yêu cầu khớp từng ký tự với `output_gold` khi đó là văn b
 - **BLOCKED:** không thể chạy/hoàn tất do account, overlay treo, feature tắt, hoặc thiếu file/ảnh input (`preparation_status: needs_file`). Không còn tính thiếu tool upload là lý do BLOCKED — cách upload qua `mcp__playwright__browser_file_upload` (đăng nhập riêng, browser riêng) đã xác nhận dùng được ngày 09/10/2026, xem [02](02-test-giao-dien-tung-buoc.txt) mục 9.
 - **NOT_RUN:** chưa chạy. **NOT_APPLICABLE:** ngoài phạm vi được bàn giao; ghi lý do, không cộng vào PASS.
 
+## 1b. Quy tắc BẮT BUỘC bổ sung: GIỮ NGUYÊN THÔNG TIN (dịch ảnh, dịch file, dịch văn bản) — do người yêu cầu thêm 10/10/2026
+
+Áp dụng cho MỌI ca dịch ở cả 3 loại (`text_direct`, `file`, `image`), không chỉ ca có `preserve_literals`. Dịch chỉ đổi ngôn ngữ của phần văn xuôi; mọi thông tin khác phải còn NGUYÊN VĂN, đầy đủ. Một ca chỉ PASS khi thỏa cả quy tắc ở mục 1 VÀ tất cả điều kiện sau:
+
+1. **Không che:** bản dịch hiển thị/tải về không chứa dấu che hay ký hiệu nội bộ: `⟦…⟧`, `[L0]`, `<L1>`, `[REDACTED…]`, `***`, `xxx`, "[đã ẩn]", "[ẩn thông tin]" thay cho nội dung gốc.
+2. **Không xóa:** mọi dữ liệu thuộc các nhóm sau trong nguồn phải xuất hiện lại trong bản dịch đúng từng ký tự (kể cả hoa/thường, ký tự đặc biệt, dấu cách bên trong): tài khoản/username, mật khẩu, khóa API, token/JWT, chuỗi kết nối (postgres://user:pass@host...), email, số điện thoại, địa chỉ IP/cổng, URL (cả tham số truy vấn), lệnh (ssh/curl...), mã CVE/CWE, số phiên bản, đường dẫn/tên tệp, ngày giờ và số liệu, tên riêng. Chữ CJK/Ả Rập/Cyrillic có trong nguồn và là thông tin (không phải câu cần dịch) cũng phải còn.
+3. **Không thêm bớt ý:** không bỏ câu/đoạn/dòng/mục nào của nguồn; không lặp đoạn; không thêm lời dẫn của mô hình ("Dưới đây là bản dịch…") hay chú thích.
+4. **Không thay đổi giá trị:** không đổi số, không sửa chính tả mật khẩu/khóa, không "chuẩn hóa" URL/IP, không bỏ dấu cách bên trong giá trị, không cắt cụt.
+5. **Bị từ chối KHÔNG phải là PASS:** nếu hệ thống trả lỗi (ví dụ `TOKEN_INTEGRITY_FAILED`, `UNSAFE_DOCUMENT`, 502) vì file/văn bản có thông tin nhạy cảm, ca đó là FAIL (không phải "an toàn nên chấp nhận"). Dịch ảnh: văn bản OCR hiển thị cũng phải chứa đủ các giá trị trên đúng từng ký tự; chỉ khi OCR đọc sai nguyên nhân do chất lượng ảnh thì ghi FAIL kèm nhãn "OCR", không tính vào lỗi dịch.
+6. **Cách kiểm:** với mỗi ca, lấy danh sách giá trị cần giữ từ `output_gold.preserve_literals` (hoặc từ nguồn nếu ca cũ chưa liệt kê) rồi dùng kiểm tra chuỗi con CHÍNH XÁC trên bản dịch (không so nghĩa, không so gần đúng). Thiếu dù một ký tự là FAIL. Báo cáo ghi rõ "literal giữ: X/Y" và liệt kê giá trị thiếu/sai.
+
+Bộ ca bắt buộc cho quy tắc này nằm ở khóa `integrity_cases` trong [04-test-data.json](04-test-data.json) (TXT-SENS-vi-en, FILE-SENS-vi-en, IMG-SENS-en-vi). Một phiên chạy đầy đủ = 68 ca ở `cases` + 3 ca ở `integrity_cases` = 71 ca; điểm tổng kết ghi "Đạt X/71". Dữ liệu trong các ca này là GIẢ, không dùng thông tin thật.
+
 ## 2. Diễn giải theo `mode`
 
 | `mode` trong JSON | Trường output_gold dùng để so khớp | Ghi chú |

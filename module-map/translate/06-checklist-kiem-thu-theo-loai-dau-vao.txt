@@ -89,6 +89,19 @@ D. HIỂN THỊ LỖI / HẠ TẦNG (mọi tab)
  [CHƯA] 401/403 (hết phiên / job của người khác) hiển thị dễ hiểu
 
 ================================================================
+E. GIỮ NGUYÊN THÔNG TIN (bắt buộc cho tệp, ảnh, văn bản) — thêm 10/10/2026
+================================================================
+ [LỖI]  Tệp vi->en có mật khẩu/khóa/token/chuỗi kết nối (fixtures/files/sensitive-vi.txt): FAIL TOKEN_INTEGRITY_FAILED
+        trước khi sửa (job 3b84e728). Đã có bản sửa local, CHƯA triển khai; retest bắt buộc sau deploy.
+ [CHƯA] Văn bản trực tiếp có mật khẩu: nhãn "mật khẩu:", "password=", "pass X", JSON "password", dấu ：toàn góc, giá trị có dấu cách
+ [CHƯA] Mật khẩu/khóa trong khối mã và trong URL tham số (?user=a&password=b) -> phải còn nguyên cả hai
+ [CHƯA] Chuỗi kết nối postgres://user:pass@host:port/db, email, số điện thoại, IP:cổng, lệnh ssh/curl -> nguyên văn
+ [CHƯA] Chữ Hán/Cyrillic/Ả Rập đứng làm dữ liệu trong câu đích không phải ja/zh -> không bị xóa
+ [CHƯA] Ảnh chứa mật khẩu/khóa/IP (fixtures/images/ocr-sensitive-en.png): OCR + bản dịch giữ nguyên
+ [CHƯA] Thử lại (dịch 2-3 lần cùng nội dung, kể cả stream) -> kết quả vẫn đủ thông tin, không lần nào mất giá trị
+ [CHƯA] Không có ⟦…⟧, [L0], [REDACTED] trong bản dịch hiển thị/tải về
+
+================================================================
 CÁCH DÙNG
 ================================================================
 1. Mỗi mục [CHƯA] làm đúng một lần, bằng UI thật, chụp ảnh; không thử lặp lại ngẫu nhiên.
