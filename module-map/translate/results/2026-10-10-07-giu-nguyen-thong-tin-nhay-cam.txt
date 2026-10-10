@@ -1,0 +1,20 @@
+KẾT QUẢ SAU SỬA: DỊCH GIỮ NGUYÊN THÔNG TIN NHẠY CẢM — 2026-10-10
+Môi trường: https://ias.id.vn/ai/translate (UI thật, dev201). Dữ liệu 100% GIẢ. Quy tắc: 03-tieu-chi-pass.txt mục 1b.
+Triển khai: translation-gateway + translation-worker (ảnh translate-lossless-20261010-*), docker-gateway (…-20261010b-dockergw).
+Nhánh code: fix/translate-lossless-20261010 (a2fd1fc). Rollback: /home/ict/secai-releases/translate-lossless-20261010/{rollback.sh,rollback-dockergw.sh}.
+
+TRƯỚC SỬA
+ FILE-SENS-vi-en  sensitive-vi.txt  -> FAIL: TOKEN_INTEGRITY_FAILED (job 3b84e728…), ảnh sensitive-file-vi-en-FAIL-TOKEN_INTEGRITY-20261010.png
+
+SAU SỬA
+ FILE-SENS-vi-en  job 98fcf89f…  succeeded 9/9 khối, 11,6 s   literal giữ: 12/12   dấu che: không   -> PASS
+                  ảnh: sensitive-file-vi-en-PASS-after-fix-20261010.png
+ IMG-SENS-en-vi   job 3e2310ce…  succeeded, 7,8 s              literal giữ: 6/6 (admin_demo, mật khẩu, khóa sk_live…, ssh…, email, CVE)  -> PASS
+                  (cảnh báo OCR_CORRECTION_REJECTED = giữ OCR thô, bình thường). ảnh: sensitive-image-en-vi-PASS-after-fix-20261010.png
+ TXT-SENS-vi-en   dịch trực tiếp (đường /ai/translate cũ)  literal giữ: 12/12  dấu che: không
+                  lần 1-2: PASS về literal nhưng có LỖI "…/admin,, change" (dấu phẩy nhân đôi: URL nuốt dấu phẩy cuối)
+                  -> sửa (URL không ôm dấu câu cuối), triển khai lại, lần 3: 12/12, không còn ",," -> PASS
+                  ảnh: sensitive-text-vi-en-after-fix-20261010.png (trước), sensitive-text-vi-en-PASS-final-20261010.png (sau)
+Thử lại nhiều lần cùng nội dung: kết quả giống hệt (nhiệt độ 0), không lần nào mất giá trị.
+CHƯA KIỂM: các hướng khác ngoài vi->en / en->vi với dữ liệu nhạy cảm; DOCX có mật khẩu; JSON "password" có nháy; kiểm hồi quy toàn bộ 68 ca.
+LƯU Ý: /ai/translate/stream không còn phát từng token (một khung token + khung cuối); API trả 502 TRANSLATION_INTEGRITY khi thiếu thông tin thay vì 200 mất dữ liệu.
