@@ -1,0 +1,52 @@
+{
+ "observed_at": "2026-10-13T22:45:55.205960+00:00",
+ "measurement_phase": "complete",
+ "unresolved_owned_jobs": 0,
+ "health_http": 200,
+ "health_status": "ok",
+ "containers_at_end": [
+  {
+   "name": "/secai-docker-gateway",
+   "image": "sha256:993dac2ec100a23e30c1754e357a4e87f24ec86f10a2b125db766b779d4aa715",
+   "started_at": "2026-10-13T13:47:05.71284993Z",
+   "restart_count": 0
+  },
+  {
+   "name": "/secai-translation-gateway",
+   "image": "sha256:4bb76dbc8498e253b7a95dbd10019d3264684c5db7509e0bb2923d5e60729c73",
+   "started_at": "2026-10-11T05:57:47.416300088Z",
+   "restart_count": 0
+  },
+  {
+   "name": "/secai-translation-worker",
+   "image": "sha256:f7ce715335bdd35d554ae6da59dafba2af2f46ecc00d57e376c7765c6a57ec7a",
+   "started_at": "2026-10-11T05:57:48.128132941Z",
+   "restart_count": 0
+  }
+ ],
+ "container_image_start_restart_unchanged": true,
+ "runner_sha256_used": "78e9df190ec98599e13f9519eda923eef55b14a85e2fa85035aab8de721eef12",
+ "helper_sha256_used": "2e8234866f2c89e0d222dc665171e719dc90eea7c6e944f9cf9225bf74ccc901",
+ "runner_sha256_after_fix": "65884bc5f0b7961e91f92ef0e85643ed355456752b34717071098647679d2374",
+ "helper_sha256_current": "2e8234866f2c89e0d222dc665171e719dc90eea7c6e944f9cf9225bf74ccc901",
+ "tool_tests": {
+  "count": 24,
+  "result": "PASS",
+  "evidence": "tool-tests.log"
+ },
+ "deadline_regression": "RED reproduced poll_error before fix; after post-sleep deadline guard, GREEN and full 24 tool tests PASS. Fixed only after formal measurement exited.",
+ "production_guard": "Missing --allow-production exits 2 before loading samples or sending requests.",
+ "scoped_diff_check": "PASS; new tool files checked for trailing whitespace separately.",
+ "full_repository_diff_check": "Pre-existing trailing whitespace in src/secai_gateway/api/routes.py, outside this task, left unchanged.",
+ "browser_preview": "T3 preview timed out; HTML structure checked locally, no browser rendering claim.",
+ "html_structure": {
+  "tables": 3,
+  "svg_charts": 4,
+  "external_src": [],
+  "browser_rendered": false
+ },
+ "raw_results_preserved": true,
+ "summary_math_verified": true,
+ "input_sha256_verified": true,
+ "output_literal_and_assessment_hashes_verified": true
+}

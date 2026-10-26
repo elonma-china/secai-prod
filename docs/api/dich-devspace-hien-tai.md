@@ -52,7 +52,7 @@ Ghép `chunk.delta` để hiển thị; **chỉ `final` xác nhận thành công
 
 Devspace hiển thị các tệp bằng grid có phân trang (4 tệp/trang). Biểu tượng loading chuyển thành hoàn tất khi job thành công; bấm **Xem trước** để xem bản dịch, tải kết quả và đối chiếu OCR trong khung bên cạnh.
 
-Mỗi POST nhận **một tệp**. Devspace giới hạn **5 tệp mỗi phiên**; tối đa 2 job đang chờ/chạy theo giới hạn admission hiện tại. Upload tối đa 10 MiB; không nhận PDF.
+Mỗi POST nhận **một tệp**. Devspace giới hạn **5 tệp mỗi phiên**; cấu hình Docker sau rollout 09/10/2026 nhận tối đa 5 job đang chờ/chạy/hủy mỗi IP, queue toàn hệ thống tối đa 20 job và worker xử lý 1 job. Upload tối đa 10 MiB; không nhận PDF. Khi đạt giới hạn, giữ tệp ở phía gọi và retry theo `Retry-After`.
 
 ```sh
 curl -sS "$BASE/ai/v2/translate/files" \

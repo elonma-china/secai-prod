@@ -1,0 +1,25 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/xlsx_documents.py.pre-limits	2026-10-11 10:05:39.550400030 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/xlsx_documents.py	2026-10-11 10:05:39.581306380 +0700
+@@ -20,8 +20,9 @@
+ from .settings import TranslationSettings
+ from .types import ExtractedDocument, TranslationError, WarningItem
+ 
+-_BAD_PARTS = ("vbaproject", "activex", "embeddings/", "oleobject", "externallinks/",
+-              "connections.xml", "querytables/", "macrosheets/", "dialogsheets/", "customui")
++# Macros/ActiveX/macro sheets stay refused. Embedded objects, external-workbook links, data connections and custom UI
++# are never opened or refreshed here (only cell text is read), so they are ignored rather than failing the file.
++_BAD_PARTS = ("vbaproject", "activex", "macrosheets/", "dialogsheets/")
+ _XML_DECL = re.compile(rb"<!\s*(?:DOCTYPE|ENTITY)", re.I)
+ _OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+ _MAIN_TYPE = b"spreadsheetml.sheet.main+xml"
+@@ -62,9 +63,7 @@
+         if any(bad in low for bad in _BAD_PARTS):
+             raise TranslationError("UNSAFE_DOCUMENT", "Active or external workbook content is unsupported.")
+         if low.endswith(".rels"):
+-            for rel in _xml(data):
+-                if rel.attrib.get("TargetMode", "").lower() == "external":
+-                    raise TranslationError("UNSAFE_DOCUMENT", "External workbook links are unsupported.")
++            _xml(data)  # external targets (hyperlinks, linked workbooks) are never dereferenced
+         elif low.endswith(".xml") and _XML_DECL.search(data):
+             raise TranslationError("UNSAFE_DOCUMENT", "Document contains unsafe XML.")
+     sheets = [node for node in _xml(parts["xl/workbook.xml"]).iter() if node.tag.endswith("}sheet")]

@@ -1,0 +1,15 @@
+SecAI png-short-en-vi-05
+[png-short-en-vi-05-0000] Every change is tested with representative documents before release to the customer.
+[png-short-en-vi-05-0001] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-short-en-vi-05-0002] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-short-en-vi-05-0003] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-short-en-vi-05-0004] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-short-en-vi-05-0005] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit6 audit7 audit8 audit9
+Account: svc_ccu_67622001
+Password: Pwde14360e!0&*()_+
+URL: https://67622001.example.org/audit?id=6775328&mode=test
+IP: 192.0.2.79:8328
+CVE: CVE-2024-8328
+Email: audit.67622001@example.org
+Key: sk-test-3145a4a58bb240c9

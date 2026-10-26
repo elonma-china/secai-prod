@@ -1,0 +1,15 @@
+SecAI png-short-en-vi-01
+[png-short-en-vi-01-0000] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-short-en-vi-01-0001] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-short-en-vi-01-0002] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-short-en-vi-01-0003] Analysts compare network alerts with application logs before opening an incident.
+[png-short-en-vi-01-0004] The security team reviews access permissions and records the owner of each service.
+[png-short-en-vi-01-0005] The maintenance window requires a tested backup and a documented recovery procedure.
+Keywords: audit6 audit7 audit8 audit9 audit10 audit11
+Account: svc_ccu_3c6c853d
+Password: Pwc0404bf4!0&*()_+
+URL: https://3c6c853d.example.org/audit?id=3959941&mode=test
+IP: 192.0.2.192:8941
+CVE: CVE-2024-9941
+Email: audit.3c6c853d@example.org
+Key: sk-test-a6797e67105d6638

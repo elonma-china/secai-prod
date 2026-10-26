@@ -1,0 +1,184 @@
+--- /home/ict/secai-opt/fastmt/fast_ocr_vllm.py.pre-gate	2026-10-11 00:35:41.381431413 +0700
++++ /home/ict/secai-opt/fastmt/fast_ocr_vllm.py	2026-10-11 00:53:35.505497685 +0700
+@@ -19,6 +19,10 @@
+ MAX_PIXELS = int(float(os.environ.get("OCR_MAX_PIXELS", "3000000")))
+ MAX_EDGE = int(os.environ.get("OCR_MAX_EDGE", "3072"))
+ MAX_TOKENS = 4096
++STRIP_PX = float(os.environ.get("OCR_STRIP_PIXELS", "600000"))     # trang lớn hơn mức này -> cắt dải
++STRIP_MAX = int(os.environ.get("OCR_STRIP_MAX", "6"))
++UPSCALE_TARGET = float(os.environ.get("OCR_UPSCALE_TARGET_PIXELS", "4500000"))  # phóng dải nhỏ lên ~mức này (chữ nhỏ đọc sai ký tự)
++UPSCALE_MAX = float(os.environ.get("OCR_UPSCALE_MAX", "2.5"))
+ TOKEN = Path("/workspace/secai-specialist-services/ocr.token").read_text().strip()
+ sem = asyncio.Semaphore(int(os.environ.get("OCR_CONCURRENCY", "16")))
+ client = httpx.AsyncClient(base_url=VLLM, trust_env=False, timeout=150,
+@@ -32,6 +36,69 @@
+     calibration_prompt: Literal["natural", "arabic", "verbatim", "universal", "conditional"] = "conditional"
+ 
+ 
++def is_blank(raw: bytes) -> bool:
++    """Ảnh gần như đồng nhất (trang trắng): không gọi model — model dễ BỊA nội dung (vd. một mã CVE) khi không có chữ."""
++    from PIL import ImageStat
++    im = Image.open(io.BytesIO(raw)).convert("L")
++    im.thumbnail((256, 256))
++    return ImageStat.Stat(im).stddev[0] < 4.0
++
++
++async def has_text(data_url: str) -> bool:
++    """Cổng kiểm 'ảnh có chữ đọc được không' (1 token). Dùng khi kết quả OCR ngắn/lặp: trang nhiễu, trang trắng có vệt."""
++    body = {"model": "ocr", "temperature": 0, "max_tokens": 3, "messages": [{"role": "user", "content": [
++        {"type": "image_url", "image_url": {"url": data_url}},
++        {"type": "text", "text": "Does this image contain any readable printed or handwritten text? Answer with only Yes or No."}]}]}
++    try:
++        r = await client.post("/v1/chat/completions", json=body)
++        return r.status_code == 200 and r.json()["choices"][0]["message"]["content"].strip().lower().startswith("y")
++    except (httpx.HTTPError, KeyError, ValueError):
++        return True  # không chắc -> không tự bỏ nội dung
++
++
++def _fit(im: Image.Image) -> Image.Image:
++    """Phóng dải nhỏ (tối đa UPSCALE_MAX, tới ~UPSCALE_TARGET pixel) hoặc thu nhỏ nếu vượt ngân sách."""
++    w, h = im.size
++    px = w * h
++    if px < UPSCALE_TARGET:
++        r = min(UPSCALE_MAX, math.sqrt(UPSCALE_TARGET / px), MAX_EDGE / max(w, h))
++    else:
++        r = min(1.0, MAX_EDGE / max(w, h), math.sqrt(MAX_PIXELS / px))
++    if abs(r - 1) > 0.05:
++        im = im.resize((max(1, int(w * r)), max(1, int(h * r))), Image.Resampling.LANCZOS)
++    return im
++
++
++def split_strips(im: Image.Image) -> list[Image.Image]:
++    """Trang cao, một cột -> cắt ở KHOẢNG TRẮNG giữa các dòng thành k dải (OCR song song, mỗi dải phóng riêng).
++    Trang 2 cột (có rãnh dọc trống) hoặc nhỏ -> giữ nguyên 1 ảnh để không đảo thứ tự đọc."""
++    import numpy as np
++    w, h = im.size
++    if w * h < STRIP_PX or h < 1.1 * w:
++        return [im]
++    g = np.asarray(im.convert("L"), dtype=np.float32)
++    rowstd = g.std(axis=1)
++    band = g[:, int(w * 0.35):int(w * 0.65)]
++    colstd = band.std(axis=0)
++    quiet = colstd < 6
++    run = best = 0
++    for q in quiet:
++        run = run + 1 if q else 0
++        best = max(best, run)
++    if best >= max(6, int(w * 0.012)):
++        return [im]  # có rãnh giữa -> nhiều cột
++    k = min(STRIP_MAX, max(2, math.ceil(w * h / STRIP_PX)))
++    cuts = [0]
++    for i in range(1, k):
++        target = int(h * i / k); lo, hi = max(cuts[-1] + 40, target - int(h * 0.08)), min(h - 40, target + int(h * 0.08))
++        if hi <= lo:
++            continue
++        seg = rowstd[lo:hi]
++        cuts.append(lo + int(np.argmin(seg)))
++    cuts.append(h)
++    return [im.crop((0, a, w, b)) for a, b in zip(cuts, cuts[1:]) if b - a > 20]
++
++
+ def prep(raw: bytes) -> bytes:
+     if len(raw) > 10 * 1024 * 1024:
+         raise ValueError("image limit")
+@@ -54,6 +121,69 @@
+     return {"ready": ok, "busy": False, "state": "ready" if ok else "failed", "model": MODEL_ID, "engine": "vllm"}
+ 
+ 
++import re
++_REPEAT = re.compile(r"(.{20,200}?)\1{3,}", re.S)
++
++
++def trim_repeat(text: str) -> str:
++    """Model quay vòng: giữ 1 lần đoạn lặp, bỏ phần lặp thừa."""
++    return _REPEAT.sub(r"\1", text)
++
++
++async def ocr_one(png: bytes, prompt: str, max_tokens: int = MAX_TOKENS) -> str:
++    """OCR một ảnh/dải. Trả "" nếu không có chữ (cổng kiểm chữ); 503 nếu có chữ nhưng model lặp/tràn."""
++    url = "data:image/png;base64," + base64.b64encode(png).decode()
++    body = {"model": "ocr", "temperature": 0, "max_tokens": max_tokens, "messages": [{"role": "user", "content": [
++        {"type": "image_url", "image_url": {"url": url}}, {"type": "text", "text": prompt}]}]}
++    async def call(extra: dict) -> tuple[str, bool]:
++        r = None
++        for attempt in range(2):  # vLLM có thể từ chối thoáng qua khi nhiều dải đến cùng lúc
++            async with sem:
++                try:
++                    r = await client.post("/v1/chat/completions", json={**body, **extra})
++                except httpx.HTTPError:
++                    r = None
++            if r is not None and r.status_code == 200:
++                break
++            await asyncio.sleep(0.5)
++        if r is None or r.status_code != 200:
++            raise HTTPException(503, "OCR worker unavailable")
++        ch = r.json()["choices"][0]
++        return (ch["message"].get("content") or "").strip(), ch.get("finish_reason") == "length"
++
++    text, capped = await call({})
++    if capped:
++        # model lặp vô hạn trên dải này: thử lại 1 lần với phạt lặp và trần token thấp hơn
++        text2, capped2 = await call({"repetition_penalty": 1.12, "max_tokens": min(1800, max_tokens)})
++        text, capped = (text2 or text), capped2
++        text = trim_repeat(text)
++    if capped or len(text) < 200:
++        async with sem:
++            readable = await has_text(url)
++        if not readable:
++            return ""  # không có chữ: tránh bịa (CVE/IP) và lặp vô hạn trên ảnh nhiễu
++        # có chữ nhưng vẫn lặp: trả phần đã đọc (không làm hỏng cả job); đuôi lặp đã bị trần token chặn
++    return text
++
++
++def _prepare(raw: bytes) -> list[bytes]:
++    if len(raw) > 10 * 1024 * 1024:
++        raise ValueError("image limit")
++    im = Image.open(io.BytesIO(raw)).convert("RGB")
++    if im.width * im.height > 20_000_000 or max(im.size) > 10_000:
++        raise ValueError("pixel limit")
++    out = []
++    for part in split_strips(im):
++        buf = io.BytesIO(); part.thumbnail((10_000, 10_000))
++        # dải trắng hoàn toàn: bỏ qua, không gọi model
++        from PIL import ImageStat
++        t = part.convert("L"); t.thumbnail((256, 256))
++        if ImageStat.Stat(t).stddev[0] < 4.0:
++            continue
++        _fit(part).save(buf, format="PNG"); out.append(buf.getvalue())
++    return out
++
++
+ @app.post("/v1/ocr")
+ async def ocr(req: Req, authorization: str = Header(default="")):
+     if not hmac.compare_digest(authorization.encode(), f"Bearer {TOKEN}".encode()):
+@@ -61,23 +191,15 @@
+     if req.model != MODEL_ID:
+         raise HTTPException(422, "Unsupported model")
+     try:
+-        png = await asyncio.to_thread(lambda: prep(base64.b64decode(req.image_base64, validate=True)))
++        raw = base64.b64decode(req.image_base64, validate=True)
++        parts = await asyncio.to_thread(_prepare, raw)
+     except Exception as exc:
+         raise HTTPException(422, "Invalid image") from exc
+-    body = {"model": "ocr", "temperature": 0, "max_tokens": MAX_TOKENS, "messages": [{"role": "user", "content": [
+-        {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(png).decode()}},
+-        {"type": "text", "text": PROMPTS[req.calibration_prompt]}]}]}
+-    async with sem:
+-        try:
+-            r = await client.post("/v1/chat/completions", json=body)
+-        except httpx.HTTPError:
+-            raise HTTPException(503, "OCR worker unavailable") from None
+-    if r.status_code != 200:
+-        raise HTTPException(503, "OCR worker unavailable")
+-    ch = r.json()["choices"][0]
+-    if ch.get("finish_reason") == "length":
+-        raise HTTPException(503, "OCR output cap reached")
+-    text = (ch["message"].get("content") or "").strip()
++    if not parts:
++        return {"model": MODEL_ID, "blocks": []}  # trang trắng
++    cap = 1800 if len(parts) > 1 else MAX_TOKENS  # mỗi dải chỉ chứa ~1/k trang
++    texts = await asyncio.gather(*(ocr_one(p, PROMPTS[req.calibration_prompt], cap) for p in parts))
++    text = "\n".join(t for t in texts if t).strip()
+     return {"model": MODEL_ID, "blocks": [] if not text else [{"text": text, "bbox": None, "confidence": None}]}
+ 
+ 

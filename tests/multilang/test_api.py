@@ -29,6 +29,8 @@ def incumbent(monkeypatch):
     monkeypatch.setenv("QWEN_MODEL", EXPECTED_MODEL)
     monkeypatch.setenv("QWEN_BASE_URL", "http://127.0.0.1:9/v1")
     monkeypatch.setenv("LLM_PROVIDER", "vllm")
+    # Pin CORS per test so wildcard or explicit origins from the caller's .env cannot leak in.
+    monkeypatch.setenv("ALLOWED_ORIGINS", "https://allowed.example")
     monkeypatch.setattr(routes, "verified_counter", lambda settings: lambda text: len(text))
     return Settings(_env_file=None)
 
@@ -76,6 +78,9 @@ async def test_composition_off_on_legacy_and_cors(incumbent):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=on),
                                  base_url="http://test") as client:
         assert (await client.get("/health")).status_code == 200
+        allowed = await client.options("/ai/v3/translate", headers={
+            "Origin": "https://allowed.example", "Access-Control-Request-Method": "POST"})
+        assert allowed.headers.get("access-control-allow-origin") == "https://allowed.example"
         preflight = await client.options("/ai/v3/translate", headers={
             "Origin": "https://untrusted.example", "Access-Control-Request-Method": "POST"})
         assert preflight.headers.get("access-control-allow-origin") != "*"

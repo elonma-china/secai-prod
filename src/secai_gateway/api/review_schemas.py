@@ -111,6 +111,7 @@ class AdjudicationInput(Input):
         return self
 
 class LivePairInput(Input):
+    always_offer: bool = False
     prompt_messages: list[Message] = Field(min_length=1,max_length=30)
     answer: str = Field(min_length=1,max_length=65536)
     source_group: str = Field(default='unknown',min_length=1,max_length=200)

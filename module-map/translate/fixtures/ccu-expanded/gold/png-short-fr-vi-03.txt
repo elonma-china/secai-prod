@@ -1,0 +1,15 @@
+SecAI png-short-fr-vi-03
+[png-short-fr-vi-03-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[png-short-fr-vi-03-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[png-short-fr-vi-03-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[png-short-fr-vi-03-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[png-short-fr-vi-03-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[png-short-fr-vi-03-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords:
+Account: svc_ccu_87b5cf59
+Password: Pwaf464da0!0&*()_+
+URL: https://87b5cf59.example.org/audit?id=8893903&mode=test
+IP: 192.0.2.154:8903
+CVE: CVE-2024-2903
+Email: audit.87b5cf59@example.org
+Key: sk-test-711e64c2c26284af

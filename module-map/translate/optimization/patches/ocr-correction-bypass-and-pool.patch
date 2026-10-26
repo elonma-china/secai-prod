@@ -1,0 +1,61 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/ocr_client.py.pre-bypass	2026-10-11 11:20:39.197566953 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/ocr_client.py	2026-10-11 11:29:18.527328154 +0700
+@@ -11,6 +11,8 @@
+ 
+ import httpx
+ 
++from .http_pool import pooled_client
++
+ from .ocr_preprocess import preprocess_image
+ from .settings import TranslationSettings
+ from .types import DocumentBlock, OcrResult, PreparedImage, ProcessingContext, TranslationError
+@@ -78,8 +80,8 @@
+         retries = min(max(0, settings.ocr_max_retries), 1)
+         for attempt in range(retries + 1):
+             try:
+-                async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+-                    async with client.stream("POST", url, json=body, headers={
++                async with pooled_client() as client:
++                    async with client.stream("POST", url, json=body, timeout=timeout, headers={
+                         "Authorization": f"Bearer {settings.ocr_api_key}",
+                         "Accept-Encoding": "gzip, identity"}) as response:
+                         if response.status_code in {502, 503, 504}:
+@@ -160,11 +162,11 @@
+         result = await recognize_image(prepared, settings=self.settings)
+         if not result.blocks:
+             raise TranslationError("NO_TEXT_DETECTED", "No text detected")
+-        await context.checkpoint("correcting")
+         if not self.settings.ocr_correction_supported:
++            # Bước sửa OCR bằng LLM tắt: BỎ QUA hoàn toàn (không đổi chữ, không cảnh báo "rejected", không thêm giai đoạn).
++            # Văn bản OCR nguyên bản là kết quả được chấp nhận và đi thẳng sang dịch.
+             return CorrectedOcr(blocks=result.blocks, raw_text=result.raw_text,
+-                                corrected_text=result.raw_text, needs_review=True,
+-                                warnings=(*result.warnings, WarningItem(
+-                                    code="OCR_CORRECTION_REJECTED",
+-                                    message="Automatic OCR correction is unavailable; review raw text.")))
++                                corrected_text=result.raw_text, needs_review=False,
++                                warnings=tuple(result.warnings))
++        await context.checkpoint("correcting")
+         return await correct_ocr(result, context=context)
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/specialist.py.pre-pool	2026-10-11 11:29:18.493940173 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/specialist.py	2026-10-11 11:29:18.527095708 +0700
+@@ -8,6 +8,8 @@
+ 
+ import httpx
+ 
++from .http_pool import pooled_client
++
+ from .settings import TranslationSettings
+ from .types import TargetLang, TranslationError
+ 
+@@ -81,8 +83,8 @@
+         if timeout <= 0:
+             raise TranslationError("PROCESSING_TIMEOUT", "Processing timed out.")
+         try:
+-            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
+-                async with client.stream("POST", self.url, content=encoded, headers={
++            async with pooled_client() as client:
++                async with client.stream("POST", self.url, content=encoded, timeout=timeout, headers={
+                         "Authorization": f"Bearer {self.settings.specialist_api_key}",
+                         "Content-Type": "application/json"}) as response:
+                     if response.status_code == 504:

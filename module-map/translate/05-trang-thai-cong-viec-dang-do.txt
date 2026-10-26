@@ -25,6 +25,43 @@ LƯU Ý: nếu ai đó chạy lại compose cũ trong secai-docker/ thì sự c�
 phụ trách biết. Các kết quả test sau 00:15Z và trước 00:59Z (nếu có) không đáng tin.
 
 ================================================================
+0b. PHẢN HỒI NGHIỆM THU 2026-10-10 — chưa xử lý (ghi nguyên ý người dùng)
+================================================================
+1) Vẫn còn trường hợp mất dữ liệu liên quan tài khoản, mật khẩu / ký tự đặc biệt khi dịch.
+2) Thời gian dịch tệp cần scan lâu (kể cả ảnh) — chưa đáp ứng về thời gian.
+3) Nội dung dịch OK, cần giữ nguyên cấu trúc.
+4) Hỗ trợ đủ các tệp: PDF, XLSX, DOCX, DOC, PDF, PNG, …
+5) Cho phép OCR PDF scan và hình ảnh.
+6) Tốc độ nhanh.
+Đã ghi vào: 03 mục 1c (tiêu chí), 06 mục A1/E/F (checklist). Trạng thái: tất cả CHƯA xử lý/CHƯA retest;
+chưa có ngưỡng thời gian số do người dùng chốt. Không suy ra PASS từ các kết quả cũ trong mục 1.
+Hạ tầng thử nghiệm riêng (ngoài IAS): 10/10 đã dựng instance Vast 55235250 (1×A100 80GB, chỉ OCR + dịch
+Hy-MT2-7B, không LLM/embed/rerank) — smoke tuần tự OCR + dịch OK trên máy; chưa đo thời gian/chất lượng nghiệm thu.
+
+================================================================
+0c. TỐC ĐỘ — tiêu chí 11/10/2026 và số đo thử nghiệm (CHƯA phải môi trường chính thức)
+================================================================
+Tiêu chí (người dùng): khoảng 1-3 giây MỖI TRANG; tài liệu 20 trang <= 60 giây. Đã ghi vào 03 mục 1c điểm 2.
+2026-10-11 (sau vòng 3): đã sửa TOKEN_INTEGRITY_FAILED ảnh chữ Trung, UC-C12 (JSON), chạy được .doc trên stack thử nghiệm; P0 16/16 PASS. Production chưa có converter .doc.
+Tiêu chí mới 03 mục 1b.7 (OCR đúng từng ký tự, 100% ảnh) + công cụ fixtures/tools/ocr_special_char_check.py — bản sửa fast_ocr_amp.py đạt 40/40 trên cổng thử (11/10/2026), chưa áp vào dịch vụ chính.
+Đo 20 mẫu trên giao diện IAS (11/10): 20/20 hoàn tất, chỉ 3/20 đạt <=3 s/trang (trung vị 6,5 s/trang; ảnh ~10-11 s, PDF scan 4,6-11,8 s/trang) — CHƯA ĐẠT tiêu chí tốc độ với ảnh/PDF scan; xem 10-nhat-ky-toi-uu.txt T35.
+2026-10-11 (tối): CCU dịch (stack thử): tối đa 20 người dùng ảo đồng thời đạt tiêu chí (p95 ngắn 18,8 s/dài 20,8 s, 0 lỗi, ~48 tài liệu/phút); từ 30 người xếp hàng tăng mạnh, 80 người gãy một phần; nút thắt OCR+dịch chung 1 GPU qua tunnel (optimization/results/ccu-report-20261011.md). Review phương pháp đo (Opus): optimization/results/review-phuong-phap-do-20261011.md — các kết quả đo hiện tại chỉ đúng với bộ mẫu tự sinh, chưa phải tài liệu thật. OCR pipeline 60 tệp ~98-100% (còn nhầm 0/O ngẫu nhiên ~1-3 mẫu, tiêu chí 1b.7 100% CHƯA đạt ổn định). Ảnh/PDF scan còn ~5-8 s/trang (CHƯA đạt 1-3 s/trang).
+Chi tiết, số đo, thay đổi, quyết định cần duyệt và việc còn tồn: optimization/README.md. Số liệu thô: optimization/results/.
+Stack thử nghiệm cô lập (cổng 18285; Vast 55235250, 1xA100 80GB; MT = vLLM BF16 và OCR = vLLM Qwen3-VL-2B luôn nạp; worker dịch
+song song; có PDF + XLSX). KHÔNG đụng production. Cấu hình cuối 11/10/2026, poll 0,3 giây:
+  docx 20 trang (221 đoạn): ~4,5 giây (0,22 giây/trang)        | docx/pdf/xlsx ngắn 1 trang: 2,3-2,6 giây
+  PDF có lớp chữ 4 trang: 4,2 giây                              | PDF scan 10 trang: 18,3 giây; 20 trang: ~36 giây (~1,8 giây/trang)
+  ảnh dày chữ 1 trang: 9,6-12,1 giây (OCR 6-8)                  | ảnh/PDF scan ngắn 1 trang: 6,7-7,1 giây
+=> ĐẠT ngưỡng cho tài liệu chữ và PDF scan nhiều trang; CHƯA ĐẠT cho ảnh/PDF scan 1 trang (OCR). Câu hỏi còn treo cho người dùng:
+ca <= 3 trang tính ngưỡng tổng <= 15 giây (đề xuất) hay 3 giây/trang tuyệt đối?
+Vòng kiểm 30 mẫu (15 dài + 15 ngắn): vòng 1 27/30 (3 lỗi chunk CJK, đã sửa), vòng 2 30/30 (literal đủ 25/30; còn lại rớt '&' do OCR),
+vòng 3 29/30 (literal đủ 23/30; 1 lỗi MỚI TOKEN_INTEGRITY_FAILED ở ảnh chữ Trung; 17/30 mẫu > 3 giây/trang, đều là ảnh/PDF scan 1-3 trang).
+Hồi quy 20 ca P0: giữ-nguyên-thông-tin PASS toàn bộ trừ UC-C12 (JSON dịch xong không parse); 4 ca tệp độc hại bị từ chối đúng.
+Baseline (production cũ, serving on-demand tuần tự): docx 20 trang ~1.370 giây (ước từ 39/221 đoạn), ảnh dày chữ 36 giây, literal 3/7.
+Chất lượng (chrF theo gold 04, 18 hướng, BF16): trung bình 69,9. Chưa có số chrF của bản Q4 cũ để so sánh.
+CHƯA nối production vào instance mới; CHƯA deploy; mã trong image khác working tree repo (patch là so với image).
+
+================================================================
 1. ĐÃ XONG — xác nhận thật qua UI, có bằng chứng
 ================================================================
 
@@ -124,6 +161,21 @@ Container đang chạy thật (production):
   secai-translation-gateway   — bản round 1 (zh-Hans alias + guard gần-rỗng v3, không áp dụng
                                  cho /ai/translate legacy nên không liên quan bug B)
   secai-translation-worker    — bản round 2 (có cả fix round 1 lẫn bug A round 2)
+
+================================================================
+3b. SỐ ĐO CHẤT LƯỢNG BẢN DỊCH CÓ % — LẦN ĐẦU 11/10/2026 (03 mục 1d; công cụ fixtures/tools/quality_score.py)
+================================================================
+Đo thật trên production dịch (127.0.0.1:18185, API v2, 36 cặp có gold trong 04: 18 tệp ~1000 từ + 18 ảnh 1 câu; cách 13 giây/lần tải lên):
+  CHẤT LƯỢNG DỊCH: ĐẠT 34/36 = 94,4%  (ngưỡng tổng 90% -> ĐẠT);  chrF trung bình 64,96.
+  Theo nhóm: to-vi 18/18 (chrF TB 67,8) | from-vi-latin 10/12 = 83,3% (66,7) | from-vi-cjk 6/6 (53,1).
+  Theo loại: tệp 18/18 = 100% (chrF TB 68,5) | ảnh 16/18 = 88,9% (61,4).
+  Theo ngôn ngữ (ngoại ngữ của cặp): en 4/4 (72,1) es 4/4 (70,2) ru 3/4 (65,7) fr 4/4 (65,5) ar 4/4 (65,5) ja 4/4 (64,0) de 3/4 (63,2) ko 4/4 (62,3) zh 4/4 (56,0).
+  Mẫu TRƯỢT (2): IMG-vi-de (chrF 44,3 < ngưỡng ngắn 45; độ dài 1,27 — bản dịch Đức dài hơn gold) và IMG-vi-ru (độ dài 1,33 > 1,30; chrF 58,8 đạt). Cả hai là ảnh 1 câu: chrF câu ngắn dao động, cần xem bằng mắt trước khi coi là lỗi dịch.
+  CHƯA CHẤM (2): FILE-SENS-vi-en, IMG-SENS-en-vi (không có gold; vẫn kiểm literal theo 1b bằng check_output.py).
+  Không mẫu nào mất literal, sót chữ ngôn ngữ nguồn hay bỏ đoạn (G3/G4/G5 đạt 36/36 sau khi sửa G4 cho ảnh).
+Lưu ý trung thực: lần chạy đầu cho 31/36 = 86,1% vì cổng G4 đếm dòng cũng áp cho ảnh, mà ảnh ngắt dòng theo bố cục hình (1 câu gold -> 2-3 dòng đầu ra): 3 ảnh bị báo trượt oan. Định nghĩa cổng đã sửa (ảnh đếm khối cách nhau bằng dòng trống) rồi chấm lại offline từ chính các đầu ra đã lưu — không gọi lại API. Số chính thức là 34/36.
+Ngưỡng chrF đặt theo số BF16 trước đó (to-vi 72,2; from-vi 67,6; vi->zh 45,4), chưa phải mục tiêu chất lượng cuối. Hạn chế: chrF đo giống bề mặt, gold do bộ dữ liệu có sẵn (chưa kiểm lại bởi người dịch trong lần này), mẫu ảnh chỉ 1 câu nên nhiễu.
+Kết quả đầy đủ: results/2026-10-11-11-do-chat-luong-dich-lan1.txt và .json. Từ nay MỖI lần đo phải báo "ĐẠT x/y = z%" (readme, 03 mục 1d).
 
 ================================================================
 4. GỢI Ý THỨ TỰ LÀM TIẾP (không bắt buộc, chỉ để tham khảo)

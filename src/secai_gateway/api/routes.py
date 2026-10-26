@@ -8,6 +8,7 @@ import re
 import time
 import unicodedata
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,14 +16,16 @@ from typing import Annotated, Any
 from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, UploadFile, File, Form
+from fastapi.responses import StreamingResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from linch.events import ResultEvent, SystemEvent
+from linch.events import PartialAssistantEvent, ResultEvent, SystemEvent
 
 from ..agent import registry_for
-from ..agent.hooks import CHAT_PRE_FETCH_MARKER, classify_chat_grounding
+from ..agent.hooks import (
+    CHAT_PRE_FETCH_MARKER, _EXPLOIT_KB_SEARCH_EXHAUSTED, classify_chat_grounding,
+)
 from ..poc import (
     canonical_block,
     cli_surface,
@@ -32,6 +35,7 @@ from ..poc import (
     enforce_section1,
     extract_cve_id,
     has_real_code_evidence,
+    looks_like_python2,
     merge_evidence,
     normalize_cve_ids,
     override_section3,
@@ -43,6 +47,9 @@ from ..poc import (
     strip_system_narration,
     strip_tool_name_mentions,
 )
+from ..poc.inject import has_synthesis_evidence
+from ..poc.trace import build_generation_trace, render_generation_trace
+from ..poc.prefetch import session_coverage_scope
 from ..poc.backend import PocBadRequest, PocError, PocForbidden, PocNotFound
 from ..poc.fixed_pocs import extract_target
 from ..poc.kt_client import KtClientError
@@ -52,18 +59,23 @@ from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..retrieval.filters import ENTITY_ID_RES
 from ..retrieval.qdrant import _qdrant_search
+from ..retrieval.date_lookup import _date_grounding
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
-from ..sanitize.gate import REFUSE_INJECTION_MSG
+from ..sanitize.gate import Action, Decision, GREET_MSG, REFUSE_OFFTOPIC_MSG, REFUSE_INJECTION_MSG
+from ..sanitize.cascade import is_direct_override, judge_chat_scope, judge_security_input
 from ..security import (
     UNSUPPORTED_LANGUAGE_MSG, has_hidden_smuggling, is_unsupported_language,
     neutralize_active_content, require_public_input, sanitize_output_language,
     wrap_untrusted_content,
 )
-from .literal_mask import unmask_literals
+from .literal_mask import (
+    PlaceholderIntegrityError, mask_literals, placeholder_ids, restore_checked,
+)
 from .projects import _norm_owner
 from .messages import (
-    build_translate_prompt, parse_statistical, report_prompt, statistical_detail_table, statistical_prompt,
+    build_translate_prompt_masked, merge_detail_table, parse_statistical, report_prompt,
+    statistical_detail_table, statistical_prompt,
     translate_langs, translate_prompt,
 )
 from .text_chunk import split_for_translation
@@ -389,6 +401,46 @@ def _web_hints_prompt_appendix(evidence: list[dict[str, Any]]) -> str:
     )
 
 
+def _kb_prompt_appendix(kb_content: str | None) -> str:
+    """Feed deterministically-retrieved internal Knowledge Base (KB) context into the prompt
+    for CVEs present in the internal DB (Qdrant/Neo4j) but absent from the PoC catalog (T3 tier).
+    Gives the model exact technical details (CWE, CVSS, affected products, vulnerability description)
+    to synthesize Section 1, 2, and 3 without hallucination."""
+    if not kb_content or not kb_content.strip():
+        return ""
+    if "Không tìm thấy kết quả trong knowledge base" in kb_content:
+        return ""
+    return (
+        "\n\n[Hệ thống đã tìm thấy thông tin kỹ thuật của lỗ hổng trong Cơ sở dữ liệu nội bộ (KB):\n"
+        + wrap_untrusted_content(kb_content.strip()[:6000], source="kb_prefetch")
+        + "\n\nHãy căn cứ vào các thông tin kỹ thuật xác thực trên (CWE, vector tấn công, sản phẩm bị ảnh hưởng, mô tả cơ chế lỗi) "
+        "để phân tích và xây dựng mã khai thác PoC (Mục 1), Hướng dẫn chạy (Mục 2) và Tổng quan kỹ thuật (Mục 3). "
+        "Ưu tiên thông tin riêng của CVE; tài liệu CWE/CAPEC/ATT&CK chỉ là kiến thức bổ trợ, không xác nhận chi tiết khai thác. Nếu thiếu điều kiện hoặc phiên bản cần thiết, nêu rõ phần thiếu, không đoán payload. Giữ nguồn trích dẫn và ghi rõ mã tổng hợp chưa chạy xác minh.]\n"
+    )
+
+
+def _kb_unavailable_response(prefetch_result: dict[str, Any], evidence: list[dict[str, Any]]) -> tuple[str, dict[str, Any]] | None:
+    """Stop before generation when neither KB context nor artifact evidence supports it."""
+    cve_id = prefetch_result.get("cve_id")
+    usable_context = (prefetch_result.get("kb_status") == "found"
+                      and bool((prefetch_result.get("kb_content") or "").strip()))
+    if (not cve_id or usable_context
+            or has_real_code_evidence(evidence) or has_synthesis_evidence(evidence)):
+        return None
+    status = prefetch_result.get("kb_status", "error")
+    if status == "not_found":
+        return_text, metadata = enforce_section1("", [], cve_id=cve_id)
+        return return_text, {**metadata, "kb_status": status}
+    detail = (f"Đã tìm thấy {cve_id} nhưng chưa đủ thông tin kỹ thuật để sinh PoC. "
+              "Cần bổ sung mô tả cơ chế lỗi và điều kiện ảnh hưởng."
+              if status == "insufficient" else
+              f"Không thể truy vấn đầy đủ cơ sở dữ liệu nội bộ (KB) để xác thực {cve_id}. "
+              "Vui lòng thử lại; hệ thống không sinh PoC khi chưa có bằng chứng xác thực.")
+    return ("## 1. Mã Khai thác (PoC) và Payload\n\n" + detail,
+            {"candidate_status": "not_generated", "section1_tier": "synthesis_failed",
+             "reference_code_injected": False, "kb_status": status})
+
+
 async def _pad_to_floor(start: float, floor_s: float) -> None:
     """Sleep just enough so total elapsed since ``start`` reaches ``floor_s`` — the uniform
     exploit-latency floor (see Settings.poc_exploit_simulate_delay_s). No-op when the floor
@@ -399,6 +451,7 @@ async def _pad_to_floor(start: float, floor_s: float) -> None:
     remaining = floor_s - (time.monotonic() - start)
     if remaining > 0:
         await asyncio.sleep(remaining)
+
 
 
 async def _run_kt_if_applicable(settings: Any, body: LegacyRequest, text: str,
@@ -678,6 +731,7 @@ async def _ondemand_github_evidence(poc: Any, cve_id: str, timeout: int) -> list
 def register_routes(app: FastAPI, state: Any) -> None:
     """Attach every gateway endpoint to ``app`` (closures capture the shared state)."""
 
+
     def _chat_tool_registry() -> list[str]:
         """Bug #13/CQ4: the ``tool_registry`` VALUE only — key stays, shape stays list[str].
         Internal retrieval-tool names (qdrant_search/neo4j_search/poc_search/fetch_reference/
@@ -692,8 +746,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     async def complete(profile: str, body: LegacyRequest, *, prompt_override: str | None = None,
                        session_id: str | None = None,
-                       keep_cjk: bool = False) -> tuple[str, dict[str, Any]]:
-        grounding_context: str | None = None
+                       grounding_context: str | None = None,
+                       keep_cjk: bool = False,
+                       raw_output: bool = False) -> tuple[str, dict[str, Any]]:
+        scope_context: dict[str, str] = {}
         if prompt_override is not None:
             # Endpoint already built the task-specific user message (translate/report/…).
             prompt = prompt_override
@@ -701,7 +757,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             prompt = require_public_input(body.supplied_text())
             grounding: dict[str, Any] | None = None
             if profile == "chat":
-                gated = await _chat_gate(prompt)
+                gated = await _chat_gate(prompt, session_id, scope_context)
                 if gated is not None:  # model classifier short-circuited (injection/off-topic)
                     return gated
                 prompt, grounding = await _ground_chat_prompt(prompt, session_id)
@@ -721,6 +777,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             text, metadata = await state.runner.complete(
                 profile, prompt, session_id,
                 **({"grounding_context": grounding_context} if grounding_context else {}),
+                **({"scope_context": scope_context["text"]} if scope_context else {}),
             )
         except HTTPException:
             raise
@@ -754,6 +811,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 "query": grounding.get("query"),
                 "summary": grounding.get("summary"),
             }]}
+        if raw_output:
+            # Translation is lossless by contract: the chat-oriented scrubbers (meta-narration,
+            # tool-call echo, reasoning-leak, CJK strip, HTML/JS defang) delete or rewrite
+            # legitimate translated content, so they are bypassed (translate has no tools).
+            return text, metadata
         return sanitize_output_language(text, keep_cjk=keep_cjk), metadata
 
     def base_meta(profile: str, run_id: str | None) -> dict[str, Any]:
@@ -765,7 +827,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
     def stream(profile: str, prompt: str, session_id: str | None, build_final,
               pre_frames: list[bytes] | None = None,
-              grounding_context: str | None = None) -> StreamingResponse:
+              grounding_context: str | None = None, scope_context: str | None = None) -> StreamingResponse:
         """Shared SSE runner for every agentic/text endpoint: streams tool_call /
         tool_result / token events as they happen, then one final event built by the
         endpoint's ``build_final(final_text, run_id)`` (which may also persist state).
@@ -798,6 +860,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 async for event in state.runner.stream(
                     profile, prompt, session_id,
                     **({"grounding_context": grounding_context} if grounding_context else {}),
+                    **({"scope_context": scope_context} if scope_context else {}),
                 ):
                     if isinstance(event, SystemEvent):
                         run_id = getattr(event, "run_id", None) or run_id
@@ -908,6 +971,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
         lên draft đã stream ("giật" — xem ``RequireChatGroundingHook`` + FE
         ToolTimeline). Route ``taxonomy``/``concept`` không đổi (vẫn early-return
         None) — lớp 1 CHỈ mở rộng cho id_lookup, KHÔNG đụng semantics `missing_web`."""
+        try:
+            dated = await _date_grounding(prompt)
+        except Exception:
+            logger.exception("date grounding lookup lỗi — dùng nguyên prompt gốc")
+            dated = None
+        if dated is not None:
+            return prompt, dated
         query = prompt
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
             plan = classify_chat_grounding(prompt)
@@ -984,7 +1054,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             }),
         ]
 
-    async def _chat_gate(prompt: str) -> tuple[str, dict[str, Any]] | None:
+    async def _chat_gate(prompt: str, session_id: str | None = None,
+                         scope_context: dict[str, str] | None = None) -> tuple[str, dict[str, Any]] | None:
         """Model-based input sanitization for the chat path (runs BEFORE the agent).
 
         Embeds the prompt with the deployed sec-embedding model and applies the numpy head
@@ -1035,28 +1106,87 @@ def register_routes(app: FastAPI, state: Any) -> None:
         try:
             verdict = await classify_input(prompt, settings=state.settings,
                                            client=getattr(state, "http_client", None))
-            # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
-            # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
-            # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
-            # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
-            # straight back to the classifier's own threshold decision — never a new failure
-            # mode. See sanitize/cascade.py.
-            if (verdict.ok and verdict.injection_uncertain
-                    and getattr(state.settings, "injection_cascade_enabled", False)):
-                # Prefer the calibrated score (the one band-membership was actually decided on)
-                # if shipped; falls back to the raw score for display when it isn't.
-                cascade_score = verdict.scores.get("injection_calibrated",
-                                                   verdict.scores.get("injection", 0.0))
-                judge_verdict = await judge_injection(
-                    state.runner, prompt, cascade_score,
-                    timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
-                if judge_verdict is not None:
-                    logger.info(
-                        "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
-                        "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
-                    verdict = replace(verdict, injection=judge_verdict)
-            decision = decide(verdict, state.settings, text=prompt)
+            if getattr(state.settings, "chat_scope_judge_enabled", False):
+                decision = decide(verdict, state.settings, text=prompt)
+                if not (verdict.injection and is_direct_override(prompt)):
+                    history = ""
+                    if session_id:
+                        rows = await state.runner.session_store.load_messages(session_id)
+                        history = json.dumps([
+                            {"role": row.message.role, "text": "\n".join(
+                                getattr(b, "text", "") or "" for b in row.message.content or [])[:1500]}
+                            for row in rows[-4:]
+                            if getattr(row, "message", None) is not None
+                        ], ensure_ascii=False)
+                    judge_started = time.monotonic()
+                    scope = await judge_chat_scope(
+                        state.runner, prompt, verdict.scores.get("injection", 0.0), history=history,
+                        timeout_s=state.settings.injection_cascade_timeout_s)
+                    if scope is None:
+                        decision = Decision(Action.SCOPE_UNAVAILABLE,
+                            "Dịch vụ kiểm tra phạm vi tạm thời không khả dụng. Vui lòng thử lại.", "scope_unavailable")
+                    elif scope.injection:
+                        decision = Decision(Action.BLOCK_INJECTION, REFUSE_INJECTION_MSG, "injection", pii=verdict.pii)
+                    elif scope.scope == "out_of_scope":
+                        decision = Decision(Action.REFUSE_OFFTOPIC, REFUSE_OFFTOPIC_MSG, "offtopic", pii=verdict.pii)
+                    elif scope.scope == "chitchat":
+                        decision = Decision(Action.GREET_CHITCHAT, GREET_MSG, "chitchat", pii=verdict.pii)
+                    elif scope.scope == "ambiguous":
+                        decision = Decision(Action.ASK_CLARIFICATION,
+                            "Bạn cần hỗ trợ vấn đề An toàn thông tin nào? Vui lòng nói rõ câu hỏi.", "ambiguous")
+                    else:
+                        decision = Decision(Action.PASS, "", "chitchat" if scope.scope == "chitchat" else "security", pii=verdict.pii)
+                        if scope.scope == "mixed" and scope_context is not None:
+                            scope_context["text"] = json.dumps(list(scope.security_requests), ensure_ascii=False)
+                    logger.info("chat-scope run_id=%s scope=%s injection=%s action=%s judge_latency_ms=%.1f",
+                                run_id, scope.scope if scope else "unavailable", scope.injection if scope else None,
+                                decision.action.value, (time.monotonic() - judge_started) * 1000)
+            else:
+                confirmed_injection = False
+                # Ư2 uncertain-band cascade: an ambiguous (calibrated) injection score gets a
+                # second opinion from the LLM judge instead of a threshold coin-flip. Only fires
+                # when a calibration asset is shipped (injection_uncertain) AND the flag is on;
+                # ANY judge failure (timeout/unreachable/malformed) returns None and this falls
+                # straight back to the classifier's own threshold decision — never a new failure
+                # mode. See sanitize/cascade.py.
+                if (verdict.ok and verdict.injection_uncertain
+                        and getattr(state.settings, "injection_cascade_enabled", False)):
+                    # Prefer the calibrated score (the one band-membership was actually decided on)
+                    # if shipped; falls back to the raw score for display when it isn't.
+                    cascade_score = verdict.scores.get("injection_calibrated",
+                                                       verdict.scores.get("injection", 0.0))
+                    judge_verdict = await judge_injection(
+                        state.runner, prompt, cascade_score,
+                        timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                    if judge_verdict is not None:
+                        logger.info(
+                            "input-sanitize-cascade run_id=%s score=%.3f threshold_verdict=%s "
+                            "judge_verdict=%s", run_id, cascade_score, verdict.injection, judge_verdict)
+                        verdict = replace(verdict, injection=judge_verdict)
+                        confirmed_injection = judge_verdict
+                decision = decide(verdict, state.settings, text=prompt)
+                # A confident head prediction can still misclassify ATTT quizzes and scenarios.
+                if (verdict.ok and not confirmed_injection and not is_direct_override(prompt)
+                        and decision.action in (Action.BLOCK_INJECTION, Action.REFUSE_OFFTOPIC)):
+                    adjudication = await judge_security_input(
+                        state.runner, prompt, verdict.scores.get("injection", 0.0),
+                        timeout_s=getattr(state.settings, "injection_cascade_timeout_s", 8.0))
+                    if adjudication is not None:
+                        injection, security = adjudication
+                        verdict = replace(verdict, injection=injection,
+                                          intent="security" if security else "offtopic")
+                        decision = decide(verdict, state.settings, text=prompt)
+                        if not injection and not security:
+                            decision = Decision(Action.REFUSE_OFFTOPIC, REFUSE_OFFTOPIC_MSG, "offtopic", pii=verdict.pii)
+                        logger.info("input-security-judge run_id=%s injection=%s security=%s action=%s",
+                                    run_id, injection, security, decision.action.value)
         except Exception:  # a guard must never break chat
+            if getattr(state.settings, "chat_scope_judge_enabled", False):
+                logger.exception("chat scope check failed; returning temporary unavailability")
+                return "Dịch vụ kiểm tra phạm vi tạm thời không khả dụng. Vui lòng thử lại.", {
+                    "run_id": run_id, "profile": "chat", "tool_registry": [], "short_circuit": True,
+                    "input_classification": {"label": "scope_unavailable", "action": "scope_unavailable", "blocked": True},
+                }
             logger.exception("input classifier failed → fail-open")
             return None
 
@@ -1111,10 +1241,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
     @app.post("/ai/chat/stream")
     async def chat_stream(body: LegacyRequest) -> StreamingResponse:
         text = require_public_input(body.supplied_text())
-        gated = await _chat_gate(text)
+        session_id = _chat_session_id(body)
+        scope_context: dict[str, str] = {}
+        gated = await _chat_gate(text, session_id, scope_context)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
-        session_id = _chat_session_id(body)
         text, grounding = await _ground_chat_prompt(text, session_id)
 
         async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
@@ -1125,7 +1256,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, session_id, build_final, pre_frames=_grounding_sse_frames(grounding),
-                      grounding_context=_grounding_context_text(grounding))
+                      grounding_context=_grounding_context_text(grounding), scope_context=scope_context.get("text"))
 
     async def _stamp_session_activity(sid: str, rec: Any, body: LegacyRequest) -> None:
         """Best-effort bookkeeping after a session-scoped chat turn: bump ``last_activity``
@@ -1194,7 +1325,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # never stamps (no turn happened), and a gate refusal below still counts as a
         # turn and is still stamped (it already happened, by this same call).
         await _stamp_session_activity(sid, rec, body)
-        gated = await _chat_gate(text)
+        scope_context: dict[str, str] = {}
+        gated = await _chat_gate(text, sid, scope_context)
         if gated is not None:  # model classifier short-circuited before the agent runs
             return _short_circuit_stream(gated[0], gated[1])
         text, grounding = await _ground_chat_prompt(text, sid)
@@ -1207,7 +1339,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, sid, build_final, pre_frames=_grounding_sse_frames(grounding),
-                      grounding_context=_grounding_context_text(grounding))
+                      grounding_context=_grounding_context_text(grounding), scope_context=scope_context.get("text"))
 
     # Defensive cleanup for very large/unusual (e.g. raw-JSON) chunks: the model
     # occasionally echoes its own instruction preamble back verbatim instead of only
@@ -1243,9 +1375,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
     _WRAPPER_TAG_RE = re.compile(
         r"(?:<|&lt;)/?untrusted_retrieved_content(?:\s[^>&]*)?(?:>|&gt;)\s*", re.IGNORECASE)
 
-    def _strip_prompt_echo(text: str) -> str:
-        cleaned = _INSTRUCTION_RE.sub("", _DATE_BRACKET_RE.sub("", text))
+    def _strip_prompt_echo(text: str, source: str = "") -> str:
+        """Remove an echoed instruction head / date preamble / spotlight wrapper from MODEL
+        output (call BEFORE restoring literals, while they are still opaque placeholders).
+        An echo pattern is only stripped when the same phrase is not part of the user's
+        ``source`` text, so legitimate content that happens to contain it is never eaten.
+        The wrapper tag is always safe to strip: a tag in the source is masked as a literal."""
+        cleaned = text
+        if not _DATE_BRACKET_RE.search(source):
+            cleaned = _DATE_BRACKET_RE.sub("", cleaned)
+        if not _INSTRUCTION_RE.search(source):
+            cleaned = _INSTRUCTION_RE.sub("", cleaned)
         return _WRAPPER_TAG_RE.sub("", cleaned)
+
+    _LEADING_THINK_RE = re.compile(r"\A\s*<think>.*?</think>\s*", re.DOTALL)
 
     # A caller can post a whole JSON record as the text to translate — the ias.id.vn
     # datalake page sends the entire "cves_detail" object. Round-tripping that through
@@ -1390,6 +1533,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
     def _split_adaptive(text: str) -> list[tuple[str, str]]:
         return split_for_translation(text, _chunk_budget(len(text)))
 
+    def _plan_value(text: str) -> tuple[list[str], list[tuple[str, str]]]:
+        """Mask the WHOLE value once (so a label/value pair split by a chunk boundary stays
+        protected), then chunk the MASKED text (placeholders are atomic). Returns
+        ``(literals, [(masked_chunk, sep_after), …])``."""
+        masked, literals = mask_literals(text)
+        return literals, _split_adaptive(masked)
+
     def _target_writes_han(tgt: Any) -> bool:
         """True when the requested translation target is written with Han ideographs.
 
@@ -1401,8 +1551,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         code = tgt.strip().lower()
         return code in {"zh", "ja"} or code.startswith("zh-")
 
-    def _translate_chunks(body: LegacyRequest) -> tuple[list[tuple[str, str]], Any, Any]:
-        """Split the input and enforce the max-chunk cap (413). Returns (chunks, src, tgt).
+    def _translate_plan(body: LegacyRequest) -> tuple[list[str], list[tuple[str, str]], Any, Any]:
+        """Mask + split the input and enforce the max-chunk cap (413). Returns
+        (literals, masked chunks, src, tgt).
 
         TR4/TR5 fix (2026-09-22): reject an empty/whitespace-only input up front (400) — no
         text means there is nothing to translate, so there is no legitimate reason to still
@@ -1413,65 +1564,92 @@ def register_routes(app: FastAPI, state: Any) -> None:
             raise HTTPException(400, "Thiếu nội dung cần dịch (text rỗng).")
         _validate_translate_langs(body)
         src, tgt = translate_langs(body)
-        chunks = _split_adaptive(body.supplied_text())
+        literals, chunks = _plan_value(body.supplied_text())
         _guard_chunk_cap(len(chunks))
-        return chunks, src, tgt
+        return literals, chunks, src, tgt
+
+    def _integrity_error(detail: str) -> HTTPException:
+        return HTTPException(502, detail={
+            "code": "TRANSLATION_INTEGRITY",
+            "message": ("Dịch thất bại: mô hình làm mất/đổi dữ liệu được bảo vệ (tài khoản, mật khẩu, "
+                        "URL, IP…) nên kết quả không được trả về để tránh mất thông tin. "
+                        "Vui lòng thử lại. (translation integrity check failed) " + detail),
+        })
+
+    def _is_integrity_error(exc: BaseException) -> bool:
+        return (isinstance(exc, HTTPException) and isinstance(exc.detail, dict)
+                and exc.detail.get("code") == "TRANSLATION_INTEGRITY")
 
     async def translate_assemble(body: LegacyRequest) -> tuple[str, dict[str, Any]]:
-        """Translate the whole input, chunking long text so no single model turn has to emit
-        a translation past its output-token cap (which would truncate). Each chunk runs the
-        full mask→translate→sanitize→unmask pipeline; chunks are rejoined with their exact
-        separators. complete() already sanitizes; we unmask each chunk's literals here.
+        """Translate the whole input losslessly. Every value is masked ONCE (literals →
+        ``⟦Ln⟧``), the masked text is chunked (so no model turn exceeds its output cap and
+        no label/value pair is split unprotected), each chunk is translated at temperature 0
+        with NO output scrubbing, and each chunk's placeholders are verified (every one
+        exactly once, none stray) before the originals are restored verbatim. An incomplete
+        chunk is retried once; if still incomplete the request fails with 502
+        TRANSLATION_INTEGRITY — never a silent 200 with lost data.
 
         TR5 fix (2026-09-22): validated here (before EITHER the record or the plain-text
         branch below runs) so a garbage source_lang/target_lang 400s regardless of which
-        shape the input takes — not just the plain-text path covered by _translate_chunks."""
+        shape the input takes."""
         _validate_translate_langs(body)
         src, tgt = translate_langs(body)
         sem = asyncio.Semaphore(max(1, state.settings.translate_chunk_concurrency))
 
-        async def render(chunk_text: str) -> str:
-            prompt, literals = build_translate_prompt(chunk_text, src, tgt)
-            out, _meta = await complete("translate", body, prompt_override=prompt,
-                                        keep_cjk=_target_writes_han(tgt))
-            cleaned = _strip_prompt_echo(unmask_literals(out, literals))
-            if not cleaned.strip():
-                # TR4 fix (2026-09-22): a blank/whitespace-only completion used to flow
-                # straight through as a "successful" 200 with translated_text="" — the
-                # caller had no signal the translation actually failed. The input itself is
-                # guaranteed non-empty here (empty input is rejected earlier, in
-                # _translate_chunks/this function's top, before any model call), so an empty
-                # result here can only mean the model/provider failed to produce a
-                # translation — surface that as a real error instead of a silent success.
-                raise HTTPException(
-                    502,
-                    "Dịch thất bại: mô hình trả về kết quả rỗng (translation failed / empty completion).",
-                )
-            return cleaned
+        async def render(chunk_masked: str, literals: list[str], source: str) -> str:
+            expected = placeholder_ids(chunk_masked)
+            base_prompt = build_translate_prompt_masked(chunk_masked, src, tgt)
+            last = "no attempt"
+            for attempt in range(2):
+                prompt = base_prompt
+                if attempt:
+                    names = ", ".join(f"⟦L{i}⟧" for i in expected)
+                    prompt += ("\n\nLƯU Ý BẮT BUỘC: bản dịch trước đã làm mất/đổi ký hiệu giữ chỗ. "
+                               f"Hãy chép NGUYÊN VĂN, đúng một lần mỗi ký hiệu: {names}.")
+                out, _meta = await complete("translate", body, prompt_override=prompt,
+                                            keep_cjk=True, raw_output=True)
+                if "<think" not in source:
+                    out = _LEADING_THINK_RE.sub("", out)
+                out = _strip_prompt_echo(out, source)  # BEFORE restore: literals still opaque
+                if not out.strip():
+                    # TR4 fix (2026-09-22): a blank completion used to flow through as a
+                    # "successful" 200 with translated_text="" — surface it as a real error.
+                    raise HTTPException(
+                        502,
+                        "Dịch thất bại: mô hình trả về kết quả rỗng (translation failed / empty completion).",
+                    )
+                try:
+                    return restore_checked(out, literals, expected)
+                except PlaceholderIntegrityError as exc:
+                    last = str(exc)
+                    logger.warning("translate integrity check failed (attempt %d): %s", attempt + 1, exc)
+            raise _integrity_error(last)
 
-        async def render_bounded(chunk_text: str) -> str:
+        async def render_bounded(chunk_masked: str, literals: list[str], source: str) -> str:
             async with sem:
-                return await render(chunk_text)
+                return await render(chunk_masked, literals, source)
 
-        async def render_chunks(chunks: list[tuple[str, str]]) -> str:
+        async def render_value(literals: list[str], chunks: list[tuple[str, str]], source: str) -> str:
             """Translate one value's chunks concurrently and rejoin on the exact separators."""
-            outs = await asyncio.gather(*(render_bounded(c) for c, _sep in chunks))
+            outs = await asyncio.gather(*(render_bounded(c, literals, source) for c, _sep in chunks))
             return "".join(out + sep for out, (_c, sep) in zip(outs, chunks))
 
         record = _prose_values(body.supplied_text())
         if record is not None:
             obj, values = record
-            plans = [_split_adaptive(v) for v in values]
-            _guard_chunk_cap(sum(len(plan) for plan in plans))
-            outs = await asyncio.gather(*(render_chunks(plan) for plan in plans))
+            plans = [_plan_value(v) for v in values]
+            _guard_chunk_cap(sum(len(chunks) for _lits, chunks in plans))
+            outs = await asyncio.gather(*(
+                render_value(lits, chunks, v) for v, (lits, chunks) in zip(values, plans)))
             meta = base_meta("translate", None)
             meta["prose_values_translated"] = len(values)
             return json.dumps(_replace_prose(obj, None, dict(zip(values, outs))), ensure_ascii=False), meta
 
-        chunks, _src, _tgt = _translate_chunks(body)
+        literals, chunks, _src, _tgt = _translate_plan(body)
+        source = body.supplied_text()
         if len(chunks) == 1:
-            return await render(chunks[0][0]), base_meta("translate", None)
-        final = await render_chunks(chunks)
+            return await render(chunks[0][0], literals, source), base_meta("translate", None)
+        final = await render_value(literals, chunks, source)
         meta = base_meta("translate", None)
         meta["chunks"] = len(chunks)
         return final, meta
@@ -1482,13 +1660,23 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return {"translated_text": text, "translation": text, "metadata": metadata}
 
     def _sse_assemble_stream(body: LegacyRequest) -> AsyncIterator[bytes]:
-        """Assemble via translate_assemble() (chunked-translate or CVE-record path) and
-        emit as one token+final SSE frame. True token streaming is traded for guaranteed
-        completeness (no truncated tail, no per-chunk partial JSON)."""
+        """Assemble via translate_assemble() and emit as one token+final SSE frame. True
+        token streaming is traded for guaranteed completeness: placeholders can only be
+        verified/restored on the whole chunk, and the per-token Han/HTML scrubbing of the
+        generic stream path would delete or rewrite translated content."""
         async def gen() -> AsyncIterator[bytes]:
             try:
                 final, meta = await translate_assemble(body)
-            except Exception:  # provider/runtime failure → visible error, not a torn stream
+            except Exception as exc:  # provider/runtime failure → visible error, not a torn stream
+                if _is_integrity_error(exc):
+                    # Never present an apology as the "translation": explicit error + empty text.
+                    msg = exc.detail["message"]  # type: ignore[union-attr]
+                    yield sse_frame("error", {"error": msg, "code": "TRANSLATION_INTEGRITY"})
+                    yield sse_frame("final", {"content": "", "translation": "", "translated_text": "",
+                                              "error": msg, "code": "TRANSLATION_INTEGRITY",
+                                              "metadata": base_meta("translate", None)})
+                    yield b"data: [DONE]\n\n"
+                    return
                 logger.exception("chunked translate_stream failed")
                 final, meta = STREAM_ERROR_MESSAGE, base_meta("translate", None)
                 yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
@@ -1506,26 +1694,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # otherwise an oversized JSON record would 200+SSE-error mid-stream instead of a
             # clean 413, breaking the "413 before streaming starts" contract for this path only.
             _, values = record
-            _guard_chunk_cap(sum(len(_split_adaptive(v)) for v in values))
-            return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
-
-        chunks, src, tgt = _translate_chunks(body)  # raises 413 before streaming starts
-
-        if len(chunks) <= 1 and not _target_writes_han(tgt):
-            # A zh/ja target takes the assembled path below: the live token stream and
-            # stream()'s final both strip Han ideographs (chat's VI/EN-only filter), which
-            # would delete the translation itself.
-            prompt, literals = build_translate_prompt(chunks[0][0], src, tgt)
-
-            async def build_final(final: str, run_id: str | None) -> dict[str, Any]:
-                # Restore literals in the authoritative `final` event (token deltas may still
-                # show ⟦L…⟧ placeholders mid-stream; the final text is always correct).
-                final = _strip_prompt_echo(unmask_literals(final, literals))
-                return {"content": final, "translation": final, "translated_text": final, "metadata": base_meta("translate", run_id)}
-
-            return stream("translate", prompt, None, build_final)
-
-        # Long input: assemble the chunked translation, then emit it as one token+final SSE.
+            _guard_chunk_cap(sum(len(_plan_value(v)[1]) for v in values))
+        else:
+            _translate_plan(body)  # raises 400/413 before streaming starts
         return StreamingResponse(_sse_assemble_stream(body), media_type="text/event-stream")
 
     @app.post("/ai/generate-report")
@@ -1545,9 +1716,1510 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # Legacy gemini shape: report_title / report_summary / report_detail (parsed from JSON).
         result = parse_statistical(text)
         table = statistical_detail_table(body)
-        if table is not None:  # structured `detail[]` given — code-rendered table wins over the model's own report_detail.
-            result["report_detail"] = table
+        if table is not None:  # structured `detail[]` / `listData` given — merge table with model recommendations.
+            result["report_detail"] = merge_detail_table(result.get("report_detail", ""), table)
         return {**result, "report": text, "statistical_report": text, "metadata": metadata}
+
+    @app.post("/ai/generate-template-report", response_class=Response)
+    async def generate_template_report(
+        file: UploadFile | None = None,
+        template_text: str | None = Form(None),
+        data: str = Form(...),
+        output_format: str = Form("docx"),
+        file_format: str | None = Form(None),
+        raw_binary: bool = Form(False)
+    ):
+        import os, tempfile, uuid, json, base64
+        from fastapi import HTTPException
+        from fastapi.responses import Response, JSONResponse
+        from docxtpl import DocxTemplate
+        import docx
+        import docx.text.paragraph
+        import unicodedata
+        import re
+
+        output_format_lower = str(output_format or "docx").strip().lower()
+        if output_format_lower not in ["docx", "pdf", "markdown", "md", "text", "json"]:
+            raise HTTPException(
+                status_code=400,
+                detail="output_format must be 'docx', 'pdf', 'markdown' (or 'md'), or 'json'"
+            )
+        
+        try:
+            scan_data = json.loads(data)
+            if not isinstance(scan_data, dict):
+                scan_data = {"raw_data": scan_data}
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in data field")
+
+        def clean_text(text: str) -> str:
+            if not text:
+                return ""
+            text = unicodedata.normalize('NFC', text)
+            return re.sub(r'[\s\xa0\t]+', ' ', text).strip()
+
+        def strip_accents(s: str) -> str:
+            s = str(s).replace('đ', 'd').replace('Đ', 'd')
+            return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn').lower()
+
+        ROMAN_TO_INT = {
+            "I": 1, "II": 2, "III": 3, "IV": 4, "V": 5,
+            "VI": 6, "VII": 7, "VIII": 8, "IX": 9, "X": 10,
+            "XI": 11, "XII": 12, "XIII": 13, "XIV": 14, "XV": 15
+        }
+        ROMAN_NUMS_PATTERN = r"(?:I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV)"
+
+        def extract_section_number(text: str) -> str | None:
+            t = clean_text(text).strip()
+            if not t:
+                return None
+            t = re.sub(r'^[#*_\s]+|[#*_\s]+$', '', t)
+            # 1. Matches: "Mục 1", "Phần 2", "Chương 3", "Mục II", "Phần IV"
+            m_pref = re.match(rf'^(?:mục|phần|chương|bài|điều)\s*(\d+(?:\.\d+)*|{ROMAN_NUMS_PATTERN})[\.\)\:\s-]?', t, flags=re.IGNORECASE)
+            if m_pref:
+                val = m_pref.group(1).upper()
+                if val in ROMAN_TO_INT:
+                    return str(ROMAN_TO_INT[val])
+                return val.split('.')[0]
+            # 2. Matches Roman: "I.", "II.", "III.", "IV.", "V.", etc.
+            m_rom = re.match(rf'^({ROMAN_NUMS_PATTERN})[\.\)\:\s-]', t, flags=re.IGNORECASE)
+            if m_rom:
+                roman = m_rom.group(1).upper()
+                if roman in ROMAN_TO_INT:
+                    return str(ROMAN_TO_INT[roman])
+            # 3. Matches standard digits: "1.", "1.1", "1)", "1:", "1 -", "1 "
+            m_num = re.match(r'^(\d+(?:\.\d+)*)[\.\)\:\s-]', t)
+            if m_num:
+                return m_num.group(1).split('.')[0]
+            # 4. Pure leading digits: "1", "2"
+            m_pure = re.match(r'^(\d+)\b', t)
+            if m_pure:
+                return m_pure.group(1)
+            return None
+
+        def normalize_key(text: str) -> str:
+            text = clean_text(text)
+            text = re.sub(r'^[#*_\s]+', '', text)
+            text = re.sub(r'[#*_\s]+$', '', text)
+            text = re.sub(r'^\{\{\s*|\s*\}\}$', '', text)
+            text = re.sub(r'[:\-.]+$', '', text).strip()
+            text = re.sub(rf'^(?:mục|phần|chương|bài|điều)?\s*(?:\d+(?:\.\d+)*|{ROMAN_NUMS_PATTERN})[\.\)\:\s-]+', '', text, flags=re.IGNORECASE).strip()
+            text = text.replace('_', ' ')
+            return text.lower()
+
+        def is_static_template_element(text: str) -> bool:
+            if not text:
+                return True
+            t_clean = clean_text(text).strip()
+            if not t_clean:
+                return True
+            t_noaccent = strip_accents(t_clean).lower()
+
+            # 1. Jinja variable tags
+            if "{{" in t_clean and "}}" in t_clean:
+                return True
+
+            # 2. Quốc hiệu, Tiêu ngữ
+            if any(q in t_noaccent for q in ["cong hoa xa hoi chu nghia viet nam", "doc lap - tu do - hanh phuc", "doc lap – tu do – hanh phuc", "doc lap — tu do — hanh phuc"]):
+                return True
+
+            # 3. Ngày tháng, địa danh: "Hà Nội, ngày 25 tháng 8 năm 2026", "ngày ... tháng ... năm ..."
+            if re.search(r'ngay\s+\d+\s+thang\s+\d+\s+nam\s+\d+', t_noaccent) or re.search(r'ngay\s*\.{2,}\s*thang', t_noaccent):
+                return True
+
+            # 4. Tiêu đề chung tài liệu: "Báo cáo", "Báo cáo đánh giá..."
+            if t_noaccent in ["bao cao", "bao cao danh gia", "bao cao ket qua", "bao cao kiem thu", "phieu danh gia", "bien ban"]:
+                return True
+            if re.match(r'^(?:bao cao|phieu danh gia|bien ban)\b', t_noaccent) and extract_section_number(t_clean) is None:
+                return True
+
+            # 5. Kính gửi, Nơi nhận và các gạch đầu dòng người nhận (QUAN TRỌNG)
+            if re.match(r'^(?:kinh gui|noi nhan)\b', t_noaccent):
+                return True
+            if re.match(r'^[\-•\+\*]\s+', t_clean) and extract_section_number(t_clean) is None:
+                return True
+            if t_clean.rstrip().endswith(';') and extract_section_number(t_clean) is None:
+                return True
+            recipient_keywords = [
+                "thu truong", "ban giam doc", "dong chi", "cac dong chi", "lanh dao", "don vi",
+                "nhu tren", "luu:", "luu vt", "phong ban", "ban chi huy"
+            ]
+            if extract_section_number(t_clean) is None and any(rk in t_noaccent for rk in recipient_keywords):
+                return True
+
+            # 6. Căn cứ, Thực hiện, Mục đích ban hành văn bản hành chính
+            if re.match(r'^(?:can cu|thuc hien|nham|theo quyet dinh|theo ke hoach)\b', t_noaccent):
+                return True
+
+            # 7. Số hiệu văn bản
+            if re.match(r'^so\s*[:\.]', t_noaccent):
+                return True
+
+            # 8. Tên cơ quan, đơn vị ban hành
+            agency_keywords = [
+                "bo quoc phong", "bo cong an", "bo thong tin", "bo tu lenh", "trung tam",
+                "cuc an toan", "tap doan", "tong cong ty", "cong ty", "so thong tin",
+                "phong an toan thong tin", "trung tam giam sat", "vien cong nghe"
+            ]
+            if extract_section_number(t_clean) is None and any(ak in t_noaccent for ak in agency_keywords):
+                return True
+
+            # 9. Khối chức vụ & chữ ký người ký
+            sig_keywords = [
+                "chi huy", "giam doc", "pho giam doc", "truong phong", "pho phong",
+                "truong doan", "nguoi lap", "nguoi lap bao cao", "nguoi soan", "nguoi soan bao cao",
+                "nguoi duyet", "xac nhan", "ki ten", "ky ten", "chu ky", "dai dien"
+            ]
+            if t_noaccent in sig_keywords:
+                return True
+            for sk in sig_keywords:
+                if t_noaccent.startswith(sk + ":") or t_noaccent.startswith(sk + " -") or t_noaccent.startswith(sk + " –"):
+                    return True
+
+            # 10. Tên người ký hoặc dòng văn bản không phải đầu mục nội dung
+            sec_num = extract_section_number(t_clean)
+            if sec_num is None:
+                sec_words = [
+                    "tong quan", "chi tiet", "khuyen nghi", "ket luan", "lo hong",
+                    "danh gia", "bien phap", "pham vi", "muc tieu", "noi dung",
+                    "thoi gian", "phuong phap", "hien trang"
+                ]
+                has_sec_word = any(sw in t_noaccent for sw in sec_words)
+                if not has_sec_word:
+                    return True
+                name_starts = ["nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do", "ho", "ngo", "duong", "dinh"]
+                if any(t_noaccent.startswith(ns + " ") for ns in name_starts):
+                    return True
+
+            return False
+
+        def split_template_text(text: str) -> list[str]:
+            if not text:
+                return []
+            text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+            
+            initial_chunks = [c.strip() for c in text.split("\n") if c.strip()]
+            pattern = r"(?<!^)(?=(?:\b(?<!Mục\s)(?<!Phần\s)(?<!Chương\s)\d+[\.\)\/:]|\b(?:I|II|III|IV|V|VI|VII|VIII|IX|X)[\.\)\/:]|\b(?:Mục|Phần|Chương)\s+\d+[\.\:\/]?|\bKí tên\b|\bKý tên\b|\bChữ ký\b)\s*)"
+            
+            final_headings = []
+            for chunk in initial_chunks:
+                chunk = re.sub(r"\s*[\-|–—|]\s*(?=(?:\b(?<!Mục\s)(?<!Phần\s)\d+[\.\)\/:]|\b(?:I|II|III|IV|V)[\.\)\/:]|\b(?:Mục|Phần)\s+\d+))", " ", chunk)
+                sub_chunks = re.split(pattern, chunk, flags=re.IGNORECASE)
+                for sc in sub_chunks:
+                    sc = sc.strip()
+                    if not sc:
+                        continue
+                    # If this chunk starts with a bullet/dash before a numbered heading, clean the leading dash
+                    if re.match(r'^[\-•*–—|]\s*(?:\b(?<!Mục\s)(?<!Phần\s)\d+[\.\)\/:]|\b(?:I|II|III|IV|V)[\.\)\/:]|\b(?:Mục|Phần)\s+\d+)', sc, flags=re.IGNORECASE):
+                        sc = re.sub(r'^[\-•*–—|]\s*', '', sc).strip()
+                    # Strip trailing dashes, commas or pipes from splitting, but keep trailing semicolon for list items
+                    sc = sc.rstrip('-–—|, \t')
+                    if not sc:
+                        continue
+                    sig_match = re.match(r"^(kí tên|ký tên|chữ ký)[\s:\-]+(.+)$", sc, flags=re.IGNORECASE)
+                    if sig_match:
+                        final_headings.append(sig_match.group(1).strip())
+                        final_headings.append(sig_match.group(2).strip())
+                    else:
+                        final_headings.append(sc)
+            return final_headings
+
+        effective_template_text = (template_text or "").strip()
+        if not effective_template_text and isinstance(scan_data, dict):
+            effective_template_text = str(scan_data.get("template_text") or scan_data.get("template") or "").strip()
+
+        file_bytes = b""
+        if file is not None and getattr(file, "filename", None):
+            try:
+                file_bytes = await file.read()
+            except Exception:
+                file_bytes = b""
+
+        if not file_bytes and not effective_template_text:
+            raise HTTPException(
+                status_code=400,
+                detail="Vui lòng tải lên file template Word (.docx) hoặc nhập nội dung mẫu báo cáo (template_text)."
+            )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_docx = os.path.join(tmpdir, f"{uuid.uuid4()}.docx")
+            if file_bytes:
+                with open(input_docx, "wb") as f:
+                    f.write(file_bytes)
+            else:
+                doc_init = docx.Document()
+                for section in doc_init.sections:
+                    section.top_margin = docx.shared.Inches(1.0)
+                    section.bottom_margin = docx.shared.Inches(1.0)
+                    section.left_margin = docx.shared.Inches(1.0)
+                    section.right_margin = docx.shared.Inches(1.0)
+
+                parsed_headings = split_template_text(effective_template_text)
+                for line_s in parsed_headings:
+                    p = doc_init.add_paragraph()
+                    p.paragraph_format.space_before = docx.shared.Pt(3)
+                    p.paragraph_format.space_after = docx.shared.Pt(3)
+                    p.paragraph_format.line_spacing = 1.15
+                    run = p.add_run(line_s)
+                    run.font.name = "Times New Roman"
+                    line_norm = normalize_key(line_s)
+                    line_noaccent = strip_accents(line_s).lower()
+
+                    if any(q in line_noaccent for q in ["cong hoa xa hoi chu nghia viet nam", "doc lap - tu do - hanh phuc", "doc lap – tu do – hanh phuc"]):
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(12)
+                    elif re.search(r'ngay\s+\d+\s+thang\s+\d+\s+nam\s+\d+', line_noaccent):
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                        run.italic = True
+                        run.font.size = docx.shared.Pt(11)
+                    elif line_norm in ["báo cáo", "bao cao"] or (line_noaccent.startswith("bao cao") and extract_section_number(line_s) is None):
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
+                        p.paragraph_format.space_before = docx.shared.Pt(14)
+                        p.paragraph_format.space_after = docx.shared.Pt(12)
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(16)
+                    elif re.match(r'^(?:kinh gui|noi nhan)\b', line_noaccent):
+                        p.paragraph_format.left_indent = docx.shared.Pt(14)
+                        p.paragraph_format.space_before = docx.shared.Pt(8)
+                        p.paragraph_format.space_after = docx.shared.Pt(2)
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(12)
+                    elif line_s.strip().startswith("-") or line_s.strip().startswith("•") or line_s.strip().endswith(";"):
+                        p.paragraph_format.left_indent = docx.shared.Pt(28)
+                        p.paragraph_format.space_before = docx.shared.Pt(1)
+                        p.paragraph_format.space_after = docx.shared.Pt(2)
+                        run.font.size = docx.shared.Pt(12)
+                    elif extract_section_number(line_s) is not None or re.match(r'^\d+[\.\)]\s*', line_s):
+                        p.paragraph_format.space_before = docx.shared.Pt(8)
+                        p.paragraph_format.space_after = docx.shared.Pt(4)
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(13)
+                    elif line_norm in ["kí tên", "ki ten", "chữ ký", "chu ky"] or any(sk in line_noaccent for sk in ["chi huy", "nguoi soan bao cao", "nguoi lap"]):
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                        p.paragraph_format.space_before = docx.shared.Pt(14)
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(12)
+                    elif any(line_noaccent.startswith(ns + " ") for ns in ["nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do", "ho", "ngo", "duong", "dinh"]) and extract_section_number(line_s) is None:
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                        run.bold = True
+                        run.font.size = docx.shared.Pt(12)
+                    else:
+                        run.font.size = docx.shared.Pt(11)
+
+                doc_init.save(input_docx)
+
+            SEMANTIC_SYNONYMS = {
+                "chi tiet": ["vulnerabilities", "details", "vulns", "lo hong", "danh sach lo hong", "chi tiet lo hong", "danh sach chi tiet", "cac lo hong", "ket qua chi tiet", "diem yeu", "diem yeu an ninh", "lo hong bao mat"],
+                "tong quan": ["summary", "overview", "tong quan danh gia", "danh gia tong quan", "tong quan kiem thu", "khai quat", "khao sat", "muc tieu khao sat", "pham vi khao sat", "ket qua khao sat"],
+                "thoi gian": ["scan_time", "time", "date", "ngay quet", "thoi gian quet", "thoi gian thuc hien", "thoi gian kiem thu", "thoi diem", "ngay lap"],
+                "khuyen nghi": ["recommendations", "khuyen nghi khac phuc", "remediation", "giai phap", "bien phap", "phong ngua", "khac phuc", "bien phap khac phuc", "phuong an", "phuong an xu ly", "lo trinh", "lo trinh khac phuc"],
+                "ket luan": ["conclusion", "danh gia chung", "assessment", "kien nghi", "ket luan chung"],
+            }
+
+            def find_matching_content(p_text: str, data_dict: dict, used_keys: set):
+                if not p_text or not data_dict:
+                    return None, None
+                p_clean = clean_text(p_text)
+                p_norm = normalize_key(p_text)
+                p_norm_noaccent = strip_accents(p_norm)
+                p_sec = extract_section_number(p_text)
+
+                if p_text in data_dict and p_text not in used_keys:
+                    return p_text, data_dict[p_text]
+
+                for k, v in data_dict.items():
+                    if k in used_keys:
+                        continue
+                    if clean_text(k) == p_clean:
+                        return k, v
+
+                for k, v in data_dict.items():
+                    if k in used_keys:
+                        continue
+                    if normalize_key(k) == p_norm:
+                        return k, v
+
+                for k, v in data_dict.items():
+                    if k in used_keys:
+                        continue
+                    if strip_accents(normalize_key(k)) == p_norm_noaccent:
+                        return k, v
+
+                for std_term, synonyms in SEMANTIC_SYNONYMS.items():
+                    if p_norm_noaccent == std_term or any(syn in p_norm_noaccent for syn in synonyms):
+                        for k, v in data_dict.items():
+                            if k in used_keys:
+                                continue
+                            k_norm_noaccent = strip_accents(normalize_key(k))
+                            if k_norm_noaccent == std_term or any(syn in k_norm_noaccent for syn in synonyms):
+                                return k, v
+
+                if p_sec:
+                    for k, v in data_dict.items():
+                        if k in used_keys:
+                            continue
+                        k_sec = extract_section_number(k)
+                        if k_sec and k_sec == p_sec:
+                            return k, v
+
+                for k, v in data_dict.items():
+                    if k in used_keys:
+                        continue
+                    k_norm = normalize_key(k)
+                    if len(p_norm) >= 4 and (p_norm in k_norm or k_norm in p_norm):
+                        return k, v
+
+                return None, None
+
+            def format_vulnerabilities_table(vulns: Any, sec_num: str = "2") -> str:
+                if not isinstance(vulns, list) or not vulns:
+                    return ""
+                sub_heading = f"{sec_num}.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:" if sec_num else "Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:"
+                lines = [
+                    sub_heading,
+                    "| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |",
+                    "|---|---|---|---|---|"
+                ]
+                for idx, v in enumerate(vulns, 1):
+                    if isinstance(v, dict):
+                        name = (v.get("name") or v.get("title") or v.get("vuln_name") or v.get("cve") or f"Lỗ hổng #{idx}").replace("|", "-")
+                        sev = (v.get("severity") or v.get("level") or v.get("risk") or "Trung bình").replace("|", "-")
+                        desc = (v.get("description") or v.get("desc") or v.get("detail") or v.get("details") or "").replace("|", "-").replace("\n", " ")
+                        rec = (v.get("recommendation") or v.get("solution") or v.get("fix") or v.get("remediation") or v.get("mitigation") or "").replace("|", "-").replace("\n", " ")
+                        lines.append(f"| {idx} | {name} | {sev} | {desc} | {rec} |")
+                    else:
+                        lines.append(f"| {idx} | {str(v).replace('|', '-')} | Thông tin | - | - |")
+                return "\n".join(lines)
+
+            def format_summary_table(scan_data_dict: Any, sec_num: str = "1") -> str:
+                if not isinstance(scan_data_dict, dict):
+                    return ""
+                vulns = scan_data_dict.get("vulnerabilities") or scan_data_dict.get("chi_tiet") or scan_data_dict.get("details") or scan_data_dict.get("lo_hong") or []
+                summary = scan_data_dict.get("summary") or scan_data_dict.get("statistics")
+                if not isinstance(summary, dict):
+                    summary = {}
+                
+                def _to_cnt(val):
+                    if isinstance(val, int):
+                        return val
+                    if isinstance(val, str) and val.strip().isdigit():
+                        return int(val.strip())
+                    return 0
+
+                sum_lower = {str(k).lower(): v for k, v in summary.items()} if isinstance(summary, dict) else {}
+                crit_count = _to_cnt(sum_lower.get("critical") or sum_lower.get("nghiem_trong") or sum_lower.get("nghiêm trọng"))
+                high_count = _to_cnt(sum_lower.get("high") or sum_lower.get("cao"))
+                med_count = _to_cnt(sum_lower.get("medium") or sum_lower.get("trung_binh") or sum_lower.get("trung bình"))
+                low_count = _to_cnt(sum_lower.get("low") or sum_lower.get("thap") or sum_lower.get("thấp"))
+
+                if not (crit_count or high_count or med_count or low_count) and isinstance(vulns, list):
+                    for v in vulns:
+                        if isinstance(v, dict):
+                            sev = str(v.get("severity") or v.get("level") or v.get("risk") or "").lower()
+                            if "crit" in sev or "nghiêm trọng" in sev or "nghiem trong" in sev:
+                                crit_count += 1
+                            elif "high" in sev or "cao" in sev:
+                                high_count += 1
+                            elif "med" in sev or "trung bình" in sev or "trung binh" in sev:
+                                med_count += 1
+                            elif "low" in sev or "thấp" in sev or "thap" in sev:
+                                low_count += 1
+                                
+                total = crit_count + high_count + med_count + low_count
+                if total == 0 and not vulns:
+                    return ""
+                    
+                sub_heading = f"{sec_num}.2. Bảng thống kê lỗ hổng phát hiện:" if sec_num else "Bảng thống kê lỗ hổng phát hiện:"
+                lines = [
+                    sub_heading,
+                    "| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |",
+                    "|---|---|---|",
+                    f"| Nghiêm trọng (Critical) | {crit_count} | Khẩn cấp (trong vòng 24h) |",
+                    f"| Cao (High) | {high_count} | Ưu tiên cao |",
+                    f"| Trung bình (Medium) | {med_count} | Kế hoạch bảo trì tiếp theo |",
+                    f"| Thấp (Low) | {low_count} | Theo dõi thường xuyên |"
+                ]
+                return "\n".join(lines)
+
+            def create_styled_table(doc, anchor, headers, rows_data, col_widths=None, insert_before: bool = False):
+                num_rows = len(rows_data) + 1
+                num_cols = len(headers)
+                table = doc.add_table(rows=num_rows, cols=num_cols)
+                table.alignment = docx.enum.table.WD_TABLE_ALIGNMENT.CENTER
+                table.autofit = False
+
+                if insert_before:
+                    if hasattr(anchor, '_p'):
+                        anchor._p.addprevious(table._tbl)
+                    elif hasattr(anchor, '_tbl'):
+                        anchor._tbl.addprevious(table._tbl)
+                else:
+                    if hasattr(anchor, '_p'):
+                        anchor._p.addnext(table._tbl)
+                    elif hasattr(anchor, '_tbl'):
+                        anchor._tbl.addnext(table._tbl)
+
+                if not col_widths or len(col_widths) != num_cols:
+                    if num_cols == 5:
+                        col_widths = [docx.shared.Inches(0.5), docx.shared.Inches(1.5), docx.shared.Inches(0.9), docx.shared.Inches(1.8), docx.shared.Inches(1.8)]
+                    elif num_cols == 3:
+                        col_widths = [docx.shared.Inches(2.0), docx.shared.Inches(1.2), docx.shared.Inches(3.3)]
+                    else:
+                        col_widths = [docx.shared.Inches(6.5 / num_cols)] * num_cols
+
+                for col_idx, width in enumerate(col_widths):
+                    table.columns[col_idx].width = width
+                for row in table.rows:
+                    for idx, width in enumerate(col_widths):
+                        row.cells[idx].width = width
+
+                tblPr = table._tbl.tblPr
+                borders = docx.oxml.parse_xml(
+                    r'<w:tblBorders {} >'
+                    r'<w:top w:val="single" w:sz="6" w:space="0" w:color="1F4E79"/>'
+                    r'<w:bottom w:val="single" w:sz="6" w:space="0" w:color="1F4E79"/>'
+                    r'<w:left w:val="none"/>'
+                    r'<w:right w:val="none"/>'
+                    r'<w:insideH w:val="single" w:sz="4" w:space="0" w:color="E0E0E0"/>'
+                    r'<w:insideV w:val="single" w:sz="4" w:space="0" w:color="EAECEE"/>'
+                    r'</w:tblBorders>'.format(docx.oxml.ns.nsdecls('w'))
+                )
+                tblPr.append(borders)
+                tblCellMar = docx.oxml.parse_xml(
+                    r'<w:tblCellMar {} >'
+                    r'<w:top w:w="120" w:type="dxa"/>'
+                    r'<w:bottom w:w="120" w:type="dxa"/>'
+                    r'<w:left w:w="160" w:type="dxa"/>'
+                    r'<w:right w:w="160" w:type="dxa"/>'
+                    r'</w:tblCellMar>'.format(docx.oxml.ns.nsdecls('w'))
+                )
+                tblPr.append(tblCellMar)
+
+                header_tr = table.rows[0]._tr.get_or_add_trPr()
+                header_tr.append(docx.oxml.parse_xml(r'<w:tblHeader {} />'.format(docx.oxml.ns.nsdecls('w'))))
+                for col_idx, text in enumerate(headers):
+                    cell = table.cell(0, col_idx)
+                    cell._tc.get_or_add_tcPr().append(docx.oxml.parse_xml(r'<w:shd {} w:fill="1F4E79"/>'.format(docx.oxml.ns.nsdecls('w'))))
+                    p = cell.paragraphs[0]
+                    p.paragraph_format.space_before = docx.shared.Pt(4)
+                    p.paragraph_format.space_after = docx.shared.Pt(4)
+                    p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER if col_idx in [0, 2] else docx.enum.text.WD_ALIGN_PARAGRAPH.LEFT
+                    clean_h = text.replace('*', '').replace('_', '').strip()
+                    run = p.add_run(clean_h)
+                    run.bold = True
+                    run.font.color.rgb = docx.shared.RGBColor(255, 255, 255)
+                    run.font.name = 'Times New Roman'
+                    run.font.size = docx.shared.Pt(10)
+
+                for row_idx, r_data in enumerate(rows_data, start=1):
+                    trPr = table.rows[row_idx]._tr.get_or_add_trPr()
+                    trPr.append(docx.oxml.parse_xml(r'<w:cantSplit {} />'.format(docx.oxml.ns.nsdecls('w'))))
+                    bg_color = 'F7F9FB' if row_idx % 2 == 1 else 'FFFFFF'
+                    for col_idx in range(num_cols):
+                        val = r_data[col_idx] if col_idx < len(r_data) else ""
+                        cell = table.cell(row_idx, col_idx)
+                        cell._tc.get_or_add_tcPr().append(docx.oxml.parse_xml(r'<w:shd {} w:fill="{}"/>'.format(docx.oxml.ns.nsdecls('w'), bg_color)))
+                        p = cell.paragraphs[0]
+                        p.paragraph_format.space_before = docx.shared.Pt(3)
+                        p.paragraph_format.space_after = docx.shared.Pt(3)
+                        p.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER if col_idx in [0, 2] else docx.enum.text.WD_ALIGN_PARAGRAPH.LEFT
+                        val_str = str(val).strip()
+                        clean_markdown_and_add_runs(p, val_str, base_font='Times New Roman', font_size=docx.shared.Pt(9.5))
+                        if col_idx == 2 or (num_cols == 3 and col_idx == 0):
+                            is_crit = any(x in val_str for x in ['Nghiêm trọng', 'Critical'])
+                            is_high = any(x in val_str for x in ['Cao', 'High'])
+                            is_med = any(x in val_str for x in ['Trung bình', 'Medium'])
+                            is_low = any(x in val_str for x in ['Thấp', 'Low'])
+                            for r in p.runs:
+                                if is_crit:
+                                    r.bold = True
+                                    r.font.color.rgb = docx.shared.RGBColor(156, 0, 6)
+                                elif is_high:
+                                    r.bold = True
+                                    r.font.color.rgb = docx.shared.RGBColor(192, 0, 0)
+                                elif is_med:
+                                    r.bold = True
+                                    r.font.color.rgb = docx.shared.RGBColor(180, 100, 0)
+                                elif is_low:
+                                    r.bold = True
+                                    r.font.color.rgb = docx.shared.RGBColor(39, 174, 96)
+
+                return table
+
+            def clean_markdown_and_add_runs(paragraph, text, base_font="Times New Roman", font_size=docx.shared.Pt(11)):
+                text = re.sub(r'^\s*#{1,6}\s*', '', text)
+                pattern = r'(\*\*\*.*?\*\*\*|\*\*.*?\*\*|\*.*?\*|___.*?___|__.*?__|_[^_]+_)'
+                tokens = re.split(pattern, text)
+                for token in tokens:
+                    if not token:
+                        continue
+                    bold = False
+                    italic = False
+                    content = token
+                    if (content.startswith('***') and content.endswith('***')) or (content.startswith('___') and content.endswith('___')):
+                        content = content[3:-3]
+                        bold = True
+                        italic = True
+                    elif (content.startswith('**') and content.endswith('**')) or (content.startswith('__') and content.endswith('__')):
+                        content = content[2:-2]
+                        bold = True
+                    elif (content.startswith('*') and content.endswith('*')) or (content.startswith('_') and content.endswith('_')):
+                        content = content[1:-1]
+                        italic = True
+                    content = content.replace('**', '').replace('***', '').replace('__', '').replace('*', '')
+                    if not content:
+                        continue
+                    run = paragraph.add_run(content)
+                    run.bold = bold
+                    run.italic = italic
+                    run.font.name = base_font
+                    run.font.size = font_size
+
+            def render_content_with_tables(doc, current_anchor, content_str, base_font="Times New Roman"):
+                lines = content_str.split('\n')
+                idx = 0
+                while idx < len(lines):
+                    line = lines[idx].strip()
+                    if not line:
+                        idx += 1
+                        continue
+                        
+                    if line.startswith('|'):
+                        table_lines = []
+                        while idx < len(lines) and lines[idx].strip().startswith('|'):
+                            table_lines.append(lines[idx].strip())
+                            idx += 1
+                        rows = []
+                        for tl in table_lines:
+                            raw_line = tl.strip()
+                            raw_line = re.sub(r'^\|\s*', '', raw_line)
+                            raw_line = re.sub(r'\s*\|$', '', raw_line)
+                            cells = [c.strip() for c in raw_line.split('|')]
+                            if all(re.match(r'^:?-+:?$', c) for c in cells):
+                                continue
+                            rows.append(cells)
+                        if len(rows) >= 2:
+                            headers = rows[0]
+                            num_cols = len(headers)
+                            data = []
+                            for r in rows[1:]:
+                                if len(r) < num_cols:
+                                    r = r + [""] * (num_cols - len(r))
+                                elif len(r) > num_cols:
+                                    r = r[:num_cols]
+                                data.append(r)
+                            if num_cols == 5:
+                                col_w = [docx.shared.Inches(0.5), docx.shared.Inches(1.5), docx.shared.Inches(0.9), docx.shared.Inches(1.8), docx.shared.Inches(1.8)]
+                            elif num_cols == 3:
+                                col_w = [docx.shared.Inches(2.0), docx.shared.Inches(1.2), docx.shared.Inches(3.3)]
+                            else:
+                                col_w = [docx.shared.Inches(6.5 / num_cols)] * num_cols
+                            current_anchor = create_styled_table(doc, current_anchor, headers, data, col_w)
+                        continue
+
+                    new_p = docx.text.paragraph.Paragraph(docx.oxml.OxmlElement('w:p'), doc._body._element)
+                    if hasattr(current_anchor, '_p'):
+                        current_anchor._p.addnext(new_p._p)
+                    elif hasattr(current_anchor, '_tbl'):
+                        current_anchor._tbl.addnext(new_p._p)
+                    current_anchor = new_p
+
+                    if re.match(r'^\d+\.\d+(?:\.\d+)*\b', line):
+                        new_p.paragraph_format.left_indent = docx.shared.Pt(14)
+                        new_p.paragraph_format.space_before = docx.shared.Pt(5)
+                        new_p.paragraph_format.space_after = docx.shared.Pt(2)
+                        new_p.paragraph_format.line_spacing = 1.15
+                        match_colon = re.match(r'^(\d+\.\d+(?:\.\d+)*\.?\s*[^:]+:)\s*(.*)$', line)
+                        if match_colon:
+                            lbl, val = match_colon.group(1), match_colon.group(2)
+                            r_lbl = new_p.add_run(lbl + " ")
+                            r_lbl.bold = True
+                            r_lbl.font.name = base_font
+                            r_lbl.font.size = docx.shared.Pt(11)
+                            clean_markdown_and_add_runs(new_p, val, base_font=base_font, font_size=docx.shared.Pt(11))
+                        else:
+                            r = new_p.add_run(re.sub(r'[\*_]', '', line))
+                            r.bold = True
+                            r.font.name = base_font
+                            r.font.size = docx.shared.Pt(11)
+                    elif re.match(r'^[a-z]\)\s*', line, flags=re.IGNORECASE):
+                        new_p.paragraph_format.left_indent = docx.shared.Pt(28)
+                        new_p.paragraph_format.space_before = docx.shared.Pt(1)
+                        new_p.paragraph_format.space_after = docx.shared.Pt(2)
+                        new_p.paragraph_format.line_spacing = 1.15
+                        match_colon = re.match(r'^([a-z]\)\s*[^:]+:)\s*(.*)$', line, flags=re.IGNORECASE)
+                        if match_colon:
+                            lbl, val = match_colon.group(1), match_colon.group(2)
+                            r_lbl = new_p.add_run(lbl + " ")
+                            r_lbl.bold = True
+                            r_lbl.font.name = base_font
+                            r_lbl.font.size = docx.shared.Pt(11)
+                            clean_markdown_and_add_runs(new_p, val, base_font=base_font, font_size=docx.shared.Pt(11))
+                        else:
+                            clean_markdown_and_add_runs(new_p, line, base_font=base_font, font_size=docx.shared.Pt(11))
+                    elif line.startswith('- ') or line.startswith('• ') or line.startswith('* '):
+                        new_p.paragraph_format.left_indent = docx.shared.Pt(28)
+                        new_p.paragraph_format.space_before = docx.shared.Pt(1)
+                        new_p.paragraph_format.space_after = docx.shared.Pt(2)
+                        new_p.paragraph_format.line_spacing = 1.15
+                        clean_bullet = re.sub(r'^[\-\*•]\s*', '• ', line)
+                        clean_markdown_and_add_runs(new_p, clean_bullet, base_font=base_font, font_size=docx.shared.Pt(11))
+                    else:
+                        new_p.paragraph_format.left_indent = docx.shared.Pt(14)
+                        new_p.paragraph_format.space_before = docx.shared.Pt(2)
+                        new_p.paragraph_format.space_after = docx.shared.Pt(3)
+                        new_p.paragraph_format.line_spacing = 1.15
+                        clean_markdown_and_add_runs(new_p, line, base_font=base_font, font_size=docx.shared.Pt(11))
+
+                    idx += 1
+
+                return current_anchor
+
+            def parse_markdown_table_lines(table_lines: list[str]):
+                rows = []
+                for tl in table_lines:
+                    raw_line = tl.strip()
+                    raw_line = re.sub(r'^\|\s*', '', raw_line)
+                    raw_line = re.sub(r'\s*\|$', '', raw_line)
+                    cells = [c.strip() for c in raw_line.split('|')]
+                    if all(re.match(r'^:?-+:?$', c) for c in cells):
+                        continue
+                    rows.append(cells)
+                if len(rows) >= 2:
+                    headers = rows[0]
+                    num_cols = len(headers)
+                    data = []
+                    for r in rows[1:]:
+                        if len(r) < num_cols:
+                            r = r + [''] * (num_cols - len(r))
+                        elif len(r) > num_cols:
+                            r = r[:num_cols]
+                        data.append(r)
+                    return headers, data
+                return None, None
+
+            def postprocess_document(doc):
+                paragraphs = list(doc.paragraphs)
+                i = 0
+                while i < len(paragraphs):
+                    p = paragraphs[i]
+                    p_text = p.text.strip()
+                    if p_text.startswith('|') and '\n' not in p_text:
+                        tbl_paras = []
+                        while i < len(paragraphs) and paragraphs[i].text.strip().startswith('|') and '\n' not in paragraphs[i].text.strip():
+                            tbl_paras.append(paragraphs[i])
+                            i += 1
+                        tbl_lines = [tp.text.strip() for tp in tbl_paras]
+                        headers, data = parse_markdown_table_lines(tbl_lines)
+                        if headers and data:
+                            create_styled_table(doc, tbl_paras[0], headers, data, insert_before=True)
+                            for tp in tbl_paras:
+                                try:
+                                    tp._element.getparent().remove(tp._element)
+                                except Exception:
+                                    pass
+                        continue
+                    i += 1
+
+                for p in list(doc.paragraphs):
+                    p_text = p.text.strip()
+                    if not p_text:
+                        continue
+                    if '|' in p_text and ('\n' in p_text or p_text.startswith('|')):
+                        lines = [l.strip() for l in p.text.split('\n')]
+                        has_table = any(l.startswith('|') for l in lines)
+                        if has_table:
+                            anchor = p
+                            idx = 0
+                            while idx < len(lines):
+                                line = lines[idx]
+                                if not line:
+                                    idx += 1
+                                    continue
+                                if line.startswith('|'):
+                                    tbl_lines = []
+                                    while idx < len(lines) and lines[idx].startswith('|'):
+                                        tbl_lines.append(lines[idx])
+                                        idx += 1
+                                    headers, data = parse_markdown_table_lines(tbl_lines)
+                                    if headers and data:
+                                        create_styled_table(doc, anchor, headers, data, insert_before=True)
+                                    continue
+                                
+                                new_p = docx.text.paragraph.Paragraph(docx.oxml.OxmlElement('w:p'), doc._body._element)
+                                anchor._p.addprevious(new_p._p)
+                                new_p.paragraph_format.left_indent = docx.shared.Pt(14)
+                                new_p.paragraph_format.space_before = docx.shared.Pt(2)
+                                new_p.paragraph_format.space_after = docx.shared.Pt(3)
+                                new_p.paragraph_format.line_spacing = 1.15
+                                clean_markdown_and_add_runs(new_p, line, base_font=base_font, font_size=docx.shared.Pt(11))
+                                idx += 1
+                            try:
+                                p._element.getparent().remove(p._element)
+                            except Exception:
+                                pass
+                            continue
+
+                for p in list(doc.paragraphs):
+                    p_text = p.text.strip()
+                    if not p_text:
+                        continue
+                    if is_static_template_element(p_text):
+                        continue
+                    match_sec = re.match(r'^(\d+\.\d+(?:\.\d+)*\.?\s*[^:]+:)\s*(.*)$', p_text)
+                    match_alpha = re.match(r'^([a-z]\)\s*[^:]+:)\s*(.*)$', p_text, flags=re.IGNORECASE)
+                    match_bullet = re.match(r'^[\-\*•]\s*(.*)$', p_text)
+
+                    if match_sec:
+                        lbl, val = match_sec.group(1), match_sec.group(2)
+                        p.text = ''
+                        p.paragraph_format.left_indent = docx.shared.Pt(14)
+                        p.paragraph_format.space_before = docx.shared.Pt(4)
+                        p.paragraph_format.space_after = docx.shared.Pt(2)
+                        p.paragraph_format.line_spacing = 1.15
+                        r_lbl = p.add_run(lbl + " ")
+                        r_lbl.bold = True
+                        r_lbl.font.name = base_font
+                        r_lbl.font.size = docx.shared.Pt(11)
+                        clean_markdown_and_add_runs(p, val, base_font=base_font, font_size=docx.shared.Pt(11))
+                    elif match_alpha:
+                        lbl, val = match_alpha.group(1), match_alpha.group(2)
+                        p.text = ''
+                        p.paragraph_format.left_indent = docx.shared.Pt(28)
+                        p.paragraph_format.space_before = docx.shared.Pt(2)
+                        p.paragraph_format.space_after = docx.shared.Pt(2)
+                        p.paragraph_format.line_spacing = 1.15
+                        r_lbl = p.add_run(lbl + " ")
+                        r_lbl.bold = True
+                        r_lbl.font.name = base_font
+                        r_lbl.font.size = docx.shared.Pt(11)
+                        clean_markdown_and_add_runs(p, val, base_font=base_font, font_size=docx.shared.Pt(11))
+                    elif match_bullet:
+                        val = match_bullet.group(1)
+                        p.text = ''
+                        p.paragraph_format.left_indent = docx.shared.Pt(28)
+                        p.paragraph_format.space_before = docx.shared.Pt(1)
+                        p.paragraph_format.space_after = docx.shared.Pt(2)
+                        p.paragraph_format.line_spacing = 1.15
+                        r_b = p.add_run("• ")
+                        r_b.bold = True
+                        r_b.font.name = base_font
+                        clean_markdown_and_add_runs(p, val, base_font=base_font, font_size=docx.shared.Pt(11))
+                    elif any(c in p.text for c in ['***', '**', '___', '__', '#']):
+                        raw = p.text
+                        p.text = ''
+                        clean_markdown_and_add_runs(p, raw, base_font=base_font, font_size=docx.shared.Pt(11))
+
+            # Build fallback text/table for vulnerabilities and overview summary if present in request data
+            raw_vulns = (scan_data.get("vulnerabilities") or scan_data.get("chi_tiet") or scan_data.get("details") or scan_data.get("lo_hong")) if isinstance(scan_data, dict) else []
+            fallback_details_str = format_vulnerabilities_table(raw_vulns, sec_num="2") if raw_vulns else ""
+            fallback_summary_str = format_summary_table(scan_data)
+
+            undeclared = set()
+            try:
+                doc_tpl = DocxTemplate(input_docx)
+                undeclared = doc_tpl.get_undeclared_template_variables()
+            except Exception as e:
+                logger.warning(f"DocxTemplate undeclared template variables inspection failed: {e}")
+
+            context = {}
+            if isinstance(scan_data, dict):
+                for var in undeclared:
+                    context[var] = scan_data.get(var, "")
+                context.update(scan_data)
+            if fallback_details_str:
+                for k in ["chi_tiet", "vulnerabilities", "details", "lo_hong", "danh_sach_chi_tiet"]:
+                    if k in undeclared and not context.get(k):
+                        context[k] = fallback_details_str
+
+            doc_raw = docx.Document(input_docx)
+            for p in list(doc_raw.paragraphs):
+                p_txt = p.text.strip()
+                headings = split_template_text(p_txt)
+                if len(headings) > 1:
+                    p.text = headings[0]
+                    curr_p = p
+                    for h in headings[1:]:
+                        new_p = docx.text.paragraph.Paragraph(docx.oxml.OxmlElement('w:p'), doc_raw._body._element)
+                        curr_p._p.addnext(new_p._p)
+                        run = new_p.add_run(h)
+                        run.font.name = "Times New Roman"
+                        run.font.size = docx.shared.Pt(13)
+                        run.bold = True
+                        curr_p = new_p
+
+            all_paragraphs = list(doc_raw.paragraphs)
+
+            template_headings = [
+                clean_text(p.text) for p in all_paragraphs
+                if clean_text(p.text) and not is_static_template_element(p.text)
+            ]
+            template_text = "\n".join(template_headings)
+
+            needed_ai_fields = [f for f in undeclared if f not in scan_data]
+
+            scan_time_val = (scan_data.get("scan_time") or scan_data.get("time") or scan_data.get("date") or "2026-10-12 10:00:00") if isinstance(scan_data, dict) else "2026-10-12 10:00:00"
+            report_date_val = (scan_data.get("date") or scan_data.get("report_date") or scan_time_val.split()[0]) if isinstance(scan_data, dict) else "2026-10-12"
+
+            is_freeform_idea = len(template_headings) < 2
+            user_prompt_desc = effective_template_text if effective_template_text else "Báo cáo đánh giá an toàn thông tin hệ thống"
+
+            section_plan = []
+            sec_counter = 0
+            for h in template_headings:
+                ext_n = extract_section_number(h)
+                if ext_n:
+                    s_num = ext_n
+                    if s_num.isdigit():
+                        sec_counter = max(sec_counter, int(s_num))
+                else:
+                    sec_counter += 1
+                    s_num = str(sec_counter)
+
+                h_norm = strip_accents(normalize_key(h))
+                if h_norm == "thoi gian" or any(syn in h_norm for syn in SEMANTIC_SYNONYMS["thoi gian"]):
+                    s_type = "thoi_gian"
+                elif h_norm == "tong quan" or any(syn in h_norm for syn in SEMANTIC_SYNONYMS["tong quan"]):
+                    s_type = "tong_quan"
+                elif h_norm == "chi tiet" or any(syn in h_norm for syn in SEMANTIC_SYNONYMS["chi tiet"]):
+                    s_type = "chi_tiet"
+                elif h_norm == "khuyen nghi" or any(syn in h_norm for syn in SEMANTIC_SYNONYMS["khuyen nghi"]):
+                    s_type = "khuyen_nghi"
+                elif h_norm == "ket luan" or any(syn in h_norm for syn in SEMANTIC_SYNONYMS["ket luan"]):
+                    s_type = "ket_luan"
+                else:
+                    s_type = "other"
+
+                section_plan.append({"heading": h, "sec_num": s_num, "sec_type": s_type})
+
+            dynamic_section_rules = []
+            for sp in section_plan:
+                h = sp["heading"]
+                s_num = sp["sec_num"]
+                s_type = sp["sec_type"]
+                if s_type == "thoi_gian":
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2...\n"
+                        f"       {s_num}.1. Thời gian thực hiện kiểm thử: [Nêu thời gian thực hiện quét từ scan_data: {scan_time_val}]\n"
+                        f"       {s_num}.2. Thời điểm ghi nhận và lập báo cáo: [Nêu ngày lập báo cáo: {report_date_val}]"
+                    )
+                elif s_type == "tong_quan":
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2, {s_num}.3...\n"
+                        f"       {s_num}.1. Phạm vi và tóm tắt kiểm thử: [Nội dung tổng quan về phạm vi kiểm thử mục tiêu]\n"
+                        f"       {s_num}.2. Bảng thống kê lỗ hổng phát hiện: [Bắt buộc bảng Markdown 3 cột: | Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |]\n"
+                        f"       {s_num}.3. Đánh giá rủi ro tổng thể: [Đánh giá tổng thể mức độ rủi ro hệ thống]"
+                    )
+                elif s_type == "chi_tiet":
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2...\n"
+                        f"       {s_num}.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được: [Bắt buộc bảng Markdown 5 cột: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |]\n"
+                        f"       {s_num}.2. Phân tích chi tiết và tác động kỹ thuật: [Nội dung phân tích kỹ thuật các điểm yếu]"
+                    )
+                elif s_type == "khuyen_nghi":
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2...\n"
+                        f"       {s_num}.1. Các biện pháp khắc phục khẩn cấp: [Các ý a), b)...]\n"
+                        f"       {s_num}.2. Kế hoạch phòng ngừa và giám sát định kỳ: [Các ý a), b)...]"
+                    )
+                elif s_type == "ket_luan":
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2...\n"
+                        f"       {s_num}.1. Đánh giá hiện trạng an toàn hệ thống: [Đánh giá tổng quát]\n"
+                        f"       {s_num}.2. Đề xuất hành động tiếp theo: [Các bước tiếp theo]"
+                    )
+                else:
+                    dynamic_section_rules.append(
+                        f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2... [Nội dung chuyên môn phù hợp với chủ đề đầu mục và dữ liệu quét]"
+                    )
+
+            prompt_rules_text = "\n".join(dynamic_section_rules)
+
+            fallback_content_map = {
+                "thoi_gian": (
+                    f"1.1. Thời gian thực hiện kiểm thử: Thực hiện từ lúc {scan_time_val}.\n"
+                    f"1.2. Thời điểm ghi nhận và lập báo cáo: Ngày {report_date_val}."
+                ),
+                "tong_quan": (
+                    f"2.1. Phạm vi và tóm tắt kiểm thử: Đánh giá an toàn thông tin toàn diện trên hệ thống mục tiêu.\n\n"
+                    f"{format_summary_table(scan_data, sec_num='2')}\n\n"
+                    f"2.3. Đánh giá rủi ro tổng thể: Hệ thống đang đối mặt với các rủi ro an toàn thông tin cần được xem xét và xử lý theo đúng mức độ ưu tiên."
+                ),
+                "chi_tiet": (
+                    format_vulnerabilities_table(raw_vulns, sec_num="3") if raw_vulns else
+                    "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\n|---|---|---|---|---|\n| 1 | Chưa ghi nhận lỗ hổng nghiêm trọng | Thấp | Không phát hiện rủi ro cao | Tiếp tục giám sát định kỳ |\n\n3.2. Phân tích chi tiết và tác động kỹ thuật: Các thành phần hệ thống cơ bản đáp ứng tiêu chuẩn an toàn."
+                ),
+                "khuyen_nghi": (
+                    f"4.1. Các biện pháp khắc phục khẩn cấp:\n"
+                    f"a) Vá và cập nhật các lỗ hổng bảo mật đã phát hiện theo đúng khuyến nghị kỹ thuật.\n"
+                    f"b) Thiết lập cấu hình tường lửa ứng dụng (WAF) và hạn chế truy cập trái phép đối với các dịch vụ mạng trọng yếu.\n"
+                    f"4.2. Kế hoạch phòng ngừa và giám sát định kỳ:\n"
+                    f"a) Thiết lập lịch rà quét an ninh mạng tự động định kỳ hàng tuần để phát hiện sớm các nguy cơ mới.\n"
+                    f"b) Nâng cao nhận thức an toàn thông tin và giám sát nhật ký truy cập hệ thống thường xuyên."
+                ),
+                "ket_luan": (
+                    f"5.1. Đánh giá hiện trạng an toàn hệ thống:\n"
+                    f"Hệ thống mục tiêu đã được kiểm tra và đánh giá toàn diện, phát hiện các điểm yếu bảo mật cần được khắc phục kịp thời nhằm đảm bảo an toàn vận hành.\n"
+                    f"5.2. Đề xuất hành động tiếp theo:\n"
+                    f"Đơn vị vận hành cần khẩn trương thực hiện kế hoạch khắc phục theo thứ tự ưu tiên và tiến hành tái kiểm thử sau khi hoàn thành vá lỗi."
+                )
+            }
+
+            ai_data = {}
+            doc_title_ai = "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN"
+            parsed_sections = []
+
+            if needed_ai_fields or template_headings or is_freeform_idea:
+                if is_freeform_idea:
+                    prompt_content = (
+                        "Bạn đóng vai trò là Trưởng nhóm Chuyên gia An toàn thông tin cấp cao. Dưới đây là yêu cầu/ý tưởng từ người dùng và dữ liệu quét an toàn thông tin (scan_data):\n\n"
+                        f"=== YÊU CẦU / Ý TƯỞNG CỦA NGƯỜI DÙNG ===\n{user_prompt_desc}\n\n"
+                        f"=== DỮ LIỆU QUÉT BẢO MẬT (SCAN DATA) ===\n{json.dumps(scan_data, ensure_ascii=False, indent=2)[:10000]}\n\n"
+                        "NHIỆM VỤ CỦA BẠN:\n"
+                        "Dựa vào ý tưởng của người dùng và dữ liệu quét, hãy TỰ ĐỘNG THIẾT KẾ CÁC ĐẦU MỤC (CÁC Ý CHÍNH) VÀ SINH NỘI DUNG TOÀN DIỆN cho một bản báo cáo an toàn thông tin chuyên nghiệp (tối thiểu 5 mục logic chuẩn an toàn thông tin):\n"
+                        f"1. Thời gian và Phạm vi kiểm thử: {scan_time_val}, ngày lập {report_date_val} (mục con: 1.1, 1.2)\n"
+                        "2. Tổng quan kết quả kiểm thử: Tóm tắt phạm vi, BẮT BUỘC có Bảng thống kê lỗ hổng 3 cột (| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |), và đánh giá rủi ro tổng thể (mục con: 2.1, 2.2, 2.3)\n"
+                        "3. Chi tiết các lỗ hổng an toàn thông tin: BẮT BUỘC có Bảng chi tiết lỗ hổng 5 cột (| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |), và phân tích tác động kỹ thuật (mục con: 3.1, 3.2)\n"
+                        "4. Khuyến nghị và Biện pháp khắc phục: Khắc phục khẩn cấp và phòng ngừa dài hạn (mục con: 4.1, 4.2 với các ý a), b)...)\n"
+                        "5. Kết luận và Đề xuất hành động tiếp theo: Hiện trạng an toàn và kiến nghị triển khai (mục con: 5.1, 5.2)\n\n"
+                        "HƯỚNG DẪN ĐỊNH DẠNG (BẮT BUỘC TUÂN THỦ):\n"
+                        "1. Trong phần nội dung (value), TUYỆT ĐỐI KHÔNG lặp lại tiêu đề mục lớn ở dòng đầu tiên.\n"
+                        "2. Số thứ tự mục con BẮT BUỘC phải khớp với mục lớn (Mục 1 -> 1.1, Mục 2 -> 2.1...).\n"
+                        "3. Bảng markdown chuẩn cho mục tổng quan (3 cột) và mục chi tiết (5 cột).\n"
+                        "4. Tuyệt đối không dùng dấu sao ** hoặc *** để in đậm vì đây là định dạng Word.\n\n"
+                        "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
+                        "Trả về DUY NHẤT một khối JSON hợp lệ theo cấu trúc:\n"
+                        "{\n"
+                        '  "document_title": "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN...",\n'
+                        '  "sections": [\n'
+                        '    {\n'
+                        '      "heading": "1. Thời gian và Phạm vi kiểm thử",\n'
+                        '      "content": "1.1. Thời gian thực hiện kiểm thử: ...\\n1.2. Thời điểm ghi nhận và lập báo cáo: ..."\n'
+                        '    },\n'
+                        '    {\n'
+                        '      "heading": "2. Tổng quan kết quả kiểm thử",\n'
+                        '      "content": "2.1. Phạm vi và tóm tắt kiểm thử: ...\\n2.2. Bảng thống kê lỗ hổng phát hiện:\\n| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |\\n|---|---|---|\\n...\\n2.3. Đánh giá rủi ro tổng thể: ..."\n'
+                        '    },\n'
+                        '    {\n'
+                        '      "heading": "3. Chi tiết các lỗ hổng an toàn thông tin",\n'
+                        '      "content": "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\\n|---|---|---|---|---|\\n...\\n3.2. Phân tích chi tiết và tác động kỹ thuật: ..."\n'
+                        '    },\n'
+                        '    {\n'
+                        '      "heading": "4. Khuyến nghị và Biện pháp khắc phục",\n'
+                        '      "content": "4.1. Các biện pháp khắc phục khẩn cấp:\\na) ...\\nb) ...\\n4.2. Kế hoạch phòng ngừa và giám sát định kỳ:\\na) ...\\nb) ..."\n'
+                        '    },\n'
+                        '    {\n'
+                        '      "heading": "5. Kết luận và Đề xuất hành động tiếp theo",\n'
+                        '      "content": "5.1. Đánh giá hiện trạng an toàn hệ thống: ...\\n5.2. Đề xuất hành động tiếp theo: ..."\n'
+                        '    }\n'
+                        '  ]\n'
+                        "}\n"
+                        "Tuyệt đối không dùng markdown block (như ```json) hay thêm văn bản giải thích thừa thãi bên ngoài khối JSON."
+                    )
+                else:
+                    prompt_content = (
+                        "Bạn đóng vai trò là chuyên gia an toàn thông tin cấp cao. Dưới đây là dữ liệu quét an toàn thông tin (scan_data) và danh sách các đầu mục của tài liệu báo cáo (template):\n\n"
+                        f"=== DỮ LIỆU QUÉT BẢO MẬT (SCAN DATA) ===\n{json.dumps(scan_data, ensure_ascii=False, indent=2)[:10000]}\n\n"
+                        f"=== CÁC ĐẦU MỤC TRONG TEMPLATE BÁO CÁO ===\n{template_text[:4000]}\n\n"
+                        "NHIỆM VỤ CỦA BẠN:\n"
+                        "Dựa vào dữ liệu quét, hãy suy luận ngữ nghĩa của TỪNG ĐẦU MỤC trong template (kể cả đầu mục chuẩn hay đầu mục tùy biến của người dùng) và sinh nội dung chi tiết, chuẩn xác, đầy đủ cho TỪNG ĐẦU MỤC đó.\n\n"
+                        "HƯỚNG DẪN ĐẶC BIỆT VỀ ĐỊNH DẠNG BẢNG (TABLE) VÀ PHÂN CẤP ĐẦU MỤC (BẮT BUỘC TUÂN THỦ):\n"
+                        "1. QUY TẮC TUYỆT ĐỐI KHÔNG LẶP TIÊU ĐỀ:\n"
+                        "   - Trong phần nội dung (value của từng key JSON), TUYỆT ĐỐI KHÔNG lặp lại tên/tiêu đề của đầu mục lớn đó ở dòng đầu tiên.\n"
+                        "   - Ví dụ: Key là '2. Tổng quan', trong value TUYỆT ĐỐI KHÔNG viết lại '2. Tổng quan' ở dòng đầu tiên, mà phải bắt đầu NGAY bằng mục con '2.1. ...'.\n"
+                        "2. QUY TẮC ĐÁNH SỐ ĐẦU MỤC CON (X.1, X.2, X.3...):\n"
+                        "   - Số thứ tự của các mục con BẮT BUỘC phải khớp CHÍNH XÁC với số thứ tự của mục lớn chứa nó trong template:\n"
+                        f"{prompt_rules_text}\n"
+                        "   - TUYỆT ĐỐI CẤM đánh số mục con bị lệch (ví dụ nếu đầu mục là Mục 2 thì mục con PHẢI là 2.1, 2.2, CẤM dùng 1.1 hay 3.1).\n"
+                        "3. CHỖ NÀO NÊN ĐỂ BẢNG THÌ HÃY ĐỂ BẢNG (Dùng cú pháp bảng Markdown chuẩn: | Cột 1 | Cột 2 | ... |):\n"
+                        "   - Bảng chi tiết lỗ hổng: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\n"
+                        "   - Bảng thống kê tổng quan: | Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |\n"
+                        "4. ĐỐI VỚI CÁC ĐẦU MỤC TÙY BIẾN CỦA NGƯỜI DÙNG: Phân tích chủ đề và dùng scan_data sinh nội dung kỹ thuật phù hợp.\n"
+                        "5. TUYỆT ĐỐI KHÔNG DÙNG DẤU SAO ** HOẶC *** ĐỂ IN ĐẬM VÌ ĐÂY LÀ ĐỊNH DẠNG WORD.\n"
+                        "6. Các phần đã có sẵn nội dung cố định trong template (như tiêu đề 'Báo cáo', tên người ký): Giữ nguyên, không cần sinh thêm.\n"
+                        "7. QUY TẮC TUYỆT ĐỐI VỀ CÁC MỤC HÀNH CHÍNH / KÍNH GỬI / NƠI NHẬN:\n"
+                        "   - TUYỆT ĐỐI KHÔNG sinh nội dung cho các phần hành chính như 'Kính gửi', 'Nơi nhận', danh sách người nhận, căn cứ, quốc hiệu, tiêu ngữ hay chữ ký.\n"
+                        "   - CHỈ sinh nội dung cho các ĐẦU MỤC NỘI DUNG BÁO CÁO THỰC SỰ (như Thời gian, Tổng quan, Chi tiết, Khuyến nghị, Kết luận...).\n\n"
+                        "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
+                        "- Trả về DUY NHẤT một khối JSON hợp lệ.\n"
+                        "- Mỗi key trong JSON phải là NGUYÊN VĂN tiêu đề của từng đầu mục trong template (ví dụ: " + ", ".join([f"'{h}'" for h in template_headings[:10]]) + ").\n"
+                        "- BẮT BUỘC sinh đầy đủ TẤT CẢ các mục có trong template, TUYỆT ĐỐI KHÔNG gộp các mục lại với nhau và không được bỏ sót bất kỳ mục nào.\n"
+                        "- Value là nội dung văn bản (string) tiếng Việt hoàn chỉnh, chứa bảng markdown chuẩn cho mục bảng.\n"
+                        "- Tuyệt đối không dùng markdown block (như ```json) hay thêm văn bản giải thích thừa thãi bên ngoài khối JSON."
+                    )
+
+                try:
+                    text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=prompt_content)
+                    text = text.strip()
+                    if text.startswith("```json"):
+                        text = text[7:]
+                    if text.startswith("```"):
+                        text = text[3:]
+                    if text.endswith("```"):
+                        text = text[:-3]
+                    text = text.strip()
+
+                    ai_data = json.loads(text)
+                except Exception as e:
+                    logger.error(f"AI gen for template failed: {e}")
+
+                if isinstance(ai_data, dict):
+                    if ai_data.get("document_title"):
+                        doc_title_ai = str(ai_data["document_title"]).strip()
+                    if "sections" in ai_data and isinstance(ai_data["sections"], list):
+                        for sec in ai_data["sections"]:
+                            if isinstance(sec, dict) and "heading" in sec and "content" in sec:
+                                parsed_sections.append(sec)
+                                ai_data[sec["heading"]] = sec["content"]
+                    else:
+                        for k, v in ai_data.items():
+                            if k not in ["document_title", "meta"]:
+                                parsed_sections.append({"heading": k, "content": str(v)})
+
+            # Sanitizer to prevent duplicate headings and correct sub-heading numbers
+            def sanitize_section_content(sec_num: str, heading_text: str, content_str: str) -> str:
+                lines = [l for l in str(content_str).strip().split('\n')]
+                if not lines:
+                    return ""
+
+                norm_head = normalize_key(heading_text)
+                norm_head_noaccent = strip_accents(norm_head)
+
+                while lines:
+                    first_clean = clean_text(lines[0])
+                    if not first_clean:
+                        lines = lines[1:]
+                        continue
+                    first_norm = normalize_key(first_clean)
+                    first_noaccent = strip_accents(first_norm)
+
+                    if (first_norm == norm_head or 
+                        (first_noaccent and first_noaccent == norm_head_noaccent) or
+                        first_clean.lower().rstrip(':.-') == heading_text.lower().rstrip(':.-') or
+                        first_clean.lower().startswith(heading_text.lower() + ':') or
+                        first_clean.lower().startswith(heading_text.lower() + ' -') or
+                        first_clean.lower().startswith(heading_text.lower() + ' –')):
+                        lines = lines[1:]
+                        continue
+
+                    clean_first_header = re.sub(r'^[#*_\s]+|[#*_\s:]+$', '', first_clean)
+                    if clean_first_header.lower() == heading_text.lower() or (first_noaccent and strip_accents(clean_first_header.lower()) == norm_head_noaccent):
+                        lines = lines[1:]
+                        continue
+                    break
+
+                while lines and not lines[0].strip():
+                    lines = lines[1:]
+
+                new_lines = []
+                for line in lines:
+                    l_s = line.strip()
+                    match_sub = re.match(r'^([#*_\s]*)(\d+)\.(\d+(?:\.\d+)*)([\.\:\s-].*)$', l_s)
+                    if match_sub:
+                        lead = match_sub.group(1)
+                        old_parent = match_sub.group(2)
+                        sub_part = match_sub.group(3)
+                        rest = match_sub.group(4)
+                        if sec_num and old_parent != sec_num:
+                            line = f"{lead}{sec_num}.{sub_part}{rest}"
+                    new_lines.append(line)
+
+                return '\n'.join(new_lines).strip()
+
+            base_font = "Times New Roman"
+            used_ai_keys = set()
+
+            if is_freeform_idea and not file_bytes:
+                if not parsed_sections:
+                    # Provide robust intelligent default sections when LLM is unavailable or fails
+                    parsed_sections = [
+                        {"heading": "1. Thời gian và Phạm vi kiểm thử", "content": fallback_content_map.get("thoi_gian", "")},
+                        {"heading": "2. Tổng quan kết quả kiểm thử", "content": fallback_content_map.get("tong_quan", "")},
+                        {"heading": "3. Chi tiết các lỗ hổng an toàn thông tin", "content": fallback_content_map.get("chi_tiet", "")},
+                        {"heading": "4. Khuyến nghị và Biện pháp khắc phục", "content": fallback_content_map.get("khuyen_nghi", "")},
+                        {"heading": "5. Kết luận và Đề xuất hành động tiếp theo", "content": fallback_content_map.get("ket_luan", "")},
+                    ]
+                if user_prompt_desc and (not doc_title_ai or doc_title_ai == "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN"):
+                    clean_desc = user_prompt_desc.strip()
+                    if clean_desc.lower().startswith("báo cáo"):
+                        doc_title_ai = clean_desc.upper()
+                    else:
+                        doc_title_ai = f"BÁO CÁO {clean_desc.upper()}"
+
+                # Dynamic full-report construction from AI planner
+                doc_raw = docx.Document()
+                for section in doc_raw.sections:
+                    section.top_margin = docx.shared.Inches(1.0)
+                    section.bottom_margin = docx.shared.Inches(1.0)
+                    section.left_margin = docx.shared.Inches(1.0)
+                    section.right_margin = docx.shared.Inches(1.0)
+
+                # 1. Quốc hiệu, Tiêu ngữ
+                p_qh = doc_raw.add_paragraph()
+                p_qh.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
+                p_qh.paragraph_format.space_before = docx.shared.Pt(0)
+                p_qh.paragraph_format.space_after = docx.shared.Pt(2)
+                r_qh = p_qh.add_run("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc")
+                r_qh.bold = True
+                r_qh.font.name = base_font
+                r_qh.font.size = docx.shared.Pt(12)
+
+                # 2. Ngày tháng
+                p_dt = doc_raw.add_paragraph()
+                p_dt.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                p_dt.paragraph_format.space_before = docx.shared.Pt(2)
+                p_dt.paragraph_format.space_after = docx.shared.Pt(6)
+                r_dt = p_dt.add_run(f"Hà Nội, ngày {report_date_val.split('-')[-1] if '-' in report_date_val else '12'} tháng {report_date_val.split('-')[1] if len(report_date_val.split('-')) > 1 else '10'} năm {report_date_val.split('-')[0] if '-' in report_date_val else '2026'}")
+                r_dt.italic = True
+                r_dt.font.name = base_font
+                r_dt.font.size = docx.shared.Pt(11)
+
+                # 3. Tiêu đề
+                p_tit = doc_raw.add_paragraph()
+                p_tit.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
+                p_tit.paragraph_format.space_before = docx.shared.Pt(14)
+                p_tit.paragraph_format.space_after = docx.shared.Pt(12)
+                r_tit = p_tit.add_run(doc_title_ai.upper())
+                r_tit.bold = True
+                r_tit.font.name = base_font
+                r_tit.font.size = docx.shared.Pt(16)
+
+                # 4. Kính gửi
+                p_kg = doc_raw.add_paragraph()
+                p_kg.paragraph_format.left_indent = docx.shared.Pt(14)
+                p_kg.paragraph_format.space_before = docx.shared.Pt(6)
+                p_kg.paragraph_format.space_after = docx.shared.Pt(2)
+                r_kg = p_kg.add_run("Kính gửi:")
+                r_kg.bold = True
+                r_kg.font.name = base_font
+                r_kg.font.size = docx.shared.Pt(12)
+
+                recip_list = ["- Thủ trưởng cơ quan, đơn vị;", "- Các đồng chí trong đơn vị"]
+                if "ban giám đốc" in user_prompt_desc.lower():
+                    recip_list = ["- Ban Giám đốc;", "- Các đồng chí phụ trách công nghệ và an toàn thông tin"]
+                elif "lãnh đạo" in user_prompt_desc.lower():
+                    recip_list = ["- Lãnh đạo đơn vị;", "- Bộ phận chuyên môn an toàn thông tin"]
+
+                for idx_r, r_item in enumerate(recip_list):
+                    p_rx = doc_raw.add_paragraph()
+                    p_rx.paragraph_format.left_indent = docx.shared.Pt(28)
+                    p_rx.paragraph_format.space_before = docx.shared.Pt(1)
+                    p_rx.paragraph_format.space_after = docx.shared.Pt(6 if idx_r == len(recip_list) - 1 else 2)
+                    r_run = p_rx.add_run(r_item)
+                    r_run.font.name = base_font
+                    r_run.font.size = docx.shared.Pt(12)
+
+                # 5. Các sections
+                curr_anchor = p_rx
+                for sec in parsed_sections:
+                    h_text = sec["heading"]
+                    c_text = sec["content"]
+                    p_h = doc_raw.add_paragraph()
+                    p_h.paragraph_format.space_before = docx.shared.Pt(10)
+                    p_h.paragraph_format.space_after = docx.shared.Pt(4)
+                    r_h = p_h.add_run(h_text)
+                    r_h.bold = True
+                    r_h.font.name = base_font
+                    r_h.font.size = docx.shared.Pt(13)
+
+                    sec_num = extract_section_number(h_text) or "1"
+                    c_clean = sanitize_section_content(sec_num, h_text, c_text)
+                    curr_anchor = render_content_with_tables(doc_raw, p_h, c_clean, base_font=base_font)
+
+                # 6. Chữ ký
+                p_sig1 = doc_raw.add_paragraph()
+                p_sig1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                p_sig1.paragraph_format.space_before = docx.shared.Pt(18)
+                p_sig1.paragraph_format.space_after = docx.shared.Pt(2)
+                r_s1 = p_sig1.add_run("CHỈ HUY")
+                r_s1.bold = True
+                r_s1.font.name = base_font
+                r_s1.font.size = docx.shared.Pt(12)
+
+                p_name1 = doc_raw.add_paragraph()
+                p_name1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                p_name1.paragraph_format.space_before = docx.shared.Pt(2)
+                p_name1.paragraph_format.space_after = docx.shared.Pt(10)
+                r_n1 = p_name1.add_run("Nguyễn Văn Tốt")
+                r_n1.bold = True
+                r_n1.font.name = base_font
+                r_n1.font.size = docx.shared.Pt(12)
+
+                p_sig2 = doc_raw.add_paragraph()
+                p_sig2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                p_sig2.paragraph_format.space_before = docx.shared.Pt(4)
+                p_sig2.paragraph_format.space_after = docx.shared.Pt(2)
+                r_s2 = p_sig2.add_run("NGƯỜI SOẠN BÁO CÁO")
+                r_s2.bold = True
+                r_s2.font.name = base_font
+                r_s2.font.size = docx.shared.Pt(12)
+
+                p_name2 = doc_raw.add_paragraph()
+                p_name2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                p_name2.paragraph_format.space_before = docx.shared.Pt(2)
+                p_name2.paragraph_format.space_after = docx.shared.Pt(4)
+                r_n2 = p_name2.add_run("Bùi Thị Xuân")
+                r_n2.bold = True
+                r_n2.font.name = base_font
+                r_n2.font.size = docx.shared.Pt(12)
+
+            else:
+                # In-place insertion for structured template or uploaded docx with headings
+                matched_section_counter = 0
+
+                for idx_p, p in enumerate(all_paragraphs):
+                    p_text = clean_text(p.text)
+                    if not p_text:
+                        continue
+                    if is_static_template_element(p_text):
+                        continue
+
+                    extracted_num = extract_section_number(p_text)
+                    if extracted_num:
+                        sec_num = extracted_num
+                        if sec_num.isdigit():
+                            matched_section_counter = max(matched_section_counter, int(sec_num))
+                    else:
+                        matched_section_counter += 1
+                        sec_num = str(matched_section_counter)
+
+                    p_norm_noaccent = strip_accents(normalize_key(p_text))
+                    is_time_section = p_norm_noaccent == "thoi gian" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["thoi gian"])
+                    is_detail_section = p_norm_noaccent == "chi tiet" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                    is_overview_section = p_norm_noaccent == "tong quan" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["tong quan"])
+                    is_rec_section = p_norm_noaccent == "khuyen nghi" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["khuyen nghi"])
+                    is_conclusion_section = p_norm_noaccent == "ket luan" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["ket luan"])
+
+                    matched_k, content = find_matching_content(p_text, ai_data, used_ai_keys)
+
+                    if not content:
+                        if is_time_section:
+                            content = (
+                                f"{sec_num}.1. Thời gian thực hiện kiểm thử: Thực hiện từ lúc {scan_time_val}.\n"
+                                f"{sec_num}.2. Thời điểm ghi nhận và lập báo cáo: Ngày {report_date_val}."
+                            )
+                            matched_k = matched_k or "thoi_gian"
+                        elif is_detail_section:
+                            target_sec_num = sec_num if sec_num else "3"
+                            content = format_vulnerabilities_table(raw_vulns, sec_num=target_sec_num) if raw_vulns else ""
+                            matched_k = matched_k or "chi_tiet"
+                        elif is_overview_section:
+                            target_sec_num = sec_num if sec_num else "2"
+                            intro_txt = f"{target_sec_num}.1. Phạm vi và tóm tắt kiểm thử: Đánh giá an toàn thông tin toàn diện trên hệ thống mục tiêu."
+                            risk_txt = f"\n\n{target_sec_num}.3. Đánh giá rủi ro tổng thể: Hệ thống đang đối mặt với các rủi ro an toàn thông tin cần được xem xét và xử lý theo đúng mức độ ưu tiên."
+                            content = intro_txt + "\n\n" + format_summary_table(scan_data, sec_num=target_sec_num) + risk_txt
+                            matched_k = matched_k or "tong_quan"
+                        elif is_rec_section:
+                            content = (
+                                f"{sec_num}.1. Các biện pháp khắc phục khẩn cấp:\n"
+                                f"a) Vá và cập nhật các lỗ hổng bảo mật đã phát hiện theo đúng khuyến nghị kỹ thuật.\n"
+                                f"b) Thiết lập cấu hình tường lửa ứng dụng (WAF) và hạn chế truy cập trái phép đối với các dịch vụ mạng trọng yếu.\n"
+                                f"{sec_num}.2. Kế hoạch phòng ngừa và giám sát định kỳ:\n"
+                                f"a) Thiết lập lịch rà quét an ninh mạng tự động định kỳ hàng tuần để phát hiện sớm các nguy cơ mới.\n"
+                                f"b) Nâng cao nhận thức an toàn thông tin và giám sát nhật ký truy cập hệ thống thường xuyên."
+                            )
+                            matched_k = matched_k or "khuyen_nghi"
+                        elif is_conclusion_section:
+                            content = (
+                                f"{sec_num}.1. Đánh giá hiện trạng an toàn hệ thống:\n"
+                                f"Hệ thống mục tiêu đã được kiểm tra và đánh giá toàn diện, phát hiện các điểm yếu bảo mật cần được khắc phục kịp thời nhằm đảm bảo an toàn vận hành.\n"
+                                f"{sec_num}.2. Đề xuất hành động tiếp theo:\n"
+                                f"Đơn vị vận hành cần khẩn trương thực hiện kế hoạch khắc phục theo thứ tự ưu tiên và tiến hành tái kiểm thử sau khi hoàn thành vá lỗi."
+                            )
+                            matched_k = matched_k or "ket_luan"
+                        else:
+                            content = (
+                                f"{sec_num}.1. Nội dung đánh giá chuyên môn: Đã tiến hành khảo sát và đánh giá toàn diện theo yêu cầu kỹ thuật.\n"
+                                f"{sec_num}.2. Đề xuất thực hiện: Tiếp tục theo dõi và phối hợp triển khai các biện pháp tương ứng."
+                            )
+                            matched_k = matched_k or p_text
+
+                    if is_detail_section and raw_vulns and "|" not in str(content):
+                        target_sec_num = sec_num if sec_num else "3"
+                        cur_details_str = format_vulnerabilities_table(raw_vulns, sec_num=target_sec_num)
+                        content = cur_details_str + ("\n\n" + str(content) if content else "")
+
+                    if is_overview_section and "|" not in str(content):
+                        target_sec_num = sec_num if sec_num else "2"
+                        cur_summary_str = format_summary_table(scan_data, sec_num=target_sec_num)
+                        if cur_summary_str:
+                            content = str(content) + "\n\n" + cur_summary_str
+
+                    if content:
+                        content_clean = sanitize_section_content(sec_num, p_text, str(content))
+                        if not content_clean:
+                            continue
+                        if content_clean.lower() == p_text.lower():
+                            continue
+                        if idx_p + 1 < len(all_paragraphs):
+                            next_p_text = clean_text(all_paragraphs[idx_p + 1].text)
+                            if content_clean.lower() == next_p_text.lower():
+                                continue
+
+                        if matched_k:
+                            used_ai_keys.add(matched_k)
+                        render_content_with_tables(doc_raw, p, content_clean, base_font=base_font)
+
+                if matched_section_counter == 0 and parsed_sections:
+                    for sec in parsed_sections:
+                        h_text = sec["heading"]
+                        c_text = sec["content"]
+                        p_h = doc_raw.add_paragraph()
+                        p_h.paragraph_format.space_before = docx.shared.Pt(12)
+                        p_h.paragraph_format.space_after = docx.shared.Pt(4)
+                        p_h.paragraph_format.keep_with_next = True
+                        r_h = p_h.add_run(h_text)
+                        r_h.bold = True
+                        r_h.font.name = base_font
+                        r_h.font.size = docx.shared.Pt(13)
+
+                        sec_num = extract_section_number(h_text) or "1"
+                        c_clean = sanitize_section_content(sec_num, h_text, c_text)
+                        render_content_with_tables(doc_raw, p_h, c_clean, base_font=base_font)
+
+            # Sync any remaining ai_data into context for docxtpl variables
+            for k, v in ai_data.items():
+                if k not in used_ai_keys:
+                    context[k] = v
+                for var in undeclared:
+                    if normalize_key(var) == normalize_key(k) or strip_accents(normalize_key(var)) == strip_accents(normalize_key(k)):
+                        context[var] = v
+
+            intermediate_docx = os.path.join(tmpdir, f"inter_{uuid.uuid4()}.docx")
+            doc_raw.save(intermediate_docx)
+
+            output_docx = os.path.join(tmpdir, f"output_{uuid.uuid4()}.docx")
+            try:
+                final_tpl = DocxTemplate(intermediate_docx)
+                final_tpl.render(context)
+                final_tpl.save(output_docx)
+            except Exception as e:
+                logger.warning(f"DocxTemplate render fallback to doc_raw: {e}")
+                output_docx = intermediate_docx
+
+            try:
+                final_doc = docx.Document(output_docx)
+                postprocess_document(final_doc)
+                final_doc.save(output_docx)
+            except Exception as e:
+                logger.warning(f"postprocess_document failed: {e}")
+
+            def docx_to_markdown(doc) -> str:
+                md_blocks = []
+                for element in doc._body._element:
+                    if element.tag.endswith('p'):
+                        p_elem = docx.text.paragraph.Paragraph(element, doc)
+                        text = p_elem.text.strip()
+                        if not text:
+                            continue
+                        t_noaccent = strip_accents(text).lower()
+                        
+                        if any(q in t_noaccent for q in ['cong hoa xa hoi chu nghia viet nam', 'doc lap - tu do - hanh phuc', 'doc lap – tu do – hanh phuc']):
+                            md_blocks.append(f"**{text}**")
+                        elif t_noaccent in ['bao cao', 'bao cao danh gia an toan thong tin', 'bao cao ket qua', 'bao cao kiem thu'] or (t_noaccent.startswith('bao cao') and not extract_section_number(text)):
+                            md_blocks.append(f"# {text}")
+                        elif re.match(r'^(?:kinh gui|noi nhan)\b', t_noaccent):
+                            md_blocks.append(f"**{text}**")
+                        elif extract_section_number(text) is not None and not re.match(r'^\d+\.\d+', text):
+                            md_blocks.append(f"## {text}")
+                        elif re.match(r'^\d+\.\d+(?:\.\d+)*', text):
+                            md_blocks.append(f"### {text}")
+                        elif re.match(r'^[a-z]\)\s*', text, flags=re.IGNORECASE):
+                            md_blocks.append(f"- {text}")
+                        elif text.startswith('• ') or text.startswith('- '):
+                            bullet_clean = re.sub(r'^[\-\*•]\s*', '', text)
+                            md_blocks.append(f"- {bullet_clean}")
+                        elif any(sig in t_noaccent for sig in ['chi huy', 'nguoi soan bao cao', 'nguoi lap', 'nguoi duyet', 'giam doc', 'truong phong']):
+                            md_blocks.append(f"\n**{text}**")
+                        else:
+                            md_blocks.append(text)
+                    elif element.tag.endswith('tbl'):
+                        tbl_elem = docx.table.Table(element, doc)
+                        rows_cells = []
+                        for row in tbl_elem.rows:
+                            cells = [c.text.strip().replace('\n', '<br>').replace('|', '\\|') for c in row.cells]
+                            rows_cells.append(cells)
+                        if rows_cells:
+                            headers = rows_cells[0]
+                            tbl_md = []
+                            tbl_md.append("| " + " | ".join(headers) + " |")
+                            tbl_md.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                            for r in rows_cells[1:]:
+                                tbl_md.append("| " + " | ".join(r) + " |")
+                            md_blocks.append("\n".join(tbl_md))
+
+                result_lines = []
+                for b in md_blocks:
+                    if result_lines and (b.startswith('- ') and (result_lines[-1].startswith('- ') or result_lines[-1].startswith('**Kính gửi'))):
+                        result_lines.append(b)
+                    else:
+                        if result_lines:
+                            result_lines.append("")
+                        result_lines.append(b)
+                return "\n".join(result_lines)
+
+            md_text = docx_to_markdown(final_doc)
+
+            if output_format_lower in ["markdown", "md", "text"]:
+                return Response(
+                    content=md_text.encode("utf-8"),
+                    media_type="text/markdown; charset=utf-8",
+                    headers={
+                        "Content-Disposition": 'inline; filename="report.md"',
+                        "X-Report-Format": "markdown"
+                    }
+                )
+
+            # Determine target document format (pdf or docx)
+            effective_file_format = (file_format or "").strip().lower()
+            if output_format_lower == "pdf" or effective_file_format == "pdf":
+                # Convert to PDF using LibreOffice
+                process = await asyncio.create_subprocess_exec(
+                    "soffice", "--headless", "--convert-to", "pdf", output_docx, "--outdir", tmpdir,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                if process.returncode != 0:
+                    logger.error(f"PDF conversion failed: {stderr.decode()}")
+                    raise HTTPException(status_code=500, detail="Lỗi chuyển đổi PDF (LibreOffice).")
+                
+                base_name = os.path.splitext(os.path.basename(output_docx))[0]
+                output_file = os.path.join(tmpdir, f"{base_name}.pdf")
+                filename = "report.pdf"
+                media_type = "application/pdf"
+                target_format = "pdf"
+            else:
+                output_file = output_docx
+                filename = "report.docx"
+                media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                target_format = "docx"
+
+            with open(output_file, "rb") as f:
+                content_bytes = f.read()
+
+            raw_binary_flag = raw_binary is True or str(raw_binary).strip().lower() in ["true", "1", "yes"]
+            if raw_binary_flag:
+                return Response(
+                    content=content_bytes,
+                    media_type=media_type,
+                    headers={"Content-Disposition": f"attachment; filename={filename}"}
+                )
+
+            file_b64 = base64.b64encode(content_bytes).decode("utf-8")
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "format": target_format,
+                    "file_name": filename,
+                    "media_type": media_type,
+                    "markdown": md_text,
+                    "file_base64": file_b64,
+                    "sections": ai_data
+                }
+            )
+
 
     @app.post("/ai/generate-statistical-report/stream")
     async def statistical_stream(body: LegacyRequest) -> StreamingResponse:
@@ -1555,95 +3227,60 @@ def register_routes(app: FastAPI, state: Any) -> None:
             result = parse_statistical(final)
             table = statistical_detail_table(body)
             if table is not None:
-                result["report_detail"] = table
+                result["report_detail"] = merge_detail_table(result.get("report_detail", ""), table)
             return {**result, "content": final, "report": final, "statistical_report": final, "metadata": base_meta("statistical_report", run_id)}
         return stream("statistical_report", statistical_prompt(body), None, build_final)
 
     async def exploit_prefetch(prompt: str, session_id: str | None = None) -> dict[str, Any]:
-        """Deterministic evidence gathering (see poc/prefetch.py) — runs independently of,
-        and concurrently with, the model's own agentic turn; its own scratch run_id keeps
-        it fully separate from whatever run_id the model's session ends up using, so it
-        can never collide with or be starved by the agentic path. Records prefetch
-        ``coverage`` on ``session_id`` so RequireSearchBeforeAnswerHook can skip
-        force_continue when coverage is already ``enough``|``empty``. Fail-open: any
-        error → coverage ``failed`` + empty evidence (hook + enforce_section1 backstop).
-
-        Also runs the CVE-KB existence check (``cve_exists_in_kb``) concurrently with the
-        catalog prefetch — same fail-open contract — so the T2/T3 synthesize-from-CVE tier
-        in ``enforce_section1`` knows whether the CVE is real even when the catalog has
-        nothing for it. Also records it on ``session_id`` (``set_session_cve_known``) so
-        RequireSection1SynthesisHook can force a retry when the model skipped Section 1
-        despite the CVE being confirmed real. Same for T2 catalog-description evidence
-        (``set_session_synthesis_evidence``) and T1 real-code evidence
-        (``set_session_real_code_evidence``) — prefetch's own fetches land in the ledger
-        under ITS scratch ``run_id`` (below), never the model's turn's run_id, so the hook
-        cannot see them any other way (see prefetch.py's own docstring on these functions).
-        Also fetches ``cwe_refs`` (H1, 2026-09-22) — the CWE ids this CVE's record links to
-        via ``cve_cwe_refs`` (retrieval/neo4j.py, same CVE-record KB lookup as
-        ``cve_exists_in_kb`` above, one hop further) — so ``/ai/exploit``'s
-        ``metadata.cwe_refs`` (populated alongside evidence_ids/edb_ids/provenance, see
-        exploit()/exploit_stream()) reflects the real KB record instead of always being
-        empty. ``[]`` whenever there's no CVE id or no CVE record (fail-open, same
-        contract as ``cve_known``).
-
-        Returns ``{"evidence", "cve_id", "cve_known", "cwe_refs"}``."""
-        from ..poc.inject import has_synthesis_evidence
+        """Gather catalog and exact KB context concurrently, scoped to this request."""
         from ..poc.prefetch import (
-            exploit_relevance_ok, set_session_coverage, set_session_cve_known,
+            clear_session_coverage, exploit_relevance_ok, set_session_coverage,
+            set_session_cve_known, set_session_kb_docs, set_session_kb_searched,
             set_session_real_code_evidence, set_session_synthesis_evidence,
         )
-        from ..retrieval.neo4j import cve_cwe_refs, cve_exists_in_kb
+        from ..retrieval.kb_context import get_cve_context
+
+        clear_session_coverage(session_id)
         cve_id = extract_cve_id(prompt)
         poc = getattr(state.runner, "poc", None)
         ledger = getattr(state.runner, "ledger", None)
-        if poc is None or ledger is None:
-            set_session_coverage(session_id, "failed")
-            if cve_id:
-                cve_known, cwe_refs = await asyncio.gather(
-                    cve_exists_in_kb(cve_id), cve_cwe_refs(cve_id))
-            else:
-                cve_known, cwe_refs = False, []
-            set_session_cve_known(session_id, cve_known)
-            set_session_synthesis_evidence(session_id, False)
-            set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
         run_id = f"prefetch:{uuid4().hex}"
-        try:
-            if cve_id:
-                report, cve_known, cwe_refs = await asyncio.gather(
-                    prefetch_evidence(poc, ledger, prompt, run_id), cve_exists_in_kb(cve_id),
-                    cve_cwe_refs(cve_id))
-            else:
-                report, cve_known, cwe_refs = await prefetch_evidence(poc, ledger, prompt, run_id), False, []
-                # Layer-4 exploit relevance gate (opt-in, EXPLOIT-ONLY): a FREE-TEXT prompt
-                # (no CVE id) that maps to no sufficiently-relevant KB entry is treated as
-                # "nothing found" — so the exploit path does not build a PoC from a weak
-                # keyword match (the "nhập linh tinh vẫn ra PoC" gap). Inert by default; a
-                # named CVE keeps using cve_known above. Fail-open (None → not gated).
-                if await exploit_relevance_ok(prompt) is False:
-                    logger.info("exploit prefetch gated: low KB relevance for free-text prompt")
-                    set_session_coverage(session_id, "empty")
-                    set_session_cve_known(session_id, False)
-                    set_session_synthesis_evidence(session_id, False)
-                    set_session_real_code_evidence(session_id, False)
-                    return {"evidence": [], "cve_id": None, "cve_known": False, "cwe_refs": [],
-                            "coverage": "empty", "gated": "low_relevance"}
-            cov = report.get("coverage") or "failed"
-            if cov not in ("enough", "empty", "partial", "failed"):
-                cov = "failed"
-            set_session_coverage(session_id, cov)
-            set_session_cve_known(session_id, cve_known)
-            evidence = ledger.evidence_for_run(run_id)
-            set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
-            set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
-            return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known, "cwe_refs": cwe_refs}
-        except Exception:
-            logger.exception("deterministic PoC prefetch failed")
-            set_session_coverage(session_id, "failed")
-            set_session_cve_known(session_id, False)
-            set_session_synthesis_evidence(session_id, False)
-            set_session_real_code_evidence(session_id, False)
-            return {"evidence": [], "cve_id": cve_id, "cve_known": False, "cwe_refs": []}
+
+        async def catalog_search() -> dict[str, Any]:
+            if poc is None or ledger is None:
+                return {"coverage": "failed"}
+            return await prefetch_evidence(poc, ledger, prompt, run_id)
+
+        async def kb_search() -> dict[str, Any]:
+            if not cve_id:
+                return {"status": "not_queried", "content": "", "cwe_refs": []}
+            return await get_cve_context(cve_id)
+
+        report, kb = await asyncio.gather(catalog_search(), kb_search(), return_exceptions=True)
+        if isinstance(report, BaseException):
+            report = {"coverage": "failed"}
+        if isinstance(kb, BaseException):
+            kb = {"status": "error", "content": "", "cwe_refs": []}
+        status = kb.get("status", "error")
+        kb_content = str(kb.get("content") or "") if status == "found" else ""
+        cve_known = status == "found" and bool(kb_content.strip())
+        if status == "found" and not cve_known:
+            status = "insufficient"
+        evidence = ledger.evidence_for_run(run_id) if ledger is not None else []
+        coverage = report.get("coverage", "failed")
+        if coverage not in ("enough", "empty", "partial", "failed"):
+            coverage = "failed"
+        if not cve_id and poc is not None and await exploit_relevance_ok(prompt) is False:
+            coverage, evidence = "empty", []
+        set_session_coverage(session_id, coverage)
+        set_session_cve_known(session_id, cve_known)
+        set_session_kb_searched(session_id, cve_known)
+        set_session_kb_docs(session_id, kb_content)
+        set_session_synthesis_evidence(session_id, has_synthesis_evidence(evidence))
+        set_session_real_code_evidence(session_id, has_real_code_evidence(evidence))
+        return {"evidence": evidence, "cve_id": cve_id, "cve_known": cve_known,
+                "cwe_refs": kb.get("cwe_refs") or [], "kb_content": kb_content,
+                "kb_status": status, "coverage": coverage}
 
     async def inject_reference_code(text: str, run_id: str | None,
                                     pre_evidence: list[dict[str, Any]] | None = None, *,
@@ -1675,6 +3312,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
         both asked for a real CVE's PoC and named a live third-party host got that host
         baked verbatim into a runnable Mục 2 command with no authorization framing at all."""
         ledger = getattr(state.runner, "ledger", None)
+        if text.strip() == _EXPLOIT_KB_SEARCH_EXHAUSTED.strip():
+            return text, {"candidate_status": "not_generated", "section1_tier": "synthesis_failed",
+                          "reference_code_injected": False, "reason": "kb_search_before_synthesis_exhausted"}
         try:
             text = strip_system_narration(text)
             # Deterministic backstop for the sibling leak: internal TOOL identifiers
@@ -1752,21 +3392,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
             logger.exception("web hints gather failed")
             return []
 
+    def _evidence_is_python2(ev: dict[str, Any]) -> bool:
+        """True when an evidence dict's ENTRY code carries strong Python-2-only markers."""
+        code = ev.get("source_code") or ""
+        if not code:
+            sf = ev.get("source_files") or []
+            entry = next((f for f in sf if (f.get("role") or "") == "entry"),
+                         sf[0] if sf else None)
+            code = (entry or {}).get("code") or ""
+        return looks_like_python2(code)
+
     async def _build_exploit_grounding(
         prefetch_result: dict[str, Any], web_hints: list[dict[str, Any]],
         session_id: str | None, target: str | None = None,
-        strategy_override: str | None = None) -> tuple[list[dict[str, Any]], str, bool]:
+        strategy_override: str | None = None
+    ) -> tuple[list[dict[str, Any]], str, bool, dict[str, Any]]:
         """Acquire the best real PoC code (catalog → temp cache → on-demand GitHub → web raw
         script), consolidate it into ONE runnable file when enabled, and build the model
         appendix. Internet-fetched code is saved to the temp cache for reuse next time.
 
-        Returns ``(pre_evidence, appendix, consolidated)``:
+        Returns ``(pre_evidence, appendix, consolidated, acquisition)``:
         * consolidated → ``pre_evidence`` is ``[merged_file] + description-only hints``; the
           appendix tells the model Mục 1 is that file (system-injected) and to write Mục 2/3
           against it. Session real-code/coverage flags are set so the synthesis/search hooks
           don't force a spurious retry.
         * not consolidated → the unchanged verbatim path: on-demand/web real code is still
           merged in (better coverage), and the existing prefetch + web-hint appendices apply.
+        * ``acquisition`` — ACQUISITION-level flags (how the winning evidence was found, as
+          opposed to per-evidence flags like `consolidated_from`/`pruned`/`extracted` which
+          live on the evidence dict itself) for `poc/trace.py::build_generation_trace` (Mục 4,
+          "Giải thích quy trình tạo PoC"). Deterministic bookkeeping only — never influences
+          which evidence is chosen, purely descriptive of the path already taken above.
         """
         from ..poc.ondemand_cache import load_cached, resolve_cache_dir, save_cached
         from ..poc.fixed_pocs import load_fixed, resolve_fixed_dir
@@ -1794,8 +3450,19 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         web_real = [e for e in (web_hints or []) if e.get("source_code")]
         all_real = base_real + extra_real
+        used_web_real = not all_real and bool(web_real)
         if not all_real:
             all_real = web_real  # web raw PoC script → real code (also internet)
+
+        # Mục 4 ("Giải thích quy trình tạo PoC") bookkeeping — see acquisition docstring above.
+        # github_ondemand = extra_real populated AND it did NOT come from the temp cache.
+        acquisition: dict[str, Any] = {
+            "canonical": False, "fixed": False,
+            "cached_hit": cached_hit,
+            "github_ondemand": bool(extra_real) and not cached_hit,
+            "web_real": used_web_real,
+            "is_multifile": False, "strategy": None,
+        }
 
         # Cache whatever we pulled from the internet (GitHub on-demand or web) so DB→temp→internet
         # holds next time. Skip DB-sourced code (already persistent) and cache re-reads.
@@ -1820,6 +3487,23 @@ def register_routes(app: FastAPI, state: Any) -> None:
             if delay > 0:
                 await asyncio.sleep(delay)
             consolidated = fixed
+            acquisition["fixed"] = True
+        canonical_entry = any(e.get("canonical") for e in all_real)
+        if canonical_entry:
+            acquisition["canonical"] = True
+            # Verified-canonical PoC (poc_canonical, executed against a lab/target): serve ONLY
+            # that artifact, VERBATIM — no LLM slice/consolidate, and no sibling artifact from
+            # the same prefetch (rendering two real PoCs would collide on identical filenames and
+            # the entry would be overwritten). This makes /ai/exploit return the exact
+            # known-working PoC bytes, deterministically.
+            canon_ev = next(e for e in all_real if e.get("canonical"))
+            desc_only = [e for e in list(base_evidence) + list(web_hints or [])
+                         if not has_real_code_evidence([e])]
+            pre_evidence = [canon_ev] + merge_evidence(desc_only)
+            appendix = (_prefetch_prompt_appendix({**prefetch_result, "evidence": [canon_ev]})
+                        + _web_hints_prompt_appendix(web_hints or [])
+                        + _kb_prompt_appendix(prefetch_result.get("kb_content")))
+            return pre_evidence, appendix, False, acquisition
         elif all_real and (getattr(settings, "poc_consolidate_enabled", False)
                            or _resolve_poc_strategy(strategy_override, settings) in ("prune", "auto")):
             try:
@@ -1831,6 +3515,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 # Multi-file iff the entry carries a >1 non-readme file set.
                 _sf = entry_ev.get("source_files") or []
                 is_multifile = len([f for f in _sf if (f.get("role") or "") != "readme"]) > 1
+                acquisition["is_multifile"] = is_multifile
+                acquisition["strategy"] = strategy
                 if strategy == "consolidate":
                     # Legacy path, unchanged: deterministic verbatim slice first (no LLM on the
                     # bytes), else the LLM merge fills what slicing can't (cross-file, non-Python).
@@ -1848,6 +3534,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     # LLM merge is the LAST resort — only if prune/slice produced nothing and it's on.
                     if consolidated is None and can_consolidate:
                         consolidated = await consolidate_poc(state.runner, real_full, cve_id)
+
+                # Python-2 PoC: the air-gap runner executes with python3, so a verbatim/pruned
+                # py2 entry (`urllib2`/`urlparse`/`raw_input`…) dies at import before it can
+                # exploit (observed: CVE-2014-6271 served a `urllib2` PoC → ImportError). Route
+                # it through the consolidate LLM (instructed to port to py3) and keep the port
+                # only if it is genuinely py3 afterwards; otherwise leave the py2 bytes as-is so
+                # this can never make a working PoC worse.
+                if consolidated is not None and can_consolidate and _evidence_is_python2(consolidated):
+                    ported = await consolidate_poc(state.runner, real_full, cve_id)
+                    if ported and has_real_code_evidence([ported]) and not _evidence_is_python2(ported):
+                        consolidated = ported
             except Exception:
                 logger.exception("poc grounding (strategy=%s) failed for %s",
                                  _resolve_poc_strategy(strategy_override, settings), cve_id)
@@ -1865,18 +3562,23 @@ def register_routes(app: FastAPI, state: Any) -> None:
             desc_only = [e for e in list(base_evidence) + list(web_hints or [])
                          if not has_real_code_evidence([e])]
             pre_evidence = [consolidated] + merge_evidence(desc_only)
-            return pre_evidence, _consolidated_prompt_appendix(consolidated, cve_id), True
+            return pre_evidence, _consolidated_prompt_appendix(consolidated, cve_id), True, acquisition
 
         # Fallback (consolidation off/failed, or no code anywhere): unchanged verbatim/synthesis.
         merged_for_appendix = {**prefetch_result,
                                "evidence": merge_evidence(base_evidence, extra_real)}
         pre_evidence = merge_evidence(base_evidence, extra_real, web_hints or [])
         appendix = (_prefetch_prompt_appendix(merged_for_appendix)
-                    + _web_hints_prompt_appendix(web_hints or []))
-        return pre_evidence, appendix, False
+                    + _web_hints_prompt_appendix(web_hints or [])
+                    + _kb_prompt_appendix(prefetch_result.get("kb_content")))
+        return pre_evidence, appendix, False, acquisition
 
     @app.post("/ai/exploit")
     async def exploit(body: LegacyRequest) -> dict[str, Any]:
+        with session_coverage_scope():
+            return await _exploit(body)
+
+    async def _exploit(body: LegacyRequest) -> dict[str, Any]:
         prompt_text = require_public_input(body.supplied_text())
         if _is_exploit_chitchat(prompt_text):
             return {"description": EXPLOIT_CVE_GUIDE, "exploit_guide": EXPLOIT_CVE_GUIDE,
@@ -1918,18 +3620,23 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # Acquire best real code (catalog → on-demand GitHub → web), consolidate into ONE
         # runnable file, and build the grounding appendix so Mục 2 targets that exact file.
         exploit_target = _exploit_target(body, prompt_text)
-        pre_evidence, grounding_appendix, _consolidated = await _build_exploit_grounding(
+        pre_evidence, grounding_appendix, _consolidated, acquisition = await _build_exploit_grounding(
             prefetch_result, web_hints, session_id, target=exploit_target,
             strategy_override=getattr(body, "poc_strategy", None))
-        agent_prompt = (prompt_text
-                        + (_kt_prompt_appendix(kt_result) if kt_result else "")
-                        + grounding_appendix)
-        text, metadata = await complete("exploit_research", body, session_id=session_id,
-                                        prompt_override=agent_prompt)
-        text, injected = await inject_reference_code(
-            text, metadata.get("run_id"), pre_evidence,
-            cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
-            prompt_text=prompt_text, target=exploit_target)
+        unavailable = _kb_unavailable_response(prefetch_result, pre_evidence)
+        if unavailable is not None:
+            text, injected = unavailable
+            metadata = exploit_final_meta(None)
+        else:
+            grounding_context = ((_kt_prompt_appendix(kt_result) if kt_result else "")
+                                 + grounding_appendix)
+            text, metadata = await complete("exploit_research", body, session_id=session_id,
+                                            prompt_override=prompt_text,
+                                            grounding_context=grounding_context)
+            text, injected = await inject_reference_code(
+                text, metadata.get("run_id"), pre_evidence,
+                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                prompt_text=prompt_text, target=exploit_target)
         no_poc = "No verified public PoC was found in the supplied evidence."
         metadata.setdefault("evidence_ids", []); metadata.setdefault("edb_ids", [])
         metadata.setdefault("provenance", []); metadata.setdefault("candidate_status", "not_generated")
@@ -1938,6 +3645,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # already did (cve_cwe_refs, retrieval/neo4j.py), not from PoC evidence — set
         # independently of `injected` (enforce_section1's report never carries this key).
         metadata["cwe_refs"] = prefetch_result.get("cwe_refs", [])
+        metadata["kb_status"] = prefetch_result.get("kb_status", "not_queried")
         metadata["poc_strategy"] = _resolve_poc_strategy(getattr(body, "poc_strategy", None), state.settings)
         if kt_result is not None:
             metadata["poc_kt_exploit"] = kt_result
@@ -1945,12 +3653,41 @@ def register_routes(app: FastAPI, state: Any) -> None:
                    f"{kt_result.get('cve')}:{kt_result.get('target_ip')}",
                    {"user_id": body.user_id, "exploit_verdict": kt_result.get("exploit_verdict"),
                     "ok": kt_result.get("ok"), "error": kt_result.get("error")})
+        # Mục 4 ("Giải thích quy trình tạo PoC") — 100% server-rendered từ `acquisition` +
+        # evidence flags + `injected["section1_tier"]`, KHÔNG qua LLM (xem poc/trace.py).
+        # Nối vào `text` TRƯỚC `neutralize_active_content` nhưng SAU toàn bộ pipeline
+        # strip_tool_name_mentions/sanitize_airgap_runguide trong inject_reference_code đã
+        # chạy xong — nên áp lại đúng 1 lưới quét an toàn (strip_tool_name_mentions) riêng
+        # cho khối trace trước khi nối, để một bug trong build_generation_trace không thể lọt
+        # tên tool nội bộ ra UI mà không bị chặn.
+        # Ngoại lệ: refusal hook-exhaustion (`reason=kb_search_before_synthesis_exhausted`,
+        # inject_reference_code's early-return ở trên) PHẢI đi qua byte-exact — bất biến này
+        # có test riêng (test_exploit_kb_grounding.py) — không nối Mục 4 vào case đó.
+        text = text or no_poc
+        if injected.get("reason") != "kb_search_before_synthesis_exhausted":
+            trace = build_generation_trace(acquisition, pre_evidence, injected)
+            metadata["generation_trace"] = trace
+            text = text + strip_tool_name_mentions(render_generation_trace(trace))
         await _pad_to_floor(_start, _floor)  # uniform total latency (see _pad_to_floor)
-        safe = neutralize_active_content(text or no_poc)  # defang XSS in the injected PoC too
+        safe = neutralize_active_content(text)  # defang XSS in the injected PoC too
         return {"description": safe, "exploit_guide": safe, "metadata": metadata}
 
     @app.post("/ai/exploit/stream")
     async def exploit_stream(body: LegacyRequest) -> StreamingResponse:
+        with session_coverage_scope() as coverage_state:
+            response = await _exploit_stream(body)
+        iterator = response.body_iterator
+
+        async def scoped_stream():
+            with session_coverage_scope(coverage_state):
+                async with aclosing(iterator):
+                    async for frame in iterator:
+                        yield frame
+
+        response.body_iterator = scoped_stream()
+        return response
+
+    async def _exploit_stream(body: LegacyRequest) -> StreamingResponse:
         """Own generator (not the shared `stream()`) so it can emit a `section1` PREVIEW
         event as soon as the deterministic prefetch resolves — which runs concurrently
         with, and often finishes well before, the model's own turn. Without this, Section
@@ -2030,25 +3767,49 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
         async def build_final(final: str, run_id: str | None,
                               kt_result: dict[str, Any] | None = None) -> dict[str, Any]:
+            if final == STREAM_ERROR_MESSAGE:
+                safe = neutralize_active_content(STREAM_ERROR_MESSAGE)
+                meta = exploit_final_meta(run_id)
+                meta.update({"candidate_status": "not_generated", "section1_tier": "error"})
+                if kt_result is not None:
+                    meta["poc_kt_exploit"] = kt_result
+                return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
+
             prefetch_result = await prefetch_task
             pre_evidence = grounding_holder.get("pre_evidence")
             if pre_evidence is None:  # prelude failed before grounding — fall back to raw merge
                 pre_evidence = merge_evidence(prefetch_result.get("evidence") or [], web_hints_holder)
-            final, injected = await inject_reference_code(
-                final, run_id, pre_evidence,
-                cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
-                prompt_text=text, target=_exploit_target(body, text))
+            unavailable = _kb_unavailable_response(prefetch_result, pre_evidence)
+            if unavailable is not None:
+                final, injected = unavailable
+            else:
+                final, injected = await inject_reference_code(
+                    final, run_id, pre_evidence,
+                    cve_known=prefetch_result.get("cve_known", False), cve_id=prefetch_result.get("cve_id"),
+                    prompt_text=text, target=_exploit_target(body, text))
             meta = exploit_final_meta(run_id)
             meta.update(injected)
             # H1 (2026-09-22): see the non-stream exploit() endpoint's identical comment —
             # cwe_refs comes from the prefetch's CVE-record lookup, not from `injected`.
             meta["cwe_refs"] = prefetch_result.get("cwe_refs", [])
+            meta["kb_status"] = prefetch_result.get("kb_status", "not_queried")
             if kt_result is not None:
                 meta["poc_kt_exploit"] = kt_result
-            safe = neutralize_active_content(final or no_poc)  # defang XSS in the injected PoC too
+            # Mục 4 ("Giải thích quy trình tạo PoC") — cùng cơ chế tất định với non-stream
+            # `_exploit` (xem comment ở đó). `grounding_holder["acquisition"]` có thể thiếu
+            # nếu prelude grounding lỗi (try/except ở generate()) — fail-open về {} thì
+            # build_generation_trace vẫn trả câu generic hợp lệ, không bao giờ raise.
+            # Ngoại lệ byte-exact: xem comment tương ứng trong `_exploit` (non-stream).
+            final = final or no_poc
+            if injected.get("reason") != "kb_search_before_synthesis_exhausted":
+                acquisition = grounding_holder.get("acquisition") or {}
+                trace = build_generation_trace(acquisition, pre_evidence, injected)
+                meta["generation_trace"] = trace
+                final = final + strip_tool_name_mentions(render_generation_trace(trace))
+            safe = neutralize_active_content(final)  # defang XSS in the injected PoC too
             return {"content": safe, "exploit_guide": safe, "description": safe, "metadata": meta}
 
-        async def gen() -> AsyncIterator[bytes]:
+        async def generate() -> AsyncIterator[bytes]:
             final = ""
             run_id = None
             failed = False
@@ -2065,16 +3826,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 _pf = await prefetch_task
                 _hints = await _maybe_web_hints(_pf)
                 web_hints_holder.extend(_hints)  # visible to build_final (see declaration above)
-                _pre, prefetch_appendix, _cons = await _build_exploit_grounding(
+                _pre, prefetch_appendix, _cons, _acq = await _build_exploit_grounding(
                     _pf, _hints, session_id, target=_exploit_target(body, text),
                     strategy_override=getattr(body, "poc_strategy", None))
                 grounding_holder["pre_evidence"] = _pre
                 grounding_holder["consolidated"] = _cons
+                grounding_holder["acquisition"] = _acq
             except Exception:
                 logger.exception("prefetch appendix build failed")
             # Wait up to 2s for KT so we can append appendix before the model starts when
             # intent is clear; if slower, start model and emit tool SSE when KT finishes.
-            agent_text = text + prefetch_appendix
+            grounding_context = prefetch_appendix
             pending_kt: asyncio.Task | None = kt_task
             if pending_kt is not None:
                 done, _ = await asyncio.wait({pending_kt}, timeout=2.0)
@@ -2086,9 +3848,29 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         kt_result = None
                     pending_kt = None
                     if kt_result is not None:
-                        agent_text = text + _kt_prompt_appendix(kt_result) + prefetch_appendix
+                        grounding_context = _kt_prompt_appendix(kt_result) + prefetch_appendix
 
-            model_agen = state.runner.stream("exploit_research", agent_text, session_id).__aiter__()
+            _pf = await prefetch_task
+            unavailable = _kb_unavailable_response(
+                _pf, grounding_holder.get("pre_evidence", _pf.get("evidence") or []))
+
+            if unavailable is not None:
+                if pending_kt is not None:
+                    try:
+                        kt_result = await pending_kt
+                    except Exception:
+                        logger.exception("kt exploit task failed")
+                await _pad_to_floor(_start, _floor)
+                payload = await build_final(unavailable[0], None, kt_result)
+                yield sse_frame("token", {"delta": payload["content"]})
+                yield sse_frame("final", payload)
+                yield b"data: [DONE]\n\n"
+                return
+
+            model_agen = state.runner.stream(
+                "exploit_research", text, session_id,
+                **({"grounding_context": grounding_context} if grounding_context else {}),
+            ).__aiter__()
             model_next = asyncio.ensure_future(model_agen.__anext__())
             pending_prefetch: asyncio.Task | None = prefetch_task
             try:
@@ -2181,9 +3963,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             run_id = getattr(event, "run_id", None) or run_id
                         if isinstance(event, ResultEvent):
                             final = sanitize_output_language(event.final_text or "")
-                        frame = event_to_sse(event)
-                        if frame:
-                            yield frame
+                        if not isinstance(event, PartialAssistantEvent):
+                            frame = event_to_sse(event)
+                            if frame:
+                                yield frame
             except Exception:
                 failed = True
                 logger.exception("stream failed for profile=exploit_research")
@@ -2197,6 +3980,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 yield sse_frame("final", await build_final(STREAM_ERROR_MESSAGE, run_id, kt_result))
             finally:
                 model_next.cancel()
+                await asyncio.gather(model_next, return_exceptions=True)
+                close_model = getattr(model_agen, "aclose", None)
+                if close_model is not None:
+                    await close_model()
             if not failed:
                 # Ensure KT finished for metadata even if SSE already emitted
                 if pending_kt is not None:
@@ -2208,8 +3995,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 # tokens + Section-1 preview already streamed live above, so this only
                 # normalizes total wall-clock, it does not delay progressive delivery.
                 await _pad_to_floor(_start, _floor)
-                yield sse_frame("final", await build_final(final, run_id, kt_result))
+                payload = await build_final(final, run_id, kt_result)
+                yield sse_frame("token", {"delta": payload["content"]})
+                yield sse_frame("final", payload)
             yield b"data: [DONE]\n\n"
+
+        async def gen() -> AsyncIterator[bytes]:
+            try:
+                async with aclosing(generate()) as frames:
+                    async for frame in frames:
+                        yield frame
+            finally:
+                for task in (prefetch_task, kt_task):
+                    if task is not None and not task.done():
+                        task.cancel()
+                await asyncio.gather(*(task for task in (prefetch_task, kt_task) if task is not None),
+                                     return_exceptions=True)
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
@@ -2627,7 +4428,27 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # over a real sample means the guard is bypassed on most requests right now.
         sanitize_stats = verdict_stats()
         status = _health_status(qwen_ok, sanitize_stats)
-        return {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        payload: dict[str, Any] = {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        if s.health_deep_checks:
+            # Real embedding/rerank probes + Qdrant/Neo4j + nightly-KB-sync age (see health_deps).
+            # Lets an operator confirm after a restart or .env change that the stack is actually
+            # usable, not just that the process is up. Still HTTP 200 (Docker healthcheck only
+            # needs liveness); readiness is in `ready`/`problems`.
+            from . import health_deps
+
+            extra = await health_deps.cached_collect(s)
+            problems = health_deps.problems_from(extra)
+            if redis_status == "unreachable":
+                problems.append("redis: unreachable")
+            if not qwen_ok:
+                problems.insert(0, f"llm: {llm_base} không phản hồi /models")
+            payload.update(extra)
+            payload.update(health_deps.uptime())
+            payload["problems"] = problems
+            payload["ready"] = not problems
+            if problems:
+                payload["status"] = "degraded"
+        return payload
 
     @app.post("/admin/refresh-models")
     async def refresh_models(x_api_key: Annotated[str | None, Header()] = None) -> dict[str, Any]:

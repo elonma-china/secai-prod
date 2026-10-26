@@ -4,65 +4,21 @@
 
 **Goal:** Thêm 16 hướng `zh/ja/ko/fr/de/es/ru/ar ↔ vi`, giữ nguyên dịch `en ↔ vi` và API hiện có, làm song song an toàn với dịch file/OCR.
 
-**Architecture:** Module/API đa ngôn ngữ cộng thêm, dùng model DuyTa hiện đang triển khai trên Vast cho điều phối và sinh bản dịch; lớp tương thích prompt/provider và bộ bảo toàn literal riêng. Đăng ký qua ASGI composition mới để không sửa app/router/profile đang thuộc task file. Benchmark năng lực model và benchmark toàn pipeline là hai phép đo khác nhau.
+**Architecture:** Module/API đa ngôn ngữ cộng thêm, dùng đúng LLM hiện tại; lớp tương thích prompt/provider và bộ bảo toàn literal riêng. Đăng ký qua ASGI composition mới để không sửa app/router/profile đang thuộc task file. Benchmark năng lực model và benchmark toàn pipeline là hai phép đo khác nhau.
 
 **Tech Stack:** Python/FastAPI/Pydantic/Linch/httpx; React/TypeScript/Vite; pytest; bộ đánh giá offline tách dependency khỏi runtime.
 
-**Spec:** [Yêu cầu gốc, giữ nguyên văn](multilang-source-requirements.txt). Ngày khảo sát: 2026-10-03. Trạng thái cập nhật 2026-10-04: **code và review độc lập đã hoàn tất; CPU integration đã kiểm chứng tại 877e619. Chưa benchmark live hoặc nghiệm thu chất lượng/phát hành.** Xem [STATE hiện hành](../loop/multilang/STATE.md) và [báo cáo tích hợp](/home/ict/secai-multilang-integration-wt/secai/secai-agent-gateway/docs/test-results/multilang/final-report.md) trong nhánh integration/multilang-translate. Các checklist bên dưới mô tả yêu cầu và gates của plan; trạng thái thực thi được ghi ở STATE/LOG và báo cáo theo SHA, không suy từ ô checklist chưa cập nhật.
-
-## Workspace đã tạo
-
-- Branch điều phối/plan: `feature/multilang-translate`.
-- Git worktree: `/home/ict/secai-multilang-wt`; gateway: `/home/ict/secai-multilang-wt/secai/secai-agent-gateway`.
-- Base đã fetch: `main = origin/main = ce9cd47ee1273018fec1c5cbab944a86d68d6ed5`.
-- Worktree worker đã được tách riêng cho backend, frontend, assessment, security và review. Nhánh bàn giao: `integration/multilang-translate`; main chưa thay đổi. Các bản trong workspace ban đầu là snapshot.
-- [Đề xuất criteria của astra A](../criteria/multilang-planning-proposal.md) là draft lịch sử. Sáu bộ criteria chính thức đã đóng băng tại b94e5ea; dùng `docs/criteria/multilang-*.md` và [API contract](../api/multilang-contract.md) làm tiêu chí review.
-
-## Cập nhật yêu cầu: 70% và tối đa 3 model tuần tự
-
-Chỉ dẫn mới nhất: model điều phối và sinh bản dịch là **DuyTa đang triển khai trên Vast.ai**. Giữ nguyên endpoint/checkpoint thực tế; HF dùng để đối chiếu model card/config/revision. Không chọn Qwen hoặc model khác thay thế. User đã chốt: giới hạn tối đa3 model áp dụng cho **model hỗ trợ OCR, nhận diện ngôn ngữ và đánh giá**, thử tuần tự. DuyTa không nằm trong hạn mức model hỗ trợ; không thử model dịch thay thế. Các agent phát triển astra/sol trong plan là vai trò làm việc trên code, tách biệt model runtime của hệ thống.
-
-### Cách nghiệm thu 70%
-
-Quy ước triển khai cho “khoảng 70%”: **quality pass rate ≥70% trên từng hướng**, tính `số mẫu đạt rubric / tổng mẫu dịch hợp lệ được lên lịch`. Mẫu timeout, lỗi inference, rỗng hoặc bị chặn do đầu ra sai vẫn tính fail, không loại khỏi mẫu số. Mẫu input cố ý invalid thuộc test validation riêng. Với 30 mẫu/hướng phải đạt ít nhất21/30 ở mỗi lượt trong3 lượt; không dùng trung bình các hướng để che hướng yếu.
-
-Rubric pass: đúng ngôn ngữ/biến thể đích, giữ đầy đủ ý chính và phủ định/quan hệ/số liệu quan trọng, không bịa hoặc bỏ ý làm đổi nghĩa, văn bản hiểu được và phù hợp register; lỗi văn phong nhỏ được phép. Giữ nguyên protected literals. Freeze rubric, người/công cụ chấm và xử lý bất đồng trước candidate runs; evaluator độc lập dùng reference, chấm mù model. Nếu dùng judge tự động, ghi rõ model/revision, kiểm hiệu chuẩn bằng tập đã gán nhãn; trường hợp không chắc phải adjudicate, không tự tính pass. Native reviewer chưa xác nhận, báo giới hạn evidence nếu không có người đủ khả năng thẩm định.
-
-chrF++, BLEU, COMET là số liệu chẩn đoán bổ sung; không gán “70%” thành BLEU70 hoặc COMET0.70. Báo confidence interval và unique sources, không khẳng định 21/30 chứng minh chất lượng dân số≥70%. Off-target≤2%, entity exact100%, tương thích API và security gates giữ riêng. En↔vi vẫn so baseline theo biên hồi quy, không cho giảm từ mức cao về70%. Ngưỡng70% đã nhận từ user, không hỏi lại; phần margin/performance còn cần baseline.
-
-### Đối chiếu Hugging Face với model DuyTa đang chạy
-
-- Nguồn tham khảo: [DuyTa/Cyber-F1-AWQ](https://huggingface.co/DuyTa/Cyber-F1-AWQ); tên này đến từ config local, cần đối chiếu `/v1/models` và checkpoint/revision thực tế trên Vast trước benchmark.
-- [Inventory HF](multilang-hf-model-inventory.json) lưu metadata/revision đã đọc, chưa tải weights. HF latest không được tự thay checkpoint đang serving.
-- HF hiện khai báo `qwen3_5_moe`, quant method `compressed-tensors`/`pack-quantized`; khác comment local về Qwen3-30B. Không suy loader hoặc LoRA support từ tên repo; context HF không thay context live.
-- Đã loại Qwen3-8B và Qwen3-30B-A3B-Instruct-2507 khỏi shortlist theo đính chính của user. Không có model dịch thay thế được chọn. Model card không chứng minh đạt70% ở18 hướng.
-
-### Phạm vi model hỗ trợ đã chốt
-
-- Lập một manifest tối đa3 model hỗ trợ tổng cộng cho đợt thử của task, không tự hiểu thành3 model cho mỗi nhóm. Ghi HF repo/revision/license, vai trò, CPU/GPU, VRAM dự kiến, owner, kết quả và quyết định giữ/bỏ. Có thể dùng ít hơn3; chưa tải model hỗ trợ trong lượt cập nhật plan này.
-- OCR chỉ trích xuất chữ; language-ID chỉ nhận diện ngôn ngữ; QE/judge chỉ chấm hoặc gắn cờ. Không model hỗ trợ nào sinh hay hậu chỉnh bản dịch thay DuyTa. QE/judge chỉ offline theo spec.
-- OCR hiện thuộc agent file/OCR: ưu tiên dùng contract và evidence đã có, không tự tạo OCR worker, đổi model, unload hoặc chạy lại benchmark của họ. Nếu cần tính một model OCR vào đợt thử này, ghi rõ owner và thống nhất lịch; không tự mở rộng task sang sửa OCR.
-- Tham khảo HF cho model hỗ trợ theo độ phủ ngôn ngữ, license và footprint thực tế; chốt danh sách trong T2 trước chạy. Metric dạng thuật toán như chrF/BLEU không tính là model; COMET/xCOMET/judge có weights thì tính vào hạn mức khi được thử. Không lách hạn mức bằng biến thể/quantization được thử như ứng viên riêng.
-- Một model hỗ trợ thử nghiệm tại một thời điểm, kể cả lúc có thể đủ VRAM để nạp nhiều model. DuyTa và các dịch vụ đang chạy vẫn giữ nguyên; lịch thử phải tính cả VRAM nền và reservation của OCR. Không đủ tài nguyên thì chờ hoặc dùng CPU nếu model hỗ trợ cho phép, không dừng dịch vụ người khác.
-
-### Quy trình GPU tuần tự
-
-1. Đọc endpoint/model revision/GPU process ownership, VRAM/disk thực tế và lịch của task OCR. Dùng instance đã thuê, không restart incumbent hay OCR để lấy VRAM.
-2. Giữ một reservation/lock GPU dùng chung giữa các worker của task, thống nhất lịch với task OCR. Tối đa một model hỗ trợ thử nghiệm của task được load/infer tại một thời điểm; không chạy GPU evaluator hoặc training chồng benchmark.
-3. Ước lượng weights + KV cache + runtime overhead theo context/batch rồi so quota và headroom đã thống nhất. Bắt đầu batch/concurrency1, context/output hữu hạn; không mặc định GPU utilization90% trên host shared. Thiếu VRAM thì đánh dấu blocked/không đủ tài nguyên, không thử nạp để xem có OOM.
-4. Chạy DEV cùng corpus/rubric và budget tương đương, ghi chất lượng từng hướng, latency, peak VRAM, lỗi và thời gian. Monitor suốt lượt; chạm ngưỡng dừng hoặc OOM thì hủy lượt, lưu evidence, không retry vô hạn.
-5. Lưu artifacts CPU/disk, shutdown đúng worker/process do task tạo, đợi PID biến mất và VRAM trở về baseline shared trong sai số đã ghi. `empty_cache()` đơn lẻ không đủ chứng minh model được unload. Chỉ sau đó mới load ứng viên kế tiếp. Incumbent của dịch vụ chung được giữ nguyên; nếu không còn chỗ thì chờ lịch phù hợp.
-6. Chọn cấu hình của DuyTa dựa DEV; sealed TEST chỉ cho cấu hình đã khóa. Acceptance tối thiểu1.620 requests áp cho candidate cuối, chi phí screening/baseline/retry cộng riêng. Giữ model DuyTa production; không thay serving từ kết quả benchmark. Adapter chỉ xét trên chính base DuyTa đang triển khai, sau Gate C và đánh giá khả năng train/serve thực tế.
+**Spec:** [Yêu cầu gốc, giữ nguyên văn](multilang-source-requirements.txt). Ngày khảo sát: 2026-10-03. Trạng thái: **PLAN, chưa triển khai feature, chưa benchmark live, chưa kết luận năng lực LLM**.
 
 ## Global Constraints
 
 - 16 hướng mới: `vi↔zh`, `vi↔ja`, `vi↔ko`, `vi↔fr`, `vi↔de`, `vi↔es`, `vi↔ru`, `vi↔ar`. Hai hướng hồi quy: `vi↔en`. Không yêu cầu dịch trực tiếp giữa hai ngôn ngữ ngoài tiếng Việt.
 - Người dùng xác nhận `main`, Trung giản thể (`zh-Hans`), Ả Rập Modern Standard Arabic. `zh` là alias của `zh-Hans`; không mở `zh-Hant` hay phương ngữ trong task này.
-- Chỉ model DuyTa hiện đang triển khai trên Vast điều phối và sinh bản dịch; không fallback/ensemble/postedit bằng model khác. LoRA/QLoRA chỉ trên chính base này, sau Gate C. Tối đa3 model hỗ trợ tổng cộng (OCR/LID/QE), không phải model dịch; mọi thử nghiệm GPU phải tuần tự. Language-ID/QE/rules không được sinh bản dịch. COMET/xCOMET/judge chỉ offline.
+- Chỉ LLM hiện tại sinh bản dịch. Không model dịch thứ hai, fallback sang model khác, ensemble hay dịch-then-postedit bằng model khác. LoRA/QLoRA chỉ trên cùng base model, sau Gate C. Language-ID/QE/rules không được sinh bản dịch. COMET/xCOMET/judge chỉ offline.
 - API/schema/hành vi cũ, prompt, chunker, client LLM, config mặc định cũ giữ nguyên. Feature flag server-side cho từng ngôn ngữ mới mặc định OFF; không được bật bằng request.
 - Không sửa nhánh/worktree file/OCR; không checkout, commit, rebase, force-push hay xóa trên các nhánh đó. Mọi mã nguồn mới được viết trong worktree riêng từ base chung.
-- Không chạy benchmark/training ảnh hưởng Vast đang phục vụ hay OCR đang đánh giá. GPU xếp hàng. Dùng instance Vast.ai người dùng đã thuê; không cần thuê thêm cho baseline. Xác minh endpoint và lịch shared trước GPU jobs; không tự thay serving hoặc phát sinh thuê mới.
-- Off-target **≤2%**, bảo toàn thực thể **100%** trên corpus có CVE/IP; API cũ không đổi. Quality pass rate≥70% mỗi hướng theo rubric phía trên; biên hồi quy en↔vi và giới hạn hiệu năng được hoàn thiện từ DEV baseline.
+- Không chạy benchmark/training ảnh hưởng Vast đang phục vụ hay OCR đang đánh giá. GPU xếp hàng. Không thuê instance, tải model, thay serving hoặc chi tiền khi chưa có ngân sách/resource gate.
+- Off-target **≤2%**, bảo toàn thực thể **100%** trên corpus có CVE/IP; API cũ không đổi. Biên hồi quy en↔vi và ngưỡng chất lượng từng hướng do astra A đề xuất sau DEV baseline, người dùng chốt một lần.
 - Tối đa **5 vòng sửa/review mỗi task**, **3 lần quay lại từ vanguard**. Lỗi tái xuất hiện hai lần sau báo sửa phải đổi cách; số lỗi không giảm hai vòng phải dừng task và ghi lý do. Không hạ tiêu chí hoặc bỏ case để đạt.
 - Mỗi lượt acceptance **30 mẫu/hướng ×18 hướng**, ít nhất **3 lượt**: tối thiểu **1.620 lần dịch** chưa tính retry/baseline/DEV. Fail là fail, không dùng trung bình toàn bộ ngôn ngữ để che hướng yếu.
 
@@ -141,7 +97,7 @@ T0 xuất danh sách cụ thể từ `git diff --name-only BASE...BRANCH`, cộn
 | sol-4 riêng | `feature/fe-devspace-multilang` | FE canonical mới snapshot, các file UI/API multilang; không sửa FE đang ở workspace user |
 | astra B riêng | `integration/multilang-translate` | Chỉ tích hợp SHA đã qua gates; không tự thêm tính năng |
 
-Execution đã tạo worktrees assessment/core/FE từ main ce9cd47; Astra A hiện chỉ viết criteria trong worktree điều phối để tránh thêm checkout chỉ-tài-liệu. Integration worktree tạo khi có commits để review. Không tạo adapter branch trước Gate C. Reviewer/tester/vanguard mỗi lần dùng worktree review độc lập ở SHA cụ thể, context mới, không sửa feature code.
+Chưa tạo các nhánh/worktree này trong lượt lập plan. Không tạo adapter branch trước Gate C. Reviewer/tester/vanguard mỗi lần dùng worktree review độc lập ở SHA cụ thể, context mới, không sửa feature code.
 
 ## 2. Thiết kế đề xuất và hợp đồng để astra A freeze
 
@@ -181,7 +137,7 @@ Registry canonical → feature/pair/input guards → nhận diện ngôn ngữ/c
 
 ```text
 T0 overlap/preflight → T1 astra A criteria & contract
-  → T2 ASSESS + Gate A DEV baseline → áp dụng quality pass rate≥70%, chốt margin/performance còn thiếu
+  → T2 ASSESS + Gate A DEV baseline → user chốt ngưỡng một lần
   → Gate B thí nghiệm DEV trên cùng LLM → [Gate C nếu cần] → Gate D kết luận
   → T3/T4 core + T5 FE + T2 hoàn thiện benchmark (độc lập, theo slot)
   → T7 review/fix → acceptance 3 lượt → T8 vanguard
@@ -189,7 +145,7 @@ T0 overlap/preflight → T1 astra A criteria & contract
   → T10 tài liệu API và báo cáo cuối
 ```
 
-Để tránh vòng phụ thuộc “phải code mới đo Gate B nhưng CODE chỉ sau gates”: Gate B chỉ có harness/prompt/thí nghiệm nằm trong assessment worktree, chưa đăng ký API hoặc đổi production. Sau khi có hướng đáp ứng, sol-2 hiện thực cấu hình thắng trong module sản phẩm. Ruling khi user yêu cầu triển khai ngay: sau khi contract/criteria freeze, CPU scaffold/code/tests và FE mock được tiến hành với flagsOFF trong lúc assessment chờ lịch GPU. Cấu hình prompt/language rollout chưa được nghiệm thu cho đến khi ASSESS và toàn bộ quality gates hoàn tất; không gọi scaffolding là hoàn thành Gate B/D.
+Để tránh vòng phụ thuộc “phải code mới đo Gate B nhưng CODE chỉ sau gates”: Gate B chỉ có harness/prompt/thí nghiệm nằm trong assessment worktree, chưa đăng ký API hoặc đổi production. Sau khi có hướng đáp ứng, sol-2 hiện thực cấu hình thắng trong module sản phẩm. FE có thể làm mock sau khi contract/criteria freeze và bước ASSESS+gate kết luận, không phải chờ API thật.
 
 Lịch slot: điều phối + tối đa 3 agent. Khi CODE: sol-core + sol-FE + sol-assessment; warden chạy tại checkpoint khi một slot rảnh. Khi Gate C chạy GPU, sol-FE/CPU tests có thể chạy song song; không benchmark GPU cạnh OCR hoặc training. Reviewer/vanguard thay slot coder đã idle, không vượt giới hạn.
 
@@ -203,7 +159,7 @@ Lịch slot: điều phối + tối đa 3 agent. Khi CODE: sol-core + sol-FE + s
 - [ ] Tạo worktrees criteria/assessment/core/FE/integration từ BASE_SHA; mỗi agent môi trường riêng, không `pip install` vào venv chung. Chưa tạo adapter branch.
 - [ ] Khóa dependency đúng pyproject và ghi version; kiểm `secai_gateway.__file__` thuộc đúng worktree (editable install trỏ sai cây là FAIL).
 - [ ] Chạy `.venv/bin/python -m pytest -q` trên base cô lập, bảo vệ data paths/network. Nếu cần timeout harness, chạy trước/sau cùng cấu hình và lưu full JUnit/node IDs. Không deselect test lỗi để tuyên bố xanh.
-- [ ] Preflight Vast chỉ metadata read-only: instance/model/engine/GPU/workloads, token budget, khả năng LoRA thực tế. Ghi instance hiện hữu, endpoint dev, owner, lịch reservation và giới hạn thời gian/tải. Người dùng xác nhận Vast.ai đã thuê; không chặn chuẩn bị/baseline chỉ vì chưa có ngân sách thuê mới. GPU jobs phải có endpoint đã xác minh và lịch không trùng OCR; adapter cần đánh giá quota riêng ở Gate C.
+- [ ] Preflight Vast chỉ metadata read-only: instance/model/engine/GPU/workloads, token budget, khả năng LoRA thực tế. Ghi `GPU_BUDGET_USD`, endpoint dev, owner và lịch reservation. Thiếu số/endpoint: chặn GPU jobs, vẫn làm docs/CPU tasks đã đủ criteria.
 - [ ] Checkpoint tài liệu preflight; warden kiểm đường dẫn, resource ledger và không có thay đổi ở worktree khác.
 
 ### T1 — Astra A freeze tiêu chí và hợp đồng, làm trước code/benchmark
@@ -211,7 +167,7 @@ Lịch slot: điều phối + tối đa 3 agent. Khi CODE: sol-core + sol-FE + s
 **Files:** `docs/criteria/multilang-{assessment,core,fe,adapter,integration-security}.md`, `docs/api/multilang-contract.md`.
 
 - [ ] Mỗi requirement trong spec gắn criterion ID, task, phép đo, bằng chứng và PASS/FAIL. Chốt signatures/interfaces dưới đây, input guard và policy identity; ghi các ngưỡng quality/performance còn phụ thuộc Gate A là `PENDING_BASELINE`, không đặt số đẹp tùy ý.
-- [ ] Khóa recipe dataset/DEV/TEST, rule chống leakage, reference policy, tokenizer/metric version, decoder/seed và phương pháp paired non-inferiority. Quality pass rate≥70% đã xác định; rubric freeze trước đo, margin/performance còn thiếu freeze sau A và trước B.
+- [ ] Khóa recipe dataset/DEV/TEST, rule chống leakage, reference policy, tokenizer/metric version, decoder/seed và phương pháp paired non-inferiority. Quality thresholds freeze sau A và trước B.
 - [ ] Chốt assertion API unchanged, flags OFF unchanged, no new failures so với baseline, và test file/OCR phải chạy trên cây ghép.
 - [ ] Checkpoint `CRITERIA_READY` cho assessment. Không đánh đồng với quality PASS hoặc production readiness; user review plan hoàn chỉnh trước triển khai.
 
@@ -227,7 +183,7 @@ Lịch slot: điều phối + tối đa 3 agent. Khi CODE: sol-core + sol-FE + s
 - [ ] Gate A: DEV baseline đủ 18 hướng với prompt hiện tại và decode cố định thấp; thêm regression control dùng decode hiện tại để không che regression. Đo raw model và legacy API riêng: CJK mất sau sanitizer là pipeline failure, không phải chứng cứ LLM không biết dịch.
 - [ ] Dữ liệu: kiểm license/revision/coverage FLORES/NTREX/WMT/Tatoeba trước chọn; thêm domain an ninh mạng từng hướng, reference đáng tin. Đo token/ký tự từng ngôn ngữ. TEST giữ kín; không dùng FLORES devtest làm train/dev.
 - [ ] Report từng hướng: chrF++ chính, BLEU có tokenizer/signature phù hợp, COMET/xCOMET hoặc metric tương đương đã kiểm language coverage (offline), off-target/script, copy/repetition/hallucination/truncation/preamble, entity exact match, p50/p95, throughput, USD/1.000 ký tự. Không bịa cost khi thiếu tariff/token usage.
-- [ ] Áp dụng quality pass rate≥70% theo rubric; astra A dùng DEV baseline để đề xuất biên không suy giảm en↔vi, latency/VRAM/cost limits và CI còn thiếu. Không yêu cầu xác nhận lại70%; không tự đổi rubric/ngưỡng dựa candidate kết quả kém. Benchmark dịch dùng DuyTa hiện tại. Lập manifest tối đa3 model hỗ trợ OCR/LID/QE theo HF, giữ ownership OCR và chạy tuần tự theo quy trình phía trên.
+- [ ] Astra A dùng DEV baseline + tham khảo model cùng cỡ để đề xuất ngưỡng từng hướng, biên không suy giảm en↔vi, latency/VRAM/cost limits và CI; user xác nhận **một lần**. Chưa xác nhận thì không chạy B/C theo ngưỡng tùy đặt.
 - [ ] Gate B: thử lần lượt pair prompt/few-shot → glossary/literal → language-aware chunk/NFC → decode/token budgets → validator+retry → guided decoding nếu engine xác nhận hỗ trợ. Mỗi ablation dùng DEV, giữ chỉ cải thiện đo được, không đổi model.
 - [ ] Gate C: chỉ tạo T6 khi B chưa đạt và prerequisites đáp ứng. Gate D: bảng đạt/fail theo hướng; còn hướng fail thì giữ OFF và hỏi user, không tự gắn beta/bật một chiều.
 - [ ] Xuất tối đa 20 câu/ngôn ngữ cho đánh giá bản ngữ nếu có người; trạng thái không có reviewer không được ghi human-PASS.
@@ -316,9 +272,9 @@ Lịch slot: điều phối + tối đa 3 agent. Khi CODE: sol-core + sol-FE + s
 
 STATE ghi phase, task/owner/branch/worktree/SHA, loop/review/vanguard counters, test manifests/config hashes, pass/fail/node IDs, language rollout status, simulated merge SHAs/results, GPU reservations, cost used/ceiling và next action. LOG append 5–10 dòng sau mỗi giai đoạn; feedback giữ nguyên theo ID, không tóm tắt mất thông tin. Mất context đọc STATE/LOG và frozen contract trước tiếp tục.
 
-Warden chạy checkpoint ở mỗi transition và trước/sau GPU job: không tự sửa criteria hoặc feature code. Cùng lỗi tái phát2 lần → đổi cách tiếp cận; lỗi không giảm2 vòng → dừng task, chuyển việc độc lập; vượt5 fix/review hoặc3 vanguard returns → báo global stop. Cũng stop khi vượt budget, chưa đạt Gate D, Critical không sửa được, cần đổi API cũ hoặc vượt danh sách tối đa3 model hỗ trợ, không hỗ trợ LoRA hay bắt buộc chạm file owner khác mà chưa phối hợp được.
+Warden chạy checkpoint ở mỗi transition và trước/sau GPU job: không tự sửa criteria hoặc feature code. Cùng lỗi tái phát2 lần → đổi cách tiếp cận; lỗi không giảm2 vòng → dừng task, chuyển việc độc lập; vượt5 fix/review hoặc3 vanguard returns → báo global stop. Cũng stop khi vượt budget, chưa đạt Gate D, Critical không sửa được, cần đổi API cũ/LLM, không hỗ trợ LoRA hay bắt buộc chạm file owner khác mà chưa phối hợp được.
 
-**Nguồn lực cập nhật:** người dùng xác nhận Vast.ai đã thuê. Dùng hạ tầng hiện hữu, không yêu cầu thuê thêm cho baseline. STATE của task file/OCR ghi instance `53846446`, A100 80GB; đây là thông tin tham chiếu, cần xác minh lại khi execution, không coi số VRAM trống cũ là hiện tại. Benchmark dùng endpoint LLM hiện hữu sau preflight và xếp lịch tránh OCR; không restart/đổi serving. `COMPUTE_PROVISIONING=EXISTING_RENTED_INSTANCE`, `ADDITIONAL_RENTAL=NOT_AUTHORIZED`, endpoint/lịch reservation cần xác minh; reviewer bản ngữ chưa xác nhận. Ghi thời gian chạy và chi phí quy đổi nếu có đơn giá. Adapter ở Gate C cần quota/thời gian riêng; thiếu sức chứa thì báo trước khi mở rộng tài nguyên.
+**Nguồn lực chưa được cấp:** user “oke” xác nhận defaults nhưng chưa nêu budget USD, endpoint dev riêng/lịch shared hay reviewer bản ngữ. `GPU_BUDGET_USD=UNSET`, `DEV_ENDPOINT=UNSET`, `NATIVE_REVIEW=UNCONFIRMED`; không quy đổi “oke” thành ngân sách vô hạn. Không benchmark/training live trước khi có budget và resource gate. OCR đang dùng Vast theo STATE của task kia, không coi GPU đó là rảnh.
 
 ## 6. Checklist đối chiếu yêu cầu
 
@@ -334,4 +290,4 @@ Warden chạy checkpoint ở mỗi transition và trước/sau GPU job: không t
 | §8 test30×18×≥3,security9 groups,prod gates | T7/T8/T9 |
 | §9 báo cáo đầy đủ | T10 |
 
-Plan không bao gồm sửa lỗi legacy vừa nghi ngờ trong lượt audit trước, đổi contract file/OCR, thử quá3 model hỗ trợ hoặc tự đổi model production, mở beta tự động hoặc triển khai production. Các điều kiện cần dữ liệu baseline/nguồn lực được ghi thành gate; không thay bằng dự đoán chất lượng.
+Plan không bao gồm sửa lỗi legacy vừa nghi ngờ trong lượt audit trước, đổi contract file/OCR, thêm model dịch khác, mở beta tự động hoặc triển khai production. Các điều kiện cần dữ liệu baseline/nguồn lực được ghi thành gate; không thay bằng dự đoán chất lượng.

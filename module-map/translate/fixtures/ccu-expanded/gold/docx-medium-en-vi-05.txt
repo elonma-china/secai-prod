@@ -1,0 +1,126 @@
+SecAI - 1
+SecAI docx-medium-en-vi-05-p01
+[docx-medium-en-vi-05-p01-0000] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p01-0001] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p01-0002] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p01-0003] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p01-0004] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p01-0005] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p01-0006] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p01-0007] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p01-0008] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p01-0009] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p01-0010] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p01-0011] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p01-0012] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p01-0013] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p01-0014] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p01-0015] Analysts compare network alerts with application logs before opening an incident.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2
+
+SecAI - 2
+SecAI docx-medium-en-vi-05-p02
+[docx-medium-en-vi-05-p02-0000] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p02-0001] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p02-0002] Analysts compare network alerts with application logs before opening an incident.
+[docx-medium-en-vi-05-p02-0003] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p02-0004] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p02-0005] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p02-0006] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p02-0007] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p02-0008] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p02-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p02-0010] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p02-0011] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p02-0012] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p02-0013] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p02-0014] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p02-0015] Analysts compare network alerts with application logs before opening an incident.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+Asset | Owner | Priority
+node-1-0 | SOC | 1
+node-1-1 | SOC | 2
+
+SecAI - 3
+SecAI docx-medium-en-vi-05-p03
+[docx-medium-en-vi-05-p03-0000] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p03-0001] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p03-0002] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p03-0003] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p03-0004] Analysts compare network alerts with application logs before opening an incident.
+[docx-medium-en-vi-05-p03-0005] Analysts compare network alerts with application logs before opening an incident.
+[docx-medium-en-vi-05-p03-0006] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p03-0007] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p03-0008] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p03-0009] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p03-0010] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p03-0011] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p03-0012] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p03-0013] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p03-0014] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p03-0015] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+
+Asset | Owner | Priority
+node-2-0 | SOC | 1
+node-2-1 | SOC | 2
+
+SecAI - 4
+SecAI docx-medium-en-vi-05-p04
+[docx-medium-en-vi-05-p04-0000] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p04-0001] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p04-0002] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p04-0003] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p04-0004] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p04-0005] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p04-0006] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p04-0007] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p04-0008] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p04-0009] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p04-0010] Analysts compare network alerts with application logs before opening an incident.
+[docx-medium-en-vi-05-p04-0011] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p04-0012] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p04-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p04-0014] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p04-0015] Every change is tested with representative documents before release to the customer.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+Asset | Owner | Priority
+node-3-0 | SOC | 1
+node-3-1 | SOC | 2
+
+SecAI - 5
+SecAI docx-medium-en-vi-05-p05
+[docx-medium-en-vi-05-p05-0000] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p05-0001] Analysts compare network alerts with application logs before opening an incident.
+[docx-medium-en-vi-05-p05-0002] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p05-0003] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[docx-medium-en-vi-05-p05-0004] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p05-0005] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p05-0006] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[docx-medium-en-vi-05-p05-0007] A vulnerability report describes the affected asset, business impact and remediation steps.
+[docx-medium-en-vi-05-p05-0008] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p05-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[docx-medium-en-vi-05-p05-0010] The security team reviews access permissions and records the owner of each service.
+[docx-medium-en-vi-05-p05-0011] Every change is tested with representative documents before release to the customer.
+[docx-medium-en-vi-05-p05-0012] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[docx-medium-en-vi-05-p05-0013] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[docx-medium-en-vi-05-p05-0014] The inventory includes databases, network devices, endpoints and their responsible teams.
+[docx-medium-en-vi-05-p05-0015] A vulnerability report describes the affected asset, business impact and remediation steps.
+Keywords: audit16 audit17 audit18
+Account: svc_ccu_51d919a7
+Password: Pw426b2f47!0&*()_+
+URL: https://51d919a7.example.org/audit?id=5363993&mode=test
+IP: 192.0.2.244:8993
+CVE: CVE-2024-9993
+Email: audit.51d919a7@example.org
+Key: sk-test-4a5e5423498fe93e
+
+Asset | Owner | Priority
+node-4-0 | SOC | 1
+node-4-1 | SOC | 2

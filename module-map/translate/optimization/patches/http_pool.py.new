@@ -1,0 +1,22 @@
+"""Kết nối HTTP dùng lại cho dịch/OCR: mỗi lệnh gọi trước đây mở kết nối MỚI; qua tunnel SSH tới GPU mỗi kết nối mới tốn
+thêm ~0,27 s (mở kênh) — dùng lại (keep-alive) giảm cộng dồn cho mọi lệnh gọi trong một trang/tài liệu."""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+
+import httpx
+
+_CLIENTS: dict[int, httpx.AsyncClient] = {}
+
+
+@contextlib.asynccontextmanager
+async def pooled_client():
+    """Một AsyncClient cho mỗi event loop; KHÔNG đóng khi thoát khối (khác `async with httpx.AsyncClient()`)."""
+    key = id(asyncio.get_running_loop())
+    client = _CLIENTS.get(key)
+    if client is None or client.is_closed:
+        client = _CLIENTS[key] = httpx.AsyncClient(
+            trust_env=False,
+            limits=httpx.Limits(max_connections=256, max_keepalive_connections=64, keepalive_expiry=3))
+    yield client

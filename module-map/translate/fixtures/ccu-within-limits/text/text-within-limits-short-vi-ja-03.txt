@@ -1,0 +1,18 @@
+SecAI text-within-limits-short-vi-ja-03
+Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit9 audit10 audit11 audit12 audit13 audit14 audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+Account: svc_ccu_0babd8cb
+Password: Pw1f21102e!0&*()_+
+URL: https://0babd8cb.example.org/audit?id=764888&mode=test
+IP: 192.0.2.139:8888
+CVE: CVE-2024-9888
+Email: audit.0babd8cb@example.org
+Key: sk-test-542470f9d4e164de

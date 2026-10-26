@@ -1,0 +1,222 @@
+[
+ {
+  "id": "docx-long-ar",
+  "size": "long",
+  "fmt": "docx",
+  "pages": 1,
+  "dir": "ar->vi",
+  "status": "done",
+  "sec": 5,
+  "spp": 5.05,
+  "lit_in_page": 6
+ },
+ {
+  "id": "docx-long-ko",
+  "size": "long",
+  "fmt": "docx",
+  "pages": 1,
+  "dir": "ko->vi",
+  "status": "done",
+  "sec": 5.1,
+  "spp": 5.05,
+  "lit_in_page": 6
+ },
+ {
+  "id": "xlsx-long-de",
+  "size": "long",
+  "fmt": "xlsx",
+  "pages": 3,
+  "dir": "de->vi",
+  "status": "done",
+  "sec": 5.4,
+  "spp": 1.79,
+  "lit_in_page": 6
+ },
+ {
+  "id": "xlsx-long-fr",
+  "size": "long",
+  "fmt": "xlsx",
+  "pages": 3,
+  "dir": "fr->vi",
+  "status": "done",
+  "sec": 5.4,
+  "spp": 1.8,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-long-de",
+  "size": "long",
+  "fmt": "pdf",
+  "pages": 4,
+  "dir": "de->vi",
+  "status": "done",
+  "sec": 7.2,
+  "spp": 1.79,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-scan-long-ja",
+  "size": "long",
+  "fmt": "pdf-scan",
+  "pages": 3,
+  "dir": "ja->vi",
+  "status": "done",
+  "sec": 18.3,
+  "spp": 6.1,
+  "lit_in_page": 5
+ },
+ {
+  "id": "pdf-scan-long-de",
+  "size": "long",
+  "fmt": "pdf-scan",
+  "pages": 3,
+  "dir": "de->vi",
+  "status": "done",
+  "sec": 13.9,
+  "spp": 4.63,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-scan-long-ar",
+  "size": "long",
+  "fmt": "pdf-scan",
+  "pages": 3,
+  "dir": "ar->vi",
+  "status": "done",
+  "sec": 35.3,
+  "spp": 11.76,
+  "lit_in_page": 6
+ },
+ {
+  "id": "png-long-en",
+  "size": "long",
+  "fmt": "png",
+  "pages": 1,
+  "dir": "en->vi",
+  "status": "done",
+  "sec": 11.4,
+  "spp": 11.4,
+  "lit_in_page": 6
+ },
+ {
+  "id": "jpg-long-ru",
+  "size": "long",
+  "fmt": "jpg",
+  "pages": 1,
+  "dir": "ru->vi",
+  "status": "done",
+  "sec": 11.6,
+  "spp": 11.58,
+  "lit_in_page": 6
+ },
+ {
+  "id": "docx-short-en",
+  "size": "short",
+  "fmt": "docx",
+  "pages": 1,
+  "dir": "en->vi",
+  "status": "done",
+  "sec": 4.7,
+  "spp": 4.74,
+  "lit_in_page": 6
+ },
+ {
+  "id": "docx-short-ja",
+  "size": "short",
+  "fmt": "docx",
+  "pages": 1,
+  "dir": "ja->vi",
+  "status": "done",
+  "sec": 6.8,
+  "spp": 6.84,
+  "lit_in_page": 6
+ },
+ {
+  "id": "xlsx-short-vi",
+  "size": "short",
+  "fmt": "xlsx",
+  "pages": 1,
+  "dir": "vi->English",
+  "status": "done",
+  "sec": 4.7,
+  "spp": 4.74,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-short-es",
+  "size": "short",
+  "fmt": "pdf",
+  "pages": 1,
+  "dir": "es->vi",
+  "status": "done",
+  "sec": 4.7,
+  "spp": 4.75,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-short-zh-Hans",
+  "size": "short",
+  "fmt": "pdf",
+  "pages": 1,
+  "dir": "zh-Hans->vi",
+  "status": "done",
+  "sec": 6.9,
+  "spp": 6.86,
+  "lit_in_page": 6
+ },
+ {
+  "id": "pdf-scan-short-es",
+  "size": "short",
+  "fmt": "pdf-scan",
+  "pages": 1,
+  "dir": "es->vi",
+  "status": "done",
+  "sec": 11.2,
+  "spp": 11.16,
+  "lit_in_page": 5
+ },
+ {
+  "id": "pdf-scan-short-en",
+  "size": "short",
+  "fmt": "pdf-scan",
+  "pages": 1,
+  "dir": "en->vi",
+  "status": "done",
+  "sec": 7,
+  "spp": 7.05,
+  "lit_in_page": 6
+ },
+ {
+  "id": "png-short-de",
+  "size": "short",
+  "fmt": "png",
+  "pages": 1,
+  "dir": "de->vi",
+  "status": "done",
+  "sec": 9.2,
+  "spp": 9.16,
+  "lit_in_page": 6
+ },
+ {
+  "id": "jpg-short-fr",
+  "size": "short",
+  "fmt": "jpg",
+  "pages": 1,
+  "dir": "fr->vi",
+  "status": "done",
+  "sec": 9.2,
+  "spp": 9.16,
+  "lit_in_page": 6
+ },
+ {
+  "id": "png-short-ko",
+  "size": "short",
+  "fmt": "png",
+  "pages": 1,
+  "dir": "ko->vi",
+  "status": "done",
+  "sec": 11.3,
+  "spp": 11.27,
+  "lit_in_page": 6
+ }
+]

@@ -1,0 +1,23 @@
+{
+  "observed_at": "2026-10-13T18:10:49.542961+00:00",
+  "containers": [
+    {
+      "name": "/secai-docker-gateway",
+      "image": "sha256:993dac2ec100a23e30c1754e357a4e87f24ec86f10a2b125db766b779d4aa715",
+      "started_at": "2026-10-13T13:47:05.71284993Z",
+      "restart_count": "0"
+    },
+    {
+      "name": "/secai-translation-gateway",
+      "image": "sha256:4bb76dbc8498e253b7a95dbd10019d3264684c5db7509e0bb2923d5e60729c73",
+      "started_at": "2026-10-11T05:57:47.416300088Z",
+      "restart_count": "0"
+    },
+    {
+      "name": "/secai-translation-worker",
+      "image": "sha256:f7ce715335bdd35d554ae6da59dafba2af2f46ecc00d57e376c7765c6a57ec7a",
+      "started_at": "2026-10-11T05:57:48.128132941Z",
+      "restart_count": "0"
+    }
+  ]
+}

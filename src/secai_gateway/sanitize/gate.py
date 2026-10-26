@@ -46,6 +46,8 @@ class Action(str, Enum):
     BLOCK_INJECTION = "block_injection"   # short-circuit: injection refusal
     REFUSE_OFFTOPIC = "refuse_offtopic"   # short-circuit: scope_policy refusal
     GREET_CHITCHAT = "greet_chitchat"     # short-circuit: bare greeting (opt-in)
+    ASK_CLARIFICATION = "ask_clarification"
+    SCOPE_UNAVAILABLE = "scope_unavailable"
 
 
 @dataclass(frozen=True, slots=True)

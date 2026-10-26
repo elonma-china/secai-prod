@@ -1,0 +1,49 @@
+--- xlsx_documents.py.pre-literal	2026-10-11 00:31:09.887056888 +0700
++++ xlsx_documents.py	2026-10-11 00:31:09.921855365 +0700
+@@ -83,6 +83,20 @@
+     return bool(stripped) and not stripped.startswith("=") and any(c.isalpha() for c in stripped)
+ 
+ 
++def _display_value(cell: Any) -> str | None:
++    """Ô KHÔNG dịch (số, ngày, công thức, chuỗi không có chữ như '192.168.10.25:8443') vẫn phải có mặt trong kết quả,
++    đúng vị trí, dưới dạng khối literal giữ nguyên — nếu không bản dịch/preview làm MẤT thông tin."""
++    value = cell.value
++    if value is None:
++        return None
++    if isinstance(value, bool):
++        return "TRUE" if value else "FALSE"
++    if hasattr(value, "isoformat"):
++        return value.isoformat()
++    text = str(value)
++    return text if text.strip() else None
++
++
+ def extract_xlsx(path: Path, settings: TranslationSettings) -> ExtractedDocument:
+     openpyxl = _load_openpyxl()
+     _vet_package(path, settings)
+@@ -108,10 +122,14 @@
+             for (row, col), cell in sorted(sheet._cells.items()):
+                 if cell.comment is not None:
+                     comments = True
+-                if not _translatable(cell):
++                translatable = _translatable(cell)
++                shown = None if translatable else _display_value(cell)
++                if not translatable and shown is None:
+                     continue
+-                if len(items) >= cap:
++                if translatable and sum(1 for it in items if it[0] == "table_cell") >= cap:
+                     raise TranslationError("TEXT_TOO_LONG", "Workbook has too many text cells.")
++                if len(items) >= settings.max_blocks:
++                    raise TranslationError("TEXT_TOO_LONG", "Workbook has too many cells.")
+                 meta: dict[str, Any] = {"sheet": sheet.title, "row": row - 1, "col": col - 1,
+                                         "cell": cell.coordinate}
+                 if sheet.sheet_state != "visible":
+@@ -121,7 +139,7 @@
+                     meta["row_span"] = span[0]
+                 if span and span[1] > 1:
+                     meta["column_span"] = span[1]
+-                items.append(("table_cell", cell.value, meta))
++                items.append(("table_cell", cell.value, meta) if translatable else ("literal", shown, meta))
+             if getattr(sheet, "_charts", None) or getattr(sheet, "_images", None):
+                 warnings.append(WarningItem(code="UNSUPPORTED_PART",
+                                             message="Charts or images in the workbook are not translated."))

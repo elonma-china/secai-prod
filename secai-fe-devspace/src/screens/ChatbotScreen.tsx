@@ -69,7 +69,7 @@ function writeSavedView(userId: string, view: ChatView) {
 
 export default function ChatbotScreen({ userId, health }: { userId: string; health: HealthStatus | null }) {
   const reviewIdentity = useReviewIdentity();
-  const [liveReviewTurn, setLiveReviewTurn] = useState<LiveReviewTurn | null>(null);
+  const [liveReviewTurns, setLiveReviewTurns] = useState<Record<string, LiveReviewTurn>>({});
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -98,7 +98,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   // restoreSession's own fallback and readSavedView's userId-scoped key.
   useEffect(() => {
     let alive = true;
-    setLiveReviewTurn(null);
+    setLiveReviewTurns({});
     setProjects([]);
     setSessions([]);
     setExpanded(new Set());
@@ -145,7 +145,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
    * and get stuck on. Writing at the point of intent instead ties the localStorage write to the
    * same synchronous call as the state update, so no render/effect ordering can race it. */
   function openView(v: ChatView) {
-    setLiveReviewTurn(null);
+    setLiveReviewTurns({});
     setView(v);
     writeSavedView(userId, v);
   }
@@ -452,9 +452,10 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       let publicAnswer = "";
       let completedAnswer: string | null = null;
       let streamFailed = false;
-      const reviewContext = (justCreated ? [] : items).flatMap(item => item.kind === "user" || (item.kind === "assistant" && !item.streaming && !item.error) ? [{role: item.kind === "user" ? "user" : "assistant", content: item.text}] : []).filter(message => message.content.trim());
+      const reviewContext = (justCreated ? [] : items).flatMap(item => item.kind === "user" || (item.kind === "assistant" && !item.streaming && !item.error) ? [{role: item.kind === "user" ? "user" : "assistant", content: item.text}] : []).filter(message => message.content.trim()).slice(-28);
+      // Leave room for the current question and keep the public context user-led.
+      while (reviewContext[0]?.role === "assistant") reviewContext.shift();
       reviewContext.push({role: "user", content: text});
-      setLiveReviewTurn(null);
       try {
         await chatStream(
           sid,
@@ -487,7 +488,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           },
           ac.signal,
         );
-        if (!ac.signal.aborted && !streamFailed && completedAnswer && getReviewIdentity()?.liveEnabled) setLiveReviewTurn({id: aid, prompt_messages: reviewContext, answer: completedAnswer, source_group: sid});
+        if (!ac.signal.aborted && !streamFailed && completedAnswer && getReviewIdentity()?.liveEnabled !== false) setLiveReviewTurns(prev => ({...prev, [aid]: {id: aid, prompt_messages: reviewContext, answer: completedAnswer!, source_group: sid}}));
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
           aborted = true;
@@ -633,7 +634,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           onCopy={copyText}
           onRegenerate={regenerateFrom}
           onSuggestion={setInput}
-          reviewWidget={<LiveReviewWidget turn={liveReviewTurn}/>}
+          reviewWidget={id => liveReviewTurns[id] ? <LiveReviewWidget turn={liveReviewTurns[id]}/> : null}
         />
       </div>
     </div>

@@ -141,7 +141,7 @@ async function loadConfig(container) {
         <tr><td>HF token (mới)</td><td><input id="cf-hf" type="password" style="width:100%;box-sizing:border-box" placeholder="để trống = giữ nguyên"></td></tr>
         <tr><td>Judge API key (mới)</td><td><input id="cf-judge-key" type="password" style="width:100%;box-sizing:border-box" placeholder="để trống = giữ nguyên"></td></tr>
         <tr><td>Vast.ai API key (mới)</td><td><input id="cf-vast" type="password" style="width:100%;box-sizing:border-box" placeholder="để trống = giữ nguyên (để thuê GPU khi retrain/deploy)"></td></tr>
-        <tr><td>Nhịp đối soát</td><td><select id="cf-cadence">${opts}</select> ngày <input id="cf-day" type="number" min="1" max="28" value="${esc(String(sched.day ?? 15))}" style="width:70px"></td></tr>
+        <tr><td>Nhịp đối soát</td><td><select id="cf-cadence">${opts}</select> ngày <input id="cf-day" type="number" min="1" max="28" value="${esc(String(sched.day ?? 7))}" style="width:70px"></td></tr>
         <tr><td>Ngưỡng CVE mới tối thiểu</td><td><input id="cf-mincves" type="number" min="1" value="${esc(String(c.min_new_cves_to_run ?? 20))}" style="width:100px"></td></tr>
         <tr><td>Model serving (vast)</td><td class="hint">embed=<code>${esc(vast.embed_model || "—")}</code> · rerank=<code>${esc(vast.rerank_model || "—")}</code></td></tr>
         <tr><td>HF repo production</td><td class="hint">${repos || "—"}</td></tr>
@@ -300,10 +300,11 @@ async function track(container, runId) {
 
   function overallLine(status) {
     const ov = status && status.overall;
-    const cls = ov === "failed" ? "fail" : ov === "running" ? "warn" : "ok";
+    const cls = (ov === "failed" || ov === "stopped") ? "fail" : ov === "running" ? "warn" : "ok";
     const failed = (status.stages || []).find((s) => s.state === "failed");
     const where = failed ? ` — fail ở giai đoạn <b>${esc(failed.id)} ${esc(failed.name)}</b>${failed.note ? ": " + esc(failed.note) : ""}` : "";
-    return `<p>Trạng thái tổng: <span class="pill ${cls}">${esc(ov || "?")}</span> <span class="hint">(chế độ ${esc(status.mode || "?")})</span>${where}</p>`;
+    return `<p>Trạng thái tổng: <span class="pill ${cls}">${esc(ov || "?")}</span> <span class="hint">(chế độ ${esc(status.mode || "?")})</span>${where}</p>` +
+      (ov === "running" ? `<p><button type="button" class="ra-stop-btn" style="background:#b91c1c;color:#fff;border:0;padding:6px 14px;border-radius:6px;cursor:pointer">⏹ Dừng pipeline</button> <span class="hint">Dừng ngay tiến trình đang chạy (cần X-API-Key). Instance vast đã thuê KHÔNG tự huỷ — kiểm tra sau khi dừng.</span></p>` : "");
   }
 
   function renderStages(status) {
@@ -320,6 +321,19 @@ async function track(container, runId) {
     }).join("");
     stagesEl.querySelectorAll("details").forEach((d) =>
       d.addEventListener("toggle", () => { openState[d.dataset.stage] = d.open; }));
+    const stopBtn = stagesEl.querySelector(".ra-stop-btn");
+    if (stopBtn) stopBtn.addEventListener("click", async () => {
+      if (!confirm("Dừng pipeline đang chạy ngay bây giờ?\n(Nếu đang ở giai đoạn deploy, production có thể ở trạng thái dở dang.)")) return;
+      stopBtn.disabled = true;
+      try {
+        const r = await jpost("/runs/" + encodeURIComponent(runId) + "/stop", {});
+        const inst = (r.vast_instances_still_running || []);
+        alert("Đã dừng pipeline (" + r.overall + ")." + (inst.length
+          ? "\nInstance vast CÒN CHẠY (đang tính tiền), cần huỷ tay: " + inst.map((i) => i.id + " [" + i.label + "]").join(", ") : ""));
+        renderStages(await jget("/runs/" + encodeURIComponent(runId)));
+        loadRuns(container);
+      } catch (e) { alert("Dừng thất bại: " + e.message); stopBtn.disabled = false; }
+    });
   }
 
   // 1) Trạng thái + chỗ fail (không cần key)

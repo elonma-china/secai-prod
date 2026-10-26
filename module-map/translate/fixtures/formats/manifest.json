@@ -1,0 +1,3245 @@
+{
+ "generator": "tools/gen_format_fixtures.py",
+ "note": "Nội dung kỹ thuật và thông tin đăng nhập là GIẢ.",
+ "count": 118,
+ "blocked": [
+  {
+   "format": "doc",
+   "reason": "Không có LibreOffice/antiword để tạo .doc (Word 97-2003) thật trên máy dựng; đổi đuôi .docx thành .doc là mẫu sai định dạng nên không tạo. Cần `soffice --headless --convert-to doc` từ docx/ để bổ sung."
+  },
+  {
+   "format": "pdf (lớp chữ)",
+   "langs": [
+    "ko",
+    "ar"
+   ],
+   "reason": "reportlab không nhúng được font CFF (Noto CJK) và không ghép chữ Ả Rập; ko/ar chỉ có ở pdf-scan/png/jpg/docx/xlsx."
+  }
+ ],
+ "items": [
+  {
+   "id": "docx-short-vi",
+   "kind": "file",
+   "format": "docx",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/docx/short-vi.docx",
+   "bytes": 38186,
+   "approx_words_or_chars": 1528,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-vi",
+   "kind": "file",
+   "format": "docx",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/docx/long-vi.docx",
+   "bytes": 39907,
+   "approx_words_or_chars": 8787,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-vi",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/xlsx/short-vi.xlsx",
+   "bytes": 6557,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-vi",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/xlsx/long-vi.xlsx",
+   "bytes": 27914,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-vi",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/pdf/short-vi.pdf",
+   "bytes": 19030,
+   "approx_words_or_chars": 542,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-vi",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/pdf/long-vi.pdf",
+   "bytes": 28248,
+   "approx_words_or_chars": 8787,
+   "structure": {
+    "pages": 3,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-vi",
+   "kind": "image",
+   "format": "png",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/png/short-vi.png",
+   "bytes": 146664,
+   "approx_words_or_chars": 540,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     900
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-vi",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/jpg/short-vi.jpg",
+   "bytes": 182545,
+   "approx_words_or_chars": 587,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     946
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-vi",
+   "kind": "image",
+   "format": "png",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/png/long-vi.png",
+   "bytes": 315854,
+   "approx_words_or_chars": 3534,
+   "structure": {
+    "paragraphs": 5,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-vi",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/jpg/long-vi.jpg",
+   "bytes": 493573,
+   "approx_words_or_chars": 3723,
+   "structure": {
+    "paragraphs": 5,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-vi",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "vi",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-vi.pdf",
+   "bytes": 134455,
+   "approx_words_or_chars": 540,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-vi",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "vi",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-vi.pdf",
+   "bytes": 1122704,
+   "approx_words_or_chars": 8007,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-en",
+   "kind": "file",
+   "format": "docx",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/docx/short-en.docx",
+   "bytes": 37944,
+   "approx_words_or_chars": 1610,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-en",
+   "kind": "file",
+   "format": "docx",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/docx/long-en.docx",
+   "bytes": 39608,
+   "approx_words_or_chars": 9232,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-en",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/xlsx/short-en.xlsx",
+   "bytes": 6286,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-en",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/xlsx/long-en.xlsx",
+   "bytes": 25209,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-en",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/pdf/short-en.pdf",
+   "bytes": 15793,
+   "approx_words_or_chars": 554,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-en",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/pdf/long-en.pdf",
+   "bytes": 23361,
+   "approx_words_or_chars": 9232,
+   "structure": {
+    "pages": 4,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-en",
+   "kind": "image",
+   "format": "png",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/png/short-en.png",
+   "bytes": 132349,
+   "approx_words_or_chars": 552,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     900
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-en",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/jpg/short-en.jpg",
+   "bytes": 187600,
+   "approx_words_or_chars": 657,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     946
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-en",
+   "kind": "image",
+   "format": "png",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/png/long-en.png",
+   "bytes": 271975,
+   "approx_words_or_chars": 3674,
+   "structure": {
+    "paragraphs": 5,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-en",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/jpg/long-en.jpg",
+   "bytes": 494301,
+   "approx_words_or_chars": 3984,
+   "structure": {
+    "paragraphs": 5,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-en",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "en",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-en.pdf",
+   "bytes": 128963,
+   "approx_words_or_chars": 552,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-en",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "en",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-en.pdf",
+   "bytes": 1095945,
+   "approx_words_or_chars": 8397,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-zh-Hans",
+   "kind": "file",
+   "format": "docx",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/docx/short-zh-Hans.docx",
+   "bytes": 38141,
+   "approx_words_or_chars": 518,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-zh-Hans",
+   "kind": "file",
+   "format": "docx",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/docx/long-zh-Hans.docx",
+   "bytes": 39846,
+   "approx_words_or_chars": 2702,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-zh-Hans",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/xlsx/short-zh-Hans.xlsx",
+   "bytes": 6599,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-zh-Hans",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/xlsx/long-zh-Hans.xlsx",
+   "bytes": 28065,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-zh-Hans",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/pdf/short-zh-Hans.pdf",
+   "bytes": 32299,
+   "approx_words_or_chars": 157,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-zh-Hans",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/pdf/long-zh-Hans.pdf",
+   "bytes": 77793,
+   "approx_words_or_chars": 2702,
+   "structure": {
+    "pages": 3,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-zh-Hans",
+   "kind": "image",
+   "format": "png",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/png/short-zh-Hans.png",
+   "bytes": 176419,
+   "approx_words_or_chars": 157,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     716
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-zh-Hans",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/jpg/short-zh-Hans.jpg",
+   "bytes": 164750,
+   "approx_words_or_chars": 246,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     808
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-zh-Hans",
+   "kind": "image",
+   "format": "png",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/png/long-zh-Hans.png",
+   "bytes": 825474,
+   "approx_words_or_chars": 1866,
+   "structure": {
+    "paragraphs": 8,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-zh-Hans",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/jpg/long-zh-Hans.jpg",
+   "bytes": 580743,
+   "approx_words_or_chars": 1819,
+   "structure": {
+    "paragraphs": 8,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-zh-Hans",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "zh-Hans",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-zh-Hans.pdf",
+   "bytes": 118195,
+   "approx_words_or_chars": 157,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-zh-Hans",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "zh-Hans",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-zh-Hans.pdf",
+   "bytes": 1033199,
+   "approx_words_or_chars": 2917,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-ja",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/docx/short-ja.docx",
+   "bytes": 38282,
+   "approx_words_or_chars": 745,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-ja",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/docx/long-ja.docx",
+   "bytes": 40262,
+   "approx_words_or_chars": 3899,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-ja",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/xlsx/short-ja.xlsx",
+   "bytes": 6640,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-ja",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/xlsx/long-ja.xlsx",
+   "bytes": 31473,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-ja",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/pdf/short-ja.pdf",
+   "bytes": 32628,
+   "approx_words_or_chars": 246,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-ja",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/pdf/long-ja.pdf",
+   "bytes": 70647,
+   "approx_words_or_chars": 3899,
+   "structure": {
+    "pages": 3,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-ja",
+   "kind": "image",
+   "format": "png",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/png/short-ja.png",
+   "bytes": 219254,
+   "approx_words_or_chars": 246,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     854
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-ja",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/jpg/short-ja.jpg",
+   "bytes": 176969,
+   "approx_words_or_chars": 324,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     900
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-ja",
+   "kind": "image",
+   "format": "png",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/png/long-ja.png",
+   "bytes": 670530,
+   "approx_words_or_chars": 1619,
+   "structure": {
+    "paragraphs": 5,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-ja",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/jpg/long-ja.jpg",
+   "bytes": 552371,
+   "approx_words_or_chars": 1955,
+   "structure": {
+    "paragraphs": 6,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-ja",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ja",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-ja.pdf",
+   "bytes": 135150,
+   "approx_words_or_chars": 246,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-ja",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ja",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-ja.pdf",
+   "bytes": 1322705,
+   "approx_words_or_chars": 4432,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-ko",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ko",
+   "size_class": "short",
+   "path": "formats/docx/short-ko.docx",
+   "bytes": 38127,
+   "approx_words_or_chars": 722,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-ko",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ko",
+   "size_class": "long",
+   "path": "formats/docx/long-ko.docx",
+   "bytes": 39963,
+   "approx_words_or_chars": 4016,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-ko",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ko",
+   "size_class": "short",
+   "path": "formats/xlsx/short-ko.xlsx",
+   "bytes": 6502,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-ko",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ko",
+   "size_class": "long",
+   "path": "formats/xlsx/long-ko.xlsx",
+   "bytes": 29411,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-ko",
+   "kind": "image",
+   "format": "png",
+   "lang": "ko",
+   "size_class": "short",
+   "path": "formats/png/short-ko.png",
+   "bytes": 137374,
+   "approx_words_or_chars": 233,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     762
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-ko",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ko",
+   "size_class": "short",
+   "path": "formats/jpg/short-ko.jpg",
+   "bytes": 151712,
+   "approx_words_or_chars": 303,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     808
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-ko",
+   "kind": "image",
+   "format": "png",
+   "lang": "ko",
+   "size_class": "long",
+   "path": "formats/png/long-ko.png",
+   "bytes": 552504,
+   "approx_words_or_chars": 2379,
+   "structure": {
+    "paragraphs": 7,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-ko",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ko",
+   "size_class": "long",
+   "path": "formats/jpg/long-ko.jpg",
+   "bytes": 507642,
+   "approx_words_or_chars": 2353,
+   "structure": {
+    "paragraphs": 7,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-ko",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ko",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-ko.pdf",
+   "bytes": 117168,
+   "approx_words_or_chars": 233,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-ko",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ko",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-ko.pdf",
+   "bytes": 1061186,
+   "approx_words_or_chars": 4586,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-fr",
+   "kind": "file",
+   "format": "docx",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/docx/short-fr.docx",
+   "bytes": 38081,
+   "approx_words_or_chars": 1828,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-fr",
+   "kind": "file",
+   "format": "docx",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/docx/long-fr.docx",
+   "bytes": 40017,
+   "approx_words_or_chars": 11056,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-fr",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/xlsx/short-fr.xlsx",
+   "bytes": 6430,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-fr",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/xlsx/long-fr.xlsx",
+   "bytes": 27316,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-fr",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/pdf/short-fr.pdf",
+   "bytes": 16072,
+   "approx_words_or_chars": 645,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-fr",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/pdf/long-fr.pdf",
+   "bytes": 25335,
+   "approx_words_or_chars": 11056,
+   "structure": {
+    "pages": 4,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-fr",
+   "kind": "image",
+   "format": "png",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/png/short-fr.png",
+   "bytes": 140735,
+   "approx_words_or_chars": 643,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     946
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-fr",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/jpg/short-fr.jpg",
+   "bytes": 196554,
+   "approx_words_or_chars": 694,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     992
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-fr",
+   "kind": "image",
+   "format": "png",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/png/long-fr.png",
+   "bytes": 247121,
+   "approx_words_or_chars": 3403,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-fr",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/jpg/long-fr.jpg",
+   "bytes": 475994,
+   "approx_words_or_chars": 3804,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-fr",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "fr",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-fr.pdf",
+   "bytes": 140550,
+   "approx_words_or_chars": 643,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-fr",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "fr",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-fr.pdf",
+   "bytes": 1171904,
+   "approx_words_or_chars": 9077,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-de",
+   "kind": "file",
+   "format": "docx",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/docx/short-de.docx",
+   "bytes": 38169,
+   "approx_words_or_chars": 1891,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-de",
+   "kind": "file",
+   "format": "docx",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/docx/long-de.docx",
+   "bytes": 40075,
+   "approx_words_or_chars": 10755,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-de",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/xlsx/short-de.xlsx",
+   "bytes": 6487,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-de",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/xlsx/long-de.xlsx",
+   "bytes": 27193,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-de",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/pdf/short-de.pdf",
+   "bytes": 16293,
+   "approx_words_or_chars": 662,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-de",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/pdf/long-de.pdf",
+   "bytes": 25338,
+   "approx_words_or_chars": 10755,
+   "structure": {
+    "pages": 4,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-de",
+   "kind": "image",
+   "format": "png",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/png/short-de.png",
+   "bytes": 156550,
+   "approx_words_or_chars": 660,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     992
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-de",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/jpg/short-de.jpg",
+   "bytes": 207976,
+   "approx_words_or_chars": 722,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     1038
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-de",
+   "kind": "image",
+   "format": "png",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/png/long-de.png",
+   "bytes": 285330,
+   "approx_words_or_chars": 3404,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-de",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/jpg/long-de.jpg",
+   "bytes": 486912,
+   "approx_words_or_chars": 3759,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-de",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "de",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-de.pdf",
+   "bytes": 148056,
+   "approx_words_or_chars": 660,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-de",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "de",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-de.pdf",
+   "bytes": 1106698,
+   "approx_words_or_chars": 8061,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-es",
+   "kind": "file",
+   "format": "docx",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/docx/short-es.docx",
+   "bytes": 38073,
+   "approx_words_or_chars": 1867,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-es",
+   "kind": "file",
+   "format": "docx",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/docx/long-es.docx",
+   "bytes": 39876,
+   "approx_words_or_chars": 10848,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-es",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/xlsx/short-es.xlsx",
+   "bytes": 6421,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-es",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/xlsx/long-es.xlsx",
+   "bytes": 26625,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-es",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/pdf/short-es.pdf",
+   "bytes": 16055,
+   "approx_words_or_chars": 655,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-es",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/pdf/long-es.pdf",
+   "bytes": 24618,
+   "approx_words_or_chars": 10848,
+   "structure": {
+    "pages": 4,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-es",
+   "kind": "image",
+   "format": "png",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/png/short-es.png",
+   "bytes": 138425,
+   "approx_words_or_chars": 653,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     946
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-es",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/jpg/short-es.jpg",
+   "bytes": 199677,
+   "approx_words_or_chars": 719,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     992
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-es",
+   "kind": "image",
+   "format": "png",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/png/long-es.png",
+   "bytes": 245702,
+   "approx_words_or_chars": 3417,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-es",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/jpg/long-es.jpg",
+   "bytes": 469861,
+   "approx_words_or_chars": 3760,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-es",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "es",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-es.pdf",
+   "bytes": 142154,
+   "approx_words_or_chars": 653,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-es",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "es",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-es.pdf",
+   "bytes": 1066047,
+   "approx_words_or_chars": 8081,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-ru",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/docx/short-ru.docx",
+   "bytes": 38515,
+   "approx_words_or_chars": 1815,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-ru",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/docx/long-ru.docx",
+   "bytes": 40793,
+   "approx_words_or_chars": 10314,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-ru",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/xlsx/short-ru.xlsx",
+   "bytes": 7027,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-ru",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/xlsx/long-ru.xlsx",
+   "bytes": 80945,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-short-ru",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/pdf/short-ru.pdf",
+   "bytes": 18754,
+   "approx_words_or_chars": 654,
+   "structure": {
+    "pages": 1,
+    "headings": 2,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-long-ru",
+   "kind": "file",
+   "format": "pdf",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/pdf/long-ru.pdf",
+   "bytes": 30631,
+   "approx_words_or_chars": 10314,
+   "structure": {
+    "pages": 4,
+    "headings": 14,
+    "text_layer": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-ru",
+   "kind": "image",
+   "format": "png",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/png/short-ru.png",
+   "bytes": 163625,
+   "approx_words_or_chars": 652,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     1038
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-ru",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/jpg/short-ru.jpg",
+   "bytes": 224895,
+   "approx_words_or_chars": 715,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     1130
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-ru",
+   "kind": "image",
+   "format": "png",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/png/long-ru.png",
+   "bytes": 307130,
+   "approx_words_or_chars": 3293,
+   "structure": {
+    "paragraphs": 4,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-ru",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/jpg/long-ru.jpg",
+   "bytes": 412883,
+   "approx_words_or_chars": 2838,
+   "structure": {
+    "paragraphs": 3,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-ru",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ru",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-ru.pdf",
+   "bytes": 153784,
+   "approx_words_or_chars": 652,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-ru",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ru",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-ru.pdf",
+   "bytes": 1060519,
+   "approx_words_or_chars": 6986,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "docx-short-ar",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ar",
+   "size_class": "short",
+   "path": "formats/docx/short-ar.docx",
+   "bytes": 38270,
+   "approx_words_or_chars": 1369,
+   "structure": {
+    "headings": 3,
+    "bullets": 3,
+    "tables": 1,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "docx-long-ar",
+   "kind": "file",
+   "format": "docx",
+   "lang": "ar",
+   "size_class": "long",
+   "path": "formats/docx/long-ar.docx",
+   "bytes": 40190,
+   "approx_words_or_chars": 7585,
+   "structure": {
+    "headings": 8,
+    "bullets": 18,
+    "tables": 2,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-short-ar",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ar",
+   "size_class": "short",
+   "path": "formats/xlsx/short-ar.xlsx",
+   "bytes": 6750,
+   "approx_words_or_chars": 8,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 8,
+    "merged_title": true,
+    "formula_cells": 1,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "xlsx-long-ar",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "ar",
+   "size_class": "long",
+   "path": "formats/xlsx/long-ar.xlsx",
+   "bytes": 36822,
+   "approx_words_or_chars": 450,
+   "structure": {
+    "sheets": 3,
+    "rows_per_sheet": 150,
+    "merged_title": true,
+    "formula_cells": 3,
+    "numeric_cols": [
+     "#",
+     "Qty"
+    ],
+    "literal_rows_per_sheet": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "png-short-ar",
+   "kind": "image",
+   "format": "png",
+   "lang": "ar",
+   "size_class": "short",
+   "path": "formats/png/short-ar.png",
+   "bytes": 132612,
+   "approx_words_or_chars": 486,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     808
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-short-ar",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ar",
+   "size_class": "short",
+   "path": "formats/jpg/short-ar.jpg",
+   "bytes": 149357,
+   "approx_words_or_chars": 526,
+   "structure": {
+    "lines": "title+3 câu+7 dòng literal",
+    "px": [
+     1200,
+     854
+    ]
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "png-long-ar",
+   "kind": "image",
+   "format": "png",
+   "lang": "ar",
+   "size_class": "long",
+   "path": "formats/png/long-ar.png",
+   "bytes": 375904,
+   "approx_words_or_chars": 3797,
+   "structure": {
+    "paragraphs": 6,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "jpg-long-ar",
+   "kind": "image",
+   "format": "jpg",
+   "lang": "ar",
+   "size_class": "long",
+   "path": "formats/jpg/long-ar.jpg",
+   "bytes": 416718,
+   "approx_words_or_chars": 3871,
+   "structure": {
+    "paragraphs": 6,
+    "px": [
+     1240,
+     1754
+    ],
+    "dense_page": true,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-short-ar",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ar",
+   "size_class": "short",
+   "path": "formats/pdf-scan/short-ar.pdf",
+   "bytes": 116547,
+   "approx_words_or_chars": 486,
+   "structure": {
+    "pages": 1,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "pdf-scan-long-ar",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "ar",
+   "size_class": "long",
+   "path": "formats/pdf-scan/long-ar.pdf",
+   "bytes": 928904,
+   "approx_words_or_chars": 8231,
+   "structure": {
+    "pages": 3,
+    "text_layer": false,
+    "literal_lines": 7
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  },
+  {
+   "id": "xlsx-xl-en",
+   "kind": "file",
+   "format": "xlsx",
+   "lang": "en",
+   "size_class": "xl",
+   "path": "formats/xlsx/xl-en.xlsx",
+   "bytes": 116222,
+   "approx_words_or_chars": 5000,
+   "structure": {
+    "sheets": 1,
+    "rows_per_sheet": 5000
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": false
+  },
+  {
+   "id": "pdf-scan-xl-en",
+   "kind": "file",
+   "format": "pdf-scan",
+   "lang": "en",
+   "size_class": "xl",
+   "path": "formats/pdf-scan/xl-en.pdf",
+   "bytes": 7754655,
+   "approx_words_or_chars": 12000,
+   "structure": {
+    "pages": 20,
+    "text_layer": false
+   },
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "https://portal.example.org/login?user=admin&pass=Ab!9#x",
+    "192.168.10.25:8443",
+    "CVE-2024-3094",
+    "ops.team@example.org",
+    "sk-test-9f8E7d6C5b4A3"
+   ],
+   "needs_ocr": true
+  }
+ ]
+}

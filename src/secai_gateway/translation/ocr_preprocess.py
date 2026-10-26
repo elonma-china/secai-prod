@@ -44,6 +44,17 @@ def _deskew(image: Image.Image) -> Image.Image:
     return image
 
 
+def _flatten_on_white(image: Image.Image) -> Image.Image:
+    """RGB copy; transparent pixels become white (a plain convert turns them black,
+    hiding dark text on transparent backgrounds from OCR)."""
+    if image.mode in {"RGBA", "LA", "PA"} or (
+            image.mode in {"P", "L", "RGB"} and "transparency" in image.info):
+        rgba = image.convert("RGBA")
+        background = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        return Image.alpha_composite(background, rgba).convert("RGB")
+    return image.convert("RGB")
+
+
 def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> PreparedImage:
     try:
         if input_path.stat().st_size > _MAX_BYTES:
@@ -58,7 +69,7 @@ def _prepare(input_path: Path, work_dir: Path, cancelled: threading.Event) -> Pr
             if width < 1 or height < 1 or max(width, height) > _MAX_EDGE or width * height > _MAX_PIXELS:
                 raise TranslationError("IMAGE_TOO_LARGE", "Image exceeds pixel limit")
             source.load()
-            image = ImageOps.exif_transpose(source).convert("RGB")
+            image = _flatten_on_white(ImageOps.exif_transpose(source))
             image = _deskew(image)
             low, high = ImageOps.grayscale(image).getextrema()
             if low > 45 and high - low < 190:

@@ -1,0 +1,39 @@
+{
+  "v2": {
+    "max_upload_bytes": 52428800,
+    "max_request_bytes": 55574528,
+    "max_image_pixels": 20000000,
+    "max_image_edge": 10000,
+    "max_text_codepoints": 3000000,
+    "max_blocks": 100000,
+    "max_chunks": 20000,
+    "xlsx_max_cells": 20000,
+    "pdf_max_pages": 600,
+    "pdf_max_ocr_pages": 200,
+    "max_running_jobs": 6,
+    "max_queued_jobs": 60,
+    "max_active_per_ip": 40,
+    "upload_rate_per_minute": 60,
+    "lookup_rate_per_minute": 1200,
+    "job_deadline_seconds": 7200,
+    "specialist_model": "tencent/Hy-MT2-7B",
+    "ocr_model": "Qwen/Qwen3-VL-2B-Instruct"
+  },
+  "v3": {
+    "max_text_chars": 24000,
+    "max_source_tokens": 8192,
+    "max_chunks": 16,
+    "specialist_chunk_input_tokens": 128,
+    "specialist_max_output_tokens": 512,
+    "max_active_requests": 8,
+    "rate_limit_per_minute": 10,
+    "backend": "specialist",
+    "specialist_model": "tencent/Hy-MT2-7B"
+  },
+  "containers": [
+    "/secai-docker-gateway sha256:993dac2ec100a23e30c1754e357a4e87f24ec86f10a2b125db766b779d4aa715 secai-docker_secai-net",
+    "/secai-translation-gateway sha256:4bb76dbc8498e253b7a95dbd10019d3264684c5db7509e0bb2923d5e60729c73 host",
+    "/secai-translation-worker sha256:f7ce715335bdd35d554ae6da59dafba2af2f46ecc00d57e376c7765c6a57ec7a host"
+  ],
+  "hardware": "Không xác minh phần cứng GPU trong phép đo; model/cấu hình lấy từ service đang chạy."
+}

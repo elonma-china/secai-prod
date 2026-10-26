@@ -93,6 +93,7 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
         # ever reaches the route.
         allow_methods=["POST", "GET", "PUT", "DELETE", "PATCH"],
         allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+        expose_headers=["Content-Disposition"],
     )
 
     @app.middleware("http")
@@ -128,6 +129,8 @@ def configure_middleware(app: FastAPI, state: Any) -> None:
             return response
         if request.url.path == "/health":
             return await call_next(request)
+        if not getattr(state.settings, "rate_limit_enabled", True):
+            return await call_next(request)  # RATE_LIMIT_ENABLED=false (benchmark/single-IP load)
         limit = route_limit(request.url.path)
         client = request.client.host if request.client else "unknown"
         key = rate_limit_key(request.url.path)

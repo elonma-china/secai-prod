@@ -1,0 +1,290 @@
+SecAI - 1
+SecAI doc-within-limits-short-fr-vi-03-p01
+[doc-within-limits-short-fr-vi-03-p01-0000] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p01-0001] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p01-0002] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p01-0003] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p01-0004] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p01-0005] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p01-0006] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi công bố một sự cố.
+[doc-within-limits-short-fr-vi-03-p01-0007] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p01-0008] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p01-0009] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p01-0010] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p01-0011] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p01-0012] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p01-0013] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p01-0014] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+Từ khóa: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-0-0
+SOC
+1
+node-0-1
+SOC
+2
+
+
+SecAI - 2
+SecAI doc-within-limits-short-fr-vi-03-p02
+[doc-within-limits-short-fr-vi-03-p02-0000] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p02-0001] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p02-0002] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p02-0003] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p02-0004] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p02-0005] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p02-0006] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p02-0007] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p02-0008] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p02-0009] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p02-0010] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p02-0011] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p02-0012] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi công bố một sự cố.
+[doc-within-limits-short-fr-vi-03-p02-0013] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p02-0014] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p02-0015] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+Từ khóa: audit16 audit17 audit18
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-1-0
+SOC
+1
+node-1-1
+SOC
+2
+
+
+SecAI - 3
+SecAI doc-within-limits-short-fr-vi-03-p03
+[doc-within-limits-short-fr-vi-03-p03-0000] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p03-0001] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p03-0002] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p03-0003] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p03-0004] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p03-0005] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p03-0006] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p03-0007] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p03-0008] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p03-0009] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p03-0010] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p03-0011] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p03-0012] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p03-0013] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p03-0014] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p03-0015] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+Từ khóa: audit16 audit17 audit18
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-2-0
+SOC
+1
+node-2-1
+SOC
+2
+
+
+SecAI - 4
+SecAI doc-within-limits-short-fr-vi-03-p04
+[doc-within-limits-short-fr-vi-03-p04-0000] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p04-0001] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p04-0002] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p04-0003] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p04-0004] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p04-0005] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p04-0006] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p04-0007] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p04-0008] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p04-0009] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p04-0010] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p04-0011] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p04-0012] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p04-0013] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p04-0014] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+Từ khóa: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-3-0
+SOC
+1
+node-3-1
+SOC
+2
+
+
+SecAI - 5
+SecAI doc-within-limits-short-fr-vi-03-p05
+[doc-within-limits-short-fr-vi-03-p05-0000] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p05-0001] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p05-0002] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p05-0003] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p05-0004] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p05-0005] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p05-0006] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p05-0007] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p05-0008] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p05-0009] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p05-0010] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p05-0011] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p05-0012] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p05-0013] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p05-0014] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+Từ khóa:
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-4-0
+SOC
+1
+node-4-1
+SOC
+2
+
+
+SecAI - 6
+SecAI doc-within-limits-short-fr-vi-03-p06
+[doc-within-limits-short-fr-vi-03-p06-0000] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p06-0001] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p06-0002] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p06-0003] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p06-0004] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p06-0005] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p06-0006] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p06-0007] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p06-0008] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p06-0009] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p06-0010] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p06-0011] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p06-0012] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p06-0013] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p06-0014] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+Từ khóa: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-5-0
+SOC
+1
+node-5-1
+SOC
+2
+
+
+SecAI - 7
+SecAI doc-within-limits-short-fr-vi-03-p07
+[doc-within-limits-short-fr-vi-03-p07-0000] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p07-0001] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p07-0002] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p07-0003] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p07-0004] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p07-0005] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p07-0006] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p07-0007] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p07-0008] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p07-0009] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p07-0010] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p07-0011] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p07-0012] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p07-0013] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p07-0014] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+Từ khóa: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-6-0
+SOC
+1
+node-6-1
+SOC
+2
+
+
+SecAI - 8
+SecAI doc-within-limits-short-fr-vi-03-p08
+[doc-within-limits-short-fr-vi-03-p08-0000] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p08-0001] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p08-0002] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p08-0003] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p08-0004] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p08-0005] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p08-0006] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p08-0007] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p08-0008] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p08-0009] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p08-0010] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p08-0011] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p08-0012] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p08-0013] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p08-0014] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p08-0015] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+Từ khóa: audit16
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-7-0
+SOC
+1
+node-7-1
+SOC
+2
+
+
+SecAI - 9
+SecAI doc-within-limits-short-fr-vi-03-p09
+[doc-within-limits-short-fr-vi-03-p09-0000] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p09-0001] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p09-0002] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p09-0003] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p09-0004] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p09-0005] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p09-0006] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p09-0007] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p09-0008] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p09-0009] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p09-0010] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p09-0011] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p09-0012] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p09-0013] Mọi thay đổi đều được kiểm thử với các tài liệu mẫu trước khi giao hàng.
+[doc-within-limits-short-fr-vi-03-p09-0014] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+Từ khóa: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+Tài sản
+Chủ sở hữu
+Ưu tiên
+node-8-0
+SOC
+1
+node-8-1
+SOC
+2
+
+
+SecAI - 10
+SecAI doc-within-limits-short-fr-vi-03-p10
+[doc-within-limits-short-fr-vi-03-p10-0000] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p10-0001] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+[doc-within-limits-short-fr-vi-03-p10-0002] Các chuyên gia phân tích so sánh các cảnh báo mạng với nhật ký trước khi xác định một sự cố.
+[doc-within-limits-short-fr-vi-03-p10-0003] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p10-0004] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p10-0005] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p10-0006] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p10-0007] Việc bảo trì đòi hỏi phải có bản sao lưu đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[doc-within-limits-short-fr-vi-03-p10-0008] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p10-0009] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p10-0010] Đội ngũ bảo mật kiểm tra quyền hạn và xác định người chịu trách nhiệm cho từng dịch vụ.
+[doc-within-limits-short-fr-vi-03-p10-0011] Các nhân viên vận hành giám sát các nguồn lực và kiểm tra thời hạn xử lý các yêu cầu đang chờ.
+[doc-within-limits-short-fr-vi-03-p10-0012] Báo cáo mô tả các thiết bị liên quan, những hậu quả và các biện pháp khắc phục.
+[doc-within-limits-short-fr-vi-03-p10-0013] Danh mục bao gồm các cơ sở dữ liệu, các máy trạm làm việc và các nhóm chịu trách nhiệm.
+[doc-within-limits-short-fr-vi-03-p10-0014] Người phụ trách xem xét các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày giải quyết.
+Từ khóa: audit15 audit16 audit17 audit18 audit19
+Tài khoản: svc_ccu_b4316c24
+Password: Pwe670b514!0&*()_+
+URL: https://b4316c24.example.org/audit?id=11809132&mode=test
+IP: 192.0.2.133:8132
+CVE: CVE-2024-2132
+Email: audit.b4316c24@example.org
+Khóa: sk-test-2038e74926e0ad0b
+AssetOwnerPrioritynode-9-0SOC1node-9-1SOC2

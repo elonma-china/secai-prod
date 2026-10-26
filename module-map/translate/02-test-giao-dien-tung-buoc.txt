@@ -163,3 +163,12 @@ Chạy lại ca TXT-01 từ input sạch trên `https://ias.id.vn/ai/translate` 
 Ca `TXT-01` trên IAS: **PASS**. Ghi lại làm bằng chứng thay cho dòng "Chưa xác nhận" ở mục 11.
 
 Kết thúc bằng cách điền báo cáo theo file tiêu chí; các ca còn lại chưa chạy trên IAS phải giữ CHƯA CHẠY/BỊ CHẶN.
+
+--------------------------------------------------------------------------------
+10. VÒNG LẶP TEST -> KIỂM -> CẢI TIẾN VỚI 30 MẪU NGẪU NHIÊN (bổ sung 11/10/2026)
+--------------------------------------------------------------------------------
+Mỗi vòng lấy 30 tài liệu ngẫu nhiên (15 dài + 15 ngắn) bằng fixtures/tools/pick_eval_sample.py --seed <mới>; tệp mẫu theo ca người dùng nằm ở
+fixtures/formats-extra/ (xem readme.md). Cách thực hiện từng mẫu trên UI giống mục 9 (đăng nhập + upload bằng mcp__playwright__browser_*), chọn
+đúng ngôn ngữ đích; ghi: tệp, kích thước, số trang, thời gian bấm dịch -> "Dịch hoàn tất", lỗi hiển thị (nếu có), kết quả tải về.
+Sau mỗi mẫu tải TXT/JSON rồi chạy fixtures/tools/check_output.py (hoặc so chuỗi con theo preserve_literals trong manifest) để chấm "giữ nguyên thông tin".
+Tệp UC-G* (zip bomb, XXE, liên kết ngoài) CHỈ để xác nhận hệ thống từ chối đúng (mã lỗi + thông báo UI nêu rõ lý do); không dùng ngoài hệ thống của mình.

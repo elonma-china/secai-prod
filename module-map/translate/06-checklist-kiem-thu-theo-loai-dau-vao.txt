@@ -17,7 +17,14 @@ A1. Định dạng
  [CHƯA] DOCX có công thức/OLE/ActiveX/macro (.docm) -> kỳ vọng từ chối rõ ràng (UNSAFE_DOCUMENT)
  [CHƯA] DOCX có mật khẩu / bị hỏng / sai đuôi (đổi .txt thành .docx) -> từ chối rõ ràng
  [CHƯA] DOC (Word cũ) -> cần converter, kiểm có chạy hay báo thiếu dependency
- [CHƯA] PDF, XLS/XLSX, PPT/PPTX -> kỳ vọng "không hỗ trợ" (FILE-04), chưa có file mẫu
+ [LỖI]  PDF, XLSX -> người dùng yêu cầu PHẢI HỖ TRỢ (nghiệm thu 10/10); hiện kỳ vọng cũ "không hỗ trợ"
+        (FILE-04) không còn đúng. Cần kiểm: PDF có lớp chữ, XLSX nhiều sheet/ô gộp/công thức, DOC, DOCX
+        Mẫu đã có: fixtures/formats/{pdf,xlsx,docx} (ngắn+dài); .doc CHƯA có mẫu (thiếu LibreOffice)
+ [CHƯA] PPT/PPTX -> chưa có yêu cầu của người dùng; giữ kỳ vọng cũ cho tới khi có chốt
+ [LỖI]  PDF scan (chỉ ảnh trang) -> người dùng yêu cầu CHO PHÉP OCR rồi dịch
+        Mẫu đã có: fixtures/formats/pdf-scan (1 và 3 trang, 10 ngôn ngữ), xl-en.pdf 20 trang
+ [LỖI]  GIỮ NGUYÊN CẤU TRÚC: nội dung dịch đạt nhưng bố cục (đoạn, tiêu đề, danh sách, bảng, trang/sheet)
+        phải còn nguyên ở mọi loại tệp (nghiệm thu 10/10)  [CHƯA kiểm toàn bộ; xem 08 cho bảng DOCX]
 A2. Kích thước
  [CHƯA] File rỗng (0 byte)   [CHƯA] 1 dòng / 1 từ   [CHƯA] ~5.000 từ (nhiều chunk)
  [CHƯA] Sát giới hạn 10 MiB và vượt 10 MiB   [CHƯA] vượt 200.000 ký tự / 10.000 block
@@ -93,6 +100,9 @@ E. GIỮ NGUYÊN THÔNG TIN (bắt buộc cho tệp, ảnh, văn bản) — thê
 ================================================================
  [LỖI]  Tệp vi->en có mật khẩu/khóa/token/chuỗi kết nối (fixtures/files/sensitive-vi.txt): FAIL TOKEN_INTEGRITY_FAILED
         trước khi sửa (job 3b84e728). Đã có bản sửa local, CHƯA triển khai; retest bắt buộc sau deploy.
+ [LỖI]  Nghiệm thu 10/10: VẪN CÒN trường hợp mất dữ liệu tài khoản, mật khẩu, ký tự đặc biệt khi dịch
+        (chưa có ca tái hiện cụ thể kèm job/request_id từ người dùng; cần tái hiện bằng UI thật rồi tra container)
+ [CHƯA] Ký tự đặc biệt trong mật khẩu/tài khoản: ! @ # $ % ^ & * ( ) _ + = { } [ ] | \ : ; " ' < > , . ? /
  [CHƯA] Văn bản trực tiếp có mật khẩu: nhãn "mật khẩu:", "password=", "pass X", JSON "password", dấu ：toàn góc, giá trị có dấu cách
  [CHƯA] Mật khẩu/khóa trong khối mã và trong URL tham số (?user=a&password=b) -> phải còn nguyên cả hai
  [CHƯA] Chuỗi kết nối postgres://user:pass@host:port/db, email, số điện thoại, IP:cổng, lệnh ssh/curl -> nguyên văn
@@ -100,6 +110,30 @@ E. GIỮ NGUYÊN THÔNG TIN (bắt buộc cho tệp, ảnh, văn bản) — thê
  [CHƯA] Ảnh chứa mật khẩu/khóa/IP (fixtures/images/ocr-sensitive-en.png): OCR + bản dịch giữ nguyên
  [CHƯA] Thử lại (dịch 2-3 lần cùng nội dung, kể cả stream) -> kết quả vẫn đủ thông tin, không lần nào mất giá trị
  [CHƯA] Không có ⟦…⟧, [L0], [REDACTED] trong bản dịch hiển thị/tải về
+
+================================================================
+F. TỐC ĐỘ (nghiệm thu 10/10/2026: "thời gian dịch tệp cần scan lâu, kể cả ảnh — chưa đáp ứng"; "tốc độ nhanh")
+================================================================
+ [CHƯA] Ngưỡng PASS (người dùng chốt 11/10/2026): ~1-3 giây MỖI TRANG, tài liệu 20 trang <= 60 giây (xem 03 mục 1c điểm 2)
+ [LỖI]  Dịch tệp cần scan (ảnh, PDF scan) mất quá lâu: đo trên production cũ 36 giây/ảnh dày chữ, PDF scan chưa hỗ trợ.
+        Stack thử nghiệm đã tối ưu (chưa deploy): docx 20 trang ~10-12 giây, ảnh dày chữ ~12 giây, PDF scan 3 trang ~12-14 giây,
+        PDF scan 20 trang ~30 giây — xem 05 mục 0c; cần retest trên môi trường chính thức
+ [CHƯA] Ghi thời gian thật mỗi ca: bấm dịch -> job succeeded, chia cho số trang (tách OCR / dịch nếu đọc được từ job)
+ [CHƯA] Ảnh 1 trang, ảnh nhiều chữ, PDF scan 1 / 5 / 20 trang, TXT 1000 từ, DOCX 20 trang bảng
+ [CHƯA] So sánh có/không tải model lần đầu (cold start OCR/MT) với lần chạy liên tiếp (warm)
+ [CHƯA] Xác định nút cổ chai: OCR, tải model, chunk dịch tuần tự, hàng đợi/lock GPU
+
+================================================================
+G. CHẤT LƯỢNG BẢN DỊCH CÓ SỐ ĐO % (03 mục 1d, thêm 11/10/2026)
+================================================================
+ [CHƯA] Chạy quality_score.py (API hoặc --outputs) trên 36 cặp có gold (18 tệp + 18 ảnh); báo "ĐẠT x/y = z%" và chrF trung bình; tổng >= 90%
+ [CHƯA] chrF theo nhóm: to-vi >= 60 (ngắn 50); from-vi-latin >= 55 (ngắn 45); from-vi-cjk (zh/ja/ko) >= 38 (ngắn 25)
+ [CHƯA] Tỉ lệ độ dài out/gold trong [0,75; 1,30] (zh/ja/ko [0,60; 1,60]) — bắt dịch cụt/lặp
+ [CHƯA] Không sót chữ ngôn ngữ nguồn: <= 5% chữ cái thuộc hệ chữ lạ; đích không-Latin <= 15% chữ Latin ngoài literal
+ [CHƯA] Không bỏ đoạn: số dòng/khối lệch gold <= 10%
+ [CHƯA] Literal tự trích từ gold (URL/IP/CVE/phiên bản) + preserve_literals còn nguyên, không marker lạ
+ [CHƯA] Ghi vào đầu file results/: lệnh đã chạy, ĐẠT x/y = z%, mẫu trượt + lý do; mẫu không có gold ghi "CHƯA CHẤM" (không bịa gold)
+ [CHƯA] python3 -m unittest fixtures/tools/test_quality_score.py -> OK
 
 ================================================================
 CÁCH DÙNG

@@ -1,0 +1,68 @@
+[
+  {
+    "sample_id": "png-within-limits-short-en-vi-01",
+    "expected": "Pw8eef84ca!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_7cb1d120",
+      "Pw8eef84ca!0&*(_)_+",
+      "sk-test-966da428a3f5381a"
+    ],
+    "output_path": "outputs/png-within-limits-short-en-vi-01-2f9590aa.txt"
+  },
+  {
+    "sample_id": "png-within-limits-short-vi-ja-04",
+    "expected": "Pw083d1ada!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_3ce51af8",
+      "Pw083d1ada!0&*(())_+",
+      "sk-test-7b0f5848ace2264a"
+    ],
+    "output_path": "outputs/png-within-limits-short-vi-ja-04-df2556e1.txt"
+  },
+  {
+    "sample_id": "png-within-limits-medium-fr-vi-03",
+    "expected": "Pw71234595!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_36d1acef",
+      "Pw71234595!0&*(()_+",
+      "sk-test-9e08eacc376f4366"
+    ],
+    "output_path": "outputs/png-within-limits-medium-fr-vi-03-f40834cd.txt"
+  },
+  {
+    "sample_id": "jpg-within-limits-short-fr-vi-03",
+    "expected": "Pw56e6d5bc!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_6537beda",
+      "Pw56e6d5bc!0&*(())_+",
+      "sk-test-bf2393b94d4654e7"
+    ],
+    "output_path": "outputs/jpg-within-limits-short-fr-vi-03-d9844d53.txt"
+  },
+  {
+    "sample_id": "jpg-within-limits-short-vi-ja-04",
+    "expected": "Pwe34285fd!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_354db13b",
+      "Pwe34285fd!0&*(())_+",
+      "sk-test-255f5b3601364914"
+    ],
+    "output_path": "outputs/jpg-within-limits-short-vi-ja-04-e8f4375b.txt"
+  },
+  {
+    "sample_id": "jpg-within-limits-medium-en-vi-01",
+    "expected": "Pwb052f56e!0&*()_+",
+    "present_in_raw_ocr": false,
+    "candidate_ocr_tokens": [
+      "svc_ccu_72b9c0da",
+      "Pwb052f56e!0&*(()_+",
+      "sk-test-1a88eb4853012ff3"
+    ],
+    "output_path": "outputs/jpg-within-limits-medium-en-vi-01-c11dace4.txt"
+  }
+]

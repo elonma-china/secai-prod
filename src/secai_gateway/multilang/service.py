@@ -169,7 +169,7 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     if len(text) > settings.max_text_chars:
         raise TranslationError("TEXT_TOO_LONG")
     validate_unicode(text)
-    protected = protect(text)
+    protected = protect(text, secrets.token_bytes(16))
     prose = re.sub(r"⟦ML-[A-Za-z0-9_-]+-\d+⟧", "", protected.masked)
     if not any(c.isalpha() for c in prose):
         raise TranslationError("INVALID_REQUEST")
@@ -233,7 +233,11 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                 except TranslationError:
                     raise TranslationError("OUTPUT_VALIDATION_FAILED") from None
                 masked_output = result.text.strip()
-                restored = protected.restore(masked_output, tokens)
+                # Keep the source chunk's own leading/trailing whitespace exactly
+                # (indentation, blank lines); the model's edge whitespace is dropped.
+                lead = chunk[:len(chunk) - len(chunk.lstrip())]
+                trail = chunk[len(chunk.rstrip()):]
+                restored = lead + protected.restore(masked_output, tokens) + trail
                 source_chunk = protected.restore(chunk, tokens)
                 chunk_warnings = _output_check(source_chunk, chunk, restored, masked_output,
                                                target, system, canary)

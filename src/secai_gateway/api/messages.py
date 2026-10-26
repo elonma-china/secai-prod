@@ -20,7 +20,11 @@ def translate_langs(body: LegacyRequest) -> tuple[Any, Any]:
     FE contract ("dịch sang <language>"), so it falls back into `tgt` — NOT `src`.
     (Previously it was OR'd into `src`, which silently dropped the caller's target: e.g.
     English text + language="vi" hit the auto-detect branch and echoed English back.)"""
-    return _field(body, "source_lang"), (_field(body, "target_lang") or _field(body, "language"))
+    src = _field(body, "source_lang")
+    tgt = _field(body, "target_lang") or _field(body, "language")
+    # IAS uses the v3 Chinese code even when calling the legacy ISO-639-1 endpoint.
+    return tuple("zh" if isinstance(code, str) and code.strip().lower() == "zh-hans"
+                 else code for code in (src, tgt))
 
 
 # TR1 fix (2026-09-22): the model has a strong learned bias to answer Vietnamese-sourced
@@ -121,6 +125,12 @@ def build_translate_prompt(text: str, src: Any, tgt: Any) -> tuple[str, list[str
     translated, never a command the model should execute (TR2 fix, 2026-09-22).
     """
     masked, literals = mask_literals(text)
+    return build_translate_prompt_masked(masked, src, tgt), literals
+
+
+def build_translate_prompt_masked(masked: str, src: Any, tgt: Any) -> str:
+    """Prompt for text that is ALREADY literal-masked (the routes mask the whole input once,
+    chunk the masked text, and restore with an integrity check — see routes.translate_assemble)."""
     spotlighted = wrap_untrusted_content(masked, source="translate_input")
     # Giữ nguyên thuật ngữ kỹ thuật (tên hàm/API, gói/thư viện/sản phẩm, giao thức, mã
     # CVE/CWE, đoạn code, số phiên bản...) — chỉ dịch phần văn xuôi diễn giải xung quanh.
@@ -139,7 +149,7 @@ def build_translate_prompt(text: str, src: Any, tgt: Any) -> tuple[str, list[str
             f"Dịch văn bản sau (tự nhận diện ngôn ngữ nguồn; Việt→Anh hoặc Anh→Việt)."
             f"{note}{_INJECTION_GUARD}"
         )
-    return f"{head}\n\n{spotlighted}", literals
+    return f"{head}\n\n{spotlighted}"
 
 
 def translate_prompt(body: LegacyRequest) -> tuple[str, list[str]]:
@@ -182,43 +192,126 @@ def _table_cell(value: Any) -> str:
     return text.replace("|", "\\|").replace("\n", " ").strip() or "-"
 
 
-def render_scan_detail_table(machines: list[Any]) -> str:
+_SEVERITY_MAP = {
+    "4": "Nghiêm\u00a0trọng",
+    "3": "Cao",
+    "2": "Trung\u00a0bình",
+    "1": "Thấp",
+    "0": "Thông\u00a0tin",
+    "critical": "Nghiêm\u00a0trọng",
+    "high": "Cao",
+    "medium": "Trung\u00a0bình",
+    "low": "Thấp",
+    "info": "Thông\u00a0tin",
+    "information": "Thông\u00a0tin",
+}
+
+
+def _format_severity(val: Any) -> str:
+    if val is None or val == "":
+        return "-"
+    s = str(val).strip()
+    return _SEVERITY_MAP.get(s.lower(), s)
+
+
+def _format_date(val: Any) -> str:
+    if not val:
+        return "-"
+    s = str(val).strip()
+    return s.split("T")[0] if "T" in s else s
+
+
+def render_scan_detail_table(findings: list[Any]) -> str:
     """Deterministically render per-machine/CVE findings into the customer-required
-    6-column table (tên máy, IP, ngày quét, lỗ hổng, mức độ, mô tả) — bypasses the LLM
-    entirely so rows can't be dropped, reordered or paraphrased away."""
+    table — bypasses the LLM entirely so rows can't be dropped, reordered or paraphrased away.
+
+    Supports both:
+    1. Nested per-machine shape: [{name, ip, scan_date, cves: [{cve, severity, description}]}]
+    2. Flat CVE list shape (e.g. listData): [{cve, description, risk, date, ...}]
+
+    Adaptively switches to a clean 4-column table (| Ngày quét | Lỗ hổng | Mức độ | Mô tả |)
+    when machine name and IP are absent across all findings.
+    """
     rows: list[tuple[str, str, str, str, str, str]] = []
-    for machine in machines:
-        if not isinstance(machine, dict):
+    for item in findings:
+        if not isinstance(item, dict):
             continue
-        name = _table_cell(machine.get("name") or machine.get("ten_may"))
-        ip = _table_cell(machine.get("ip"))
-        scanned = _table_cell(machine.get("scaned") or machine.get("scan_date"))
-        cves = machine.get("cves") or machine.get("vulnerabilities") or []
-        if not isinstance(cves, list) or not cves:
-            rows.append((name, ip, scanned, "-", "-", "-"))
-            continue
-        for cve in cves:
-            if not isinstance(cve, dict):
+
+        cves = item.get("cves") or item.get("vulnerabilities")
+        if isinstance(cves, list):
+            # Shape 1: Nested machine with cves list
+            name = _table_cell(item.get("name") or item.get("ten_may") or item.get("target") or item.get("host"))
+            ip = _table_cell(item.get("ip"))
+            scanned = _table_cell(_format_date(item.get("scaned") or item.get("scan_date") or item.get("date")))
+            if not cves:
+                rows.append((name, ip, scanned, "-", "-", "-"))
                 continue
-            cve_id = _table_cell(cve.get("cve") or cve.get("cve_id") or cve.get("name"))
-            severity = _table_cell(cve.get("severity"))
-            description = _table_cell(cve.get("description"))
+            for cve in cves:
+                if not isinstance(cve, dict):
+                    continue
+                cve_id = _table_cell(cve.get("cve") or cve.get("cve_id") or cve.get("name"))
+                severity = _table_cell(_format_severity(cve.get("severity") or cve.get("risk") or cve.get("level")))
+                description = _table_cell(cve.get("description"))
+                rows.append((name, ip, scanned, cve_id, severity, description))
+        else:
+            # Shape 2: Flat vulnerability entry (e.g. listData item)
+            cve_raw = item.get("cve") or item.get("cve_id") or ""
+            desc_raw = item.get("description") or ""
+            # Filter out blank counter entries that have no CVE, no description, and no target
+            if not str(cve_raw).strip() and not str(desc_raw).strip() and not item.get("name") and not item.get("ip"):
+                continue
+
+            name = _table_cell(item.get("name") or item.get("ten_may") or item.get("target") or item.get("host"))
+            ip = _table_cell(item.get("ip"))
+            scanned = _table_cell(_format_date(item.get("date") or item.get("scaned") or item.get("scan_date") or item.get("modified")))
+            cve_id = _table_cell(cve_raw)
+            severity = _table_cell(_format_severity(item.get("severity") or item.get("risk") or item.get("level")))
+            description = _table_cell(desc_raw)
             rows.append((name, ip, scanned, cve_id, severity, description))
+
     if not rows:
         return "_Không có dữ liệu chi tiết._\n"
+
+    has_targets = any(name != "-" or ip != "-" for name, ip, _, _, _, _ in rows)
+    if not has_targets:
+        header = "| Ngày quét | Lỗ hổng | Mức độ | Mô tả |\n|---|---|---|---|"
+        body = "\n".join(f"| {sd} | {c} | {sv} | {d} |" for _, _, sd, c, sv, d in rows)
+        return f"{header}\n{body}\n"
+
     header = "| Tên máy | IP | Ngày quét | Lỗ hổng | Mức độ | Mô tả |\n|---|---|---|---|---|---|"
     body = "\n".join(f"| {n} | {ip} | {sd} | {c} | {sv} | {d} |" for n, ip, sd, c, sv, d in rows)
     return f"{header}\n{body}\n"
 
 
 def statistical_detail_table(body: LegacyRequest) -> str | None:
-    """Return the code-rendered detail table when `detail` is the new structured array
-    shape, or None when the caller still sends the legacy free-text `detail` (in which case
-    the model's own report_detail from parse_statistical() is used unchanged)."""
+    """Return the code-rendered detail table when `detail`, `listData`, or `machines`
+    contains structured data, or None when only legacy free-text `detail` is provided."""
+    list_data = _field(body, "listData") or _field(body, "list_data")
+    if isinstance(list_data, list) and list_data:
+        return render_scan_detail_table(list_data)
+
+    machines = _field(body, "machines")
+    if isinstance(machines, list) and machines:
+        return render_scan_detail_table(machines)
+
     detail = _field(body, "detail")
-    if isinstance(detail, list):
+    if isinstance(detail, list) and detail:
         return render_scan_detail_table(detail)
+
     return None
+
+
+def merge_detail_table(model_detail: str, table: str) -> str:
+    """Keep the deterministic table for the vulnerability list, while preserving the
+    model's narrative recommendations and conclusion sections."""
+    if not model_detail or not model_detail.strip():
+        return table
+    pattern = r"(?im)^(?:#{1,4}\s*|\*{1,2}|)(?:Khuyến nghị|Biện pháp|Giải pháp|Đề xuất|Kết luận)\b.*"
+    match = re.search(pattern, model_detail)
+    if match:
+        narrative = model_detail[match.start():].strip()
+        return f"{table.rstrip()}\n\n{narrative}\n"
+    return table
 
 
 def parse_statistical(text: str) -> dict[str, str]:

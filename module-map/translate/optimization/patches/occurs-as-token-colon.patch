@@ -1,0 +1,15 @@
+--- /tmp/a.py	2026-10-11 06:35:36.281267821 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/service.py	2026-10-11 06:35:00.099826617 +0700
+@@ -203,8 +203,10 @@
+ 
+ def _occurs_as_token(core: str, source: str) -> bool:
+     """True when ``core`` appears in ``source`` as a whole token, not a fragment."""
+-    return re.search(r"(?<![A-Za-z0-9_.:/\\-])" + re.escape(core) +
+-                     r"(?![A-Za-z0-9_:/\\-]|\.[A-Za-z0-9])", source) is not None
++    # A ':' right before the token is a label separator ("账号:svc_x", "IP:10.0.0.1"), and ':<digits>'
++    # right after it is a port ("10.0.0.1:8443"); neither makes the token a fragment of another one.
++    return re.search(r"(?:(?<![A-Za-z0-9_.:/\\-])|(?<=[^/]:))" + re.escape(core) +
++                     r"(?![A-Za-z0-9_/\\-]|:(?![0-9])|\.[A-Za-z0-9])", source) is not None
+ 
+ 
+ _CLAUSE_END = re.compile(r"(?<=[,:—–])[ \t]+|(?<=\n)")

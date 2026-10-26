@@ -1,0 +1,105 @@
+SecAI pdf-scan-medium-en-vi-01-p01
+[pdf-scan-medium-en-vi-01-p01-0000] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p01-0001] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p01-0002] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p01-0003] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p01-0004] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p01-0005] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p01-0006] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p01-0007] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p01-0008] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p01-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p01-0010] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p01-0011] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p01-0012] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p01-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p01-0014] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p01-0015] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit16 audit17 audit18 audit19
+
+
+SecAI pdf-scan-medium-en-vi-01-p02
+[pdf-scan-medium-en-vi-01-p02-0000] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p02-0001] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p02-0002] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p02-0003] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p02-0004] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p02-0005] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p02-0006] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p02-0007] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p02-0008] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p02-0009] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p02-0010] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p02-0011] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p02-0012] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p02-0013] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p02-0014] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p02-0015] Every change is tested with representative documents before release to the customer.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+
+SecAI pdf-scan-medium-en-vi-01-p03
+[pdf-scan-medium-en-vi-01-p03-0000] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p03-0001] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p03-0002] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p03-0003] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p03-0004] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p03-0005] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p03-0006] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p03-0007] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p03-0008] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p03-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p03-0010] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p03-0011] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p03-0012] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p03-0013] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p03-0014] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p03-0015] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit16 audit17
+
+
+SecAI pdf-scan-medium-en-vi-01-p04
+[pdf-scan-medium-en-vi-01-p04-0000] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p04-0001] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p04-0002] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p04-0003] Every change is tested with representative documents before release to the customer.
+[pdf-scan-medium-en-vi-01-p04-0004] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p04-0005] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p04-0006] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p04-0007] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p04-0008] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p04-0009] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p04-0010] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p04-0011] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p04-0012] Analysts compare network alerts with application logs before opening an incident.
+[pdf-scan-medium-en-vi-01-p04-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p04-0014] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p04-0015] The security team reviews access permissions and records the owner of each service.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27 audit28
+
+
+SecAI pdf-scan-medium-en-vi-01-p05
+[pdf-scan-medium-en-vi-01-p05-0000] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p05-0001] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p05-0002] The security team reviews access permissions and records the owner of each service.
+[pdf-scan-medium-en-vi-01-p05-0003] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p05-0004] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[pdf-scan-medium-en-vi-01-p05-0005] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p05-0006] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p05-0007] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p05-0008] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p05-0009] A vulnerability report describes the affected asset, business impact and remediation steps.
+[pdf-scan-medium-en-vi-01-p05-0010] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p05-0011] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p05-0012] The maintenance window requires a tested backup and a documented recovery procedure.
+[pdf-scan-medium-en-vi-01-p05-0013] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[pdf-scan-medium-en-vi-01-p05-0014] The inventory includes databases, network devices, endpoints and their responsible teams.
+[pdf-scan-medium-en-vi-01-p05-0015] Analysts compare network alerts with application logs before opening an incident.
+Keywords: audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+Account: svc_ccu_fc87e4a3
+Password: Pw978aedac!0&*()_+
+URL: https://fc87e4a3.example.org/audit?id=16549860&mode=test
+IP: 192.0.2.111:8860
+CVE: CVE-2024-8860
+Email: audit.fc87e4a3@example.org
+Key: sk-test-0d92029394c5ee71

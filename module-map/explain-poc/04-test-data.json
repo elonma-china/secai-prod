@@ -1,0 +1,116 @@
+{
+  "version": "1.0-spec",
+  "description": "Bộ case kiểm thử tính năng 'Giải thích quy trình tạo PoC' (explain-poc), mỗi case nhắm đúng 1 nhánh pipeline trong bảng ánh xạ ở 01-api-va-luong-xu-ly.txt mục 3. Khác module-map/poc/04 (chia theo 3 nhóm in_db/not_in_db/fabricated), bộ này chia theo NHÁNH CODE vì tiêu chí PASS duy nhất là 'generation_trace khớp đúng nhánh đã chạy'. CVE tái dùng từ truy vấn trực tiếp catalog.db/poc_canonical/pocs-fixed/ondemand-cache trong container secai-docker-gateway ngày xác minh bên dưới — PHẢI tra lại trước khi chạy phiên test thật (xem 02-test-giao-dien-tung-buoc.txt mục 1), vì catalog/cache thay đổi theo thời gian.",
+  "verified_date": "2026-10-12",
+  "verification_method": "docker exec secai-docker-gateway python3 -c \"sqlite3 queries trên /srv/poc/catalog.db (bảng poc/poc_cve/poc_canonical) + ls /srv/poc/pocs-fixed /srv/poc/ondemand-cache\"",
+  "pass_rule": "Mỗi case: PASS khi generation_trace tất định (2 lần chạy giống nhau) VÀ khớp đúng nhánh pipeline ở field 'branch' VÀ không leak tên tool nội bộ — chi tiết đủ 7 tiêu chí ở 03-tieu-chi-pass.txt mục 1.",
+  "environment": "https://ias.id.vn/ai/exploit (chính) hoặc Devspace http://127.0.0.1:5173 (chẩn đoán cục bộ) — như module-map/poc/02 mục 2.",
+  "cases": [
+    {
+      "id": "EXPL-CANON-01",
+      "branch": "canonical_entry",
+      "cve_id": "CVE-2017-5638",
+      "title": "Apache Struts2 Content-Type OGNL RCE",
+      "expected_trace_sentence_kind": "PoC đã xác minh chạy thành công trên môi trường thử nghiệm — trả nguyên bản",
+      "expected": { "section1_tier": ["real", "real_pruned", "real_consolidated"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "source": "poc_canonical", "poc_id": 125769 },
+      "verified": { "date": "2026-10-12", "checked_via": "select cve_id, poc_id from poc_canonical" }
+    },
+    {
+      "id": "EXPL-FIX-01",
+      "branch": "fixed",
+      "cve_id": "CVE-2026-63030",
+      "title": "WordPress — CVE theo lab vulhub/wordpress (xem module-map/poc/readme.md bảng thư mục)",
+      "expected_trace_sentence_kind": "PoC đã được kỹ thuật viên hiệu chỉnh + xác minh chạy được — trả bản đã hiệu chỉnh",
+      "expected": { "section1_tier": ["real", "real_pruned", "real_consolidated"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "source": "pocs-fixed/CVE-2026-63030.json", "not_in_poc_canonical": true },
+      "verified": { "date": "2026-10-12", "checked_via": "ls /srv/poc/pocs-fixed" }
+    },
+    {
+      "id": "EXPL-SINGLE-01",
+      "branch": "base_real_single_file",
+      "cve_id": "CVE-2026-24061",
+      "title": "GNU InetUtils telnetd — Argument Injection / Authentication Bypass (POC-DB-01 trong module-map/poc/04)",
+      "expected_trace_sentence_kind": "Danh mục nội bộ có mã khai thác thật (một tệp) — trích xuất nguyên văn, loại banner/trang trí",
+      "expected": { "section1_tier": ["real", "real_pruned"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "sources": ["exploitdb", "metasploit", "poc_github"] },
+      "verified": { "date": "2026-10-09", "ref": "module-map/poc/04-test-data.json#POC-DB-01" }
+    },
+    {
+      "id": "EXPL-MULTI-PRUNE-01",
+      "branch": "base_real_multifile_prune",
+      "cve_id": "CVE-2025-29927",
+      "title": "Next.js middleware auth bypass (POC-DB-09 trong module-map/poc/04)",
+      "expected_trace_sentence_kind": "Mã khai thác nhiều tệp — giữ cấu trúc gốc, chỉ loại phần không cần thiết",
+      "expected": { "section1_tier": ["real_pruned"], "candidate_status": "draft_not_executed", "observed_files": 2 },
+      "catalog_evidence": { "note": "Quan sát thật 09/10/2026: trả 2 file (cve-2025-29927.py, requirements.txt) — xem module-map/poc/02 mục 7" },
+      "verified": { "date": "2026-10-09", "ref": "module-map/poc/02-test-giao-dien-tung-buoc.txt mục 7" }
+    },
+    {
+      "id": "EXPL-CONSOLIDATE-01",
+      "branch": "consolidated_llm_merge",
+      "cve_id": "CVE-2021-44228",
+      "title": "Log4Shell — VMware vCenter JNDI Injection RCE (module Metasploit)",
+      "expected_trace_sentence_kind": "Mã nhiều tệp phức tạp — AI hợp nhất thành 1 tệp, có kiểm tra fidelity không đổi tham số/logic gốc",
+      "expected": { "section1_tier": ["real_consolidated"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "sources": ["exploitdb", "metasploit", "poc_github"], "note": "Đã gọi live /ai/exploit 2026-10-12, metadata.section1_tier=real_consolidated, consolidated=true, poc_strategy=prune, provenance trỏ github.com/rapid7/metasploit-framework/.../vmware_vcenter_log4shell.rb" },
+      "verified": { "date": "2026-10-12", "checked_via": "POST /ai/exploit trực tiếp trên docker :8131, xem log hội thoại phiên tạo tài liệu này" }
+    },
+    {
+      "id": "EXPL-CACHE-01",
+      "branch": "cached_hit",
+      "cve_id": "CVE-2026-45504",
+      "title": "CVE dùng làm ví dụ sống cho lỗi fidelity (poc/fidelity.py docstring) — đã có trong ondemand-cache",
+      "expected_trace_sentence_kind": "Không có trong catalog nhưng đã tải/lưu từ lần tra cứu trước — dùng lại bản đã lưu",
+      "expected": { "section1_tier": ["real", "real_consolidated"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "source": "ondemand-cache/CVE-2026-45504.json" },
+      "verified": { "date": "2026-10-12", "checked_via": "ls /srv/poc/ondemand-cache" }
+    },
+    {
+      "id": "EXPL-GITHUB-OD-01",
+      "branch": "github_on_demand",
+      "cve_id": "CVE-2026-0013",
+      "title": "Chưa xác định tiêu đề — catalog chỉ có 2 dòng poc_github link-only, chưa fetch",
+      "expected_trace_sentence_kind": "Catalog chỉ có liên kết chưa tải — hệ thống tự động tải mã khai thác thật từ nguồn công khai",
+      "expected": { "section1_tier": ["real", "real_consolidated"], "candidate_status": "draft_not_executed" },
+      "catalog_evidence": { "source": "poc_github", "artifact_sha256": null, "config_state": "poc_github_ondemand_enabled MẶC ĐỊNH True (config.py:382) — KHÔNG cần bật tay; chỉ bị ép False khi AIRGAP=true (config.py:513, cùng nhóm với web_search_enabled/fetch_reference_enabled). Re-check `docker inspect secai-docker-gateway` biến AIRGAP trước khi chạy case này." },
+      "verified": { "date": "2026-10-12", "checked_via": "sqlite query poc_github WHERE artifact_sha256 IS NULL AND cve_id LIKE 'CVE-2026%'", "caveat": "Chưa xác nhận GitHub repo công khai thật có tồn tại cho CVE này — cần re-check ngay trước khi chạy case, có thể fetch thất bại (coi là BLOCKED, không phải NOT PASS, nếu repo không còn tồn tại)" }
+    },
+    {
+      "id": "EXPL-WEB-01",
+      "branch": "web_real",
+      "cve_id": "CHƯA CHỌN — cố ý không điền một CVE cụ thể ở đây",
+      "title": "Case này CHƯA thể điền CVE cụ thể mà không vi phạm chính nguyên tắc chống bịa đặt của tài liệu này",
+      "expected_trace_sentence_kind": "Không có mã thật trong danh mục nội bộ — tìm kiếm trên internet và dùng làm căn cứ",
+      "expected": { "section1_tier": ["real", "synthesized_cve"], "candidate_status": "draft_not_executed_or_synthesized" },
+      "catalog_evidence": { "requires_config": "web_search_enabled mặc định false (config.py:339) VÀ bị ép false khi AIRGAP=true (config.py:511, cùng nhóm fetch_reference_enabled/poc_github_ondemand_enabled — xem ghi chú case EXPL-GITHUB-OD-01, đã đúng từ đầu). Để chạy nhánh này cần CẢ HAI: WEB_SEARCH_ENABLED=true VÀ AIRGAP=false — gateway mặc định BẬT AIRGAP, chỉ set WEB_SEARCH_ENABLED=true là KHÔNG đủ, dễ chẩn đoán nhầm thành NOT PASS nếu quên vế AIRGAP." },
+      "verified": { "date": "2026-10-12", "checked_via": "docker inspect secai-docker-gateway — WEB_SEARCH_ENABLED=false trên prod hiện tại", "caveat": "Lý do để trống cve_id: chọn một CVE cụ thể ở đây đòi hỏi tự xác nhận trên web là catalog/cache KHÔNG có gì VÀ có PoC công khai dễ tìm — việc này cần WebSearch/WebFetch thật tại thời điểm chạy phiên test (giống cách module-map/poc/readme.md đã làm cho bảng vulhub), không thể suy luận tĩnh từ catalog.db như các case khác. Người chạy phiên test đầu tiên (sau khi code xong và bật WEB_SEARCH_ENABLED) phải tự tra và điền case này, ghi lại cách tra như module-map/poc/readme.md đã làm. Case này KHÔNG chạy được trên docker prod đang live (WEB_SEARCH_ENABLED=false) — ghi BLOCKED nếu chạy trên prod, không phải NOT PASS." }
+    },
+    {
+      "id": "EXPL-SYN-01",
+      "branch": "synthesized_cve_or_readme",
+      "cve_id": "CVE-2026-17666",
+      "title": "Google Chrome Enterprise cryptographic flaw (POC-SYN-01 trong module-map/poc/04)",
+      "expected_trace_sentence_kind": "Không có mã khai thác công khai trong danh mục — CVE có thật trong KB nội bộ, hệ thống tự tổng hợp minh hoạ, KHÔNG phải mã đã kiểm chứng",
+      "expected": { "section1_tier": ["synthesized_cve", "synthesized_readme"], "candidate_status": "synthesized_not_executed" },
+      "catalog_evidence": { "catalog_rows_in_poc_table": 0, "kb_known": true },
+      "verified": { "date": "2026-10-09", "ref": "module-map/poc/04-test-data.json#POC-SYN-01" }
+    },
+    {
+      "id": "EXPL-NOTFOUND-01",
+      "branch": "not_found",
+      "cve_id": "CVE-2026-99999",
+      "title": "Mã CVE không tồn tại (POC-FAKE-01 trong module-map/poc/04)",
+      "expected_trace_sentence_kind": "Không tìm thấy CVE này trong danh mục PoC công khai lẫn cơ sở dữ liệu nội bộ — không đủ căn cứ để tạo PoC",
+      "expected": { "section1_tier": ["not_found"], "candidate_status": "not_generated" },
+      "catalog_evidence": { "note": "Số thứ tự chưa được CVE Program gán tại thời điểm xác minh — PHẢI re-check lại trước khi dùng, xem module-map/poc/readme.md mục 'Vì sao 20 CVE này được chọn'" },
+      "verified": { "date": "2026-10-09", "ref": "module-map/poc/04-test-data.json#POC-FAKE-01" }
+    }
+  ],
+  "branches_not_covered_by_a_real_cve": [
+    {
+      "branch": "synthesis_failed",
+      "reason": "Tier lỗi hệ thống (model không viết được Section 1 dùng được dù có bằng chứng) — không tái hiện tất định bằng 1 CVE cụ thể vì phụ thuộc hành vi model tại thời điểm chạy, không phải trạng thái catalog/KB cố định. Agent review cần dùng test hermetic (mock runner trả lỗi, theo pattern tests/test_poc_evaluation_rubric.py::CaptureRunner) để phủ nhánh này thay vì case CVE thật."
+    }
+  ]
+}

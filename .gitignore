@@ -16,3 +16,7 @@ logs/
 .playwright-mcp/
 # vendored third-party repo (its own git history/remote) — not part of this project
 secai-serving-vast/
+jev-ultrafast/
+
+# cocoindex-code local index
+.cocoindex_code/

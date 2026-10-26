@@ -1,0 +1,128 @@
+[
+ {
+  "id": "FILE-vi-en",
+  "dir": "vi->en",
+  "status": "succeeded",
+  "wall_s": 4.09,
+  "chrf": 81.7
+ },
+ {
+  "id": "FILE-en-vi",
+  "dir": "en->vi",
+  "status": "succeeded",
+  "wall_s": 6.08,
+  "chrf": 74.7
+ },
+ {
+  "id": "FILE-vi-zh-Hans",
+  "dir": "vi->zh",
+  "status": "succeeded",
+  "wall_s": 4.07,
+  "chrf": 45.4
+ },
+ {
+  "id": "FILE-zh-Hans-vi",
+  "dir": "zh->vi",
+  "status": "succeeded",
+  "wall_s": 6.08,
+  "chrf": 72.4
+ },
+ {
+  "id": "FILE-vi-ja",
+  "dir": "vi->ja",
+  "status": "succeeded",
+  "wall_s": 4.07,
+  "chrf": 61.1
+ },
+ {
+  "id": "FILE-ja-vi",
+  "dir": "ja->vi",
+  "status": "succeeded",
+  "wall_s": 8.12,
+  "chrf": 71.6
+ },
+ {
+  "id": "FILE-vi-ko",
+  "dir": "vi->ko",
+  "status": "succeeded",
+  "wall_s": 4.07,
+  "chrf": 59.8
+ },
+ {
+  "id": "FILE-fr-vi",
+  "dir": "fr->vi",
+  "status": "succeeded",
+  "wall_s": 6.09,
+  "chrf": 73.7
+ },
+ {
+  "id": "FILE-vi-de",
+  "dir": "vi->de",
+  "status": "succeeded",
+  "wall_s": 4.07,
+  "chrf": 71.7
+ },
+ {
+  "id": "FILE-de-vi",
+  "dir": "de->vi",
+  "status": "succeeded",
+  "wall_s": 6.09,
+  "chrf": 72.0
+ },
+ {
+  "id": "FILE-vi-es",
+  "dir": "vi->es",
+  "status": "succeeded",
+  "wall_s": 4.08,
+  "chrf": 78.5
+ },
+ {
+  "id": "FILE-es-vi",
+  "dir": "es->vi",
+  "status": "succeeded",
+  "wall_s": 6.1,
+  "chrf": 73.5
+ },
+ {
+  "id": "FILE-vi-ru",
+  "dir": "vi->ru",
+  "status": "succeeded",
+  "wall_s": 6.08,
+  "chrf": 69.7
+ },
+ {
+  "id": "FILE-ru-vi",
+  "dir": "ru->vi",
+  "status": "succeeded",
+  "wall_s": 6.09,
+  "chrf": 69.5
+ },
+ {
+  "id": "FILE-vi-ar",
+  "dir": "vi->ar",
+  "status": "succeeded",
+  "wall_s": 6.11,
+  "chrf": 67.0
+ },
+ {
+  "id": "FILE-ar-vi",
+  "dir": "ar->vi",
+  "status": "succeeded",
+  "wall_s": 6.09,
+  "chrf": 71.8
+ },
+ {
+  "id": "FILE-ko-vi",
+  "dir": "ko->vi",
+  "status": "succeeded",
+  "wall_s": 8.14,
+  "chrf": 70.5
+ },
+ {
+  "id": "FILE-vi-fr",
+  "dir": "vi->fr",
+  "status": "succeeded",
+  "wall_s": 4.07,
+  "chrf": 73.9
+ }
+]

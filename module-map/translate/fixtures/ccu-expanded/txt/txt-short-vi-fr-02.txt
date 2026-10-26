@@ -1,0 +1,13 @@
+SecAI txt-short-vi-fr-02
+[txt-short-vi-fr-02-0000] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[txt-short-vi-fr-02-0001] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[txt-short-vi-fr-02-0002] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[txt-short-vi-fr-02-0003] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+Keywords: audit4 audit5 audit6 audit7 audit8
+Account: svc_ccu_fffdf3b8
+Password: Pw1aa20c13!0&*()_+
+URL: https://fffdf3b8.example.org/audit?id=16776691&mode=test
+IP: 192.0.2.192:8691
+CVE: CVE-2024-1691
+Email: audit.fffdf3b8@example.org
+Key: sk-test-8855e01999459828

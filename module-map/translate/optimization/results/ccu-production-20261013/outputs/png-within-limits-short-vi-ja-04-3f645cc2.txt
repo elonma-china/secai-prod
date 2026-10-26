@@ -1,0 +1,33 @@
+SecAI png-within-limits-short-vi-ja-04
+[png-within-limits-short-vi-ja-04-0000] 影響を受けた資産を記述した脆弱性報告、業務への影響と対処策。
+[png-within-limits-short-vi-ja-04-0001] 運用チームはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[png-within-limits-short-vi-ja-04-0002] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[png-within-limits-short-vi-ja-04-0003] 不具合報告書には、影響を受けた資産、業務への影響、および対処手順が記載されています。
+[png-within-limits-short-vi-ja-04-0004] 保守作業には、検証済みのバックアップと、明確に記載された復元手順が必要です。
+[png-within-limits-short-vi-ja-04-0005] トラブル記録を開く前に、アプリケーションのシグネチャーを使ってネットワーク障害を警告する方向転換機能。
+[png-within-limits-short-vi-ja-04-0006] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[png-within-limits-short-vi-ja-04-0007] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[png-within-limits-short-vi-ja-04-0008] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[png-within-limits-short-vi-ja-04-0009] 保守作業には、検証済みのバックアップと、明確に記載された復元手順が必要です。  
+[png-within-limits-short-vi-ja-04-0010] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログです。  
+[png-within-limits-short-vi-ja-04-0011] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[png-within-limits-short-vi-ja-04-0012] セキュリティホール報告書には、影響を受けた資産、被害の程度、および対処手順が記載されています。
+[png-within-limits-short-vi-ja-04-0013] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[png-within-limits-short-vi-ja-04-0014] 評価者は証拠を確認し、優先順位を決定し、処理期限を確認する。
+[png-within-limits-short-vi-ja-04-0015] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[png-within-limits-short-vi-ja-04-0016] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[png-within-limits-short-vi-ja-04-0017] すべての変更は、顧客に引き渡す前にサンプルドキュメントを用いてテストされます。
+[png-within-limits-short-vi-ja-04-0018] 状況転換担当者は、障害記録を開く前にアプリケーションの署名によってネットワーク上で警告を発する。
+[png-within-limits-short-vi-ja-04-0019] 情報セキュリティチームが各サービスのアクセス権を確認し、責任者を記録する。
+[png-within-limits-short-vi-ja-04-0020] エラー報告書には、影響を受けた資産、業務への影響、および対処手順が記載されています。
+[png-within-limits-short-vi-ja-04-0021] 運用チームはリソースを監視し、キュー内の要求が期日までに処理されるよう確認しています。
+[png-within-limits-short-vi-ja-04-0022] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[png-within-limits-short-vi-ja-04-0023] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+キーワード：audit24 audit25 audit26 audit27 audit28 audit29 audit30 audit31 audit32 audit33 audit34 audit35 audit36
+アカウント：svc_ccu_3ce51af8
+Password: Pw083d1ada!0&*(())_+
+URL: https://3ce51af8.example.org/audit?id=3990810&mode=test
+IP: 192.0.2.61:8810
+CVE: CVE-2024-4810
+メールアドレス：audit.3ce51af8@example.org  
+キー：sk-test-7b0f5848ace2264a

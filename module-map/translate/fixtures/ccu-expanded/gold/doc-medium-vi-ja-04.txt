@@ -1,0 +1,101 @@
+SecAI - 1
+SecAI doc-medium-vi-ja-04-p01
+[doc-medium-vi-ja-04-p01-0000] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p01-0001] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p01-0002] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p01-0003] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[doc-medium-vi-ja-04-p01-0004] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[doc-medium-vi-ja-04-p01-0005] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p01-0006] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[doc-medium-vi-ja-04-p01-0007] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p01-0008] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[doc-medium-vi-ja-04-p01-0009] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p01-0010] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Keywords: audit11 audit12 audit13 audit14
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2
+
+SecAI - 2
+SecAI doc-medium-vi-ja-04-p02
+[doc-medium-vi-ja-04-p02-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[doc-medium-vi-ja-04-p02-0001] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p02-0002] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p02-0003] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p02-0004] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p02-0005] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p02-0006] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p02-0007] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p02-0008] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p02-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p02-0010] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+Keywords: audit11 audit12
+
+Asset | Owner | Priority
+node-1-0 | SOC | 1
+node-1-1 | SOC | 2
+
+SecAI - 3
+SecAI doc-medium-vi-ja-04-p03
+[doc-medium-vi-ja-04-p03-0000] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p03-0001] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p03-0002] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p03-0003] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p03-0004] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p03-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p03-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p03-0007] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p03-0008] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p03-0009] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p03-0010] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit11 audit12 audit13
+
+Asset | Owner | Priority
+node-2-0 | SOC | 1
+node-2-1 | SOC | 2
+
+SecAI - 4
+SecAI doc-medium-vi-ja-04-p04
+[doc-medium-vi-ja-04-p04-0000] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p04-0001] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p04-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[doc-medium-vi-ja-04-p04-0003] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p04-0004] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p04-0005] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p04-0006] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p04-0007] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[doc-medium-vi-ja-04-p04-0008] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p04-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p04-0010] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Keywords: audit11 audit12 audit13
+
+Asset | Owner | Priority
+node-3-0 | SOC | 1
+node-3-1 | SOC | 2
+
+SecAI - 5
+SecAI doc-medium-vi-ja-04-p05
+[doc-medium-vi-ja-04-p05-0000] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p05-0001] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[doc-medium-vi-ja-04-p05-0002] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p05-0003] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[doc-medium-vi-ja-04-p05-0004] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[doc-medium-vi-ja-04-p05-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[doc-medium-vi-ja-04-p05-0006] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[doc-medium-vi-ja-04-p05-0007] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[doc-medium-vi-ja-04-p05-0008] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[doc-medium-vi-ja-04-p05-0009] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[doc-medium-vi-ja-04-p05-0010] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+Keywords: audit11 audit12 audit13 audit14
+Account: svc_ccu_8a4008cc
+Password: Pw18006325!0&*()_+
+URL: https://8a4008cc.example.org/audit?id=9060360&mode=test
+IP: 192.0.2.111:8360
+CVE: CVE-2024-7360
+Email: audit.8a4008cc@example.org
+Key: sk-test-3434e633087d2ede
+
+Asset | Owner | Priority
+node-4-0 | SOC | 1
+node-4-1 | SOC | 2

@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     # Dense+sparse hybrid collection (legacy dense-only: cve_kb).
     qdrant_collection: str = "cve_kb_hybrid"
+    # Optional advisory/patch collections queried only for exact, linked CVE refs.
+    # Empty by default so deployments opt in after provisioning the collection.
+    qdrant_kb_supplemental_collections: str = ""
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
     embedding_api_url: str = ""
@@ -135,6 +138,8 @@ class Settings(BaseSettings):
     # calibrated head is shipped.
     injection_cascade_enabled: bool = False
     injection_cascade_timeout_s: float = 8.0
+    # Explicit rollout for contextual chat scope adjudication (including mixed requests).
+    chat_scope_judge_enabled: bool = False
 
     # Language gate (security.is_unsupported_language): the classifier head was trained on
     # Vietnamese + English only, so a message written predominantly in a non-Latin script
@@ -214,6 +219,11 @@ class Settings(BaseSettings):
     # simple queries to 1-2 turns. Override per-deploy via STEP_CAP.
     step_cap: int = 16
     tool_timeout_ms: int = 30000
+    # Disable for offline load/benchmark runs where all virtual users share one source IP
+    # (the fixed-window limiter keys on (client_ip, path), so 30 CCU from 127.0.0.1 collide on
+    # one bucket and 429-storm). Default true = production behaviour; set RATE_LIMIT_ENABLED=false
+    # ONLY for a controlled single-IP measurement. Does not touch review-api/v2 special paths.
+    rate_limit_enabled: bool = True
 
     # ── Gateway runtime ────────────────────────────────────────────────────────
     report_feature_enabled: bool = False
@@ -455,6 +465,8 @@ class Settings(BaseSettings):
     # Log cron cập nhật KB (CVE/0-day) hằng ngày — nhóm "Cập nhật KB".
     showcase_kb_sync_log: str = "/home/ict/Downloads/CVE-DB/sync_cve.log"
     showcase_kb_cron: str = "0 3 * * *"
+    # /health also probes embedding/rerank/Qdrant/Neo4j and the KB-sync cron age (cached 30s).
+    health_deep_checks: bool = True
     # Triển khai: docker-compose + Helm chart để trưng trên UI (tiêu chí Docker image + Helm).
     showcase_docker_compose: str = "/home/ict/AIEngines/secai/secai-docker/docker-compose.yml"
     showcase_helm_dir: str = "./deploy/helm/secai-gateway"

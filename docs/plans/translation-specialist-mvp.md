@@ -1,0 +1,23 @@
+# Translation specialist MVP
+
+Latest user authority: build usable multi-agent translation quickly; quality optimization follows. DuyTa orchestrates, specialist model <4B translates. Existing import/OCR work is reused, not rebuilt.
+
+## Global constraints
+
+BE only. Preserve legacy endpoint/schema/SSE/session/security contracts; default legacy behavior remains until explicitly scoped routing is verified. New v2 translation routes to specialist, no silent DuyTa fallback. No main merge or production replacement. Existing Vast only, isolated dependencies/resources, protect incumbent LLM/embedding/reranker. Max3 OCR checkpoints remains; dedicated translation model separate. No secrets/model weights in git. All failures retained; functional MVP is not full multilingual quality acceptance. Independent review of shipped changes and critical upload/token/timeout protections remains required.
+
+## Task 1: MVP criteria and routing contract addendum
+
+Fresh Astra reads this plan plus existing docs/criteria and docs/api/translate-v2-contract.md. Write docs/criteria/translation-specialist-mvp.md before implementation. Define finite pass/fail for dedicated translator client, direct v2 jobs, callable specialist for DuyTa orchestration, timeout/cancel/resource/logging/token integrity, 18-direction functional smoke, existing API regression and actual file+image E2E. Explicitly defer broad semantic quality certification/expanded corpus, preserve past FAILs. Decide minimal routing API shared with host: POST /v1/translate JSON text/source_lang/target_lang -> translated_text/model; bounded request/response, service-only bearer, no exposed prompts. Prefer structured client data over parsing legacy prompt strings. Source auto is resolved locally by existing detector. Specify truthful OCR correction fallback if specialist cannot correct: original OCR unchanged, needs_review and existing warning; never claim corrected quality. Read existing skills/AGENTS. Docs only, no product edits.
+
+## Task 2: Dedicated translation agent backend
+
+Own worktree /home/ict/secai-translation-specialist-wt, branch feature/translation-specialist-agent, base147bd666. You are not alone; do not revert others. Read task1 criteria first. Implement smallest async TranslationAgent using configured specialist endpoint/model, separate from incumbent Linch/DuyTa. Own new translation agent/client module and minimal translation/service.py, worker.py, settings.py, types.py interfaces; only add shared integration when necessary and documented. Retain existing literal protection, chunk order, lifecycle and resource bounds. Agent callable independently and via a narrowly scoped orchestrator tool/profile; do not silently mutate legacy chat tools. No unnecessary DuyTa call for direct translation. Missing endpoint fails safely, no DuyTa fallback. Explicit runtime warning/raw OCR fallback if correction unavailable, not fake successful correction. Host contract comes through root. Add bounded network/mock tests incl incorrect model/lang envelope, timeout, cancellation, malformed output, protected token mutation; 18 language directions route correctly. Run focused tests and full suite once, report inherited failures honestly. Commit explicit paths only. No GPU or serving edits owned by runtime agent. No subagents.
+
+## Task 3: Isolated specialist model hosting
+
+Existing quality_runner owns separate runtime worktree. Preserve interrupted OCR benchmark then release owned GPU. Verify official candidate tencent/Hy-MT2-1.8B exactparams/license/revision/native support before isolated download/load. No incumbent modification. Protected loopback HTTP contract from task1; no auto model downloads in gateway. Bound memory/input/output/concurrency/deadlines, pin model and reproducible startup. Coordinate memory for sequential OCR and MT services; never imply both fit without measurement. Run actual 18-direction short smoke with output saved and quality caveats.
+
+## Task 4: Focused independent review, assembled staging and handoff
+
+Fresh reviewer verifies task2 diff plus prior147bd token fixes and critical file validation/lifecycle tests using evidence checkpoints. Compose import+OCR+specialist in temporary test worktree; resolve overlap via owning coder. Run real create/status/result file and image flow, invalid file, unavailable service and token preservation checks; regression evidence on exact assembled SHA. No claim production-ready or full18-direction quality PASS. Write concise API/launch instructions and deferred backlog. Official integration/main decisions retain original separate gates; preview composition is not main merge.

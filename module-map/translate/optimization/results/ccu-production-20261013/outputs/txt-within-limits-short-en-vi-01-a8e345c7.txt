@@ -1,0 +1,160 @@
+SecAI txt-within-limits-short-en-vi-01
+[txt-within-limits-short-en-vi-01-0000] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0001] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0002] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0003] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0004] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0005] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0006] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0007] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0008] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0009] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0010] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0011] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0012] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0013] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0014] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0015] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0016] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0017] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0018] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0019] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0020] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0021] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0022] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0023] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0024] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0025] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0026] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0027] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0028] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0029] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0030] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0031] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0032] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0033] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0034] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0035] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0036] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0037] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0038] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0039] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0040] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0041] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0042] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0043] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0044] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0045] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0046] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0047] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0048] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0049] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0050] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0051] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0052] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[Báo cáo lỗ hổng – mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.]
+[txt-within-limits-short-en-vi-01-0054] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0055] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0056] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0057] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0058] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0059] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0060] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0061] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0062] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0063] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0064] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0065] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0066] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0067] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0068] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0069] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0070] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0071] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[Báo cáo lỗ hổng – mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.]
+[txt-within-limits-short-en-vi-01-0073] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0074] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0075] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0076] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0077] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0078] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0079] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0080] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0081] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0082] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0083] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0084] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0085] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0086] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0087] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0088] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0089] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0090] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0091] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[Báo cáo lỗ hổng – mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.]
+[txt-within-limits-short-en-vi-01-0093] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0094] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0095] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0096] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0097] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0098] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0099] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0100] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0101] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0102] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0103] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0104] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết.
+[txt-within-limits-short-en-vi-01-0105] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0106] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0107] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0108] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0109] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0110] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0111] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0112] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0113] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0114] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0115] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0116] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0117] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0118] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0119] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0120] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0121] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0122] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0123] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0124] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0125] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0126] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0127] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0128] Hệ thống giám sát mức độ sử dụng tài nguyên và kiểm tra xem các yêu cầu được xếp hàng có được xử lý xong trước hạn hay không.
+[txt-within-limits-short-en-vi-01-0129] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0130] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[Báo cáo lỗ hổng – mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.]
+[txt-within-limits-short-en-vi-01-0132] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0133] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[Báo cáo lỗ hổng – mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.]
+[txt-within-limits-short-en-vi-01-0135] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0136] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0137] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0138] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0139] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0140] Danh mục bao gồm các cơ sở dữ liệu, thiết bị mạng, các điểm cuối và các nhóm chịu trách nhiệm về chúng.
+[txt-within-limits-short-en-vi-01-0141] Người xem xét kiểm tra các bằng chứng, xác định mức độ ưu tiên và xác nhận ngày dự kiến giải quyết vấn đề.
+[txt-within-limits-short-en-vi-01-0142] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0143] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0144] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+[txt-within-limits-short-en-vi-01-0145] Báo cáo về lỗ hổng mô tả tài sản bị ảnh hưởng, tác động đến hoạt động kinh doanh và các bước khắc phục.
+[txt-within-limits-short-en-vi-01-0146] Mọi thay đổi đều được kiểm thử trên các tài liệu mẫu trước khi được cung cấp cho khách hàng.
+[txt-within-limits-short-en-vi-01-0147] Các chuyên gia so sánh các cảnh báo mạng với nhật ký ứng dụng trước khi xử lý một sự cố.
+[txt-within-limits-short-en-vi-01-0148] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0149] Khoảng thời gian bảo trì đòi hỏi phải có bản sao dự phòng đã được kiểm tra và quy trình khôi phục được ghi chép rõ ràng.
+[txt-within-limits-short-en-vi-01-0150] Đội ngũ bảo mật kiểm tra quyền truy cập và ghi lại chủ sở hữu của từng dịch vụ.
+Từ khóa: audit151 audit152
+Tài khoản: svc_ccu_6b28464d
+Password: Pw4054d652!0&*()_+
+URL: https://6b28464d.example.org/audit?id=7022662&mode=test
+IP: 192.0.2.163:8662
+CVE: CVE-2024-3662
+Email: audit.6b28464d@example.org
+Khóa: sk-test-642aeb9255e80e47

@@ -1,0 +1,13 @@
+SecAI jpg-short-vi-fr-02
+[jpg-short-vi-fr-02-0000] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-short-vi-fr-02-0001] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-short-vi-fr-02-0002] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-short-vi-fr-02-0003] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit4 audit5 audit6
+Account: svc_ccu_cf1a9a5d
+Password: Pw91001708!0&*()_+
+URL: https://cf1a9a5d.example.org/audit?id=13572762&mode=test
+IP: 192.0.2.13:8762
+CVE: CVE-2024-1762
+Email: audit.cf1a9a5d@example.org
+Key: sk-test-167e1a353eb2e047

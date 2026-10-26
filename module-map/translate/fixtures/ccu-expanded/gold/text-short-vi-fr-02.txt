@@ -1,0 +1,13 @@
+SecAI text-short-vi-fr-02
+[text-short-vi-fr-02-0000] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[text-short-vi-fr-02-0001] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-short-vi-fr-02-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-short-vi-fr-02-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Keywords: audit4 audit5 audit6 audit7 audit8
+Account: svc_ccu_124a132e
+Password: Pwdf2a36f4!0&*()_+
+URL: https://124a132e.example.org/audit?id=1198611&mode=test
+IP: 192.0.2.112:8611
+CVE: CVE-2024-2611
+Email: audit.124a132e@example.org
+Key: sk-test-b3f516731a2cee06

@@ -1,0 +1,33 @@
+SecAI text-medium-vi-fr-02
+[text-medium-vi-fr-02-0000] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[text-medium-vi-fr-02-0001] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[text-medium-vi-fr-02-0002] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[text-medium-vi-fr-02-0003] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[text-medium-vi-fr-02-0004] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0005] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[text-medium-vi-fr-02-0006] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[text-medium-vi-fr-02-0007] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0008] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[text-medium-vi-fr-02-0009] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[text-medium-vi-fr-02-0010] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[text-medium-vi-fr-02-0011] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0012] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0013] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0014] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[text-medium-vi-fr-02-0015] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[text-medium-vi-fr-02-0016] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[text-medium-vi-fr-02-0017] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[text-medium-vi-fr-02-0018] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[text-medium-vi-fr-02-0019] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0020] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[text-medium-vi-fr-02-0021] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[text-medium-vi-fr-02-0022] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[text-medium-vi-fr-02-0023] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit24 audit25 audit26 audit27 audit28 audit29 audit30 audit31 audit32 audit33 audit34 audit35 audit36 audit37 audit38
+Account: svc_ccu_188370e2
+Password: Pw3003f204!0&*()_+
+URL: https://188370e2.example.org/audit?id=1606512&mode=test
+IP: 192.0.2.13:8512
+CVE: CVE-2024-5512
+Email: audit.188370e2@example.org
+Key: sk-test-62eb71deb0444425

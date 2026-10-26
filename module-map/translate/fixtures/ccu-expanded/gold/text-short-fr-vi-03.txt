@@ -1,0 +1,15 @@
+SecAI text-short-fr-vi-03
+[text-short-fr-vi-03-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[text-short-fr-vi-03-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-short-fr-vi-03-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-short-fr-vi-03-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[text-short-fr-vi-03-0004] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[text-short-fr-vi-03-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords:
+Account: svc_ccu_8f5a6ac4
+Password: Pw678238b9!0&*()_+
+URL: https://8f5a6ac4.example.org/audit?id=9394794&mode=test
+IP: 192.0.2.45:8794
+CVE: CVE-2024-8794
+Email: audit.8f5a6ac4@example.org
+Key: sk-test-090249ae6e7332b8

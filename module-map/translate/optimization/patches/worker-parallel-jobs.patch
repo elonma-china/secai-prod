@@ -1,0 +1,39 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/worker.py.pre-parallel	2026-10-11 10:31:30.988653238 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/worker.py	2026-10-11 10:31:31.020388297 +0700
+@@ -170,8 +170,9 @@
+             if not await asyncio.to_thread(self.store.heartbeat, row["job_id"], row["generation"]):
+                 return
+ 
+-    async def run_once(self) -> bool:
+-        row = await asyncio.to_thread(self.store.claim)
++    async def run_once(self, row: dict | None = None) -> bool:
++        if row is None:
++            row = await asyncio.to_thread(self.store.claim)
+         if row is None:
+             return False
+         heartbeat = asyncio.create_task(self._heartbeat(row))
+@@ -277,10 +278,22 @@
+         return True
+ 
+     async def serve(self) -> None:
++        """Chạy tới `max_running_jobs` job ĐỒNG THỜI (trước đây mỗi lần chỉ 1 job: các job còn lại xếp hàng dù
++        trần admission cho phép 2-4). `store.claim` vẫn áp trần theo trạng thái DB, nên nhiều tiến trình worker an toàn."""
++        running: set[asyncio.Task] = set()
+         while True:
+-            worked = await self.run_once()
++            for task in [t for t in running if t.done()]:
++                running.discard(task)
++                if not task.cancelled() and task.exception() is not None:
++                    import logging
++                    logging.getLogger("secai.translate.worker").error("job task crashed", exc_info=task.exception())
++            claimed = None
++            if len(running) < max(1, int(self.settings.max_running_jobs)):
++                claimed = await asyncio.to_thread(self.store.claim)
++                if claimed is not None:
++                    running.add(asyncio.create_task(self.run_once(claimed)))
+             await asyncio.to_thread(self.store.reap)
+-            if not worked:
++            if claimed is None:
+                 await asyncio.sleep(0.15)  # thăm dò hàng đợi dày hơn: bớt ~0,2 giây chờ nhận job
+ 
+ 

@@ -1,0 +1,986 @@
+{
+ "when": "2026-10-11T09:46:08",
+ "pass_pct": 90.0,
+ "summary": {
+  "graded": 36,
+  "dat": 34,
+  "pct": 94.4,
+  "chrf_mean": 64.96,
+  "ungraded": 2,
+  "by_group": {
+   "from-vi-cjk": {
+    "n": 6,
+    "dat": 6,
+    "pct": 100.0,
+    "chrf_mean": 53.1
+   },
+   "from-vi-latin": {
+    "n": 12,
+    "dat": 10,
+    "pct": 83.3,
+    "chrf_mean": 66.7
+   },
+   "to-vi": {
+    "n": 18,
+    "dat": 18,
+    "pct": 100.0,
+    "chrf_mean": 67.8
+   }
+  },
+  "by_kind": {
+   "file": {
+    "n": 18,
+    "dat": 18,
+    "pct": 100.0,
+    "chrf_mean": 68.5
+   },
+   "image": {
+    "n": 18,
+    "dat": 16,
+    "pct": 88.9,
+    "chrf_mean": 61.4
+   }
+  },
+  "by_lang": {
+   "ar": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 65.5
+   },
+   "de": {
+    "n": 4,
+    "dat": 3,
+    "chrf_mean": 63.2
+   },
+   "en": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 72.1
+   },
+   "es": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 70.2
+   },
+   "fr": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 65.5
+   },
+   "ja": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 64.0
+   },
+   "ko": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 62.3
+   },
+   "ru": {
+    "n": 4,
+    "dat": 3,
+    "chrf_mean": 65.7
+   },
+   "zh": {
+    "n": 4,
+    "dat": 4,
+    "chrf_mean": 56.0
+   }
+  }
+ },
+ "rows": [
+  {
+   "id": "FILE-vi-en",
+   "kind": "file",
+   "dir": "vi->en",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 78.4,
+   "chrf_min": 55.0,
+   "len_ratio": 1.0,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-en-vi",
+   "kind": "file",
+   "dir": "en->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 74.7,
+   "chrf_min": 60.0,
+   "len_ratio": 1.13,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-zh-Hans",
+   "kind": "file",
+   "dir": "vi->zh",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 41.9,
+   "chrf_min": 38.0,
+   "len_ratio": 1.04,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 1.1,
+   "lines": "9/9",
+   "literal": "1/1",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-zh-Hans-vi",
+   "kind": "file",
+   "dir": "zh->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.7,
+   "chrf_min": 60.0,
+   "len_ratio": 1.13,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-ja",
+   "kind": "file",
+   "dir": "vi->ja",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 56.4,
+   "chrf_min": 38.0,
+   "len_ratio": 1.03,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.5,
+   "lines": "9/9",
+   "literal": "1/1",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-ja-vi",
+   "kind": "file",
+   "dir": "ja->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.2,
+   "chrf_min": 60.0,
+   "len_ratio": 1.15,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-ko",
+   "kind": "file",
+   "dir": "vi->ko",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 54.0,
+   "chrf_min": 38.0,
+   "len_ratio": 1.03,
+   "foreign_pct": 0.1,
+   "latin_left_pct": 0.5,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-ko-vi",
+   "kind": "file",
+   "dir": "ko->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 70.8,
+   "chrf_min": 60.0,
+   "len_ratio": 1.14,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-fr",
+   "kind": "file",
+   "dir": "vi->fr",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.9,
+   "chrf_min": 55.0,
+   "len_ratio": 0.99,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-fr-vi",
+   "kind": "file",
+   "dir": "fr->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 72.4,
+   "chrf_min": 60.0,
+   "len_ratio": 1.17,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-de",
+   "kind": "file",
+   "dir": "vi->de",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.0,
+   "chrf_min": 55.0,
+   "len_ratio": 1.01,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-de-vi",
+   "kind": "file",
+   "dir": "de->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.9,
+   "chrf_min": 60.0,
+   "len_ratio": 1.18,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-es",
+   "kind": "file",
+   "dir": "vi->es",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 77.1,
+   "chrf_min": 55.0,
+   "len_ratio": 1.03,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-es-vi",
+   "kind": "file",
+   "dir": "es->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 73.2,
+   "chrf_min": 60.0,
+   "len_ratio": 1.14,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-ru",
+   "kind": "file",
+   "dir": "vi->ru",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 68.2,
+   "chrf_min": 55.0,
+   "len_ratio": 1.01,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.3,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-ru-vi",
+   "kind": "file",
+   "dir": "ru->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 70.1,
+   "chrf_min": 60.0,
+   "len_ratio": 1.16,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-vi-ar",
+   "kind": "file",
+   "dir": "vi->ar",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 66.1,
+   "chrf_min": 55.0,
+   "len_ratio": 1.0,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.2,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-ar-vi",
+   "kind": "file",
+   "dir": "ar->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 71.6,
+   "chrf_min": 60.0,
+   "len_ratio": 1.15,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "9/9",
+   "literal": "5/5",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-en",
+   "kind": "image",
+   "dir": "vi->en",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 66.1,
+   "chrf_min": 45.0,
+   "len_ratio": 0.95,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-en-vi",
+   "kind": "image",
+   "dir": "en->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 69.2,
+   "chrf_min": 50.0,
+   "len_ratio": 1.03,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-zh-Hans",
+   "kind": "image",
+   "dir": "vi->zh",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 41.6,
+   "chrf_min": 25.0,
+   "len_ratio": 1.07,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-zh-Hans-vi",
+   "kind": "image",
+   "dir": "zh->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 68.6,
+   "chrf_min": 50.0,
+   "len_ratio": 1.07,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-ja",
+   "kind": "image",
+   "dir": "vi->ja",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 63.6,
+   "chrf_min": 25.0,
+   "len_ratio": 1.04,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-ja-vi",
+   "kind": "image",
+   "dir": "ja->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 64.8,
+   "chrf_min": 50.0,
+   "len_ratio": 1.16,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-ko",
+   "kind": "image",
+   "dir": "vi->ko",
+   "group": "from-vi-cjk",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 61.0,
+   "chrf_min": 25.0,
+   "len_ratio": 1.03,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-ko-vi",
+   "kind": "image",
+   "dir": "ko->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 63.3,
+   "chrf_min": 50.0,
+   "len_ratio": 1.2,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-fr",
+   "kind": "image",
+   "dir": "vi->fr",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 62.9,
+   "chrf_min": 45.0,
+   "len_ratio": 1.09,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-fr-vi",
+   "kind": "image",
+   "dir": "fr->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 55.0,
+   "chrf_min": 50.0,
+   "len_ratio": 1.08,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-de",
+   "kind": "image",
+   "dir": "vi->de",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": false,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [
+    "chrF 44.3 < 45.0"
+   ],
+   "chrf": 44.3,
+   "chrf_min": 45.0,
+   "len_ratio": 1.27,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "TRƯỢT"
+  },
+  {
+   "id": "IMG-de-vi",
+   "kind": "image",
+   "dir": "de->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 65.8,
+   "chrf_min": 50.0,
+   "len_ratio": 0.97,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-es",
+   "kind": "image",
+   "dir": "vi->es",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 77.0,
+   "chrf_min": 45.0,
+   "len_ratio": 1.1,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-es-vi",
+   "kind": "image",
+   "dir": "es->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 53.6,
+   "chrf_min": 50.0,
+   "len_ratio": 1.04,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-ru",
+   "kind": "image",
+   "dir": "vi->ru",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": false,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [
+    "độ dài 1.33 ngoài [0.75,1.3]"
+   ],
+   "chrf": 58.8,
+   "chrf_min": 45.0,
+   "len_ratio": 1.33,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "TRƯỢT"
+  },
+  {
+   "id": "IMG-ru-vi",
+   "kind": "image",
+   "dir": "ru->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 65.8,
+   "chrf_min": 50.0,
+   "len_ratio": 0.97,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-vi-ar",
+   "kind": "image",
+   "dir": "vi->ar",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 58.6,
+   "chrf_min": 45.0,
+   "len_ratio": 1.15,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "IMG-ar-vi",
+   "kind": "image",
+   "dir": "ar->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {
+    "G0_run": true,
+    "G1_chrf": true,
+    "G2_len": true,
+    "G3_script": true,
+    "G4_lines": true,
+    "G5_literal": true
+   },
+   "reasons": [],
+   "chrf": 65.8,
+   "chrf_min": 50.0,
+   "len_ratio": 0.97,
+   "foreign_pct": 0.0,
+   "latin_left_pct": 0.0,
+   "lines": "1/1",
+   "literal": "0/0",
+   "state": "ĐẠT"
+  },
+  {
+   "id": "FILE-SENS-vi-en",
+   "kind": "file",
+   "dir": "vi->en",
+   "group": "from-vi-latin",
+   "status": "succeeded",
+   "gates": {},
+   "reasons": [
+    "không có gold"
+   ],
+   "state": "CHƯA CHẤM"
+  },
+  {
+   "id": "IMG-SENS-en-vi",
+   "kind": "image",
+   "dir": "en->vi",
+   "group": "to-vi",
+   "status": "succeeded",
+   "gates": {},
+   "reasons": [
+    "không có gold"
+   ],
+   "state": "CHƯA CHẤM"
+  }
+ ]
+}

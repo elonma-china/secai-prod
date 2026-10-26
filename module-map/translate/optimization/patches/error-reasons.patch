@@ -1,0 +1,54 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/api/translate_v2/routes.py.pre-reason	2026-10-11 09:40:48.149289678 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/api/translate_v2/routes.py	2026-10-11 10:11:37.036349091 +0700
+@@ -61,6 +61,41 @@
+     return datetime.fromtimestamp(value, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+ 
+ 
++# Lý do lỗi hiển thị cho người dùng (giao diện in nguyên object `error`). Chỉ là mô tả theo MÃ lỗi: không chứa
++# nội dung tệp, đường dẫn hay chi tiết nội bộ. "hint" = cách xử lý gợi ý.
++_REASONS = {
++    "UNSAFE_DOCUMENT": ("Tệp bị từ chối vì có nội dung không an toàn (macro/ActiveX, tệp nén bất thường hoặc XML nguy hiểm).",
++                        "Xóa macro/đối tượng ActiveX, lưu lại dạng .docx thường rồi tải lại."),
++    "CORRUPT_DOCUMENT": ("Tệp bị hỏng hoặc cấu trúc không đọc được.", "Mở tệp bằng Word/Excel/Acrobat, lưu lại bản mới rồi tải lại."),
++    "CORRUPT_IMAGE": ("Ảnh bị hỏng hoặc không đọc được.", "Chụp/xuất lại ảnh dạng PNG hoặc JPG."),
++    "FILE_TYPE_MISMATCH": ("Nội dung tệp không khớp với phần đuôi tệp.", "Đổi đúng đuôi hoặc xuất lại tệp đúng định dạng."),
++    "UNSUPPORTED_FILE_TYPE": ("Định dạng tệp chưa được hỗ trợ.", "Dùng TXT, DOCX, DOC, XLSX, PDF, PNG hoặc JPG."),
++    "UNSUPPORTED_ENCODING": ("Không xác định được bảng mã ký tự của tệp văn bản.", "Lưu tệp TXT dạng UTF-8 rồi tải lại."),
++    "EMPTY_FILE": ("Tệp rỗng.", "Chọn tệp có nội dung."),
++    "FILE_TOO_LARGE": ("Tệp vượt dung lượng cho phép.", "Tách tệp nhỏ hơn hoặc nén ảnh trong tệp."),
++    "IMAGE_TOO_LARGE": ("Ảnh vượt kích thước cho phép.", "Giảm kích thước ảnh rồi tải lại."),
++    "TEXT_TOO_LONG": ("Nội dung quá dài hoặc có quá nhiều đoạn để xử lý một lần.", "Tách tài liệu thành nhiều phần."),
++    "ARCHIVE_LIMIT_EXCEEDED": ("Tệp (gói nén bên trong) vượt giới hạn an toàn.", "Giảm số ảnh/phần nhúng hoặc dung lượng tệp."),
++    "NO_TEXT_DETECTED": ("Không nhận dạng được chữ trong tệp/ảnh.", "Dùng ảnh rõ nét, đủ độ phân giải, chữ không bị mờ."),
++    "LANGUAGE_DETECTION_FAILED": ("Không xác định được ngôn ngữ nguồn.", "Chọn ngôn ngữ nguồn thủ công."),
++    "UNSUPPORTED_LANGUAGE_PAIR": ("Cặp ngôn ngữ chưa được hỗ trợ.", "Một trong hai ngôn ngữ phải là tiếng Việt."),
++    "TOKEN_INTEGRITY_FAILED": ("Không giữ nguyên được thông tin kỹ thuật (mật khẩu, IP, URL, số hiệu...) trong bản dịch nên dừng để tránh sai lệch.",
++                               "Thử lại; nếu vẫn lỗi, tách đoạn chứa thông tin kỹ thuật ra riêng."),
++    "EMPTY_TRANSLATION": ("Mô hình dịch trả về nội dung rỗng.", "Thử lại sau ít phút."),
++    "TRANSLATION_UNAVAILABLE": ("Dịch vụ dịch tạm thời không phản hồi.", "Thử lại sau ít phút."),
++    "OCR_UNAVAILABLE": ("Dịch vụ nhận dạng chữ (OCR) tạm thời không phản hồi.", "Thử lại sau ít phút."),
++    "DEPENDENCY_UNAVAILABLE": ("Một thành phần xử lý (dịch/OCR/chuyển đổi .doc) chưa sẵn sàng.", "Thử lại sau ít phút; báo quản trị nếu kéo dài."),
++    "PROCESSING_TIMEOUT": ("Xử lý quá thời gian cho phép.", "Thử lại hoặc tách tài liệu nhỏ hơn."),
++    "STORAGE_UNAVAILABLE": ("Kho lưu tạm không khả dụng.", "Thử lại sau ít phút."),
++    "INTERNAL_ERROR": ("Lỗi nội bộ khi xử lý.", "Thử lại; gửi kèm request_id cho quản trị nếu vẫn lỗi."),
++}
++
++
++def _job_error(code: str) -> dict:
++    reason, hint = _REASONS.get(code, ("Xử lý thất bại.", "Thử lại; gửi kèm request_id cho quản trị nếu vẫn lỗi."))
++    return {"code": code, "message": reason, "hint": hint, "request_id": secrets.token_hex(12)}
++
++
+ def _job(row: dict) -> dict:
+     job_id = row["job_id"]
+     return {
+@@ -68,8 +103,7 @@
+         "progress": {"completed": row["completed"], "total": row["total"]},
+         "source_lang": row["source_lang"], "target_lang": row["target_lang"],
+         "warnings": json.loads(row["warnings_json"]),
+-        "error": ({"code": row["error_code"], "message": "Processing failed.",
+-                   "request_id": secrets.token_hex(12)} if row["error_code"] else None),
++        "error": _job_error(row["error_code"]) if row["error_code"] else None,
+         "created_at": _stamp(row["created"]), "updated_at": _stamp(row["updated"]),
+         "expires_at": _stamp(row["expires"]),
+         "status_url": f"/ai/v2/translate/jobs/{job_id}",

@@ -1,0 +1,30 @@
+SecAI - 1
+SecAI doc-short-en-vi-01-p01
+[doc-short-en-vi-01-p01-0000] The inventory includes databases, network devices, endpoints and their responsible teams.
+[doc-short-en-vi-01-p01-0001] The maintenance window requires a tested backup and a documented recovery procedure.
+[doc-short-en-vi-01-p01-0002] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[doc-short-en-vi-01-p01-0003] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[doc-short-en-vi-01-p01-0004] A vulnerability report describes the affected asset, business impact and remediation steps.
+[doc-short-en-vi-01-p01-0005] The security team reviews access permissions and records the owner of each service.
+[doc-short-en-vi-01-p01-0006] Every change is tested with representative documents before release to the customer.
+[doc-short-en-vi-01-p01-0007] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[doc-short-en-vi-01-p01-0008] Every change is tested with representative documents before release to the customer.
+[doc-short-en-vi-01-p01-0009] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[doc-short-en-vi-01-p01-0010] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[doc-short-en-vi-01-p01-0011] The security team reviews access permissions and records the owner of each service.
+[doc-short-en-vi-01-p01-0012] The inventory includes databases, network devices, endpoints and their responsible teams.
+[doc-short-en-vi-01-p01-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[doc-short-en-vi-01-p01-0014] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[doc-short-en-vi-01-p01-0015] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+Keywords: audit16 audit17
+Account: svc_ccu_9b1e72c4
+Password: Pwb60935d6!0&*()_+
+URL: https://9b1e72c4.example.org/audit?id=10165874&mode=test
+IP: 192.0.2.125:8874
+CVE: CVE-2024-5874
+Email: audit.9b1e72c4@example.org
+Key: sk-test-7bd4e6a4d8c33051
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2

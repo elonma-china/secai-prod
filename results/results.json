@@ -1,0 +1,9 @@
+[
+  {
+    "target": "http://127.0.0.1:9000",
+    "vulnerable": true,
+    "status": "VULNERABLE",
+    "security_header": "wVfiLc2hQT/EYDeraiqJSe9r3Lp2jYdy477GuZPpWCs=:m1FcAW9u5eeRjFj5JmnuTw==",
+    "content_length": 11698
+  }
+]

@@ -1,0 +1,307 @@
+node-0000 | xlsx-medium-vi-fr-02-0000: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-0 | 1
+node-0001 | xlsx-medium-vi-fr-02-0001: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-1 | 2
+node-0002 | xlsx-medium-vi-fr-02-0002: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-2 | 3
+node-0003 | xlsx-medium-vi-fr-02-0003: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-3 | 4
+node-0004 | xlsx-medium-vi-fr-02-0004: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-4 | 5
+node-0005 | xlsx-medium-vi-fr-02-0005: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-5 | 6
+node-0006 | xlsx-medium-vi-fr-02-0006: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-6 | 7
+node-0007 | xlsx-medium-vi-fr-02-0007: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-7 | 8
+node-0008 | xlsx-medium-vi-fr-02-0008: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-8 | 9
+node-0009 | xlsx-medium-vi-fr-02-0009: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-9 | 10
+node-0010 | xlsx-medium-vi-fr-02-0010: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-10 | 11
+node-0011 | xlsx-medium-vi-fr-02-0011: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-0 | 12
+node-0012 | xlsx-medium-vi-fr-02-0012: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-1 | 13
+node-0013 | xlsx-medium-vi-fr-02-0013: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-2 | 14
+node-0014 | xlsx-medium-vi-fr-02-0014: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-3 | 15
+node-0015 | xlsx-medium-vi-fr-02-0015: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-4 | 16
+node-0016 | xlsx-medium-vi-fr-02-0016: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-5 | 17
+node-0017 | xlsx-medium-vi-fr-02-0017: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-6 | 18
+node-0018 | xlsx-medium-vi-fr-02-0018: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-7 | 19
+node-0019 | xlsx-medium-vi-fr-02-0019: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-8 | 20
+node-0020 | xlsx-medium-vi-fr-02-0020: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-9 | 21
+node-0021 | xlsx-medium-vi-fr-02-0021: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-10 | 22
+node-0022 | xlsx-medium-vi-fr-02-0022: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-0 | 23
+node-0023 | xlsx-medium-vi-fr-02-0023: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-1 | 24
+node-0024 | xlsx-medium-vi-fr-02-0024: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-2 | 25
+node-0025 | xlsx-medium-vi-fr-02-0025: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-3 | 26
+node-0026 | xlsx-medium-vi-fr-02-0026: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-4 | 27
+node-0027 | xlsx-medium-vi-fr-02-0027: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-5 | 28
+node-0028 | xlsx-medium-vi-fr-02-0028: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-6 | 29
+node-0029 | xlsx-medium-vi-fr-02-0029: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-7 | 30
+node-0030 | xlsx-medium-vi-fr-02-0030: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-8 | 31
+node-0031 | xlsx-medium-vi-fr-02-0031: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-9 | 32
+node-0032 | xlsx-medium-vi-fr-02-0032: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-10 | 33
+node-0033 | xlsx-medium-vi-fr-02-0033: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-0 | 34
+node-0034 | xlsx-medium-vi-fr-02-0034: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-1 | 35
+node-0035 | xlsx-medium-vi-fr-02-0035: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-2 | 36
+node-0036 | xlsx-medium-vi-fr-02-0036: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-3 | 37
+node-0037 | xlsx-medium-vi-fr-02-0037: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-4 | 38
+node-0038 | xlsx-medium-vi-fr-02-0038: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-5 | 39
+node-0039 | xlsx-medium-vi-fr-02-0039: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-6 | 40
+node-0040 | xlsx-medium-vi-fr-02-0040: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-7 | 41
+node-0041 | xlsx-medium-vi-fr-02-0041: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-8 | 42
+node-0042 | xlsx-medium-vi-fr-02-0042: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-9 | 43
+node-0043 | xlsx-medium-vi-fr-02-0043: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-10 | 44
+node-0044 | xlsx-medium-vi-fr-02-0044: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-0 | 45
+node-0045 | xlsx-medium-vi-fr-02-0045: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-1 | 46
+node-0046 | xlsx-medium-vi-fr-02-0046: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-2 | 47
+node-0047 | xlsx-medium-vi-fr-02-0047: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-3 | 48
+node-0048 | xlsx-medium-vi-fr-02-0048: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-4 | 49
+node-0049 | xlsx-medium-vi-fr-02-0049: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-5 | 50
+node-0050 | xlsx-medium-vi-fr-02-0050: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-6 | 51
+node-0051 | xlsx-medium-vi-fr-02-0051: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-7 | 52
+node-0052 | xlsx-medium-vi-fr-02-0052: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-8 | 53
+node-0053 | xlsx-medium-vi-fr-02-0053: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-9 | 54
+node-0054 | xlsx-medium-vi-fr-02-0054: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-10 | 55
+node-0055 | xlsx-medium-vi-fr-02-0055: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-0 | 56
+node-0056 | xlsx-medium-vi-fr-02-0056: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-1 | 57
+node-0057 | xlsx-medium-vi-fr-02-0057: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-2 | 58
+node-0058 | xlsx-medium-vi-fr-02-0058: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-3 | 59
+node-0059 | xlsx-medium-vi-fr-02-0059: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-4 | 60
+node-0060 | xlsx-medium-vi-fr-02-0060: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-5 | 61
+node-0061 | xlsx-medium-vi-fr-02-0061: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-6 | 62
+node-0062 | xlsx-medium-vi-fr-02-0062: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-7 | 63
+node-0063 | xlsx-medium-vi-fr-02-0063: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-8 | 64
+node-0064 | xlsx-medium-vi-fr-02-0064: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-9 | 65
+node-0065 | xlsx-medium-vi-fr-02-0065: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-10 | 66
+node-0066 | xlsx-medium-vi-fr-02-0066: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-0 | 67
+node-0067 | xlsx-medium-vi-fr-02-0067: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-1 | 68
+node-0068 | xlsx-medium-vi-fr-02-0068: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-2 | 69
+node-0069 | xlsx-medium-vi-fr-02-0069: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-3 | 70
+node-0070 | xlsx-medium-vi-fr-02-0070: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-4 | 71
+node-0071 | xlsx-medium-vi-fr-02-0071: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-5 | 72
+node-0072 | xlsx-medium-vi-fr-02-0072: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-6 | 73
+node-0073 | xlsx-medium-vi-fr-02-0073: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-7 | 74
+node-0074 | xlsx-medium-vi-fr-02-0074: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-8 | 75
+node-0075 | xlsx-medium-vi-fr-02-0075: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-9 | 76
+node-0076 | xlsx-medium-vi-fr-02-0076: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-10 | 77
+node-0077 | xlsx-medium-vi-fr-02-0077: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-0 | 78
+node-0078 | xlsx-medium-vi-fr-02-0078: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-1 | 79
+node-0079 | xlsx-medium-vi-fr-02-0079: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-2 | 80
+node-0080 | xlsx-medium-vi-fr-02-0080: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-3 | 81
+node-0081 | xlsx-medium-vi-fr-02-0081: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-4 | 82
+node-0082 | xlsx-medium-vi-fr-02-0082: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-5 | 83
+node-0083 | xlsx-medium-vi-fr-02-0083: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-6 | 84
+node-0084 | xlsx-medium-vi-fr-02-0084: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-7 | 85
+node-0085 | xlsx-medium-vi-fr-02-0085: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-8 | 86
+node-0086 | xlsx-medium-vi-fr-02-0086: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-9 | 87
+node-0087 | xlsx-medium-vi-fr-02-0087: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-10 | 88
+node-0088 | xlsx-medium-vi-fr-02-0088: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-0 | 89
+node-0089 | xlsx-medium-vi-fr-02-0089: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-1 | 90
+node-0090 | xlsx-medium-vi-fr-02-0090: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-2 | 91
+node-0091 | xlsx-medium-vi-fr-02-0091: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-3 | 92
+node-0092 | xlsx-medium-vi-fr-02-0092: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-4 | 93
+node-0093 | xlsx-medium-vi-fr-02-0093: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-5 | 94
+node-0094 | xlsx-medium-vi-fr-02-0094: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-6 | 95
+node-0095 | xlsx-medium-vi-fr-02-0095: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-7 | 96
+node-0096 | xlsx-medium-vi-fr-02-0096: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-8 | 97
+node-0097 | xlsx-medium-vi-fr-02-0097: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-9 | 98
+node-0098 | xlsx-medium-vi-fr-02-0098: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-10 | 99
+node-0099 | xlsx-medium-vi-fr-02-0099: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-0 | 100
+node-0100 | xlsx-medium-vi-fr-02-0100: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-1 | 101
+node-0101 | xlsx-medium-vi-fr-02-0101: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-2 | 102
+node-0102 | xlsx-medium-vi-fr-02-0102: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-3 | 103
+node-0103 | xlsx-medium-vi-fr-02-0103: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-4 | 104
+node-0104 | xlsx-medium-vi-fr-02-0104: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-5 | 105
+node-0105 | xlsx-medium-vi-fr-02-0105: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-6 | 106
+node-0106 | xlsx-medium-vi-fr-02-0106: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-7 | 107
+node-0107 | xlsx-medium-vi-fr-02-0107: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-8 | 108
+node-0108 | xlsx-medium-vi-fr-02-0108: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-9 | 109
+node-0109 | xlsx-medium-vi-fr-02-0109: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-10 | 110
+node-0110 | xlsx-medium-vi-fr-02-0110: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-0 | 111
+node-0111 | xlsx-medium-vi-fr-02-0111: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-1 | 112
+node-0112 | xlsx-medium-vi-fr-02-0112: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-2 | 113
+node-0113 | xlsx-medium-vi-fr-02-0113: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-3 | 114
+node-0114 | xlsx-medium-vi-fr-02-0114: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-4 | 115
+node-0115 | xlsx-medium-vi-fr-02-0115: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-5 | 116
+node-0116 | xlsx-medium-vi-fr-02-0116: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-6 | 117
+node-0117 | xlsx-medium-vi-fr-02-0117: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-7 | 118
+node-0118 | xlsx-medium-vi-fr-02-0118: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-8 | 119
+node-0119 | xlsx-medium-vi-fr-02-0119: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-9 | 120
+node-0120 | xlsx-medium-vi-fr-02-0120: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-10 | 121
+node-0121 | xlsx-medium-vi-fr-02-0121: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-0 | 122
+node-0122 | xlsx-medium-vi-fr-02-0122: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-1 | 123
+node-0123 | xlsx-medium-vi-fr-02-0123: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-2 | 124
+node-0124 | xlsx-medium-vi-fr-02-0124: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-3 | 125
+node-0125 | xlsx-medium-vi-fr-02-0125: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-4 | 126
+node-0126 | xlsx-medium-vi-fr-02-0126: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-5 | 127
+node-0127 | xlsx-medium-vi-fr-02-0127: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-6 | 128
+node-0128 | xlsx-medium-vi-fr-02-0128: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-7 | 129
+node-0129 | xlsx-medium-vi-fr-02-0129: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-8 | 130
+node-0130 | xlsx-medium-vi-fr-02-0130: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-9 | 131
+node-0131 | xlsx-medium-vi-fr-02-0131: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-10 | 132
+node-0132 | xlsx-medium-vi-fr-02-0132: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-0 | 133
+node-0133 | xlsx-medium-vi-fr-02-0133: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-1 | 134
+node-0134 | xlsx-medium-vi-fr-02-0134: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-2 | 135
+node-0135 | xlsx-medium-vi-fr-02-0135: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-3 | 136
+node-0136 | xlsx-medium-vi-fr-02-0136: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-4 | 137
+node-0137 | xlsx-medium-vi-fr-02-0137: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-5 | 138
+node-0138 | xlsx-medium-vi-fr-02-0138: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-6 | 139
+node-0139 | xlsx-medium-vi-fr-02-0139: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-7 | 140
+node-0140 | xlsx-medium-vi-fr-02-0140: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-8 | 141
+node-0141 | xlsx-medium-vi-fr-02-0141: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-9 | 142
+node-0142 | xlsx-medium-vi-fr-02-0142: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-10 | 143
+node-0143 | xlsx-medium-vi-fr-02-0143: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-0 | 144
+node-0144 | xlsx-medium-vi-fr-02-0144: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-1 | 145
+node-0145 | xlsx-medium-vi-fr-02-0145: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-2 | 146
+node-0146 | xlsx-medium-vi-fr-02-0146: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-3 | 147
+node-0147 | xlsx-medium-vi-fr-02-0147: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-4 | 148
+node-0148 | xlsx-medium-vi-fr-02-0148: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-5 | 149
+node-0149 | xlsx-medium-vi-fr-02-0149: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-6 | 150
+node-0150 | xlsx-medium-vi-fr-02-0150: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-7 | 151
+node-0151 | xlsx-medium-vi-fr-02-0151: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-8 | 152
+node-0152 | xlsx-medium-vi-fr-02-0152: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-9 | 153
+node-0153 | xlsx-medium-vi-fr-02-0153: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-10 | 154
+node-0154 | xlsx-medium-vi-fr-02-0154: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-0 | 155
+node-0155 | xlsx-medium-vi-fr-02-0155: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-1 | 156
+node-0156 | xlsx-medium-vi-fr-02-0156: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-2 | 157
+node-0157 | xlsx-medium-vi-fr-02-0157: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-3 | 158
+node-0158 | xlsx-medium-vi-fr-02-0158: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-4 | 159
+node-0159 | xlsx-medium-vi-fr-02-0159: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-5 | 160
+node-0160 | xlsx-medium-vi-fr-02-0160: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-6 | 161
+node-0161 | xlsx-medium-vi-fr-02-0161: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-7 | 162
+node-0162 | xlsx-medium-vi-fr-02-0162: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-8 | 163
+node-0163 | xlsx-medium-vi-fr-02-0163: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-9 | 164
+node-0164 | xlsx-medium-vi-fr-02-0164: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-10 | 165
+node-0165 | xlsx-medium-vi-fr-02-0165: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-0 | 166
+node-0166 | xlsx-medium-vi-fr-02-0166: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-1 | 167
+node-0167 | xlsx-medium-vi-fr-02-0167: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-2 | 168
+node-0168 | xlsx-medium-vi-fr-02-0168: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-3 | 169
+node-0169 | xlsx-medium-vi-fr-02-0169: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-4 | 170
+node-0170 | xlsx-medium-vi-fr-02-0170: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-5 | 171
+node-0171 | xlsx-medium-vi-fr-02-0171: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-6 | 172
+node-0172 | xlsx-medium-vi-fr-02-0172: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-7 | 173
+node-0173 | xlsx-medium-vi-fr-02-0173: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-8 | 174
+node-0174 | xlsx-medium-vi-fr-02-0174: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-9 | 175
+node-0175 | xlsx-medium-vi-fr-02-0175: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-10 | 176
+node-0176 | xlsx-medium-vi-fr-02-0176: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-0 | 177
+node-0177 | xlsx-medium-vi-fr-02-0177: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-1 | 178
+node-0178 | xlsx-medium-vi-fr-02-0178: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-2 | 179
+node-0179 | xlsx-medium-vi-fr-02-0179: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-3 | 180
+node-0180 | xlsx-medium-vi-fr-02-0180: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-4 | 181
+node-0181 | xlsx-medium-vi-fr-02-0181: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-5 | 182
+node-0182 | xlsx-medium-vi-fr-02-0182: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-6 | 183
+node-0183 | xlsx-medium-vi-fr-02-0183: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-7 | 184
+node-0184 | xlsx-medium-vi-fr-02-0184: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-8 | 185
+node-0185 | xlsx-medium-vi-fr-02-0185: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-9 | 186
+node-0186 | xlsx-medium-vi-fr-02-0186: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-10 | 187
+node-0187 | xlsx-medium-vi-fr-02-0187: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-0 | 188
+node-0188 | xlsx-medium-vi-fr-02-0188: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-1 | 189
+node-0189 | xlsx-medium-vi-fr-02-0189: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-2 | 190
+node-0190 | xlsx-medium-vi-fr-02-0190: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-3 | 191
+node-0191 | xlsx-medium-vi-fr-02-0191: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-4 | 192
+node-0192 | xlsx-medium-vi-fr-02-0192: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-5 | 193
+node-0193 | xlsx-medium-vi-fr-02-0193: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-6 | 194
+node-0194 | xlsx-medium-vi-fr-02-0194: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-7 | 195
+node-0195 | xlsx-medium-vi-fr-02-0195: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-8 | 196
+node-0196 | xlsx-medium-vi-fr-02-0196: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-9 | 197
+node-0197 | xlsx-medium-vi-fr-02-0197: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-10 | 198
+node-0198 | xlsx-medium-vi-fr-02-0198: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-0 | 199
+node-0199 | xlsx-medium-vi-fr-02-0199: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-1 | 200
+node-0200 | xlsx-medium-vi-fr-02-0200: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-2 | 201
+node-0201 | xlsx-medium-vi-fr-02-0201: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-3 | 202
+node-0202 | xlsx-medium-vi-fr-02-0202: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-4 | 203
+node-0203 | xlsx-medium-vi-fr-02-0203: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-5 | 204
+node-0204 | xlsx-medium-vi-fr-02-0204: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-6 | 205
+node-0205 | xlsx-medium-vi-fr-02-0205: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-7 | 206
+node-0206 | xlsx-medium-vi-fr-02-0206: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-8 | 207
+node-0207 | xlsx-medium-vi-fr-02-0207: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-9 | 208
+node-0208 | xlsx-medium-vi-fr-02-0208: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-10 | 209
+node-0209 | xlsx-medium-vi-fr-02-0209: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-0 | 210
+node-0210 | xlsx-medium-vi-fr-02-0210: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-1 | 211
+node-0211 | xlsx-medium-vi-fr-02-0211: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-2 | 212
+node-0212 | xlsx-medium-vi-fr-02-0212: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-3 | 213
+node-0213 | xlsx-medium-vi-fr-02-0213: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-4 | 214
+node-0214 | xlsx-medium-vi-fr-02-0214: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-5 | 215
+node-0215 | xlsx-medium-vi-fr-02-0215: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-6 | 216
+node-0216 | xlsx-medium-vi-fr-02-0216: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-7 | 217
+node-0217 | xlsx-medium-vi-fr-02-0217: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-8 | 218
+node-0218 | xlsx-medium-vi-fr-02-0218: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-9 | 219
+node-0219 | xlsx-medium-vi-fr-02-0219: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-10 | 220
+node-0220 | xlsx-medium-vi-fr-02-0220: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-0 | 221
+node-0221 | xlsx-medium-vi-fr-02-0221: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-1 | 222
+node-0222 | xlsx-medium-vi-fr-02-0222: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-2 | 223
+node-0223 | xlsx-medium-vi-fr-02-0223: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-3 | 224
+node-0224 | xlsx-medium-vi-fr-02-0224: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-4 | 225
+node-0225 | xlsx-medium-vi-fr-02-0225: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-5 | 226
+node-0226 | xlsx-medium-vi-fr-02-0226: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-6 | 227
+node-0227 | xlsx-medium-vi-fr-02-0227: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-7 | 228
+node-0228 | xlsx-medium-vi-fr-02-0228: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-8 | 229
+node-0229 | xlsx-medium-vi-fr-02-0229: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-9 | 230
+node-0230 | xlsx-medium-vi-fr-02-0230: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-10 | 231
+node-0231 | xlsx-medium-vi-fr-02-0231: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-0 | 232
+node-0232 | xlsx-medium-vi-fr-02-0232: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-1 | 233
+node-0233 | xlsx-medium-vi-fr-02-0233: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-2 | 234
+node-0234 | xlsx-medium-vi-fr-02-0234: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-3 | 235
+node-0235 | xlsx-medium-vi-fr-02-0235: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-4 | 236
+node-0236 | xlsx-medium-vi-fr-02-0236: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-5 | 237
+node-0237 | xlsx-medium-vi-fr-02-0237: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-6 | 238
+node-0238 | xlsx-medium-vi-fr-02-0238: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-7 | 239
+node-0239 | xlsx-medium-vi-fr-02-0239: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-8 | 240
+node-0240 | xlsx-medium-vi-fr-02-0240: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-9 | 241
+node-0241 | xlsx-medium-vi-fr-02-0241: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-10 | 242
+node-0242 | xlsx-medium-vi-fr-02-0242: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-0 | 243
+node-0243 | xlsx-medium-vi-fr-02-0243: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-1 | 244
+node-0244 | xlsx-medium-vi-fr-02-0244: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-2 | 245
+node-0245 | xlsx-medium-vi-fr-02-0245: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-3 | 246
+node-0246 | xlsx-medium-vi-fr-02-0246: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-4 | 247
+node-0247 | xlsx-medium-vi-fr-02-0247: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-5 | 248
+node-0248 | xlsx-medium-vi-fr-02-0248: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-6 | 249
+node-0249 | xlsx-medium-vi-fr-02-0249: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-7 | 250
+node-0250 | xlsx-medium-vi-fr-02-0250: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-8 | 251
+node-0251 | xlsx-medium-vi-fr-02-0251: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-9 | 252
+node-0252 | xlsx-medium-vi-fr-02-0252: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-10 | 253
+node-0253 | xlsx-medium-vi-fr-02-0253: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-0 | 254
+node-0254 | xlsx-medium-vi-fr-02-0254: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-1 | 255
+node-0255 | xlsx-medium-vi-fr-02-0255: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-2 | 256
+node-0256 | xlsx-medium-vi-fr-02-0256: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-3 | 257
+node-0257 | xlsx-medium-vi-fr-02-0257: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-4 | 258
+node-0258 | xlsx-medium-vi-fr-02-0258: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-5 | 259
+node-0259 | xlsx-medium-vi-fr-02-0259: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-6 | 260
+node-0260 | xlsx-medium-vi-fr-02-0260: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-7 | 261
+node-0261 | xlsx-medium-vi-fr-02-0261: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-8 | 262
+node-0262 | xlsx-medium-vi-fr-02-0262: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-9 | 263
+node-0263 | xlsx-medium-vi-fr-02-0263: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-10 | 264
+node-0264 | xlsx-medium-vi-fr-02-0264: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-0 | 265
+node-0265 | xlsx-medium-vi-fr-02-0265: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-1 | 266
+node-0266 | xlsx-medium-vi-fr-02-0266: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-2 | 267
+node-0267 | xlsx-medium-vi-fr-02-0267: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-3 | 268
+node-0268 | xlsx-medium-vi-fr-02-0268: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-4 | 269
+node-0269 | xlsx-medium-vi-fr-02-0269: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-5 | 270
+node-0270 | xlsx-medium-vi-fr-02-0270: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-6 | 271
+node-0271 | xlsx-medium-vi-fr-02-0271: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-7 | 272
+node-0272 | xlsx-medium-vi-fr-02-0272: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-8 | 273
+node-0273 | xlsx-medium-vi-fr-02-0273: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-9 | 274
+node-0274 | xlsx-medium-vi-fr-02-0274: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-10 | 275
+node-0275 | xlsx-medium-vi-fr-02-0275: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-0 | 276
+node-0276 | xlsx-medium-vi-fr-02-0276: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-1 | 277
+node-0277 | xlsx-medium-vi-fr-02-0277: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-2 | 278
+node-0278 | xlsx-medium-vi-fr-02-0278: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-3 | 279
+node-0279 | xlsx-medium-vi-fr-02-0279: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-4 | 280
+node-0280 | xlsx-medium-vi-fr-02-0280: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-5 | 281
+node-0281 | xlsx-medium-vi-fr-02-0281: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-6 | 282
+node-0282 | xlsx-medium-vi-fr-02-0282: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-7 | 283
+node-0283 | xlsx-medium-vi-fr-02-0283: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-8 | 284
+node-0284 | xlsx-medium-vi-fr-02-0284: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-9 | 285
+node-0285 | xlsx-medium-vi-fr-02-0285: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-10 | 286
+node-0286 | xlsx-medium-vi-fr-02-0286: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-0 | 287
+node-0287 | xlsx-medium-vi-fr-02-0287: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-1 | 288
+node-0288 | xlsx-medium-vi-fr-02-0288: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-2 | 289
+node-0289 | xlsx-medium-vi-fr-02-0289: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-3 | 290
+node-0290 | xlsx-medium-vi-fr-02-0290: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-4 | 291
+node-0291 | xlsx-medium-vi-fr-02-0291: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-5 | 292
+node-0292 | xlsx-medium-vi-fr-02-0292: Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn. | team-6 | 293
+node-0293 | xlsx-medium-vi-fr-02-0293: Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý. | team-7 | 294
+node-0294 | xlsx-medium-vi-fr-02-0294: Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng. | team-8 | 295
+node-0295 | xlsx-medium-vi-fr-02-0295: Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm. | team-9 | 296
+node-0296 | xlsx-medium-vi-fr-02-0296: Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ. | team-10 | 297
+node-0297 | xlsx-medium-vi-fr-02-0297: Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố. | team-0 | 298
+node-0298 | xlsx-medium-vi-fr-02-0298: Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ. | team-1 | 299
+node-0299 | xlsx-medium-vi-fr-02-0299: Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục. | team-2 | 300
+Account: svc_ccu_a13399c2
+Password: Pw00154d3f!0&*()_+
+URL: https://a13399c2.example.org/audit?id=10564505&mode=test
+IP: 192.0.2.6:8505
+CVE: CVE-2024-8505
+Email: audit.a13399c2@example.org
+Key: sk-test-4e3a29100566b03a

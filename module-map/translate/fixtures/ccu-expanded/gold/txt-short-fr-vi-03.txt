@@ -1,0 +1,15 @@
+SecAI txt-short-fr-vi-03
+[txt-short-fr-vi-03-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-short-fr-vi-03-0001] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-short-fr-vi-03-0002] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-short-fr-vi-03-0003] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-short-fr-vi-03-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[txt-short-fr-vi-03-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit6 audit7 audit8 audit9
+Account: svc_ccu_5801b602
+Password: Pwb9879ede!0&*()_+
+URL: https://5801b602.example.org/audit?id=5767606&mode=test
+IP: 192.0.2.107:8606
+CVE: CVE-2024-8606
+Email: audit.5801b602@example.org
+Key: sk-test-d5a35c6a3303dab0

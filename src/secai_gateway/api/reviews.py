@@ -239,7 +239,7 @@ async def put_live_settings(request: Request, actor: ReviewActor = Depends(requi
 
 @router.post('/live-pairs')
 async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor)):
-    """Occasional independent B generation; the original chat/session stays untouched."""
+    """Generate an independent B, on every opted-in turn or by legacy sampling."""
     import secrets
     import time
     from uuid import uuid4
@@ -260,19 +260,27 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
     settings=state.settings
     live_config=await call(request, 'live_settings', live_defaults(request))
     sample_rate=live_config['sample_percent']/100
-    if sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000:
+    if not payload.always_offer and (sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000):
         return {'offered':False}
     # Reserving before any await prevents two simultaneous actor requests spending twice.
     if not hasattr(state,'review_live_inflight'):
         state.review_live_inflight=set()
         state.review_live_next={}
     current=time.monotonic()
-    if actor.actor_id in state.review_live_inflight or state.review_live_next.get(actor.actor_id,0)>current:
+    if not payload.always_offer and (actor.actor_id in state.review_live_inflight or state.review_live_next.get(actor.actor_id,0)>current):
         return {'offered':False}
-    state.review_live_inflight.add(actor.actor_id)
-    state.review_live_next[actor.actor_id]=current+getattr(settings,'review_live_cooldown_seconds',600)
+    if not payload.always_offer:
+        state.review_live_inflight.add(actor.actor_id)
+        state.review_live_next[actor.actor_id]=current+getattr(settings,'review_live_cooldown_seconds',600)
+    # Every opted-in turn gets a chance; serialize model work instead of dropping turns.
+    if not hasattr(state,'review_live_locks'):
+        state.review_live_locks={}
+    generation_lock=state.review_live_locks.setdefault(actor.actor_id,asyncio.Lock())
+    lock_acquired=False
     session_id='review-live-'+str(uuid4())
     try:
+        await generation_lock.acquire()
+        lock_acquired=True
         if not await call(request,'live_campaign_is_open'):
             return {'offered':False}
         messages=[{'role':m.role,'content':redact_public_input(m.content).text} for m in payload.prompt_messages]
@@ -305,22 +313,27 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
             return {'offered':False}
         return {'offered':True,'assignment':await call(request,'assignment_detail',aid,actor.actor_id)}
     finally:
-        # Release Linch's live session registry/work before removing durable history.
         try:
-            agent=getattr(state.runner,'agent',None)
-            release=getattr(agent,'release_session',None)
-            if callable(release):
-                await asyncio.wait_for(release(session_id,force=True),timeout=5)
-        except Exception:
-            pass
-        try:
-            session_store=getattr(state.runner,'session_store',None)
-            if session_store is not None:
-                await asyncio.wait_for(session_store.delete(session_id),timeout=5)
-        except Exception:
-            # Only this isolated UUID is ever targeted; cleanup failure cannot touch chat.
-            pass
-        state.review_live_inflight.discard(actor.actor_id)
+            # Release Linch's live session registry/work before removing durable history.
+            try:
+                agent=getattr(state.runner,'agent',None)
+                release=getattr(agent,'release_session',None)
+                if callable(release):
+                    await asyncio.wait_for(release(session_id,force=True),timeout=5)
+            except Exception:
+                pass
+            try:
+                session_store=getattr(state.runner,'session_store',None)
+                if session_store is not None:
+                    await asyncio.wait_for(session_store.delete(session_id),timeout=5)
+            except Exception:
+                # Only this isolated UUID is ever targeted; cleanup failure cannot touch chat.
+                pass
+        finally:
+            if not payload.always_offer:
+                state.review_live_inflight.discard(actor.actor_id)
+            if lock_acquired:
+                generation_lock.release()
 
 # Template assistance shares review identity only; no existing IAS report route changes.
 from .review_templates import router as template_router

@@ -1,0 +1,63 @@
+- generic [ref=f1e3]:
+  - banner [ref=f1e4]:
+    - generic [ref=f1e5]: INTELLIGENT AUTOSCAN
+    - generic [ref=f1e11]:
+      - textbox "Tra cứu ip hoặc tên miền" [ref=f1e12]
+      - button "Tra cứu" [ref=f1e13] [cursor=pointer]
+    - generic [ref=f1e17]:
+      - generic [ref=f1e18]: Hệ thống gián đoạn
+      - textbox "user_id (owner-scoping cho project/session/chat)" [ref=f1e20]: devspace
+  - generic [ref=f1e25]:
+    - complementary [ref=f1e26]:
+      - generic [ref=f1e27]:
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e28]: Dashboard
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e34]: Hệ thống ẩn danh
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e39]: Quét diện rộng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e47]: Quét chuyên sâu
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e50]: Kiểm thử lỗ hổng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e60]: Engine quét
+        - generic [ref=f1e64]: Nền tảng AI
+        - generic [ref=f1e67]:
+          - button "Dịch văn bản" [ref=f1e68] [cursor=pointer]
+          - button "Trợ lý ảo ATTT" [ref=f1e70] [cursor=pointer]
+          - button "Sinh mã khai thác" [ref=f1e72] [cursor=pointer]
+          - button "Báo cáo thông minh" [ref=f1e74] [cursor=pointer]
+          - button "Đánh giá A/B" [ref=f1e76] [cursor=pointer]
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e78]: Data lake
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e83]: Thiết lập nguồn thu thập
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e87]: Quản lý lịch
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f1e92]: Báo cáo
+      - generic [ref=f1e96] [cursor=pointer]: Thu gọn
+    - main [ref=f1e99]:
+      - generic [ref=f1e100]:
+        - generic [ref=f1e101]:
+          - heading "Cuộc trò chuyện mới" [level=3] [ref=f1e102]
+          - generic [ref=f1e103]: health không phản hồi
+        - generic [ref=f1e105]:
+          - complementary [ref=f1e106]:
+            - generic [ref=f1e107]:
+              - textbox "Tìm cuộc trò chuyện…" [ref=f1e112]
+              - button "Thu gọn rail" [ref=f1e113] [cursor=pointer]
+            - generic [ref=f1e116]:
+              - button "Cuộc trò chuyện mới" [ref=f1e117] [cursor=pointer]
+              - generic [ref=f1e120]:
+                - generic [ref=f1e121]: Dự án
+                - button "Dự án mới" [ref=f1e122] [cursor=pointer]
+              - generic [ref=f1e124]: Chưa có dự án nào.
+              - generic [ref=f1e125]: Cuộc trò chuyện
+              - generic [ref=f1e127]: Chưa có cuộc trò chuyện nào.
+          - generic [ref=f1e128]:
+            - generic [ref=f1e132]:
+              - heading "Bạn muốn hỏi gì hôm nay?" [level=4] [ref=f1e136]
+              - paragraph [ref=f1e137]: Đặt câu hỏi về CVE, cấu hình hoặc log — trợ lý sẽ trả lời ngay bên dưới.
+              - generic [ref=f1e138]:
+                - generic [ref=f1e139] [cursor=pointer]: Tóm tắt CVE mới nhất
+                - generic [ref=f1e142] [cursor=pointer]: Phân tích log này
+                - generic [ref=f1e146] [cursor=pointer]: Khuyến nghị vá
+            - generic [ref=f1e150]:
+              - generic [ref=f1e151]:
+                - textbox "Nhập nội dung…" [ref=f1e152]
+                - generic [ref=f1e153]:
+                  - button "Đính kèm" [disabled] [ref=f1e154]
+                  - button "Gửi" [disabled] [ref=f1e157]
+              - generic [ref=f1e161]: Đầu vào được kiểm tra secret/PII · nội dung Markdown được làm sạch (DOMPurify) trước khi hiển thị

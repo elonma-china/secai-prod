@@ -1,0 +1,38 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/service.py.pre-dbg2	2026-10-11 09:20:57.100323751 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/service.py	2026-10-11 09:24:07.194222570 +0700
+@@ -206,8 +206,17 @@
+     """True when ``core`` appears in ``source`` as a whole token, not a fragment."""
+     # A ':' right before the token is a label separator ("账号:svc_x", "IP:10.0.0.1"), and ':<digits>'
+     # right after it is a port ("10.0.0.1:8443"); neither makes the token a fragment of another one.
+-    return re.search(r"(?:(?<![A-Za-z0-9_.:/\\-])|(?<=[^/]:))" + re.escape(core) +
+-                     r"(?![A-Za-z0-9_/\\-]|:(?![0-9])|\.[A-Za-z0-9])", source) is not None
++    # A URL/e-mail glued to a footnote digit in extracted PDF text ("7https://github.com/x") is still that
++    # URL; its left edge is the scheme, so only the right boundary is checked.
++    left = "" if re.match(r"(?:https?|ftp)://|www\\.", core, re.I) else r"(?:(?<![A-Za-z0-9_.:/\\-])|(?<=[^/]:))"
++    if re.search(left + re.escape(core) + r"(?![A-Za-z0-9_/\\-]|:(?![0-9])|\.[A-Za-z0-9])", source) is not None:
++        return True
++    # Localised digit grouping ("25,000" -> "25.000", "3.5" -> "3,5") keeps the same digits: accept it.
++    if re.fullmatch(r"\d[\d.,\u00a0\u202f ]*\d|\d", core):
++        digits = re.sub(r"\D", "", core)
++        # table rows put many numbers in one run ("0.312 0 0 0"); the digits must still occur in order.
++        return any(digits in re.sub(r"\D", "", m) for m in re.findall(r"\d(?:[\d.,\u00a0\u202f ]*\d)?", source))
++    return False
+ 
+ 
+ _CLAUSE_END = re.compile(r"(?<=[,:—–])[ \t]+|(?<=\n)")
+@@ -510,8 +519,14 @@
+                         output = assemble(refined)
+ 
+                 except TranslationError as exc:
+-                    if exc.code != "TOKEN_INTEGRITY_FAILED" or attempt >= integrity_max_attempt:
++                    if exc.code != "TOKEN_INTEGRITY_FAILED":
+                         raise
++                    if attempt >= integrity_max_attempt:
++                        # One block must not fail a whole document: keep its source text verbatim (no literal
++                        # is lost) and say so in the job warnings.
++                        notes.append(WarningItem(code="TOKEN_INTEGRITY_FALLBACK", block_id=block.id, message=(
++                            "Block left untranslated: a technical literal could not be preserved.")))
++                        return TranslatedBlock(source=block, translated_text=block.text), notes
+                     continue
+                 return TranslatedBlock(source=block, translated_text=output), notes
+         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")

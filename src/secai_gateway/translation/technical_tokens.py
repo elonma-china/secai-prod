@@ -5,6 +5,8 @@ later expression from matching inside a placeholder or nesting a prior match.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import ipaddress
 import re
 import secrets
@@ -24,15 +26,25 @@ class ProtectedText:
 
 
 _PLACEHOLDER_LIKE = re.compile(r"⟦[A-Za-z][A-Za-z0-9:]*⟧")
+# Value stops before a trailing "," or ";" (sentence punctuation, not part of a
+# secret). Over-masking is harmless: mask-all-then-restore is lossless.
 _CREDENTIAL = re.compile(
-    r"(?i)(?<![A-Za-z0-9_])(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
-    r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+)")
+    r"(?i)(?<![A-Za-z0-9_])(?:(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
+    r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*|mật\s*khẩu\s+là\s+)"
+    r"(\S+?)(?=[,;]?(?:\s|$))")
+# Weaker labels also get masked in the source, but a translated label ("Người dùng:"
+# -> "User:") must not turn its translated value into an "invented literal" when the
+# output is re-scanned, so these are skipped by the output-side integrity check.
+_CREDENTIAL_WEAK = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])(?:pass|pw|user(?:name)?|login|account|mk)\s*[:=]\s*"
+    r"(\S+?)(?=[,;]?(?:\s|$))")
 _IP = re.compile(r"(?<![A-Za-z0-9_.:])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?"
                  r"(?![A-Za-z0-9_/]|\.[A-Za-z0-9])")
 _IPV6 = re.compile(r"(?<![A-Za-z0-9_.:%-])[0-9A-Fa-f:.]+"
                    r"(?:%[A-Za-z0-9_.-]+)?(?:/\d{1,3})?"
                    r"(?![A-Za-z0-9_:/%-]|\.[A-Za-z0-9])")
-_URL_START = re.compile(r"(?<![A-Za-z0-9_.-])(?:https?|ftp|ssh|file)://", re.I)
+_URL_START = re.compile(r"(?<![A-Za-z0-9_.-])[a-z][a-z0-9+.-]*://", re.I)
+_KNOWN_SCHEMES = ("https", "http", "ftp", "ssh", "file")
 _URL_STOP = frozenset("<>\"'")
 _QUOTED_PATH = re.compile(
     r"(?P<quote>['\"])(?P<path>(?:[A-Za-z]:\\|\\\\[A-Za-z0-9_.~-]+\\[A-Za-z0-9_.~-]+\\|"
@@ -60,8 +72,15 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
                r"[A-Za-z0-9_.-]+(?![A-Za-z0-9_.-])"),
     re.compile(r"(?<![A-Za-z0-9_])[0-9a-fA-F]{16,}(?![A-Za-z0-9_])"),
     re.compile(r"(?m)(?:^|(?<=\n))\s*\$\s*[^\n]+"),
+    # Each argument must be a whole ASCII token not glued to a non-ASCII letter, so
+    # "ssh root@host -p 22 với" does not swallow the "v" of the Vietnamese "với".
+    # Only Latin-script letters stop a token: CJK/Cyrillic/Arabic prose legitimately
+    # touches an ASCII argument without a space.
     re.compile(r"(?<![A-Za-z0-9_])(?:curl|wget|nmap|ssh|sudo|pip|npm|docker|kubectl)\s+"
-               r"[A-Za-z0-9_./:@%?=&+~-]+(?:\s+[A-Za-z0-9_./:@%?=&+~-]+)*"),
+               r"[A-Za-z0-9_./:@%?=&+~-]+(?![A-Za-z0-9_./:@%?=&+~-])(?![À-ɏḀ-ỿ])"
+               r"(?:\s+[A-Za-z0-9_./:@%?=&+~-]+(?![A-Za-z0-9_./:@%?=&+~-])(?![À-ɏḀ-ỿ]))*"),
+    re.compile(r"(?<![A-Za-z0-9_.%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"),
+    re.compile(r"(?<![\w.+-])\+?\d[\d ()-]{7,}\d(?!\w)"),
     *(re.compile(pattern.pattern, (pattern.flags & ~re.UNICODE) | re.ASCII)
       for pattern in _SECRET_PATTERNS),
     re.compile(_SENSITIVE_IDENTIFIERS.pattern,
@@ -72,6 +91,9 @@ _PATTERNS: tuple[re.Pattern[str], ...] = (
 def _url_spans(text: str) -> tuple[tuple[int, int], ...]:
     spans: list[tuple[int, int]] = []
     for match in _URL_START.finditer(text):
+        scheme = match.group()[:-3].lower()
+        if scheme not in _KNOWN_SCHEMES and scheme.endswith(_KNOWN_SCHEMES):
+            continue  # "prefixhttps://": a longer identifier, not the known scheme
         end = match.end()
         unicode_body = False
         bracket_depth = 0
@@ -108,7 +130,7 @@ def _url_spans(text: str) -> tuple[tuple[int, int], ...]:
     return tuple(spans)
 
 
-def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
+def literal_spans(text: str, *, weak_labels: bool = True) -> tuple[tuple[int, int], ...]:
     """Return maximal disjoint technical spans in source code-point offsets."""
     candidates: list[tuple[int, int]] = []
     for match in _IP.finditer(text):
@@ -133,6 +155,9 @@ def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
                 break
     for match in _CREDENTIAL.finditer(text):
         candidates.append(match.span(1))
+    if weak_labels:
+        for match in _CREDENTIAL_WEAK.finditer(text):
+            candidates.append(match.span(1))
     candidates.extend(match.span("path") for match in _QUOTED_PATH.finditer(text))
     candidates.extend(_url_spans(text))
     for match in _VERSION.finditer(text):
@@ -153,11 +178,23 @@ def literal_spans(text: str) -> tuple[tuple[int, int], ...]:
     return tuple((start, end) for start, end in merged)
 
 
-def protect_literals(text: str) -> ProtectedText:
+def _prefix(text: str, salt: bytes | None) -> str:
+    """HMAC(salt, text) prefix: reproducible per request salt, unguessable without it."""
+    counter = 0
+    while True:
+        if salt is None:
+            body = secrets.token_hex(12)
+        else:
+            body = hmac.new(salt, f"{counter}\x00{text}".encode(), hashlib.sha256).hexdigest()[:24]
+        prefix = f"⟦T{body}:"
+        if prefix not in text:
+            return prefix
+        counter += 1
+
+
+def protect_literals(text: str, salt: bytes | None = None) -> ProtectedText:
     spans = literal_spans(text)
-    prefix = f"⟦T{secrets.token_hex(12)}:"
-    while prefix in text:
-        prefix = f"⟦T{secrets.token_hex(12)}:"
+    prefix = _prefix(text, salt)
     chunks: list[str] = []
     literals: list[str] = []
     cursor = 0
@@ -186,6 +223,12 @@ def _canonical_markers(output: str, prefix: str) -> str:
 
 
 def restore_literals(output: str, protected: ProtectedText) -> str:
+    return restore_literals_with_ranges(output, protected)[0]
+
+
+def restore_literals_with_ranges(
+        output: str, protected: ProtectedText) -> tuple[str, tuple[tuple[int, int], ...]]:
+    """Restore literals and return the (start, end) offsets each one occupies in the result."""
     prefix = protected._prefix
     output = _canonical_markers(output, prefix)
     marker = re.compile(re.escape(prefix) + r"(\d+)⟧")
@@ -197,9 +240,15 @@ def restore_literals(output: str, protected: ProtectedText) -> str:
     ):
         raise TranslationError("TOKEN_INTEGRITY_FAILED", "Technical literal integrity check failed")
     cursor = 0
+    position = 0
     chunks: list[str] = []
+    ranges: list[tuple[int, int]] = []
     for match, literal in zip(found, protected._literals):
-        chunks.extend((output[cursor:match.start()], literal))
+        gap = output[cursor:match.start()]
+        chunks.extend((gap, literal))
+        position += len(gap)
+        ranges.append((position, position + len(literal)))
+        position += len(literal)
         cursor = match.end()
     chunks.append(output[cursor:])
-    return "".join(chunks)
+    return "".join(chunks), tuple(ranges)

@@ -1,0 +1,20 @@
+SecAI pdf-short-vi-fr-02-p01
+[pdf-short-vi-fr-02-p01-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[pdf-short-vi-fr-02-p01-0001] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[pdf-short-vi-fr-02-p01-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[pdf-short-vi-fr-02-p01-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[pdf-short-vi-fr-02-p01-0004] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[pdf-short-vi-fr-02-p01-0005] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[pdf-short-vi-fr-02-p01-0006] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[pdf-short-vi-fr-02-p01-0007] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[pdf-short-vi-fr-02-p01-0008] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[pdf-short-vi-fr-02-p01-0009] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[pdf-short-vi-fr-02-p01-0010] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+Keywords: audit11 audit12 audit13
+Account: svc_ccu_b901db8c
+Password: Pw00b1ffaa!0&*()_+
+URL: https://b901db8c.example.org/audit?id=12124635&mode=test
+IP: 192.0.2.136:8635
+CVE: CVE-2024-2635
+Email: audit.b901db8c@example.org
+Key: sk-test-fb299810f5a56162

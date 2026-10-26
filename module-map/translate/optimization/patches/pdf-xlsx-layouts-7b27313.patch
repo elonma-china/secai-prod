@@ -1,0 +1,451 @@
+diff --git a/secai/secai-agent-gateway/src/secai_gateway/api/translate_v2/routes.py b/secai/secai-agent-gateway/src/secai_gateway/api/translate_v2/routes.py
+index 7f5b898..061dd0c 100644
+--- a/secai/secai-agent-gateway/src/secai_gateway/api/translate_v2/routes.py
++++ b/secai/secai-agent-gateway/src/secai_gateway/api/translate_v2/routes.py
+@@ -155,7 +155,7 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
+         if not filename or len(filename) > 255 or any(c in filename for c in "/\\\x00"):
+             raise TranslationError("INVALID_REQUEST", "Filename is invalid.")
+         extension = PurePath(filename).suffix.lower()
+-        allowed = {".txt", ".docx", ".doc", ".pdf"} if kind == "file" else {".png", ".jpg", ".jpeg"}
++        allowed = {".txt", ".docx", ".doc", ".pdf", ".xlsx"} if kind == "file" else {".png", ".jpg", ".jpeg"}
+         if extension not in allowed:
+             raise TranslationError("UNSUPPORTED_FILE_TYPE", "File type is unsupported.")
+         payload = await upload.read(settings.max_upload_bytes + 1)
+@@ -167,6 +167,15 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
+             raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
+         if extension == ".doc" and not payload.startswith(_OLE):
+             raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
++        if extension == ".xlsx":
++            if payload.startswith(_OLE):  # Office-encrypted workbooks / legacy .xls
++                raise TranslationError("UNSAFE_DOCUMENT", "Encrypted or legacy workbooks are unsupported.")
++            if not payload.startswith(b"PK\x03\x04"):
++                raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
++            from ...translation.xlsx_documents import xlsx_dependencies_available
++
++            if not xlsx_dependencies_available():
++                raise TranslationError("DEPENDENCY_UNAVAILABLE", "XLSX support is unavailable.")
+         if extension == ".pdf":
+             if not payload.startswith(b"%PDF-"):
+                 raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
+diff --git a/secai/secai-agent-gateway/src/secai_gateway/translation/pdf_documents.py b/secai/secai-agent-gateway/src/secai_gateway/translation/pdf_documents.py
+index 8ee95f4..7aaf7e2 100644
+--- a/secai/secai-agent-gateway/src/secai_gateway/translation/pdf_documents.py
++++ b/secai/secai-agent-gateway/src/secai_gateway/translation/pdf_documents.py
+@@ -11,6 +11,7 @@ import asyncio
+ import importlib.util
+ import re
+ import threading
++import unicodedata
+ from pathlib import Path
+ from typing import Any
+ 
+@@ -24,6 +25,8 @@ _MAX_ANNOTATIONS = 20_000
+ _ACTIVE_ACTIONS = {"/JavaScript", "/Launch", "/ImportData", "/GoToR", "/GoToE", "/Rendition",
+                    "/Movie", "/Sound", "/SubmitForm", "/ResetForm"}
+ _ACTIVE_ANNOTATIONS = {"/FileAttachment", "/RichMedia", "/Screen", "/Movie", "/Sound", "/3D"}
++_MAX_RECTS = 5000
++_PRESENTATION = re.compile("[\ufb00-\ufb06\ufb50-\ufdff\ufe70-\ufeff]")
+ _TERMINAL = tuple(".!?:;。！？：；")
+ _CJK = re.compile("[\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]")
+ 
+@@ -127,22 +130,48 @@ class _Pdfium:
+         with _PDFIUM_LOCK:
+             return len(self._doc)
+ 
+-    def text(self, index: int) -> str:
++    def read_page(self, index: int) -> tuple[str, str | None, float]:
++        """Return (plain text, reading-order text or None, fraction of page covered by images)."""
+         with _PDFIUM_LOCK:
+             try:
+                 page = self._doc[index]
+                 try:
+                     textpage = page.get_textpage()
+                     try:
+-                        return textpage.get_text_bounded()
++                        plain = textpage.get_text_bounded()
++                        ordered = None
++                        if page.get_rotation() == 0 and plain.strip():
++                            width, height = page.get_size()
++                            rects = _line_rects(textpage, width)
++                            if rects is not None:
++                                ordered = _reading_order(rects, width, plain)
+                     finally:
+                         textpage.close()
++                    coverage = 0.0
++                    if len("".join(plain.split())) < 400:  # only matters for text-poor pages
++                        coverage = self._image_coverage(page)
++                    return plain, ordered, coverage
+                 finally:
+                     page.close()
++            except TranslationError:
++                raise
+             except Exception as exc:
+                 raise TranslationError("CORRUPT_DOCUMENT", "PDF page cannot be read.") from exc
+ 
+-    def render(self, index: int, out_dir: Path, settings: TranslationSettings) -> Path:
++    def _image_coverage(self, page: Any) -> float:
++        try:
++            width, height = page.get_size()
++            area = 0.0
++            for obj in page.get_objects(filter=[self._pdfium.raw.FPDF_PAGEOBJ_IMAGE]):
++                left, bottom, right, top = (getattr(obj, "get_bounds", None) or obj.get_pos)()
++                area += (max(0.0, min(right, width) - max(left, 0.0))
++                         * max(0.0, min(top, height) - max(bottom, 0.0)))
++            return min(1.0, area / (width * height))
++        except Exception:
++            return 0.0
++
++    def render(self, index: int, out_dir: Path, settings: TranslationSettings) -> Path | None:
++        """Render the page as displayed (pdfium applies /Rotate); None when it is blank."""
+         dpi = min(max(settings.pdf_render_dpi, 72), 300)
+         with _PDFIUM_LOCK:
+             try:
+@@ -152,6 +181,8 @@ class _Pdfium:
+                     if not (width > 0 and height > 0):
+                         raise TranslationError("CORRUPT_DOCUMENT", "PDF page size is invalid.")
+                     scale = dpi / 72
++                    if max(width, height) * scale < 1000:  # tiny page: upscale for legible OCR
++                        scale = 1000 / max(width, height)
+                     pixels = width * height * scale * scale
+                     if pixels > settings.pdf_max_render_pixels:  # shrink instead of rejecting
+                         scale *= (settings.pdf_max_render_pixels / pixels) ** 0.5
+@@ -163,6 +194,9 @@ class _Pdfium:
+                 raise
+             except Exception as exc:
+                 raise TranslationError("CORRUPT_DOCUMENT", "PDF page cannot be rendered.") from exc
++        low, high = image.convert("L").getextrema()
++        if high - low < 8:  # uniformly blank page: nothing for OCR to read
++            return None
+         out_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+         target = out_dir / "page.png"
+         image.save(target, format="PNG")
+@@ -180,6 +214,111 @@ class _Pdfium:
+                 pass
+ 
+ 
++def _line_rects(textpage: Any, page_width: float
++                ) -> list[tuple[float, float, float, float, str]] | None:
++    """Line fragments (left, bottom, right, top, text); None when layout analysis is unsafe."""
++    count = textpage.count_rects()
++    if count < 2 or count > _MAX_RECTS:
++        return None
++    rects = []
++    for i in range(count):
++        left, bottom, right, top = textpage.get_rect(i)
++        text = textpage.get_text_bounded(left, bottom, right, top)
++        if not text.strip():
++            continue
++        # Vertical writing (tall boxes holding several glyphs): pdfium order is already right.
++        if len(text.strip()) > 1 and (top - bottom) > 1.5 * (right - left):
++            return None
++        # pdfium splits one visual line at every font/run change: glue near-touching fragments
++        # back together so only real gaps (columns, table cells) remain separate.
++        if rects:
++            pl, pb, pr, pt, ptext = rects[-1]
++            height = max(top - bottom, 1.0)
++            overlap = min(top, pt) - max(bottom, pb)
++            gap = left - pr
++            if overlap >= 0.5 * min(height, pt - pb) and 0 <= gap < 1.5 * height:
++                glue = "" if (gap < 0.3 * height or ptext.endswith(" ") or text.startswith(" ")
++                              or _CJK.match(text[:1]) or _CJK.match(ptext[-1:])) else " "
++                rects[-1] = (pl, min(pb, bottom), max(pr, right), max(pt, top), ptext + glue + text)
++                continue
++        rects.append((left, bottom, right, top, text))
++    rects = [(l, b, r, t, x.strip()) for l, b, r, t, x in rects]
++    return rects if len(rects) >= 2 else None
++
++
++def _gap(items: list, axis: int, minimum: float) -> float | None:
++    """First empty band along an axis (0 = x projection, 1 = y projection); returns its middle."""
++    lo, hi = (0, 2) if axis == 0 else (1, 3)
++    spans = sorted((item[lo], item[hi]) for item in items)
++    edge = spans[0][1]
++    for start, end in spans[1:]:
++        if start - edge >= minimum:
++            return (start + edge) / 2
++        edge = max(edge, end)
++    return None
++
++
++def _order(items: list, width: float, depth: int = 0) -> list[list]:
++    """XY-cut: split on page-wide white bands; prose columns are read column by column."""
++    if len(items) < 2 or depth > 40:
++        return [items]
++    heights = sorted(item[3] - item[1] for item in items)
++    line_h = max(heights[len(heights) // 2], 1.0)
++    h_cut = _gap(items, 1, 1.2 * line_h)
++    v_cut = _gap(items, 0, max(10.0, 0.02 * width))
++
++    def split(axis_cut: float, axis: int) -> tuple[list, list]:
++        lo, hi = (0, 2) if axis == 0 else (1, 3)
++        a = [i for i in items if (i[lo] + i[hi]) / 2 < axis_cut]
++        b = [i for i in items if (i[lo] + i[hi]) / 2 >= axis_cut]
++        return a, b
++
++    prose = False
++    if v_cut is not None:
++        left, right = split(v_cut, 0)
++        prose = all(len(side) >= 3 and sorted(len(i[4]) for i in side)[len(side) // 2] >= 25
++                    for side in (left, right))
++    if v_cut is not None and prose:
++        left, right = split(v_cut, 0)
++        if left and right:
++            return _order(left, width, depth + 1) + _order(right, width, depth + 1)
++    if h_cut is not None:
++        lower, upper = split(h_cut, 1)  # PDF y grows upward: upper band is read first
++        if lower and upper:
++            return _order(upper, width, depth + 1) + _order(lower, width, depth + 1)
++    return [sorted(items, key=lambda i: (-round(i[3] / max(line_h / 2, 1.0)), i[0]))]
++
++
++def _render_region(items: list) -> str:
++    """Lines of a region; widely separated fragments on one row (table cells) stay separate."""
++    heights = sorted(item[3] - item[1] for item in items)
++    median = max(heights[len(heights) // 2], 1.0)
++    rows: dict[int, list] = {}
++    for item in items:
++        rows.setdefault(round(item[3] / (median / 2)), []).append(item)
++    out: list[tuple[str, bool]] = []
++    for key in sorted(rows, reverse=True):
++        row = sorted(rows[key], key=lambda i: i[0])
++        gaps = [b[0] - a[2] for a, b in zip(row, row[1:])]
++        if gaps and max(gaps) >= 3 * median:
++            out.append(("\n\n".join(i[4] for i in row), True))
++        else:
++            out.append((_join([i[4] for i in row]), False))
++    text = out[0][0]
++    for (prev, prev_cell), (cur, cur_cell) in zip(out, out[1:]):
++        text += ("\n\n" if prev_cell or cur_cell else "\n") + cur
++    return text
++
++
++def _reading_order(rects: list, width: float, plain: str) -> str | None:
++    regions = _order(rects, width)
++    text = "\n\n".join(_render_region(region) for region in regions)
++    # Rect extraction must not lose text; otherwise the content-stream order is the safer answer.
++    if len("".join(text.split())) < 0.95 * len("".join(plain.split())):
++        return None
++    return text
++
++
+ def _paragraphs(raw: str) -> list[str]:
+     """Rebuild paragraphs from pdfium's hard-wrapped lines without joining across literals."""
+     lines = [line.strip() for line in raw.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+@@ -227,11 +366,17 @@ async def extract_pdf(path: Path, settings: TranslationSettings, *, context: Pro
+         if await asyncio.to_thread(len, document) != page_count:
+             raise TranslationError("CORRUPT_DOCUMENT", "PDF page tree is inconsistent.")
+         texts: list[str] = []
++        scan_pages: list[int] = []
+         for index in range(page_count):
+             await context.checkpoint("extracting", index, page_count)
+-            texts.append(await asyncio.to_thread(document.text, index))
+-        scan_pages = [i for i, t in enumerate(texts)
+-                      if len("".join(t.split())) < settings.pdf_scan_text_threshold]
++            plain, ordered, coverage = await asyncio.to_thread(document.read_page, index)
++            texts.append(ordered if ordered is not None else plain)
++            chars = len("".join(plain.split()))
++            # No text layer, or a page-sized picture with only a little text (header/page
++            # number over a scan): the visible text lives in the image.
++            if (chars < settings.pdf_scan_text_threshold or
++                    (coverage >= 0.5 and chars < settings.pdf_image_page_text_limit)):
++                scan_pages.append(index)
+         if len(scan_pages) > settings.pdf_max_ocr_pages:
+             raise TranslationError("TEXT_TOO_LONG", "PDF has too many scanned pages.")
+         ocr_blocks: dict[int, list[tuple[str, dict]]] = {}
+@@ -251,6 +396,8 @@ async def extract_pdf(path: Path, settings: TranslationSettings, *, context: Pro
+         else:
+             clean = "".join(c for c in texts[index] if c in "\t\n\r" or ord(c) >= 32 and
+                             not 0x7F <= ord(c) <= 0x9F)
++            # Arabic presentation forms / Latin ligatures come from font mappings: fold to letters.
++            clean = _PRESENTATION.sub(lambda m: unicodedata.normalize("NFKC", m.group()), clean)
+             items.extend(("paragraph", text, {"page": index, "page_source": "text"})
+                          for text in _paragraphs(clean))
+     if scan_pages:
+@@ -276,6 +423,11 @@ async def _ocr_pages(document: _Pdfium, pages: list[int], settings: TranslationS
+         async with gate:
+             page_dir = work_dir / f"page-{index:05d}"
+             rendered = await asyncio.to_thread(document.render, index, page_dir / "raw", settings)
++            if rendered is None:  # blank page: skip the GPU
++                results[index] = []
++                done += 1
++                await context.checkpoint("ocr", done, len(pages))
++                return
+             prepared = await preprocess_image(rendered, work_dir=page_dir / "prepared")
+             result = await recognize_image(prepared, settings=settings)
+             rendered.unlink(missing_ok=True)
+diff --git a/secai/secai-agent-gateway/src/secai_gateway/translation/settings.py b/secai/secai-agent-gateway/src/secai_gateway/translation/settings.py
+index 9c608bc..c34383e 100644
+--- a/secai/secai-agent-gateway/src/secai_gateway/translation/settings.py
++++ b/secai/secai-agent-gateway/src/secai_gateway/translation/settings.py
+@@ -41,9 +41,16 @@ class TranslationSettings(BaseSettings):
+     max_docx_ratio: int = 100
+     # PDF (files API). Page/OCR caps bound GPU time: 1 A100 runs OCR serially server-side, so
+     # extra client concurrency only hides upload/preprocess latency.
++    # XLSX (files API): one model chunk per text cell, so the cell cap tracks max_chunks.
++    xlsx_max_sheets: int = 20
++    xlsx_max_cells: int = 300  # translatable text cells; effective cap also <= max_chunks
++    xlsx_max_entries: int = 500
++    xlsx_max_inflated_bytes: int = 50 * 1024 * 1024
++    xlsx_max_ratio: int = 100
+     pdf_max_pages: int = 50
+     pdf_max_ocr_pages: int = 30
+     pdf_scan_text_threshold: int = 20  # non-whitespace chars; fewer => page is OCR'd
++    pdf_image_page_text_limit: int = 150  # picture-covered page with fewer chars => OCR
+     pdf_render_dpi: int = 150
+     pdf_max_render_pixels: int = 16_000_000
+     pdf_ocr_concurrency: int = 2
+diff --git a/secai/secai-agent-gateway/src/secai_gateway/translation/worker.py b/secai/secai-agent-gateway/src/secai_gateway/translation/worker.py
+index 1597500..09d253f 100644
+--- a/secai/secai-agent-gateway/src/secai_gateway/translation/worker.py
++++ b/secai/secai-agent-gateway/src/secai_gateway/translation/worker.py
+@@ -157,6 +157,11 @@ class Worker:
+             elif row["extension"] == ".docx":
+                 extracted = await asyncio.to_thread(extract_docx, input_path, self.settings)
+                 blocks, warnings, ocr = extracted.blocks, extracted.warnings, None
++            elif row["extension"] == ".xlsx":
++                from .xlsx_documents import extract_xlsx
++
++                extracted = await asyncio.to_thread(extract_xlsx, input_path, self.settings)
++                blocks, warnings, ocr = extracted.blocks, extracted.warnings, None
+             elif row["extension"] == ".pdf":
+                 from .pdf_documents import extract_pdf
+ 
+diff --git a/secai/secai-agent-gateway/src/secai_gateway/translation/xlsx_documents.py b/secai/secai-agent-gateway/src/secai_gateway/translation/xlsx_documents.py
+new file mode 100644
+index 0000000..71b434b
+--- /dev/null
++++ b/secai/secai-agent-gateway/src/secai_gateway/translation/xlsx_documents.py
+@@ -0,0 +1,133 @@
++"""Bounded XLSX extraction: one block per translatable text cell, structure kept in metadata.
++
++The workbook is untrusted. The OOXML package is vetted without openpyxl first (zip-bomb limits,
++macros/embedded objects/external links/connections rejected), then openpyxl reads the cells.
++openpyxl is imported lazily so the gateway still imports when it is missing. No network access.
++
++Policy: only string cells that contain at least one letter are translated. Numbers, dates,
++booleans, errors, formulas (data type ``f`` or text starting with ``=``) and empty cells are
++never touched. Sheet names are not translated but ride in every block's metadata. Hidden and
++very-hidden sheets ARE read (their ``sheet_state`` is reported) so nothing is silently dropped.
++"""
++from __future__ import annotations
++
++import importlib.util
++import re
++from pathlib import Path
++from typing import Any
++
++from .documents import _make_blocks, _safe_zip, _xml
++from .settings import TranslationSettings
++from .types import ExtractedDocument, TranslationError, WarningItem
++
++_BAD_PARTS = ("vbaproject", "activex", "embeddings/", "oleobject", "externallinks/",
++              "connections.xml", "querytables/", "macrosheets/", "dialogsheets/", "customui")
++_XML_DECL = re.compile(rb"<!\s*(?:DOCTYPE|ENTITY)", re.I)
++_OLE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
++_MAIN_TYPE = b"spreadsheetml.sheet.main+xml"
++
++
++def xlsx_dependencies_available() -> bool:
++    return importlib.util.find_spec("openpyxl") is not None
++
++
++def _load_openpyxl() -> Any:
++    try:
++        import openpyxl
++    except ImportError as exc:  # pragma: no cover - exercised through monkeypatch
++        raise TranslationError("DEPENDENCY_UNAVAILABLE", "XLSX support is unavailable.") from exc
++    return openpyxl
++
++
++def _vet_package(path: Path, settings: TranslationSettings) -> int:
++    """Zip-level and OOXML-level checks; returns the declared sheet count."""
++    with path.open("rb") as handle:
++        head = handle.read(8)
++    if head == _OLE:  # Office-encrypted workbooks (and legacy .xls) are CFB containers
++        raise TranslationError("UNSAFE_DOCUMENT", "Encrypted or legacy workbooks are unsupported.")
++    limits = settings.model_copy(update={
++        "max_docx_entries": settings.xlsx_max_entries,
++        "max_docx_inflated_bytes": settings.xlsx_max_inflated_bytes,
++        "max_docx_ratio": settings.xlsx_max_ratio})
++    parts = _safe_zip(path, limits)
++    if "[Content_Types].xml" not in parts or "xl/workbook.xml" not in parts:
++        raise TranslationError("CORRUPT_DOCUMENT", "Workbook parts are missing.")
++    content_types = parts["[Content_Types].xml"]
++    if b"macroEnabled" in content_types:
++        raise TranslationError("UNSAFE_DOCUMENT", "Macro-enabled workbooks are unsupported.")
++    if _MAIN_TYPE not in content_types:
++        raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
++    for name, data in parts.items():
++        low = name.lower()
++        if any(bad in low for bad in _BAD_PARTS):
++            raise TranslationError("UNSAFE_DOCUMENT", "Active or external workbook content is unsupported.")
++        if low.endswith(".rels"):
++            for rel in _xml(data):
++                if rel.attrib.get("TargetMode", "").lower() == "external":
++                    raise TranslationError("UNSAFE_DOCUMENT", "External workbook links are unsupported.")
++        elif low.endswith(".xml") and _XML_DECL.search(data):
++            raise TranslationError("UNSAFE_DOCUMENT", "Document contains unsafe XML.")
++    sheets = [node for node in _xml(parts["xl/workbook.xml"]).iter() if node.tag.endswith("}sheet")]
++    if not sheets:
++        raise TranslationError("CORRUPT_DOCUMENT", "Workbook has no sheets.")
++    if len(sheets) > settings.xlsx_max_sheets:
++        raise TranslationError("TEXT_TOO_LONG", "Workbook has too many sheets.")
++    return len(sheets)
++
++
++def _translatable(cell: Any) -> bool:
++    value = cell.value
++    if not isinstance(value, str) or cell.data_type not in {"s", "inlineStr", "str"}:
++        return False
++    stripped = value.strip()
++    return bool(stripped) and not stripped.startswith("=") and any(c.isalpha() for c in stripped)
++
++
++def extract_xlsx(path: Path, settings: TranslationSettings) -> ExtractedDocument:
++    openpyxl = _load_openpyxl()
++    _vet_package(path, settings)
++    cap = min(settings.xlsx_max_cells, settings.max_chunks, settings.max_blocks)
++    try:
++        with path.open("rb") as handle:  # artifact files have no .xlsx suffix
++            workbook = openpyxl.load_workbook(handle, data_only=False, keep_links=False,
++                                              keep_vba=False, rich_text=False)
++    except TranslationError:
++        raise
++    except Exception as exc:  # openpyxl raises many distinct types on malformed input
++        raise TranslationError("CORRUPT_DOCUMENT", "Workbook structure is invalid.") from exc
++    items: list[tuple[str, str, dict]] = []
++    warnings: list[WarningItem] = []
++    comments = False
++    try:
++        for sheet in workbook.worksheets:
++            spans: dict[tuple[int, int], tuple[int, int]] = {}
++            for merged in sheet.merged_cells.ranges:
++                spans[(merged.min_row, merged.min_col)] = (merged.max_row - merged.min_row + 1,
++                                                          merged.max_col - merged.min_col + 1)
++            # _cells holds only cells that exist: safe for sparse sheets with huge dimensions.
++            for (row, col), cell in sorted(sheet._cells.items()):
++                if cell.comment is not None:
++                    comments = True
++                if not _translatable(cell):
++                    continue
++                if len(items) >= cap:
++                    raise TranslationError("TEXT_TOO_LONG", "Workbook has too many text cells.")
++                meta: dict[str, Any] = {"sheet": sheet.title, "row": row - 1, "col": col - 1,
++                                        "cell": cell.coordinate}
++                if sheet.sheet_state != "visible":
++                    meta["sheet_state"] = sheet.sheet_state
++                span = spans.get((row, col))
++                if span and span[0] > 1:
++                    meta["row_span"] = span[0]
++                if span and span[1] > 1:
++                    meta["column_span"] = span[1]
++                items.append(("table_cell", cell.value, meta))
++            if getattr(sheet, "_charts", None) or getattr(sheet, "_images", None):
++                warnings.append(WarningItem(code="UNSUPPORTED_PART",
++                                            message="Charts or images in the workbook are not translated."))
++    finally:
++        workbook.close()
++    if comments:
++        warnings.append(WarningItem(code="UNSUPPORTED_PART",
++                                    message="Cell comments are not translated."))
++    return _make_blocks(items, settings, warnings)

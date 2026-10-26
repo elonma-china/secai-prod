@@ -1,0 +1,64 @@
+Kết quả thăm dò chức năng sinh PoC — phiên 2026-10-09-01
+Môi trường: https://ias.id.vn/ai/exploit (sau đăng nhập https://ias.id.vn/login, tài khoản dev201)
+Công cụ: MCP preview browser (mcp__t3-code__preview_*)
+
+Đây là CA THĂM DÒ (2/20 case) để xác nhận chức năng "Sinh mã khai thác" tồn tại trực tiếp
+trên IAS (không chỉ Devspace) và lấy selector/thời gian xử lý thật trước khi chạy đủ phiên
+68→20 case. KHÔNG phải một phiên chạy đầy đủ theo quy ước ở 03-tieu-chi-pass.txt mục 6 —
+18 case còn lại giữ NOT_RUN.
+
+--------------------------------------------------------------------
+Case id: POC-DB-09
+cve_id: CVE-2025-29927
+Nhóm: in_db
+Input: "CVE-2025-29927"
+metadata.candidate_status kỳ vọng: draft_not_executed
+Output thực tế quan sát: banner "ℹ️ PoC dưới đây là mã GỐC (giữ nguyên cấu trúc tệp), chỉ lược
+  bỏ phần không liên quan — KHÔNG viết lại; xem pip install/cách chạy ở đầu tệp. CHƯA chạy
+  thử; nguồn gốc (URL/sha256) ở metadata." — 2 file cục bộ: cve-2025-29927.py, requirements.txt.
+Có lỗi/overlay trên màn hình: Không (chỉ có lỗi mạng không liên quan — tile OpenStreetMap
+  trên dashboard từ trước, không phải lỗi của trang /ai/exploit)
+Đối chiếu catalog: CHƯA làm (agent kiểm tra độc lập #1 cần tự tra sha256 — xem 03 mục 1) —
+  chỉ ghi quan sát ở đây, không tự kết luận PASS.
+Kết luận: NOT_RUN (thiếu bước đối chiếu catalog độc lập để chốt PASS/NOT PASS chính thức)
+Ghi chú: Khớp hướng dự đoán (tier real) từ 01-api-va-luong-xu-ly.txt mục 3.
+--------------------------------------------------------------------
+Case id: POC-DB-04
+cve_id: CVE-2026-33017
+Nhóm: in_db
+Input: "CVE-2026-33017"
+metadata.candidate_status kỳ vọng: draft_not_executed
+Output thực tế quan sát: banner "⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP DỰA TRÊN
+  BẰNG CHỨNG NỘI BỘ, KHÔNG PHẢI PoC ĐÃ FETCH THẬT, CHƯA ĐƯỢC THỰC THI HAY XÁC THỰC." — mã
+  Python do model tự viết (endpoint /api/v1/build_public_tmp/{flow_id}/flow), cuối bài tự
+  dẫn 2 link GitHub "tham khảo": https://github.com/z4yd3/PoC-CVE-2026-33017,
+  https://github.com/diamorphine666/CVE-2026-33017-Exploit.
+Có lỗi/overlay trên màn hình: Không
+Đối chiếu catalog: Catalog nội bộ (docker exec secai-docker-gateway, 09/10/2026) CÓ dòng
+  artifact_sha256 thật cho CVE-2026-33017 từ nguồn metasploit (rb) và exploitdb (py) — hai
+  nguồn này KHÔNG xuất hiện trong output thực tế; hai link GitHub trong output không khớp
+  nguồn catalog đã xác nhận.
+Kết luận: NOT_RUN — CẦN CHẠY LẠI + điều tra trước khi chốt chính thức, nhưng đây là dấu hiệu
+  NOT PASS mạnh theo 03-tieu-chi-pass.txt mục 1.1 bước 1 (hệ thống không coi đây là mã thật
+  từ DB dù catalog thực tế có).
+Nguyên nhân (sơ bộ, CHƯA xác định dứt điểm):
+  - Loại: BE (nghi vấn)
+  - Khả năng 1: license-redistributable gate trong poc/models.py::FetchResult chặn
+    metasploit/exploitdb cho case này dù comment trong code nói 2 nguồn đó được coi
+    redistributable — cần đọc lại điều kiện thật trong backend.py/consolidate.py.
+  - Khả năng 2: on-demand fetch/consolidate thất bại âm thầm cho case này, rơi về nhánh
+    synthesized_cve dù catalog có evidence — cần log thật phía server (không có quyền xem
+    trong phiên MCP browser này).
+  - Chưa dùng DevTools Network để bắt response thô của /ai/exploit (trang IAS không hiện
+    SSE token rời, có thể gọi bản JSON non-stream) — cần làm ở lần chạy sau để đọc
+    metadata.sha256/evidence_ids trực tiếp thay vì chỉ đọc banner hiển thị.
+--------------------------------------------------------------------
+
+Ghi chú chung:
+- Thời gian xử lý mỗi case quan sát được: lâu hơn 60 giây (một lần preview_wait_for 60000ms
+  timeout nhưng kết quả đã có khi snapshot lại ngay sau) — dùng timeout >=90s cho các lần sau.
+- 18/20 case còn lại (POC-DB-01/02/03/05/06/07/08/10, toàn bộ POC-SYN-*, toàn bộ POC-FAKE-*)
+  CHƯA CHẠY — giữ NOT_RUN, không suy PASS từ catalog tĩnh.
+- Trước khi chạy phiên đầy đủ: lặp lại CVE-2026-33017 ít nhất 2 lần nữa để biết đây là lỗi
+  nhất quán (pipeline) hay ngẫu nhiên (race/cache); nếu nhất quán, đây là bug cần báo riêng,
+  không chỉ là một dòng NOT PASS trong báo cáo test.

@@ -145,6 +145,8 @@ class LegacyRequest(BaseModel):
     to_date: str | None = None
     summary: str | None = None
     detail: str | list[dict[str, Any]] | None = None
+    listData: list[dict[str, Any]] | None = None
+    scan_type: int | None = None
 
     def supplied_text(self) -> str:
         """Return the first non-empty user text across legacy request shapes."""

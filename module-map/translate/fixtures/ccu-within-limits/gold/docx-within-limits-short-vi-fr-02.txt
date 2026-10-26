@@ -1,0 +1,196 @@
+SecAI - 1
+SecAI docx-within-limits-short-vi-fr-02-p01
+[docx-within-limits-short-vi-fr-02-p01-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p01-0001] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p01-0002] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p01-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p01-0004] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p01-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p01-0006] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p01-0007] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p01-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p01-0009] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p01-0010] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+Keywords: audit11 audit12 audit13 audit14
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2
+
+SecAI - 2
+SecAI docx-within-limits-short-vi-fr-02-p02
+[docx-within-limits-short-vi-fr-02-p02-0000] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p02-0001] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p02-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p02-0003] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p02-0004] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p02-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p02-0006] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p02-0007] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p02-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p02-0009] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p02-0010] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+Keywords: audit11 audit12 audit13
+
+Asset | Owner | Priority
+node-1-0 | SOC | 1
+node-1-1 | SOC | 2
+
+SecAI - 3
+SecAI docx-within-limits-short-vi-fr-02-p03
+[docx-within-limits-short-vi-fr-02-p03-0000] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p03-0001] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p03-0002] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p03-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p03-0004] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p03-0005] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p03-0006] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p03-0007] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p03-0008] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p03-0009] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p03-0010] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit11 audit12 audit13 audit14 audit15 audit16 audit17 audit18 audit19
+
+Asset | Owner | Priority
+node-2-0 | SOC | 1
+node-2-1 | SOC | 2
+
+SecAI - 4
+SecAI docx-within-limits-short-vi-fr-02-p04
+[docx-within-limits-short-vi-fr-02-p04-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p04-0001] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p04-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p04-0003] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p04-0004] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p04-0005] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p04-0006] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p04-0007] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p04-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p04-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p04-0010] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit11 audit12 audit13
+
+Asset | Owner | Priority
+node-3-0 | SOC | 1
+node-3-1 | SOC | 2
+
+SecAI - 5
+SecAI docx-within-limits-short-vi-fr-02-p05
+[docx-within-limits-short-vi-fr-02-p05-0000] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p05-0001] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p05-0002] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p05-0003] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p05-0004] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p05-0005] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p05-0006] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p05-0007] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p05-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p05-0009] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p05-0010] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+Keywords: audit11 audit12 audit13 audit14
+
+Asset | Owner | Priority
+node-4-0 | SOC | 1
+node-4-1 | SOC | 2
+
+SecAI - 6
+SecAI docx-within-limits-short-vi-fr-02-p06
+[docx-within-limits-short-vi-fr-02-p06-0000] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p06-0001] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p06-0002] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p06-0003] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p06-0004] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p06-0005] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p06-0006] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p06-0007] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p06-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p06-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p06-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Keywords: audit11 audit12 audit13 audit14 audit15 audit16 audit17
+
+Asset | Owner | Priority
+node-5-0 | SOC | 1
+node-5-1 | SOC | 2
+
+SecAI - 7
+SecAI docx-within-limits-short-vi-fr-02-p07
+[docx-within-limits-short-vi-fr-02-p07-0000] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p07-0001] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p07-0002] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p07-0003] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p07-0004] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p07-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p07-0006] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p07-0007] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p07-0008] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[docx-within-limits-short-vi-fr-02-p07-0009] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p07-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Keywords: audit11 audit12 audit13
+
+Asset | Owner | Priority
+node-6-0 | SOC | 1
+node-6-1 | SOC | 2
+
+SecAI - 8
+SecAI docx-within-limits-short-vi-fr-02-p08
+[docx-within-limits-short-vi-fr-02-p08-0000] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p08-0001] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p08-0002] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p08-0003] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p08-0004] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p08-0005] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p08-0006] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p08-0007] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p08-0008] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p08-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p08-0010] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+Keywords: audit11 audit12 audit13 audit14
+
+Asset | Owner | Priority
+node-7-0 | SOC | 1
+node-7-1 | SOC | 2
+
+SecAI - 9
+SecAI docx-within-limits-short-vi-fr-02-p09
+[docx-within-limits-short-vi-fr-02-p09-0000] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p09-0001] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[docx-within-limits-short-vi-fr-02-p09-0002] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p09-0003] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p09-0004] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p09-0005] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p09-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p09-0007] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p09-0008] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p09-0009] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p09-0010] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+Keywords: audit11 audit12 audit13 audit14
+
+Asset | Owner | Priority
+node-8-0 | SOC | 1
+node-8-1 | SOC | 2
+
+SecAI - 10
+SecAI docx-within-limits-short-vi-fr-02-p10
+[docx-within-limits-short-vi-fr-02-p10-0000] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p10-0001] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p10-0002] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[docx-within-limits-short-vi-fr-02-p10-0003] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p10-0004] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p10-0005] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[docx-within-limits-short-vi-fr-02-p10-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[docx-within-limits-short-vi-fr-02-p10-0007] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[docx-within-limits-short-vi-fr-02-p10-0008] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[docx-within-limits-short-vi-fr-02-p10-0009] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[docx-within-limits-short-vi-fr-02-p10-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Keywords: audit11 audit12 audit13 audit14 audit15 audit16
+Account: svc_ccu_80812be2
+Password: Pw7327d27d!0&*()_+
+URL: https://80812be2.example.org/audit?id=8421675&mode=test
+IP: 192.0.2.176:8675
+CVE: CVE-2024-7675
+Email: audit.80812be2@example.org
+Key: sk-test-2fa4a184fa7f253d
+
+Asset | Owner | Priority
+node-9-0 | SOC | 1
+node-9-1 | SOC | 2

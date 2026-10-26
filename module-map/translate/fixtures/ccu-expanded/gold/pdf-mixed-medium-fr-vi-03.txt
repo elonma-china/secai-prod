@@ -1,0 +1,102 @@
+SecAI pdf-scan-medium-fr-vi-03-p01
+[pdf-scan-medium-fr-vi-03-p01-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p01-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p01-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p01-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p01-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p01-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-medium-fr-vi-03-p01-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p01-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p01-0008] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p01-0009] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-scan-medium-fr-vi-03-p01-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-medium-fr-vi-03-p01-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p01-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p01-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p01-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-medium-fr-vi-03-p01-0015] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords:
+
+
+SecAI pdf-medium-fr-vi-03-p02
+[pdf-medium-fr-vi-03-p02-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-medium-fr-vi-03-p02-0001] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-medium-fr-vi-03-p02-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-medium-fr-vi-03-p02-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p02-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-medium-fr-vi-03-p02-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p02-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-medium-fr-vi-03-p02-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-medium-fr-vi-03-p02-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-medium-fr-vi-03-p02-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-medium-fr-vi-03-p02-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-medium-fr-vi-03-p02-0011] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p02-0012] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-medium-fr-vi-03-p02-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p02-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+
+SecAI pdf-scan-medium-fr-vi-03-p03
+[pdf-scan-medium-fr-vi-03-p03-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p03-0001] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-medium-fr-vi-03-p03-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p03-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p03-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p03-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p03-0006] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p03-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p03-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p03-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p03-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p03-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-medium-fr-vi-03-p03-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p03-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p03-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p03-0015] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit16
+
+
+SecAI pdf-medium-fr-vi-03-p04
+[pdf-medium-fr-vi-03-p04-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-medium-fr-vi-03-p04-0001] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-medium-fr-vi-03-p04-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-medium-fr-vi-03-p04-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-medium-fr-vi-03-p04-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-medium-fr-vi-03-p04-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p04-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-medium-fr-vi-03-p04-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-medium-fr-vi-03-p04-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-medium-fr-vi-03-p04-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-medium-fr-vi-03-p04-0010] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-medium-fr-vi-03-p04-0011] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-medium-fr-vi-03-p04-0012] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-medium-fr-vi-03-p04-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-medium-fr-vi-03-p04-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21
+
+
+SecAI pdf-scan-medium-fr-vi-03-p05
+[pdf-scan-medium-fr-vi-03-p05-0000] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-medium-fr-vi-03-p05-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-medium-fr-vi-03-p05-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p05-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p05-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-scan-medium-fr-vi-03-p05-0005] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-scan-medium-fr-vi-03-p05-0006] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-medium-fr-vi-03-p05-0007] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p05-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-medium-fr-vi-03-p05-0009] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-medium-fr-vi-03-p05-0010] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-scan-medium-fr-vi-03-p05-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-scan-medium-fr-vi-03-p05-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-scan-medium-fr-vi-03-p05-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-medium-fr-vi-03-p05-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16
+Account: svc_ccu_6e38ef3a
+Password: Pwfd96fc64!0&*()_+
+URL: https://6e38ef3a.example.org/audit?id=7223535&mode=test
+IP: 192.0.2.36:8535
+CVE: CVE-2024-6535
+Email: audit.6e38ef3a@example.org
+Key: sk-test-e9a80fee2ef071d6

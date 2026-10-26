@@ -1,0 +1,238 @@
+{
+  "function": "chat_history",
+  "mode": "live",
+  "scores_0_100": {
+    "on_dinh": 100.0,
+    "nho_ngu_canh": 61.9
+  },
+  "old_contract_gate": "PASS",
+  "total_checks": 24,
+  "by_check": [
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-000 expect=CHIENDICH-6932",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-001 expect=PROJECT-9821",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": true,
+      "detail": "recall-002 expect=IRT-8333",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": true,
+      "detail": "recall-003 expect=ASSET-6117",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": true,
+      "detail": "recall-004 expect=IRT-3814",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": true,
+      "detail": "recall-005 expect=PROJECT-4204",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-006 expect=ASSET-7191",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": true,
+      "detail": "recall-007 expect=IRT-4689",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-000 expect=CHIENDICH-4958",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-001 expect=PROJECT-9085",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-002 expect=CHIENDICH-1058",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": true,
+      "detail": "compaction-003 expect=PHÒNG-4351",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-004 expect=IRT-9197",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": true,
+      "detail": "compaction-005 expect=ASSET-3116",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-000 must_not_leak=PROJECT-5439",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-001 must_not_leak=CHIENDICH-9281",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-002 must_not_leak=CHIENDICH-8650",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-003 must_not_leak=PROJECT-4579",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-004 must_not_leak=IRT-9642",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "isolation",
+      "passed": true,
+      "detail": "isolation-005 must_not_leak=ASSET-4824",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_observed_on_long_thread",
+      "passed": false,
+      "detail": "metadata.compaction xuất hiện trên ít nhất 1 hội thoại dài",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "old_contract_live",
+      "passed": true,
+      "detail": "",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "spoof_404_live",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "anon_400_live",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    }
+  ],
+  "failures": [
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-000 expect=CHIENDICH-6932",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-001 expect=PROJECT-9821",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "recall_recall",
+      "passed": false,
+      "detail": "recall-006 expect=ASSET-7191",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-000 expect=CHIENDICH-4958",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-001 expect=PROJECT-9085",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-002 expect=CHIENDICH-1058",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_recall",
+      "passed": false,
+      "detail": "compaction-004 expect=IRT-9197",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "compaction_observed_on_long_thread",
+      "passed": false,
+      "detail": "metadata.compaction xuất hiện trên ít nhất 1 hội thoại dài",
+      "gate": false
+    }
+  ]
+}

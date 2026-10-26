@@ -1,0 +1,33 @@
+SecAI png-within-limits-short-vi-ja-04
+[png-within-limits-short-vi-ja-04-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-short-vi-ja-04-0001] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-short-vi-ja-04-0002] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-short-vi-ja-04-0003] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-short-vi-ja-04-0004] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-short-vi-ja-04-0005] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-within-limits-short-vi-ja-04-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-short-vi-ja-04-0007] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-short-vi-ja-04-0008] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-short-vi-ja-04-0009] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-short-vi-ja-04-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-short-vi-ja-04-0011] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-short-vi-ja-04-0012] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-short-vi-ja-04-0013] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-short-vi-ja-04-0014] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-short-vi-ja-04-0015] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-short-vi-ja-04-0016] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-short-vi-ja-04-0017] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-within-limits-short-vi-ja-04-0018] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-within-limits-short-vi-ja-04-0019] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-short-vi-ja-04-0020] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-short-vi-ja-04-0021] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-short-vi-ja-04-0022] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-short-vi-ja-04-0023] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Keywords: audit24 audit25 audit26 audit27 audit28 audit29 audit30 audit31 audit32 audit33 audit34 audit35 audit36
+Account: svc_ccu_3ce51af8
+Password: Pw083d1ada!0&*()_+
+URL: https://3ce51af8.example.org/audit?id=3990810&mode=test
+IP: 192.0.2.61:8810
+CVE: CVE-2024-4810
+Email: audit.3ce51af8@example.org
+Key: sk-test-7b0f5848ace2264a

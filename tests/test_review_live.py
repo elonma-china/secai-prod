@@ -21,6 +21,63 @@ def configure(client, rate=1,answer='Alternative answer'):
 
 PAYLOAD={'prompt_messages':[{'role':'user','content':'Question'}],'answer':'Original answer','source_group':'original-session'}
 
+def test_explicit_ab_offers_each_turn_without_sampling_or_cooldown(client):
+    state=configure(client,0)
+    state.review_live_inflight=set()
+    state.review_live_next={'expert':float('inf')}
+    for question in ('First question', 'Second question'):
+        response=client.post('/review-api/live-pairs',headers=REVIEW,json={
+            **PAYLOAD,'always_offer':True,'prompt_messages':[{'role':'user','content':question}],
+        })
+        assert response.status_code==200
+        result=response.json()
+        assert result['offered'] is True
+        assert {result['assignment']['left']['text'],result['assignment']['right']['text']}=={'Original answer','Alternative answer'}
+    assert len(state.runner.calls)==2
+
+def test_explicit_ab_queues_concurrent_turns_for_the_same_reviewer(client):
+    import asyncio
+    import httpx
+    state=configure(client,0)
+    async def exercise():
+        active=0
+        peak=0
+        async def slow(profile,prompt,session_id):
+            nonlocal active,peak
+            active+=1
+            peak=max(peak,active)
+            await asyncio.sleep(0.02)
+            active-=1
+            return 'Alternative answer',{}
+        state.runner.complete=slow
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=client.app),base_url='http://test') as http:
+            responses=await asyncio.gather(*[
+                http.post('/review-api/live-pairs',headers=REVIEW,json={**PAYLOAD,'always_offer':True}) for _ in range(2)
+            ])
+        assert all(response.status_code==200 and response.json()['offered'] for response in responses)
+        assert peak==1
+    asyncio.run(exercise())
+
+def test_cancelled_cleanup_releases_the_reviewers_generation_queue(client):
+    import asyncio
+    import httpx
+    import pytest
+    state=configure(client,0)
+    async def exercise():
+        deleting=asyncio.Event()
+        async def delete(sid):
+            deleting.set()
+            await asyncio.Event().wait()
+        state.runner.session_store.delete=delete
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=client.app),base_url='http://test') as http:
+            pending=asyncio.create_task(http.post('/review-api/live-pairs',headers=REVIEW,json={**PAYLOAD,'always_offer':True}))
+            await asyncio.wait_for(deleting.wait(),1)
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+        assert not state.review_live_locks['expert'].locked()
+    asyncio.run(exercise())
+
 def test_zero_sampling_never_calls_model(client):
     state=configure(client,0)
     assert client.post('/review-api/live-pairs',headers=REVIEW,json=PAYLOAD).json()=={'offered':False}

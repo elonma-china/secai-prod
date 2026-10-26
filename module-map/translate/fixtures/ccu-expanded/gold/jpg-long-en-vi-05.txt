@@ -1,0 +1,68 @@
+SecAI jpg-long-en-vi-05
+[jpg-long-en-vi-05-0000] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0001] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0002] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0003] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0004] Analysts compare network alerts with application logs before opening an incident.
+[jpg-long-en-vi-05-0005] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0006] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0007] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0008] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0010] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0011] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0012] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0013] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0014] The security team reviews access permissions and records the owner of each service.
+[jpg-long-en-vi-05-0015] Analysts compare network alerts with application logs before opening an incident.
+[jpg-long-en-vi-05-0016] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0017] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0018] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0019] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0020] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0021] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0022] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0023] The security team reviews access permissions and records the owner of each service.
+[jpg-long-en-vi-05-0024] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0025] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0026] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0027] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0028] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0029] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0030] Analysts compare network alerts with application logs before opening an incident.
+[jpg-long-en-vi-05-0031] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0032] The security team reviews access permissions and records the owner of each service.
+[jpg-long-en-vi-05-0033] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0034] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0035] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0036] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0037] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0038] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0039] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0040] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0041] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0042] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0043] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0044] The security team reviews access permissions and records the owner of each service.
+[jpg-long-en-vi-05-0045] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0046] Every change is tested with representative documents before release to the customer.
+[jpg-long-en-vi-05-0047] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-long-en-vi-05-0048] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0049] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0050] Analysts compare network alerts with application logs before opening an incident.
+[jpg-long-en-vi-05-0051] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-long-en-vi-05-0052] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0053] The inventory includes databases, network devices, endpoints and their responsible teams.
+[jpg-long-en-vi-05-0054] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-long-en-vi-05-0055] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0056] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0057] The maintenance window requires a tested backup and a documented recovery procedure.
+[jpg-long-en-vi-05-0058] The maintenance window requires a tested backup and a documented recovery procedure.
+Keywords: audit59 audit60 audit61 audit62 audit63 audit64 audit65 audit66 audit67 audit68 audit69 audit70
+Account: svc_ccu_e5f0d53e
+Password: Pw5ab94e31!0&*()_+
+URL: https://e5f0d53e.example.org/audit?id=15069397&mode=test
+IP: 192.0.2.148:8397
+CVE: CVE-2024-4397
+Email: audit.e5f0d53e@example.org
+Key: sk-test-4d1be7fbbd4edc97

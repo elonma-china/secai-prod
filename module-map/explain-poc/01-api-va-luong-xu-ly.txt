@@ -1,0 +1,102 @@
+# Đặc tả API và luồng xử lý — "Giải thích quy trình tạo PoC" (explain-poc)
+
+Trạng thái: **SPEC — chưa có dòng code nào cho tính năng này trong `src/secai_gateway` tại thời điểm viết tài liệu**. Mọi tên hàm/biến dưới đây là code THẬT đã tồn tại (dùng làm input), riêng phần output/field mới là ĐỀ XUẤT, cần review trước khi code.
+
+## 1. Endpoint bị ảnh hưởng
+
+Giống [module-map/poc/01](../poc/01-api-va-luong-xu-ly.txt) mục 1 — chỉ 2 endpoint:
+
+| Method | Endpoint | Thay đổi |
+|---|---|---|
+| POST | `/ai/exploit` | Thêm field mới `metadata.generation_trace` (A, phụ trợ) VÀ nối khối `## 4.` vào `description`/`exploit_guide` (B, **BẮT BUỘC** — xem mục 4) — không đổi SCHEMA field cũ, chỉ đổi NỘI DUNG `description`/`exploit_guide` (dài hơn, có thêm Mục 4 ở cuối) |
+| POST | `/ai/exploit/stream` | **Đã chốt (sau review):** KHÔNG thêm SSE event riêng — gộp `generation_trace` vào `metadata` VÀ nối khối `## 4.` vào `content` của payload event `final`, để cả A lẫn B giống hệt nhau giữa `/ai/exploit` (JSON 1 lần) và `/ai/exploit/stream` (SSE) — tránh lệch dữ liệu giữa UI (đọc stream) và agent chấm (có thể gọi bản non-stream) |
+
+Không đụng `/ai/exploit/run`, `/ai/exploit-advance*`, `/ai/verify`.
+
+## 2. Nguyên tắc thiết kế bắt buộc — tất định, không qua LLM
+
+Quyết định đã chốt (xem [readme.md](readme.md)): nội dung giải thích quy trình **render từ biến trạng thái Python đã có sẵn**, không phải LLM tự viết. Lý do kỹ thuật: các biến này **đã tồn tại trong code hiện tại**, chỉ chưa được gom lại và hiển thị:
+
+| Biến đã có trong code | Vị trí | Ý nghĩa |
+|---|---|---|
+| `prefetch_result["coverage"]` | `routes.py::exploit_prefetch` | `enough`/`empty`/`partial`/`failed` — đã tìm trong catalog chưa, có gì không |
+| `prefetch_result["cve_known"]` | cùng trên | CVE có xác nhận tồn tại trong KB nội bộ (Qdrant/Neo4j) hay không |
+| `prefetch_result["kb_status"]` | cùng trên | `found`/`not_found`/`insufficient`/`error` |
+| `base_real` (rỗng hay không) | `routes.py::_build_exploit_grounding` | Catalog có artifact mã thật (exploitdb/metasploit/poc_github) hay không |
+| `cached_hit` | cùng trên | Mã lấy từ cache tạm (CVE đã từng fetch internet trước đó), không phải catalog gốc |
+| `extra_real` qua GitHub on-demand | cùng trên | Catalog chỉ có link-only, hệ thống tự fetch GitHub bổ sung |
+| `web_real` | cùng trên | Không có gì trong catalog/cache/GitHub, lấy từ web-search (chỉ khi `WEB_SEARCH_ENABLED=true`) |
+| `canonical_entry` | cùng trên | PoC đã verify chạy thật trên lab (`poc_canonical`), phục vụ verbatim |
+| `fixed` (`load_fixed`) | cùng trên | PoC đã operator fix tay + verify lab, phục vụ nguyên bản |
+| `is_multifile` | cùng trên | Entry có >1 file (không tính README) |
+| `strategy` (`prune`/`consolidate`/`auto`) | `_resolve_poc_strategy` (routes.py:208) | Chiến lược hợp nhất đang áp dụng |
+| `consolidated` (bool trả về bởi `_build_exploit_grounding`, routes.py:3298) | `routes.py::_build_exploit_grounding` | **CẢNH BÁO (phát hiện từ review Opus + đọc thêm code):** bool này `True` cho CẢ BA nguồn — `fixed`, `slice_entry` (cắt tất định 1 file, KHÔNG LLM), VÀ `consolidate_poc` (LLM merge thật) — KHÔNG dùng trực tiếp bool này để viết câu "AI hợp nhất", xem mục 3 và tín hiệu đúng bên dưới |
+| `metadata.section1_tier` | `poc/inject.py::enforce_section1` (dòng 1106, set tier ở 1151-1162) | Tier cuối cùng quyết định Mục 1 là gì — set theo per-evidence flag `consolidated`/`pruned` trên DICT evidence, không phải bool ở dòng trên |
+| `metadata.candidate_status` | cùng trên | `draft_not_executed`/`synthesized_not_executed`/`not_generated` |
+
+### Tín hiệu ĐÚNG để phân biệt "AI thực sự hợp nhất" — đã đọc sâu thêm `poc/slicer.py`/`poc/consolidate.py`/`poc/fixed_pocs.py`
+
+Per-evidence dict (không phải bool trả về ở bảng trên) mang các key khác nhau theo đúng nguồn gốc — đây mới là tín hiệu cần dùng để render câu giải thích, vì `section1_tier=="real_consolidated"` BẢN THÂN NÓ gộp chung 3 nguồn khác hẳn nhau (quyết định sản phẩm: cùng hiển thị 1 banner nhẹ cho người dùng cuối), nhưng câu giải thích quy trình ở tính năng này cần phân biệt đúng:
+
+| Nguồn thật | Key trên evidence dict | `section1_tier` | Ý nghĩa |
+|---|---|---|---|
+| `fixed_pocs.py::load_fixed` | `fixed=True`, `consolidated=True` | `real_consolidated` | Đã operator fix tay + verify lab |
+| `slicer.py::slice_entry` (1 file, tất định, KHÔNG LLM) | `extracted=True`, `consolidated=True`, KHÔNG có `consolidated_from` | `real_consolidated` | Trích xuất verbatim 1 file, không qua AI — chỉ GIỐNG banner hiển thị với 2 dòng kia, bản chất khác |
+| `consolidate.py::consolidate_poc` (LLM merge thật) | `consolidated=True` VÀ CÓ `consolidated_from` (dict chứa `sha256`/`url`/`source`/`files` gốc) | `real_consolidated` | AI thực sự viết lại/gộp nhiều file |
+| `slicer.py::prune_evidence` (nhiều file, tất định) | `pruned=True`, `consolidated=False` | `real_pruned` | Giữ cấu trúc gốc, chỉ bỏ phần không cần — không qua AI |
+
+→ Câu "AI hợp nhất" (mục 3) CHỈ được render khi evidence có `consolidated_from` (không chỉ `consolidated=True`) — nếu không sẽ gắn sai nhãn "AI hợp nhất" cho case `fixed` hoặc `slice_entry` (cả hai đều KHÔNG dùng LLM).
+
+→ Việc code cần làm: viết 1 hàm thuần (pure function, không gọi LLM) `build_generation_trace(prefetch_result, build_result_flags) -> list[str]` nhận các biến trên, trả về danh sách câu tiếng Việt theo bảng ánh xạ mục 3 — tương tự cách `enforce_section1` đã chèn banner tất định, KHÔNG phải cách model viết Mục 2/3.
+
+## 3. Bảng ánh xạ nhánh → câu giải thích (nội dung đề xuất, cần duyệt mức lộ chi tiết)
+
+Dùng từ vựng khách hàng hiểu được, KHÔNG dùng tên tool nội bộ (`poc_search`, `qdrant_search`...) — tái dùng đúng nguyên tắc `strip_tool_name_mentions` đang áp dụng cho Mục 2/3.
+
+| Nhánh code | Câu giải thích đề xuất |
+|---|---|
+| `canonical_entry` có (evidence `canonical=True`) | "Hệ thống tìm thấy một PoC đã được xác minh chạy thành công trên môi trường thử nghiệm cho đúng CVE này — trả về nguyên bản, không chỉnh sửa." |
+| `fixed` có — evidence `fixed=True` | "Hệ thống tìm thấy một PoC đã được kỹ thuật viên hiệu chỉnh và xác minh chạy được trên môi trường thử nghiệm — trả về bản đã hiệu chỉnh." |
+| `base_real` có, không multifile — evidence `extracted=True` + `consolidated=True`, KHÔNG có `consolidated_from` (`slice_entry`, tất định, KHÔNG qua AI) | "Danh mục PoC nội bộ có sẵn mã khai thác thật (một tệp) cho CVE này — trích xuất nguyên văn phần liên quan, loại bỏ phần không cần thiết (banner, mã trang trí). Bước này tất định, không qua AI." |
+| `base_real` có, multifile — evidence `pruned=True` (`prune_evidence`, tất định, KHÔNG qua AI) | "Danh mục PoC nội bộ có sẵn mã khai thác thật gồm nhiều tệp — giữ nguyên cấu trúc gốc, chỉ loại bỏ phần không cần thiết cho việc khai thác. Bước này tất định, không qua AI." |
+| Evidence `consolidated=True` VÀ CÓ `consolidated_from` (`consolidate_poc` — LLM merge thật sự chạy, đây là trường hợp DUY NHẤT thực sự dùng AI để hợp nhất) | "Mã khai thác gồm nhiều tệp phức tạp — hệ thống dùng AI hợp nhất thành một tệp duy nhất chạy được, có kiểm tra lại để đảm bảo không đổi tham số/logic gốc." |
+| `cached_hit` | "Mã khai thác không có sẵn trong danh mục nội bộ nhưng đã được hệ thống tải về và lưu lại từ một lần tra cứu trước — dùng lại bản đã lưu." |
+| `extra_real` qua GitHub on-demand | "Danh mục nội bộ chỉ có liên kết chưa tải — hệ thống tự động tải mã khai thác thật từ nguồn công khai tương ứng." |
+| `web_real` (web-search) | "Không có mã khai thác thật trong danh mục nội bộ — hệ thống tìm kiếm trên internet và sử dụng mã tìm được làm căn cứ." |
+| Không `base_real`, `cve_known=True` (tier `synthesized_cve`/`synthesized_readme`) | "Không tìm thấy mã khai thác công khai nào cho CVE này trong danh mục nội bộ. Hệ thống đã xác nhận CVE này tồn tại trong cơ sở dữ liệu nội bộ (dựa trên mô tả kỹ thuật/CWE/CVSS) và tự tổng hợp một đoạn minh hoạ dựa trên thông tin đó — KHÔNG phải mã đã kiểm chứng." |
+| `kb_status=not_found` (tier `not_found`) | "Không tìm thấy CVE này trong danh mục PoC công khai lẫn cơ sở dữ liệu nội bộ — không đủ căn cứ để tạo PoC." |
+
+Câu cho tier `synthesis_failed` (lỗi hệ thống, không viết được Mục 1 dù có bằng chứng): cần bổ sung — đề xuất "Có đủ dữ liệu tham khảo nhưng hệ thống chưa tạo được bản minh hoạ hợp lệ, vui lòng thử lại."
+
+## 4. Vị trí đặt trong response — B (Markdown nối vào text) là BẮT BUỘC, A chỉ là phụ trợ
+
+**Đã chốt dứt điểm (sau khi đọc thật `secai-fe-devspace/src/screens/ExploitScreen.tsx` + `secai-fe-devspace/src/components/FileCode.tsx`) — tiêu chuẩn nghiệm thu của khách hàng là "PHẢI HIỂN THỊ TRÊN GIAO DIỆN WEB", không phải "có trong response API".** Field JSON đơn thuần (`metadata.generation_trace`) KHÔNG đạt tiêu chuẩn này nếu không có khối markdown đi kèm — vì FE hiện tại **không đọc field `metadata` để render bất kỳ UI nào**, chỉ đọc `content`/`description`/`exploit_guide` (text). Do đó:
+
+| Phương án | Tự hiện trên UI không cần sửa FE? | Vai trò |
+|---|---|---|
+| **A. Field JSON** `metadata.generation_trace: list[str]` | **KHÔNG** — FE không đọc field này ở bất kỳ đâu hiện tại | Phụ trợ — nguồn chân lý tất định cho agent kiểm tra độc lập (so khớp tiêu chí #2 ở [03](03-tieu-chi-pass.txt)), KHÔNG thay thế được yêu cầu "hiển thị trên UI" |
+| **B. Mục Markdown mới** `## 4. Quy trình tạo PoC` nối vào `text` (`content`/`description`/`exploit_guide`) | **CÓ** — xem cơ chế FE bên dưới, không cần đổi 1 dòng code FE | **BẮT BUỘC** — đây là thứ duy nhất thỏa yêu cầu khách hàng "phải hiển thị được chỗ giải thích PoC sinh thế nào" |
+
+### Cơ chế FE đã xác nhận khiến B tự hiển thị (không cần sửa FE)
+
+Đọc `FileCode.tsx::splitSection1` (dòng 31-42): hàm này cắt `text` thành `section1` (nội dung dưới heading `## 1.`, dừng khi gặp heading tiếp theo khớp regex `#{2,6}[ \t]*[2-9]\.`) và `guide` (phần CÒN LẠI — tức Mục 2, 3, **và bất kỳ mục nào khác đánh số 2-9**). `ExploitScreen.tsx` dòng 209-219: toàn bộ `guide` được render bằng component `<Markdown>` chung trong card có tiêu đề **"Phân tích / hướng dẫn"** — đây là card ĐANG CÓ SẴN trên UI, hiển thị Mục 2+3 hiện tại.
+
+→ Vì heading `## 4.` khớp đúng regex `[2-9]\.` của `splitSection1`, nếu nối `## 4. Quy trình tạo PoC` vào cuối `text` (sau Mục 3), nó sẽ **tự động rơi vào `guide` và hiện trong CÙNG card "Phân tích / hướng dẫn"** — không cần sửa dòng FE nào, không cần thêm panel mới, không cần thêm field mới cho FE đọc. Đây là lý do B khả thi với chi phí FE = 0 và PHẢI là cơ chế chính.
+
+### Ràng buộc bắt buộc khi code theo B (để không vỡ cơ chế trên)
+
+1. Nối vào field `text` TRƯỚC khi trả về trong CẢ `description`/`exploit_guide` (`/ai/exploit`) lẫn `final.content` (`/ai/exploit/stream`, xem `ExploitScreen.tsx` dòng 68-69: `onFinal` đọc `payload.content ?? payload.description ?? payload.exploit_guide`) — thiếu 1 trong 3 field thì 1 trong 2 luồng JSON/SSE sẽ không hiện trên UI dù luồng kia có.
+2. Đặt banner rõ ràng (vd "🔧 Quy trình hệ thống (tự động, không phải AI viết):") làm dòng đầu dưới heading `## 4.` — để không bị nhầm với văn bản LLM viết ở Mục 2/3 khi người dùng đọc trên UI.
+3. **Không phá heading-count của `splitSection1`** — heading Mục 4 PHẢI dùng đúng dạng `## 4.` hoặc `### 4.` (2-6 dấu `#`, số trong khoảng 2-9) để được nhận diện đúng là ranh giới section, không lẫn vào `section1` (panel Mã khai thác).
+4. `onSection1` (preview sớm giữa stream) sẽ KHÔNG có Mục 4 — Mục 4 chỉ chắc chắn xuất hiện ở `onFinal`, đúng như Mục 2/3 hiện tại cũng chỉ chốt ở `onFinal`. Không coi việc Mục 4 vắng mặt lúc đang stream là lỗi.
+
+## 5. Vị trí cần sửa trong mã nguồn (khi code)
+
+- `src/secai_gateway/api/routes.py::_build_exploit_grounding` — nơi TẤT CẢ biến nhánh ở mục 2 đã tồn tại sẵn trong cùng 1 hàm; thêm việc build `trace: list[str]` song song với việc build `pre_evidence`/`appendix`, trả thêm trong tuple.
+- `src/secai_gateway/api/routes.py::_exploit`/`_exploit_stream` — nhận `trace` từ `_build_exploit_grounding`, gắn vào `metadata["generation_trace"]` (phương án A — phụ trợ, không đủ để nghiệm thu một mình). Khi nối khối `## 4.` vào `text` (phương án B — **BẮT BUỘC**, xem mục 4): **đã chốt (sau review) phải chèn TRƯỚC `strip_tool_name_mentions`/`sanitize_airgap_runguide`** (routes.py quanh dòng 3078, trong `inject_reference_code`), KHÔNG chèn sau cùng — lý do: nếu nối sau cả 2 lớp quét an toàn đó, khối trace tự sinh sẽ KHÔNG được lưới quét tên-tool lần 2; một bug trong `build_generation_trace` lọt tên tool nội bộ sẽ ra thẳng UI mà không bị chặn, vi phạm trực tiếp tiêu chí #4 ở [03](03-tieu-chi-pass.txt). Cách làm: build trace TRƯỚC, nối vào `text` thô, rồi mới chạy `strip_tool_name_mentions(text)` như một lưới chung cho cả Mục 1-3 (LLM viết) lẫn Mục 4 (hệ thống viết) — không tạo 2 đường xử lý khác nhau.
+- `src/secai_gateway/poc/inject.py` — KHÔNG sửa `enforce_section1` (giữ nguyên 4-tier hiện có), chỉ thêm hàm mới độc lập `render_generation_trace(...)`.
+- `src/secai_gateway/prompts/exploit.md` — KHÔNG sửa rule dòng 46 (vẫn cấm LLM kể quy trình); có thể cần thêm 1 dòng ghi chú "Mục 4 do hệ thống tự chèn, không phải phần bạn viết" tương tự cách `section1_policy` đang được giấu khỏi model.
+
+## 6. Lỗi và cấu hình (kế thừa nguyên trạng)
+
+Không có HTTP status mới — vẫn 200 cho mọi tier kể cả `not_found`. **Tiêu chí #1-7 ở [03](03-tieu-chi-pass.txt) đọc từ `metadata.generation_trace`; riêng tiêu chí #0 (hard gate, kiểm trước tiên) đọc bằng quan sát UI thật, KHÔNG đọc `metadata`** — xem [03](03-tieu-chi-pass.txt) mục 1. Không cấu hình bật/tắt riêng — tính năng này không gọi thêm LLM/network nên không có cờ enable/disable như `web_search_enabled`; luôn bật khi đã code xong (trace rỗng chỉ khi pipeline lỗi hoàn toàn, tự nó là một tín hiệu bug cần log).

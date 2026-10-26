@@ -1,0 +1,44 @@
+SecAI txt-medium-fr-vi-03
+[txt-medium-fr-vi-03-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[txt-medium-fr-vi-03-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[txt-medium-fr-vi-03-0002] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[txt-medium-fr-vi-03-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[txt-medium-fr-vi-03-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[txt-medium-fr-vi-03-0007] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0008] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[txt-medium-fr-vi-03-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[txt-medium-fr-vi-03-0011] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[txt-medium-fr-vi-03-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[txt-medium-fr-vi-03-0014] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0015] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[txt-medium-fr-vi-03-0016] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[txt-medium-fr-vi-03-0017] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[txt-medium-fr-vi-03-0018] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0019] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0020] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[txt-medium-fr-vi-03-0021] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[txt-medium-fr-vi-03-0022] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[txt-medium-fr-vi-03-0023] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[txt-medium-fr-vi-03-0024] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[txt-medium-fr-vi-03-0025] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0026] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0027] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[txt-medium-fr-vi-03-0028] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[txt-medium-fr-vi-03-0029] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[txt-medium-fr-vi-03-0030] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[txt-medium-fr-vi-03-0031] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[txt-medium-fr-vi-03-0032] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[txt-medium-fr-vi-03-0033] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[txt-medium-fr-vi-03-0034] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+Keywords: audit35 audit36 audit37 audit38 audit39
+Account: svc_ccu_9cc9de7b
+Password: Pw914b5630!0&*()_+
+URL: https://9cc9de7b.example.org/audit?id=10275294&mode=test
+IP: 192.0.2.45:8294
+CVE: CVE-2024-7294
+Email: audit.9cc9de7b@example.org
+Key: sk-test-c74ceb702ba2e782

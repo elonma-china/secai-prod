@@ -1,0 +1,13 @@
+SecAI txt-short-vi-ja-04
+[txt-short-vi-ja-04-0000] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[txt-short-vi-ja-04-0001] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[txt-short-vi-ja-04-0002] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[txt-short-vi-ja-04-0003] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+Keywords: audit4 audit5 audit6 audit7 audit8
+Account: svc_ccu_0e7859a3
+Password: Pw42305286!0&*()_+
+URL: https://0e7859a3.example.org/audit?id=948313&mode=test
+IP: 192.0.2.64:8313
+CVE: CVE-2024-4313
+Email: audit.0e7859a3@example.org
+Key: sk-test-a74aa67d855a3ce5

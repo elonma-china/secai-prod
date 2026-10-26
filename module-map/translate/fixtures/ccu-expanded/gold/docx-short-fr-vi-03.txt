@@ -1,0 +1,29 @@
+SecAI - 1
+SecAI docx-short-fr-vi-03-p01
+[docx-short-fr-vi-03-p01-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-short-fr-vi-03-p01-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-short-fr-vi-03-p01-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-short-fr-vi-03-p01-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-short-fr-vi-03-p01-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-short-fr-vi-03-p01-0005] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-short-fr-vi-03-p01-0006] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-short-fr-vi-03-p01-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-short-fr-vi-03-p01-0008] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-short-fr-vi-03-p01-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-short-fr-vi-03-p01-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-short-fr-vi-03-p01-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-short-fr-vi-03-p01-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-short-fr-vi-03-p01-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-short-fr-vi-03-p01-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18
+Account: svc_ccu_47e7147d
+Password: Pw60ee1791!0&*()_+
+URL: https://47e7147d.example.org/audit?id=4712212&mode=test
+IP: 192.0.2.213:8212
+CVE: CVE-2024-6212
+Email: audit.47e7147d@example.org
+Key: sk-test-841c9c186da89bb3
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2

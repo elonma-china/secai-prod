@@ -30,8 +30,56 @@ Không yêu cầu khớp từng ký tự với `output_gold` khi đó là văn b
 4. **Không thay đổi giá trị:** không đổi số, không sửa chính tả mật khẩu/khóa, không "chuẩn hóa" URL/IP, không bỏ dấu cách bên trong giá trị, không cắt cụt.
 5. **Bị từ chối KHÔNG phải là PASS:** nếu hệ thống trả lỗi (ví dụ `TOKEN_INTEGRITY_FAILED`, `UNSAFE_DOCUMENT`, 502) vì file/văn bản có thông tin nhạy cảm, ca đó là FAIL (không phải "an toàn nên chấp nhận"). Dịch ảnh: văn bản OCR hiển thị cũng phải chứa đủ các giá trị trên đúng từng ký tự; chỉ khi OCR đọc sai nguyên nhân do chất lượng ảnh thì ghi FAIL kèm nhãn "OCR", không tính vào lỗi dịch.
 6. **Cách kiểm:** với mỗi ca, lấy danh sách giá trị cần giữ từ `output_gold.preserve_literals` (hoặc từ nguồn nếu ca cũ chưa liệt kê) rồi dùng kiểm tra chuỗi con CHÍNH XÁC trên bản dịch (không so nghĩa, không so gần đúng). Thiếu dù một ký tự là FAIL. Báo cáo ghi rõ "literal giữ: X/Y" và liệt kê giá trị thiếu/sai.
+7. **OCR phải đọc đúng TỪNG KÝ TỰ của giá trị nhạy cảm (tiêu chí 1b.7, thêm 11/10/2026).** Với ảnh và PDF scan, văn bản OCR (khung OCR hiển thị/`ocr.raw_text`) phải chứa đủ, đúng từng ký tự, mọi giá trị trong `preserve_literals` — đặc biệt mật khẩu có ký tự đặc biệt `P@ss!w0rd#2026$%^&*()_+`: không được rớt/đổi/đảo thứ tự ký tự nào (lỗi đã gặp: rớt `&`; ảnh tiếng Ả Rập/RTL đẩy đuôi `()*&^` lên đầu dòng và mất `_+`). Ngưỡng PASS: 100% ảnh trong bộ `fixtures/formats/{png,jpg}/{long,short}-<ngôn ngữ>` (40 ảnh, 10 ngôn ngữ) đủ literal; thiếu dù 1 ký tự ở 1 ảnh = FAIL nhãn "OCR" (không được coi là "do chất lượng ảnh" khi ảnh render rõ như bộ fixture). Cách kiểm tự động: `python3 fixtures/tools/ocr_special_char_check.py --ocr-url <URL OCR> --token-file <tệp token> [--langs ...] [--fmts png,jpg] [--sizes long,short]` — in literal đủ x/y theo ảnh, thống kê ký tự bị rớt/đổi, mã thoát 0=PASS. Đo hiện tại (stack thử 11/10/2026): ~16/20 ảnh dài đủ 7/7, ~3/30 mẫu ngắn trong vòng 30 thiếu mật khẩu → CHƯA ĐẠT. Bản dịch từ ảnh còn phải đạt 1b.1–1b.6 trên văn bản đã OCR.
 
 Bộ ca bắt buộc cho quy tắc này nằm ở khóa `integrity_cases` trong [04-test-data.json](04-test-data.json) (TXT-SENS-vi-en, FILE-SENS-vi-en, IMG-SENS-en-vi). Một phiên chạy đầy đủ = 68 ca ở `cases` + 3 ca ở `integrity_cases` = 71 ca; điểm tổng kết ghi "Đạt X/71". Dữ liệu trong các ca này là GIẢ, không dùng thông tin thật.
+
+## 1c. Yêu cầu NGHIỆM THU bổ sung — người dùng phản hồi 10/10/2026 (áp dụng cùng mục 1 và 1b)
+
+Phản hồi nghiệm thu chức năng dịch, ghi nguyên ý người dùng; chưa có ngưỡng số cụ thể nào được chốt ngoài những gì ghi dưới đây:
+
+1. **Mất dữ liệu tài khoản/mật khẩu/ký tự đặc biệt khi dịch — VẪN CÒN.** Mục 1b là tiêu chí PASS; trường hợp mất/đổi/che vẫn xảy ra thì ca là FAIL, kể cả khi tệp/ảnh/văn bản "dịch hoàn tất". Phải kiểm cả ký tự đặc biệt trong giá trị (`! @ # $ % ^ & * ( ) _ + = { } [ ] | \ : ; " ' < > , . ? /`, dấu cách bên trong, ký tự toàn góc `：`, Unicode).
+2. **Tốc độ: khoảng 1-3 giây MỖI TRANG (người dùng chốt 11/10/2026).** Áp dụng cho tệp có phân trang và cho tệp/ảnh cần scan (OCR), kể cả ảnh và PDF scan. Cách đo: thời gian thật từ lúc gửi yêu cầu đến khi job `succeeded` (gồm OCR và dịch, không gồm thời gian người dùng chọn tệp) chia cho số trang. Quy ước số trang: DOCX/DOC = số trang khi in (tài liệu mẫu 20 trang: `fixtures/files/en-long-20pages.docx`); PDF = số trang PDF; ảnh = 1 trang; XLSX = số sheet (mỗi sheet 1 trang) và ghi thêm số ô có chữ; TXT = 500 từ/trang. PASS tốc độ khi giây/trang <= 3 (mục tiêu 1-3; dưới 1 là tốt hơn, không phải lỗi). Tài liệu 20 trang phải xong trong <= 60 giây tổng. Báo cáo ghi: tổng giây, số trang, giây/trang, tách giai đoạn nếu đọc được (extracting/ocr/translating) và có tải lạnh (khởi động model) hay không. Chậm hơn 3 giây/trang là FAIL (nhãn "tốc độ"), cần điều tra nút cổ chai (OCR, nạp model, dịch tuần tự, hàng đợi/khóa GPU). Lần đầu sau khi khởi động serving đo riêng, không tính vào ngưỡng.
+3. **Nội dung dịch OK, nhưng phải GIỮ NGUYÊN CẤU TRÚC.** Ca PASS khi bản dịch giữ đúng bố cục nguồn: thứ tự đoạn/dòng/mục, tiêu đề, danh sách, bảng (số hàng/cột, ô gộp), ranh giới trang/sheet, định dạng đậm/nghiêng nếu tệp gốc có. Dịch đúng nghĩa nhưng làm vỡ/gộp/đảo cấu trúc = FAIL (nhãn "cấu trúc").
+4. **Phải hỗ trợ đủ các loại tệp:** PDF, XLSX, DOCX, DOC, PNG, … (ảnh JPG/JPEG cũng thuộc nhóm ảnh). Loại tệp trong danh sách mà hệ thống báo "không hỗ trợ" là FAIL — không còn là kỳ vọng "từ chối đúng" như trước (xem [06](06-checklist-kiem-thu-theo-loai-dau-vao.txt) A1).
+5. **Phải cho phép OCR PDF scan và hình ảnh.** PDF scan (chỉ có ảnh trang, không có lớp chữ) và ảnh phải được nhận dạng chữ rồi dịch; bị từ chối hoặc trả trống = FAIL.
+6. **Tốc độ nhanh** là yêu cầu của toàn bộ chức năng (văn bản, tệp, ảnh, PDF scan); ngưỡng 1-3 giây/trang và cách đo xem điểm 2 của mục này.
+
+## 1d. Chất lượng bản dịch có số đo % — thêm 11/10/2026 (áp dụng cùng mục 1, 1b, 1c)
+
+Yêu cầu người dùng: "thêm tiêu chí chấm kết quả dịch: metric nào đó, mỗi lần đo thì báo kết quả xem đạt bao nhiêu %". Mục 1 chấm nghĩa theo `output_gold` bằng người/agent đọc; mục này bổ sung phép đo TỰ ĐỘNG, lặp lại được, ra con số %. Công cụ: [fixtures/tools/quality_score.py](fixtures/tools/quality_score.py) (chỉ thư viện chuẩn Python, không tải model, chạy offline hoặc qua API). Mỗi lần đo BẮT BUỘC báo dòng "ĐẠT x/y = z%" kèm chrF trung bình, bảng theo hướng dịch/loại đầu vào và danh sách mẫu trượt + lý do.
+
+**Metric chính: chrF** (n-gram ký tự bậc 1..6, beta=2, bỏ khoảng trắng; trung bình precision/recall theo bậc rồi F-beta; thang 0-100) so với bản dịch chuẩn (gold). Chọn chrF vì: không cần model/tải về, chạy ngay trên mọi văn tự (kể cả zh/ja/ko không có dấu cách), ổn định với biến thể diễn đạt hơn so khớp từng chuỗi; cùng công thức `secai-opt/quality.py` nên so được với số đo cũ (trung bình 69,9 trên 18 hướng BF16). Hạn chế đã biết: chrF đo độ giống bề mặt, KHÔNG thay việc đọc nghĩa (mục 1); nên dịch đúng nhưng khác cách nói vẫn bị trừ điểm.
+
+**Gold:** lấy từ [04-test-data.json](04-test-data.json): `output_gold.text` (ca tệp 18 hướng) và `output_gold.translated_text` (ca ảnh 18 hướng) — 36 cặp song song vi <-> en/zh/ja/ko/fr/de/es/ru/ar (18 đoạn dài ~1000 từ + 18 câu ngắn). Gold do bộ dữ liệu cung cấp từ trước (nguồn lưu trong chính 04-test-data.json); công cụ KHÔNG tự sinh gold bằng model và không chấm model bằng chính đầu ra của nó. Mẫu không có gold (ví dụ FILE-SENS-vi-en: `output_gold.text` rỗng, toàn bộ kho `fixtures/formats` và `formats-extra` — chỉ có literal/cấu trúc, chưa có bản dịch chuẩn, nên vẫn chấm bằng `check_output.py` chứ chưa có chrF) ghi "CHƯA CHẤM", không đưa vào mẫu số; chưa dùng round-trip (dịch đi dịch lại) vì sai lệch cộng dồn, ghi rõ là hạn chế.
+
+**Một mẫu ĐẠT khi và chỉ khi qua đồng thời 6 cổng:**
+- G0 Chạy: job `succeeded`, đầu ra không rỗng.
+- G1 chrF >= ngưỡng theo nhóm hướng dịch (bảng dưới).
+- G2 Tỉ lệ độ dài len(đầu ra)/len(gold) (đếm ký tự không khoảng trắng) trong [0,75; 1,30]; đích zh/ja/ko trong [0,60; 1,60].
+- G3 Không sót ngôn ngữ nguồn/lạ: <= 5% chữ cái thuộc hệ chữ không thuộc đích (CJK/Cyrillic/Ả Rập/Hangul/Kana... tùy đích; ví dụ đích tiếng Việt không được còn > 5% chữ Hán/Cyrillic/Ả Rập); đích không-Latin (ru, ar, zh, ja, ko) chữ Latin còn lại ngoài literal <= 15%. Literal (IP, URL, CVE, phiên bản, `preserve_literals`) được loại ra trước khi đếm.
+- G4 Không bỏ đoạn: số dòng không rỗng của đầu ra lệch gold <= 10% (tệp); với ảnh đếm khối cách nhau bằng dòng trống vì ảnh ngắt dòng theo bố cục hình.
+- G5 Giữ nguyên thông tin: mọi `preserve_literals` của ca + literal tự trích từ gold (URL, IPv4, CVE-năm-số, số phiên bản a.b.c) phải còn đúng từng ký tự, và không có marker lạ (`⟦⟧`, `[L0]`, `<L1>`, `[REDACTED`, `***`, "[đã ẩn]"). Kiểm đầy đủ theo mục 1b vẫn dùng `check_output.py` / `ocr_special_char_check.py`.
+
+**Ngưỡng chrF theo nhóm (có lý do — đặt thấp hơn số đo BF16 đã có để không báo trượt giả do dao động, nhưng đủ cao để bắt dịch hỏng):**
+
+| Nhóm hướng dịch | Mẫu dài/tệp | Mẫu ngắn/ảnh (gold < 400 ký tự) | Số đo tham chiếu (BF16, 18 hướng) và lý do |
+|---|---|---|---|
+| `to-vi` (en,zh,ja,ko,fr,de,es,ru,ar -> vi) | >= 60 | >= 50 | trung bình 72,2; ngưỡng ~ thấp hơn 12 điểm |
+| `from-vi-latin` (vi -> en,fr,de,es,ru,ar) | >= 55 | >= 45 | trung bình ~72-82 (en 81,7; fr 73,9); ngưỡng thấp hơn ~17 vì vi->ru/ar chưa có số riêng |
+| `from-vi-cjk` (vi -> zh,ja,ko) | >= 38 | >= 25 | vi->zh 45,4 (thấp do chrF tính theo ký tự, chữ Hán dày nghĩa nên ít n-gram trùng), ja 61,1, ko 59,8; ngưỡng thấp hơn zh ~7 điểm |
+
+Ngưỡng ngắn thấp hơn vì chrF trên câu ngắn dao động mạnh (ít n-gram). Ngưỡng là điểm xuất phát đặt theo số đo hiện có, KHÔNG phải mục tiêu chất lượng cuối cùng; khi có thêm lượt đo, chỉnh trong `CHRF_MIN` của công cụ và ghi lý do vào [10](10-nhat-ky-toi-uu.txt).
+
+**Công thức "Đạt X%" (điểm của lần đo):** Đạt X% = (số mẫu qua cả G0..G5) / (số mẫu đã chấm) x 100. Mẫu "CHƯA CHẤM" không nằm trong mẫu số nhưng PHẢI báo số lượng. Ngưỡng tổng: **>= 90%** thì lần đo ĐẠT (mã thoát 0; công cụ in lý do "x% >= 90%" hoặc "< 90%"). Ngoài ra luôn báo: chrF trung bình, ĐẠT theo từng nhóm hướng dịch (`to-vi` / `from-vi-latin` / `from-vi-cjk`), theo loại đầu vào (tệp/ảnh) và theo ngôn ngữ. Điểm này ĐỘC LẬP với "Đạt X/71" và "Đạt X/30": ghi thành dòng riêng "Chất lượng dịch: ĐẠT x/y = z% (chrF TB n)".
+
+**Cách chạy:**
+- Offline trên đầu ra có sẵn: `python3 fixtures/tools/quality_score.py --outputs <thư mục *.out.txt> --label <tiền tố> [--kinds file,image] [--json-out kq.json]`.
+- Qua API (tải lên thật; production giới hạn 5 lần tải lên/phút nên mặc định cách 13 giây): `python3 fixtures/tools/quality_score.py --api-url http://127.0.0.1:18185 --save-dir <thư mục> --json-out results/<tên>.json [--token-env BIEN | --token-file TEP]` (token chỉ gửi qua header, không in/không lưu).
+- Kiểm công cụ: `python3 -m unittest fixtures/tools/test_quality_score.py` (chrF với ví dụ biết trước + từng cổng + gold tự chấm phải ĐẠT 100%).
+
+1e. **Tải đồng thời (thêm 11/10/2026).** Hệ thống phải xử lý gọn khi nhiều tệp được gửi cùng lúc: (a) KHÔNG có HTTP 5xx, đứt kết nối hay poll_error ở bất kỳ mức đồng thời nào; (b) mọi job đã được nhận (202) đều kết thúc với succeeded, hoặc failed có mã + lý do (không treo, không timeout); tỉ lệ succeeded của job đã nhận >= 95%; (c) vượt giới hạn thì từ chối GỌN bằng 429 (`RATE_LIMITED`/`QUEUE_FULL`) chứ không lỗi; (d) báo thông lượng (tài liệu/phút, trang/phút) và p50/p95 thời gian tổng + thời gian xếp hàng. Mức tham chiếu stack thử (20 tệp trộn đồng thời): p95 <= 60 s, thông lượng >= 25 tài liệu/phút. Cách đo: `python3 fixtures/tools/loadtest.py --base <URL API> --concurrency 5|10|20|40 [--kinds text|ocr|all]` (mã thoát 0 = PASS).
+
 
 ## 2. Diễn giải theo `mode`
 

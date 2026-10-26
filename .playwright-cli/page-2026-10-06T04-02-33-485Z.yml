@@ -1,0 +1,81 @@
+- generic [ref=f10e3]:
+  - banner [ref=f10e4]:
+    - generic [ref=f10e5]: INTELLIGENT AUTOSCAN
+    - generic [ref=f10e11]:
+      - textbox "Tra cứu ip hoặc tên miền" [ref=f10e12]
+      - button "Tra cứu" [ref=f10e13] [cursor=pointer]
+    - generic [ref=f10e17]:
+      - generic [ref=f10e18]:
+        - text: Demo
+        - combobox "Vai trò demo" [ref=f10e19]:
+          - option "Người dùng thường"
+          - option "Admin" [selected]
+      - generic [ref=f10e20]: Hệ thống ổn định
+      - textbox "user_id (owner-scoping cho project/session/chat)" [ref=f10e22]: demo-admin
+  - generic [ref=f10e27]:
+    - complementary [ref=f10e28]:
+      - generic [ref=f10e29]:
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e30]: Dashboard
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e36]: Hệ thống ẩn danh
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e41]: Quét diện rộng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e49]: Quét chuyên sâu
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e52]: Kiểm thử lỗ hổng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e62]: Engine quét
+        - generic [ref=f10e66]: Nền tảng AI
+        - generic [ref=f10e69]:
+          - button "Dịch văn bản" [ref=f10e70] [cursor=pointer]
+          - button "Trợ lý ảo ATTT" [ref=f10e72] [cursor=pointer]
+          - button "Sinh mã khai thác" [ref=f10e74] [cursor=pointer]
+          - button "Báo cáo thông minh" [ref=f10e76] [cursor=pointer]
+          - button "Đánh giá A/B" [active] [ref=f10e78] [cursor=pointer]
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e80]: Data lake
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e85]: Thiết lập nguồn thu thập
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e89]: Quản lý lịch
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e94]: Báo cáo
+      - generic [ref=f10e98] [cursor=pointer]: Thu gọn
+    - main [ref=f10e101]:
+      - generic [ref=f10e187]:
+        - heading "Phản hồi A/B" [level=2] [ref=f10e189]
+        - generic [ref=f10e190]:
+          - paragraph [ref=f10e191]: Phản hồi được lưu thật. Bản demo dùng tài khoản chung cho mỗi vai trò.
+          - generic [ref=f10e193]:
+            - text: Đợt đánh giá
+            - combobox "Đợt đánh giá" [ref=f10e194]:
+              - option "Chọn đợt đánh giá"
+              - 'option "QA Devspace 2026-10-04: reward feedback · Đã đóng"'
+              - option "QA E2E Reward 1791184946341 — không dùng training · Đã đóng"
+              - option "QA E2E Reward 1791185001304 — không dùng training · Đã đóng"
+              - option "Đánh giá từ chat · Đang mở"
+              - option "QA E2E Reward 1791185127279 — không dùng training · Đã đóng"
+              - option "QA E2E Reward 1791185191573 — không dùng training · Đã đóng"
+              - option "QA E2E Reward 1791194785500 — không dùng training · Đã đóng"
+              - option "Demo 2 vai trò — QA, không dùng huấn luyện production · Đang mở"
+              - option "QA DEMO · Vast Qwen3 · 1000 cặp · 20261006 · Đã đóng" [selected]
+          - group [ref=f10e195]:
+            - generic "Quản lý đợt đánh giá" [ref=f10e196] [cursor=pointer]
+          - generic [ref=f10e229]:
+            - generic [ref=f10e230]:
+              - heading "Phản hồi · QA DEMO · Vast Qwen3 · 1000 cặp · 20261006" [level=3] [ref=f10e231]
+              - button "Làm mới" [disabled] [ref=f10e232]
+            - paragraph [ref=f10e233]: Chọn câu hỏi, xem phản hồi, rồi duyệt đáp án tốt hơn hoặc loại mẫu.
+            - status [ref=f10e234]: Đang tải phản hồi…
+            - generic [ref=f10e235]:
+              - generic [ref=f10e236]:
+                - heading "Huấn luyện model chấm điểm" [level=4] [ref=f10e237]
+                - paragraph [ref=f10e238]: Chưa kết nối dịch vụ huấn luyện.
+                - paragraph [ref=f10e239]: Mẫu QA chỉ để kiểm thử; model mới chưa đưa vào chatbot.
+              - generic [ref=f10e240]:
+                - button "Huấn luyện model chấm điểm" [disabled] [ref=f10e241]
+                - button "Cập nhật trạng thái" [ref=f10e242] [cursor=pointer]
+            - group "Lọc phản hồi" [ref=f10e243]:
+              - button "Chờ duyệt" [pressed] [ref=f10e244] [cursor=pointer]
+              - button "Đã duyệt" [ref=f10e245] [cursor=pointer]
+              - button "Đã loại" [ref=f10e246] [cursor=pointer]
+              - button "Tất cả" [ref=f10e247] [cursor=pointer]
+            - generic [ref=f10e248]:
+              - generic "Danh sách câu hỏi"
+              - generic [ref=f10e249]:
+                - heading "Xem và duyệt phản hồi" [level=3] [ref=f10e250]
+                - paragraph [ref=f10e251]: Chọn một câu hỏi trong danh sách để xem hai đáp án và lựa chọn đã lưu.
+            - group [ref=f10e252]:
+              - generic "Công cụ nâng cao" [ref=f10e253] [cursor=pointer]

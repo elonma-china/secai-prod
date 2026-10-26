@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -80,7 +81,7 @@ def _date_line() -> str:
     return f"[Hôm nay là {weekday}, ngày {today} (giờ Việt Nam)]"
 
 
-def _ephemeral_context_text(profile_name: str, grounding_context: str | None) -> str | None:
+def _ephemeral_context_text(profile_name: str, grounding_context: str | None, scope_context: str | None = None) -> str | None:
     """Build the per-turn ephemeral context text (date + optional KB grounding block)
     for ``session.meta["ephemeral_context"]`` — see ``_date_line`` and
     ``EphemeralTurnContextHook`` (agent/hooks.py) for why this is a separate channel
@@ -140,6 +141,8 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
         parts.append(_date_line())
     if grounding_context:
         parts.append(grounding_context)
+    if scope_context:
+        parts.append(scope_context)
     if not parts:
         return None
     body = "\n\n".join(parts)
@@ -158,9 +161,9 @@ def _ephemeral_context_text(profile_name: str, grounding_context: str | None) ->
 
 class CompletionRunner(Protocol):
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
-                        *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]: ...
+                        *, grounding_context: str | None = None, scope_context: str | None = None) -> tuple[str, dict[str, Any]]: ...
     def stream(self, profile_name: str, prompt: str, session_id: str | None = None,
-               *, grounding_context: str | None = None) -> AsyncIterator[Any]: ...
+               *, grounding_context: str | None = None, scope_context: str | None = None) -> AsyncIterator[Any]: ...
 
 
 class LinchRunner:
@@ -232,7 +235,7 @@ class LinchRunner:
         self._translation_agent: Any | None = None
 
     def _agent_for(self, profile_name: str) -> Any:
-        if profile_name != "translate_v2":
+        if profile_name not in ("translate_v2", "translate"):  # translation: deterministic decoding
             return self.agent
         if self._translation_agent is None:
             provider, model = build_llm_provider(temperature_override=0.0)
@@ -244,7 +247,7 @@ class LinchRunner:
         return self._translation_agent
 
     def _apply_profile(self, session: Any, profile_name: str, prompt: str = "",
-                        *, grounding_context: str | None = None) -> None:
+                        *, grounding_context: str | None = None, scope_context: str | None = None) -> None:
         if profile_name == "translation_orchestrator" and "translation_specialist" not in self.tools:
             raise RuntimeError("Translation specialist is unavailable")
         # Override both runnable registry and system context per session. The exploit tools
@@ -255,6 +258,10 @@ class LinchRunner:
         session.tools_override = empty_tools(
             *(self.tools[name] for name in profile.tool_names if name in self.tools))
         session.system_blocks_override = [SystemBlock(text=compose_system_prompt(profile, settings=get_settings()))]
+        if scope_context:
+            session.system_blocks_override.append(SystemBlock(text=
+                "Trong lượt này chỉ trả lời các câu hỏi ATTT được chọn, không làm nhiệm vụ ngoài phạm vi."
+                + scope_context))
         # RequireChatGroundingHook reads last_user_prompt from session.meta. `prompt` here
         # is always the caller's ORIGINAL, unwrapped text (routes.py no longer bakes KB
         # grounding/date into it) — session.meta is in-memory-only (set via plain attribute
@@ -262,6 +269,12 @@ class LinchRunner:
         # SessionRecord/`GET /sessions/{sid}` endpoints.
         meta = dict(getattr(session, "meta", None) or {})
         meta["profile"] = profile.name
+        meta["scope_user_prompt"] = None
+        if scope_context:
+            requests = json.loads(scope_context)
+            if not isinstance(requests, list) or not requests or not all(isinstance(x, str) and x.strip() for x in requests):
+                raise ValueError("Invalid selected security requests")
+            meta["scope_user_prompt"] = "\n".join(requests)
         if prompt:
             meta["last_user_prompt"] = prompt
         # Explicit flag replacing the old "sniff CHAT_PRE_FETCH_MARKER inside the persisted
@@ -272,7 +285,7 @@ class LinchRunner:
         # Per-turn context delivered via EphemeralTurnContextHook (agent/hooks.py) — the
         # date line (skipped for translate) plus, for chat, the pre-fetched KB grounding
         # block. Never part of the string passed to session.run(), so never persisted.
-        meta["ephemeral_context"] = _ephemeral_context_text(profile_name, grounding_context)
+        meta["ephemeral_context"] = _ephemeral_context_text(profile_name, grounding_context, scope_context)
         session.meta = meta
 
     @asynccontextmanager
@@ -300,14 +313,14 @@ class LinchRunner:
                 del self._session_locks[session_id]
 
     async def complete(self, profile_name: str, prompt: str, session_id: str | None = None,
-                        *, grounding_context: str | None = None) -> tuple[str, dict[str, Any]]:
+                        *, grounding_context: str | None = None, scope_context: str | None = None) -> tuple[str, dict[str, Any]]:
         if (profile_name == "translation_orchestrator" and
                 not isinstance(self.session_store, InMemorySessionStore)):
             raise RuntimeError("Translation orchestration requires in-memory sessions")
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
-            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
+            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context, scope_context=scope_context)
             final = ""
             delegated = None
             run_id = None
@@ -365,7 +378,7 @@ class LinchRunner:
         return final, metadata
 
     async def stream(self, profile_name: str, prompt: str, session_id: str | None = None,
-                      *, grounding_context: str | None = None):
+                      *, grounding_context: str | None = None, scope_context: str | None = None):
         """Yield raw linch run events (SystemEvent, ToolCallStart/End, PartialAssistant,
         Result, …) so the caller can render tool calls separately from assistant text
         over SSE. Applies the same per-profile tool/system override as ``complete()`` —
@@ -373,7 +386,7 @@ class LinchRunner:
         async with self._session_lock(session_id):
             profile = PROFILES[profile_name]
             session = await self._agent_for(profile_name).session(id=session_id, meta={"profile": profile.name})
-            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context)
+            self._apply_profile(session, profile_name, prompt, grounding_context=grounding_context, scope_context=scope_context)
             salvageable = profile_name in _SALVAGE_PROFILES
             got_text = False
             turn_limited = False

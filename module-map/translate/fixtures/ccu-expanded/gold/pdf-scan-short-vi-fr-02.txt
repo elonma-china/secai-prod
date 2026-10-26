@@ -1,0 +1,20 @@
+SecAI pdf-scan-short-vi-fr-02-p01
+[pdf-scan-short-vi-fr-02-p01-0000] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[pdf-scan-short-vi-fr-02-p01-0001] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[pdf-scan-short-vi-fr-02-p01-0002] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[pdf-scan-short-vi-fr-02-p01-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[pdf-scan-short-vi-fr-02-p01-0004] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[pdf-scan-short-vi-fr-02-p01-0005] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[pdf-scan-short-vi-fr-02-p01-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[pdf-scan-short-vi-fr-02-p01-0007] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[pdf-scan-short-vi-fr-02-p01-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[pdf-scan-short-vi-fr-02-p01-0009] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[pdf-scan-short-vi-fr-02-p01-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+Keywords: audit11 audit12 audit13 audit14
+Account: svc_ccu_2a59c31c
+Password: Pw8352eb2d!0&*()_+
+URL: https://2a59c31c.example.org/audit?id=2775491&mode=test
+IP: 192.0.2.242:8491
+CVE: CVE-2024-4491
+Email: audit.2a59c31c@example.org
+Key: sk-test-1b1279f8c41ab148

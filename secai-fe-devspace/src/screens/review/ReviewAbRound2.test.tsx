@@ -24,7 +24,8 @@ test('stat tiles show real totals per status and filter by pressing them (incl. 
  await waitFor(()=>expect(within(group).getByRole('button',{name:/Đã duyệt/}).textContent).toContain('3'));
  expect(within(group).getByRole('button',{name:/Chờ duyệt/}).textContent).toContain('7');
  expect(within(group).getByRole('button',{name:/Đã loại/}).textContent).toContain('2');
- expect(within(group).getByRole('button',{name:/Tất cả/}).textContent).toContain('12');
+ expect(within(group).queryByRole('button',{name:/Tất cả/})).toBeNull();
+ expect(within(group).getAllByRole('button')).toHaveLength(3);
  expect(within(group).getByRole('button',{name:/Chờ duyệt/}).getAttribute('aria-pressed')).toBe('true');
  fireEvent.click(within(group).getByRole('button',{name:/Đã duyệt/}));
  await waitFor(()=>expect(a.overview).toHaveBeenCalledWith('approved','all','',0));

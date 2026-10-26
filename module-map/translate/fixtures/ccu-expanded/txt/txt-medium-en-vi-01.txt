@@ -1,0 +1,46 @@
+SecAI txt-medium-en-vi-01
+[txt-medium-en-vi-01-0000] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[txt-medium-en-vi-01-0001] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0002] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[txt-medium-en-vi-01-0003] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[txt-medium-en-vi-01-0004] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[txt-medium-en-vi-01-0005] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[txt-medium-en-vi-01-0006] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0007] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[txt-medium-en-vi-01-0008] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0009] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0010] Analysts compare network alerts with application logs before opening an incident.
+[txt-medium-en-vi-01-0011] Analysts compare network alerts with application logs before opening an incident.
+[txt-medium-en-vi-01-0012] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[txt-medium-en-vi-01-0013] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0014] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0015] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0016] A vulnerability report describes the affected asset, business impact and remediation steps.
+[txt-medium-en-vi-01-0017] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0018] Analysts compare network alerts with application logs before opening an incident.
+[txt-medium-en-vi-01-0019] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0020] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0021] The maintenance window requires a tested backup and a documented recovery procedure.
+[txt-medium-en-vi-01-0022] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0023] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0024] The security team reviews access permissions and records the owner of each service.
+[txt-medium-en-vi-01-0025] A vulnerability report describes the affected asset, business impact and remediation steps.
+[txt-medium-en-vi-01-0026] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0027] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0028] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0029] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[txt-medium-en-vi-01-0030] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0031] The security team reviews access permissions and records the owner of each service.
+[txt-medium-en-vi-01-0032] Every change is tested with representative documents before release to the customer.
+[txt-medium-en-vi-01-0033] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0034] The security team reviews access permissions and records the owner of each service.
+[txt-medium-en-vi-01-0035] The inventory includes databases, network devices, endpoints and their responsible teams.
+[txt-medium-en-vi-01-0036] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+Keywords: audit37
+Account: svc_ccu_3401c4ea
+Password: Pw2f8da346!0&*()_+
+URL: https://3401c4ea.example.org/audit?id=3408324&mode=test
+IP: 192.0.2.75:8324
+CVE: CVE-2024-7324
+Email: audit.3401c4ea@example.org
+Key: sk-test-ecc9babbc72d0045

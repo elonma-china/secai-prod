@@ -1,0 +1,59 @@
+SecAI png-within-limits-medium-vi-ja-04
+[png-within-limits-medium-vi-ja-04-0000] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0001] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0002] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0003] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0004] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0005] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0007] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0008] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-medium-vi-ja-04-0009] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0010] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-within-limits-medium-vi-ja-04-0011] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-within-limits-medium-vi-ja-04-0012] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-medium-vi-ja-04-0013] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0014] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0015] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0016] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0017] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0018] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-medium-vi-ja-04-0019] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0020] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0021] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0022] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0023] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-medium-vi-ja-04-0024] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-within-limits-medium-vi-ja-04-0025] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-within-limits-medium-vi-ja-04-0026] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0027] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-within-limits-medium-vi-ja-04-0028] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0029] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0030] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0031] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0032] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0033] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0034] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0035] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0036] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0037] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0038] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[png-within-limits-medium-vi-ja-04-0039] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-medium-vi-ja-04-0040] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0041] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0042] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-within-limits-medium-vi-ja-04-0043] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0044] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-medium-vi-ja-04-0045] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-medium-vi-ja-04-0046] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[png-within-limits-medium-vi-ja-04-0047] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-within-limits-medium-vi-ja-04-0048] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-within-limits-medium-vi-ja-04-0049] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+Keywords: audit50 audit51 audit52 audit53 audit54 audit55 audit56 audit57
+Account: svc_ccu_0596e06f
+Password: Pwe247c428!0&*()_+
+URL: https://0596e06f.example.org/audit?id=366304&mode=test
+IP: 192.0.2.55:8304
+CVE: CVE-2024-7304
+Email: audit.0596e06f@example.org
+Key: sk-test-d58b2381f1334c7e

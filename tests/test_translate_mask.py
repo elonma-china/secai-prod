@@ -281,7 +281,10 @@ def test_translate_prompt_forged_closing_tag_inside_text_is_neutralized():
     prompt, _literals = build_translate_prompt(forged, None, "en")
     # exactly one real closing tag (the one this function added) — the forged one is escaped
     assert prompt.count("</untrusted_retrieved_content>") == 1
-    assert "&lt;/untrusted_retrieved_content&gt;" in prompt
+    # (lossless-translate change: the forged tag is now masked as a literal, so the model
+    # never sees it AND it is restored verbatim instead of being angle-escaped)
+    assert "&lt;/untrusted_retrieved_content&gt;" not in prompt
+    assert "</untrusted_retrieved_content>" in _literals
 
 
 @pytest.mark.parametrize("src,tgt", [(None, "en"), ("vi", "en"), (None, None)])

@@ -10,7 +10,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-VAST_IID="${VAST_IID:-48080054}"          # instance vast (đổi khi thuê máy khác)
+VAST_IID="${VAST_IID:-$(sed -n 's/^VAST_INSTANCE_ID=//p' .env 2>/dev/null | head -n 1)}"
 DATA="/home/ict/AIEngines/secai/secai-data"
 C='\033[1;36m'; G='\033[1;32m'; Y='\033[1;33m'; D='\033[0;90m'; N='\033[0m'
 hr(){ printf "${D}%s${N}\n" "────────────────────────────────────────────────────────────────────────"; }

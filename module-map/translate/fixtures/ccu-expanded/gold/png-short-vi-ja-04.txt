@@ -1,0 +1,13 @@
+SecAI png-short-vi-ja-04
+[png-short-vi-ja-04-0000] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-short-vi-ja-04-0001] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[png-short-vi-ja-04-0002] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-short-vi-ja-04-0003] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+Keywords: audit4 audit5 audit6 audit7 audit8 audit9
+Account: svc_ccu_09f53abc
+Password: Pw7de41283!0&*()_+
+URL: https://09f53abc.example.org/audit?id=652602&mode=test
+IP: 192.0.2.103:8602
+CVE: CVE-2024-5602
+Email: audit.09f53abc@example.org
+Key: sk-test-d05c1302fa23b5c9

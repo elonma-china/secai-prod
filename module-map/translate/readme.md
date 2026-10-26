@@ -1,5 +1,9 @@
 # Context chức năng dịch SecAI
 
+**Bộ lớn đã đo production (13–14/10/2026):** [dataset](fixtures/ccu-within-limits/README.md), [kết quả đánh giá](optimization/results/ccu-production-20261013/summary.md), [report HTML](optimization/results/ccu-production-20261013/report.html). 155 mẫu trong giới hạn; tài liệu/scan 10–30–60 trang; 1.538 yêu cầu tải qua 8131. File/ảnh đo tới 30 VU; scan/mixed dừng tăng sau mức 20 có timeout. Chất lượng và thời gian chờ báo riêng, giữ nguyên production.
+
+**Dataset CCU mở rộng (13/10/2026):** [fixtures/ccu-expanded/README.md](fixtures/ccu-expanded/README.md) — text/tệp/ảnh/PDF scan nhiều độ dài, manifest riêng và ca khó. Đây là dữ liệu chuẩn bị bench; chưa có số đo tải mới. Runner CCU cũ chưa tiêu thụ manifest này.
+
 Cập nhật theo checkout ngày **09/10/2026**. Thư mục này cung cấp bản đồ API, hành vi giao diện và quy trình kiểm thử dịch như người dùng thường. Nội dung đối chiếu mã nguồn hiện có; kết quả quan sát môi trường chạy được ghi riêng, không xem danh sách ca kiểm thử là bằng chứng đã chạy.
 
 ## Nếu bạn là agent được yêu cầu "đọc file readme của thư mục này" — làm ngay theo thứ tự sau
@@ -15,6 +19,87 @@ Cập nhật theo checkout ngày **09/10/2026**. Thư mục này cung cấp bả
 
 Không hỏi lại người dùng "có nên chạy không" nếu đây đúng là tình huống "đọc readme của thư mục này" — tự chạy theo quy trình trên là hành vi mặc định đã được xác nhận trước (xem lịch sử quyết định trong các mục bên dưới).
 
+## Kho mẫu đa định dạng và lấy mẫu đánh giá (10/10/2026)
+
+**Kho mẫu** nằm ở [fixtures/formats/](fixtures/formats/) — 118 tệp, danh mục + cấu trúc + literal cần giữ ở [fixtures/formats/manifest.json](fixtures/formats/manifest.json). Nội dung kỹ thuật và thông tin đăng nhập là GIẢ (tài khoản `svc_backup_01`, mật khẩu `P@ss!w0rd#2026$%^&*()_+`, URL có tham số, IP:cổng, CVE, email, khóa) — dùng kiểm quy tắc giữ nguyên thông tin ([03](03-tieu-chi-pass.txt) mục 1b).
+
+| Định dạng | Thư mục | Ngắn (`short`) | Dài (`long`) | Ngôn ngữ |
+|---|---|---|---|---|
+| DOCX | `formats/docx/` | 1 trang: tiêu đề, đoạn, 3 gạch đầu dòng, bảng 3 cột | ~4-6 trang: nhiều mục, danh sách, 2 bảng | 10 |
+| XLSX | `formats/xlsx/` | 1 sheet, 8 dòng, ô gộp, công thức SUM | 3 sheet x 150 dòng | 10 |
+| PDF có lớp chữ | `formats/pdf/` | 1 trang | 3-4 trang, nhiều mục | 8 (không có `ko`, `ar`: công cụ sinh không nhúng được font Hàn / ghép chữ Ả Rập) |
+| PDF scan (chỉ ảnh, không lớp chữ) | `formats/pdf-scan/` | 1 trang | 3 trang | 10 |
+| PNG | `formats/png/` | ~1200px, 3 câu + 7 dòng literal | A4 150dpi, dày chữ | 10 |
+| JPG | `formats/jpg/` | như PNG (đoạn văn khác) | như PNG (đoạn văn khác) | 10 |
+| Rất lớn (`xl`, chỉ `en`) | `xlsx/xl-en.xlsx`, `pdf-scan/xl-en.pdf` | — | XLSX 5.000 dòng; PDF scan 20 trang | kiểm dung lượng/thời gian, không vào mẫu 30 |
+
+Tệp DOCX 20 trang có bảng và TXT dài có sẵn ở `fixtures/files/` (`en-long-20pages.docx`, `docx-tables/L1`, `L2`, `en-long-3000.txt`).
+
+**`.doc` (Word 97-2003):** `formats/doc/short-en.doc`, `formats/doc/long-en.doc`, `formats-extra/pentest-report-vi.doc` — sinh bằng `soffice --headless --convert-to doc` (image `secai-doc-converter:1`) từ docx cùng tên; chưa đăng ký trong manifest. Dịch `.doc` cần worker và gateway gọi được `docker` + image converter (xem optimization/README.md).
+
+Sinh lại kho (xác định, cùng nội dung): `python fixtures/tools/gen_format_fixtures.py` (cần `python-docx openpyxl reportlab pillow pypdf`; ghi đè `fixtures/formats/`).
+
+### Tài liệu mẫu theo ca người dùng (09) — `fixtures/formats-extra/`
+
+[09-case-tai-lieu-nguoi-dung-co-the-thu.txt](09-case-tai-lieu-nguoi-dung-co-the-thu.txt) liệt kê 169 ca tài liệu người dùng có thể thử (nhóm A-I, ưu tiên P0/P1/P2; chưa chạy ca nào). **Đợt 1 = 20 ca P0 đã có tệp mẫu** ở [fixtures/formats-extra/](fixtures/formats-extra/), danh mục + literal cần giữ + kiểm tra riêng từng ca ở [fixtures/formats-extra/manifest.json](fixtures/formats-extra/manifest.json) (22 mục, ~5 MB, dữ liệu GIẢ):
+
+| Ca | Tệp mẫu | Kiểm gì |
+|---|---|---|
+| UC-C02 / C01 | `sensitive-specialchars-vi.txt` (32 mật khẩu, mỗi ký tự đặc biệt một dòng), `creds-30pairs-vi.txt` | mất/đổi mật khẩu, tài khoản |
+| UC-C07 | `connstrings-en.txt` (chuỗi kết nối, JWT, PEM, khóa SSH) | literal dài, khối nhiều dòng |
+| UC-C12 / C13 | `config-json-vi.txt`, `config-yaml.txt` | JSON/YAML còn parse được, khóa không đổi |
+| UC-C15 | `log-200lines.txt` | số dòng ra = vào |
+| UC-C24 | `ioc-table-vi.docx` (101 hàng IOC defang) | cấu trúc bảng + literal |
+| UC-A01 | `pentest-report-vi.docx` (bảng phát hiện, khối lệnh Courier) | cấu trúc + lệnh nguyên văn |
+| UC-B02 | `nested-tables-vi.docx` (bảng 3x3 chứa 2x2) | bảng lồng |
+| UC-A08 / B08 / B10 / B13 | `inventory-300rows-vi.xlsx`, `sheets-special-names.xlsx`, `formulas-vi.xlsx`, `numbers-dates-vi.xlsx` | XLSX: ô gộp, tên sheet, công thức không bị dịch, số/ngày |
+| UC-A07 | `invoice-en.pdf` (bảng + IBAN) | PDF có lớp chữ, bảng |
+| UC-E18 / E07 | `mixed-scan-text-5p.pdf`, `scan-10p-with-blank.pdf` | PDF trộn scan + chữ; trang trắng/nhiễu |
+| UC-E10 | `terminal-nmap-dark.png` | OCR chữ sáng trên nền tối |
+| UC-G08 / G06 / G07 | `zipbomb-ratio.docx`, `zip-many-entries.docx`, `docx-external-rel.docx`, `docx-xxe.docx` | từ chối an toàn (413 ARCHIVE_LIMIT_EXCEEDED / UNSAFE_DOCUMENT), không có `/etc/passwd` trong đầu ra |
+| UC-H01 / H02 | mục `batch` trong manifest (5 tệp hợp lệ, 6 tệp vượt giới hạn) | giới hạn 5 tệp, rate-limit |
+
+Sinh lại: `python fixtures/tools/gen_case_fixtures.py`. UC-I02 dùng đầu ra của UC-C02. Các tệp "độc hại" chỉ để kiểm hệ thống của chính mình từ chối đúng.
+
+**Kiểm "giữ nguyên thông tin" tự động** ([03](03-tieu-chi-pass.txt) mục 1b — mật khẩu, tài khoản, IP, email, URL, khóa, CVE, ký tự đặc biệt phải còn nguyên từng ký tự): `python3 fixtures/tools/check_output.py --id UC-C02 --output <bản dịch.txt>` in "literal giữ X/Y", liệt kê giá trị thiếu, báo marker lạ (`⟦⟧`, `[L0]`, `[REDACTED]`, `***`), kiểm số dòng, JSON parse, chuỗi cấm. Thiếu dù một ký tự = FAIL. Công cụ không chấm nghĩa dịch; nghĩa chấm theo 03 mục 1.
+
+## Quy tắc triển khai (bắt buộc, thêm 11/10/2026)
+Mỗi lần cập nhật mã/cấu hình dịch phải **test lại trước, rồi mới triển khai production**; ghi vào đây và vào [10-nhat-ky-toi-uu.txt](10-nhat-ky-toi-uu.txt):
+1. Dựng/áp trên stack thử (cổng 18285, `optimization/scripts/run_stack.sh`), KHÔNG áp thẳng vào production.
+2. Test lại tối thiểu: (a) bộ P0 `p0run.py` (16 ca giữ-nguyên-thông-tin PASS + 4 ca tệp độc hại bị từ chối đúng, trừ ca đã chủ động đổi kỳ vọng như UC-G06), (b) OCR: `fixtures/tools/ocr_special_char_check.py` đủ 40/40 nếu đụng OCR, (c) một vòng 30 mẫu (15 dài + 15 ngắn) nếu đụng pipeline, (d) tốc độ giây/trang so với số trước.
+3. Ghi kết quả (đạt/không, số đo trước → sau) và việc CHƯA test vào nhật ký TRƯỚC khi triển khai; mục nào chưa test thì ghi rõ "chưa test lại", không coi là đã xong.
+3b. Test cả đường LỖI của API (mã ngôn ngữ sai → 400, job không tồn tại → 404, vượt giới hạn tần suất → 429, tệp bị từ chối → job failed có lý do) — một lần đổi tên hàm đã làm mọi phản hồi lỗi thành HTTP 500 (T45).
+4. Triển khai production bằng quy trình có khóa + đường lui (`/home/ict/secai-releases/<bản>/rollback.sh`), kiểm không có job đang chạy, rồi test lại qua cổng 8131 và giao diện IAS.
+**Đang chờ test lại (đã nằm trong image production `translate-opt-20261011c` nhưng CHƯA kiểm riêng):** patch chồng OCR↔dịch của agent B (cờ `TRANSLATE_V2_SPEC_TRANSLATE_ENABLED` mặc định TẮT — chưa bật, chưa đo lại); adapter OCR song song dải CHƯA ghép vào VM.
+
+**Test tải (gửi đồng thời nhiều tệp):** `python3 fixtures/tools/loadtest.py --base http://127.0.0.1:18285 --concurrency 20 [--kinds text|ocr|all]` — báo nhận/từ chối (429 gọn), thành công/thất bại, xếp hàng, p50/p95, thông lượng, lỗi 5xx; xem [03](03-tieu-chi-pass.txt) mục 1e và kết quả ở optimization/results/load/. Trên production giới hạn 5 upload/phút và 5 job/IP sẽ cho 429 (hợp lệ).
+
+**Đo CCU (người dùng đồng thời):** `flock /tmp/translate-gpu-test.lock python3 fixtures/tools/ccu_translate.py --base http://127.0.0.1:18285 --levels 20,25,30 --runs 3 --duration 240 --ramp 30 --json optimization/results/ccu/ccu-N.json --html optimization/results/ccu/ccu-N.html` (mỗi mức đo 3 lần, nghỉ 40 s giữa các lần, kết luận theo TRUNG BÌNH; `--levels` chỉ nhận 20/25/30, hoặc dùng `--users N` cho 1 mức; ~15 phút/mức) (mỗi VU: tải tệp → poll → nghỉ 5-20 s; 70% chữ/30% OCR, 20% dài; ĐẠT khi 0 lỗi 5xx/timeout, succeeded >= 99%, p95 ngắn <= 30 s, dài <= 120 s). Luôn in kết quả ra terminal (từng lần + trung bình); `--html` xuất thêm báo cáo HTML tự chứa (bảng PASS/FAIL theo mức + biểu đồ p95/thông lượng nhúng ảnh, không cần mạng — ví dụ [ccu-smoke-20261011.html](optimization/results/ccu-smoke-20261011.html)). Chỉ chạy trên stack thử (dựng bằng /home/ict/secai-opt/stack_exp.sh, cần tunnel test 28868/28083 mở), từ chối chạy vào :8131/:18185. Kết quả: [ccu-report-20261011.md](optimization/results/ccu-report-20261011.md).
+
+**Kiểm OCR mức pipeline (ảnh + PDF scan):** `python3 fixtures/tools/ocr_pipeline_check.py --base http://127.0.0.1:18285 --concurrency 3` — gửi 60 tệp (png/jpg/pdf-scan × 10 ngôn ngữ × dài/ngắn) qua API, kiểm giá trị nhạy cảm trong bản dịch, báo ký tự bị rớt/đảo và giây/trang; khác `ocr_special_char_check.py` (gọi thẳng OCR trên ảnh gốc, không thấy lỗi do phóng ảnh/render trang).
+
+**Nhật ký tối ưu:** [10-nhat-ky-toi-uu.txt](10-nhat-ky-toi-uu.txt) — mỗi lần tối ưu ghi 1 ý (ngày, thay đổi, số đo trước → sau, nơi lưu mã). Tối ưu mới thì thêm dòng cuối tệp này.
+
+**Kiểm OCR từng ký tự** ([03](03-tieu-chi-pass.txt) mục 1b.7 — ảnh/PDF scan không được rớt/đổi/đảo ký tự đặc biệt như `&`): `python3 fixtures/tools/ocr_special_char_check.py --ocr-url <URL OCR> --token-file <token>` chạy OCR trực tiếp trên 40 ảnh `fixtures/formats/{png,jpg}`, in literal đủ x/y, ký tự hay bị rớt, mã thoát 0 = PASS (phải 100%). Hiện CHƯA ĐẠT (xem optimization/README.md).
+
+**Chấm chất lượng bản dịch có % ([03](03-tieu-chi-pass.txt) mục 1d, thêm 11/10/2026):** `python3 fixtures/tools/quality_score.py --api-url http://127.0.0.1:18185 --save-dir <thư mục> --json-out results/<tên>.json` (hoặc `--outputs <thư mục *.out.txt> --label <tiền tố>` để chấm đầu ra có sẵn, offline). Metric chính chrF so với gold trong [04-test-data.json](04-test-data.json) + cổng phụ (tỉ lệ độ dài, không sót chữ ngôn ngữ nguồn, không bỏ đoạn, giữ literal/không marker). In bảng từng mẫu và dòng "ĐẠT x/y = z%"; mã thoát 0 nếu z >= 90. Cách 13 giây giữa các lần tải lên (production 5/phút). Token (nếu cần) qua `--token-env`/`--token-file`, không bao giờ in/ghi. Test: `python3 -m unittest fixtures/tools/test_quality_score.py`. **Yêu cầu: MỖI LẦN ĐO (mỗi vòng, mỗi lần sau khi sửa/deploy) phải báo "Chất lượng dịch: ĐẠT x/y = z%, chrF TB n" kèm mẫu trượt và lý do, ghi vào đầu file kết quả `results/`.**
+
+### Lấy mẫu đánh giá — mỗi vòng 30 tài liệu ngẫu nhiên, dài : ngắn = 15 : 15
+
+Mỗi **vòng** (test -> kiểm -> cải tiến) lấy **30 tài liệu ngẫu nhiên có phân tầng** (tệp + ảnh) từ kho [fixtures/formats/](fixtures/formats/) (118 tệp), không chọn tay:
+
+- **Tỉ lệ bằng nhau: 15 dài + 15 ngắn.** 6 định dạng x 5 mẫu (DOCX, XLSX, PDF có lớp chữ, PDF scan, PNG, JPG). 3 định dạng (chọn ngẫu nhiên theo seed) lấy 3 dài + 2 ngắn, 3 định dạng còn lại 2 dài + 3 ngắn. Ưu tiên ngôn ngữ khác nhau trong cùng định dạng. Mẫu `xl` kiểm riêng, không vào 30.
+- Lệnh: `python3 fixtures/tools/pick_eval_sample.py [--seed N] [--json]`. Mỗi vòng dùng **seed mới**; ghi seed vào đầu file kết quả (`results/YYYY-MM-DD-NN.txt`) để chạy lại đúng bộ mẫu. Công cụ từ chối ra bộ không đúng 15:15.
+- Mẫu 30 này là bộ NGẪU NHIÊN để tránh học vẹt; 20 ca P0 ở trên là bộ HỒI QUY CỐ ĐỊNH, chạy ở vòng đầu và sau mỗi lần sửa liên quan.
+
+**Vòng lặp test -> kiểm -> cải tiến (mỗi vòng):**
+
+1. **Test:** lấy 30 mẫu bằng `pick_eval_sample.py --seed <mới>`; gửi từng mẫu qua API v2 hoặc UI theo [02](02-test-giao-dien-tung-buoc.txt) mục 9 (ghi lại ngôn ngữ đích; hướng dịch xoay vòng để phủ 9 ngôn ngữ). Agent chạy test chỉ ĐO và ghi kết quả (không tự sửa), tuần tự vì chỉ có 1 GPU.
+2. **Kiểm:** (0) chạy `quality_score.py` và báo "Chất lượng dịch: ĐẠT x/y = z%" (03 mục 1d) trên các hướng/mẫu có gold của vòng; với mỗi mẫu áp [03](03-tieu-chi-pass.txt): (a) mục 1 nghĩa/ngôn ngữ đích; (b) mục 1b giữ nguyên thông tin, dùng `check_output.py` hoặc so chuỗi con với `preserve_literals` trong manifest; (c) mục 1c: giữ cấu trúc, hỗ trợ đúng loại tệp/OCR, **tốc độ ~1-3 giây/trang** (tài liệu 20 trang <= 60 giây). Ghi "Đạt X/30", chia theo dài/ngắn và theo định dạng, kèm thời gian thật mỗi mẫu.
+3. **Cải tiến:** gom lỗi theo nguyên nhân (OCR / dịch / cấu trúc / tốc độ / loại tệp), sửa trong nhánh riêng, **không deploy lên production khi chưa được xác nhận**; kiểm bằng stack thử nghiệm cô lập. Mỗi sửa phải kèm test tái hiện lỗi.
+4. **Vòng sau:** chạy lại các mẫu FAIL của vòng trước + **30 mẫu mới** (seed mới) + các ca P0 liên quan. Dừng khi 2 vòng liên tiếp đều không có FAIL mới ở phần nghĩa/giữ thông tin/tốc độ.
+- Điểm ghi riêng cho phần này: "Đạt X/30 (tệp/ảnh)"; không cộng vào điểm 71 ca của phiên đầy đủ.
+
 ## Đọc theo thứ tự
 
 | File | Nội dung |
@@ -24,6 +109,7 @@ Không hỏi lại người dùng "có nên chạy không" nếu đây đúng l�
 | [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) | Tiêu chí PASS/FAIL/BLOCKED, checklist và mẫu báo cáo |
 
 > **Quy tắc bắt buộc (10/10/2026):** mọi ca dịch ảnh/file/text phải GIỮ NGUYÊN toàn bộ thông tin — không che, không xóa, không đổi giá trị (mật khẩu, tài khoản, khóa, token, IP, URL, email, CVE, chữ CJK…). Xem [03](03-tieu-chi-pass.txt) mục 1b; 3 ca bắt buộc ở khóa `integrity_cases` trong 04 (phiên đầy đủ = 68 + 3 = 71 ca). Bị từ chối vì thông tin nhạy cảm = FAIL.
+> **Phản hồi nghiệm thu (10/10/2026):** còn mất dữ liệu tài khoản/mật khẩu/ký tự đặc biệt; dịch tệp cần scan (kể cả ảnh) quá chậm; cần giữ nguyên cấu trúc; phải hỗ trợ PDF, XLSX, DOCX, DOC, PNG…; cho phép OCR PDF scan và ảnh; tốc độ ~1-3 giây/trang (tài liệu 20 trang <= 60 giây). Xem [03](03-tieu-chi-pass.txt) mục 1c, [05](05-trang-thai-cong-viec-dang-do.txt) mục 0b, [06](06-checklist-kiem-thu-theo-loai-dau-vao.txt) mục A1/E/F.
 | [04-test-data.json](04-test-data.json) | Dữ liệu text và đường dẫn file/ảnh theo từng ID ca |
 | [05-trang-thai-cong-viec-dang-do.txt](05-trang-thai-cong-viec-dang-do.txt) | **Đọc file này trước nếu tiếp tục công việc dở** — đã xong gì, deploy gì, còn gì chưa xử lý |
 | [06-checklist-kiem-thu-theo-loai-dau-vao.txt](06-checklist-kiem-thu-theo-loai-dau-vao.txt) | **Checklist theo loại đầu vào (tệp / ảnh / văn bản)** — duyệt từng mục một lần thay vì thử case rời rạc; có trạng thái OK/LỖI/CHƯA |

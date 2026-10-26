@@ -1,0 +1,13 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/pdf_documents.py.pre-upscale	2026-10-11 11:31:46.878677508 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/pdf_documents.py	2026-10-11 11:31:46.908806714 +0700
+@@ -429,7 +429,9 @@
+                 done += 1
+                 await context.checkpoint("ocr", done, len(pages))
+                 return
+-            prepared = await preprocess_image(rendered, work_dir=page_dir / "prepared")
++            prepared = await preprocess_image(rendered, work_dir=page_dir / "prepared",
++                                              upscale_enabled=settings.ocr_upscale_enabled,
++                                              target_edge=settings.ocr_target_edge)
+             result = await recognize_image(prepared, settings=settings)
+             rendered.unlink(missing_ok=True)
+             prepared.path.unlink(missing_ok=True)

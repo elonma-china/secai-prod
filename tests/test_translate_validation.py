@@ -106,6 +106,16 @@ async def test_garbage_source_lang_is_rejected():
     assert runner.calls == []
 
 
+@pytest.mark.parametrize("field", ["source_lang", "target_lang", "language"])
+@pytest.mark.asyncio
+async def test_ias_simplified_chinese_code_is_accepted(field):
+    runner = ScriptedRunner(response="translated")
+    resp = await _post(runner, {"text": "网络安全很重要。", field: "zh-Hans"})
+    assert resp.status_code == 200, resp.text
+    assert len(runner.calls) == 1
+    assert "zh-Hans" not in runner.calls[0][1]
+
+
 @pytest.mark.parametrize("target_lang", ["en", "vi"])
 @pytest.mark.asyncio
 async def test_prod_used_target_langs_are_never_rejected(target_lang):

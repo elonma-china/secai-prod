@@ -1,0 +1,13 @@
+{
+  "phase": "measuring",
+  "runner_pid": 2876298,
+  "exec_session": 70360,
+  "manifest": "/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/fixtures/ccu-within-limits/manifest.json",
+  "output": "/home/ict/AIEngines/secai/secai-agent-gateway/module-map/translate/optimization/results/ccu-production-20261013",
+  "next_command": ".venv/bin/python -u module-map/translate/fixtures/tools/bench_ccu_manifest.py --base http://127.0.0.1:8131 --manifest module-map/translate/fixtures/ccu-within-limits/manifest.json --out module-map/translate/optimization/results/ccu-production-20261013 --allow-production --resume",
+  "source_static_validation": "155 input samples checked",
+  "unit_tests": "22 tests passed",
+  "notes": "wait for preflight session to finish; all main code edits completed before preflight launch; no production settings changes; helper converter stopped; old data retained; preflight outputs/owned-jobs persisted; one text short vi-ja failure so far",
+  "queued_benchmark": "Waiting on shared test lock; starts only after preflight releases lock and ready_ids exists",
+  "preflight_finished": true
+}

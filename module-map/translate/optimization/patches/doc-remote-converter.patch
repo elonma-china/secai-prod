@@ -1,0 +1,69 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/documents.py.pre-conv	2026-10-11 07:21:54.589241837 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/documents.py	2026-10-11 07:21:54.622564779 +0700
+@@ -383,7 +383,45 @@
+         raise TranslationError("CORRUPT_DOCUMENT", "DOC structure is invalid.") from exc
+ 
+ 
++def _remote_converter(settings: TranslationSettings) -> str | None:
++    url = (getattr(settings, "converter_url", "") or "").rstrip("/")
++    if not url:
++        return None
++    if not url.startswith(("http://", "https://")):
++        raise TranslationError("DEPENDENCY_UNAVAILABLE", "DOC converter is unavailable.")
++    return url
++
++
++def _convert_remote(url: str, path: Path, work_dir: Path, settings: TranslationSettings) -> Path:
++    """Gửi .doc tới dịch vụ converter riêng (sandbox ở đó); nhận .docx."""
++    import httpx
++
++    try:
++        response = httpx.post(url + "/convert", content=path.read_bytes(), timeout=settings.converter_timeout_seconds + 5,
++                              headers={"Authorization": f"Bearer {settings.converter_token}"}, trust_env=False)
++    except httpx.TimeoutException as exc:
++        raise TranslationError("PROCESSING_TIMEOUT", "DOC conversion timed out.") from exc
++    except httpx.HTTPError as exc:
++        raise TranslationError("DEPENDENCY_UNAVAILABLE", "DOC converter is unavailable.") from exc
++    if response.status_code == 504:
++        raise TranslationError("PROCESSING_TIMEOUT", "DOC conversion timed out.")
++    if response.status_code in {401, 403, 429, 502, 503}:
++        raise TranslationError("DEPENDENCY_UNAVAILABLE", "DOC converter is unavailable.")
++    if response.status_code != 200 or not response.content.startswith(b"PK"):
++        raise TranslationError("CORRUPT_DOCUMENT", "DOC conversion failed.")
++    result = work_dir / "document.docx"
++    result.write_bytes(response.content)
++    return result
++
++
+ def converter_available(settings: TranslationSettings) -> bool:
++    url = _remote_converter(settings)
++    if url:
++        import httpx
++        try:
++            return httpx.get(url + "/health", timeout=3, trust_env=False).json().get("ready") is True
++        except (httpx.HTTPError, ValueError):
++            return False
+     if not shutil.which("docker"):
+         return False
+     try:
+@@ -397,6 +435,9 @@
+ def convert_doc(path: Path, work_dir: Path, settings: TranslationSettings) -> Path:
+     """Convert old Word input in a networkless, bounded, read-only container."""
+     validate_doc(path)
++    remote = _remote_converter(settings)
++    if remote:
++        return _convert_remote(remote, path, work_dir, settings)
+     if not converter_available(settings):
+         raise TranslationError("DEPENDENCY_UNAVAILABLE", "DOC converter is unavailable.")
+     incoming = work_dir / "incoming"
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/settings.py.pre-conv	2026-10-11 07:21:54.585848498 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/settings.py	2026-10-11 07:21:54.622257352 +0700
+@@ -29,6 +29,8 @@
+     artifact_dir: str = "./data/translate-v2/artifacts"
+     worker_db_path: str = "./data/translate-v2/worker-gateway.sqlite3"
+     converter_image: str = "secai-doc-converter:1"
++    converter_url: str = ""  # dịch vụ chuyển .doc riêng (http://host:18090); rỗng = dùng docker run cục bộ
++    converter_token: str = ""
+     max_upload_bytes: int = 10 * 1024 * 1024
+     max_request_bytes: int = 11 * 1024 * 1024
+     max_multipart_parts: int = 8

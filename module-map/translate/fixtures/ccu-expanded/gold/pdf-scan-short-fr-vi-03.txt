@@ -1,0 +1,24 @@
+SecAI pdf-scan-short-fr-vi-03-p01
+[pdf-scan-short-fr-vi-03-p01-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-short-fr-vi-03-p01-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-short-fr-vi-03-p01-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-short-fr-vi-03-p01-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-scan-short-fr-vi-03-p01-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-short-fr-vi-03-p01-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-short-fr-vi-03-p01-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-scan-short-fr-vi-03-p01-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-scan-short-fr-vi-03-p01-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-short-fr-vi-03-p01-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-short-fr-vi-03-p01-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-short-fr-vi-03-p01-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-scan-short-fr-vi-03-p01-0012] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-scan-short-fr-vi-03-p01-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-scan-short-fr-vi-03-p01-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21
+Account: svc_ccu_dec8abd5
+Password: Pwe2f4e0ec!0&*()_+
+URL: https://dec8abd5.example.org/audit?id=14600363&mode=test
+IP: 192.0.2.114:8363
+CVE: CVE-2024-3363
+Email: audit.dec8abd5@example.org
+Key: sk-test-60b5aed1dec87662

@@ -65,26 +65,6 @@ npm run build         # tsc -b && vite build → dist/
 npm run preview
 ```
 
-## Báo cáo theo mẫu (MVP)
-
-Tab **Nền tảng AI → Báo cáo thông minh → Theo mẫu** được ẩn mặc định. Khi backend đã bật
-`REPORT_FEATURE_ENABLED` và cấu hình `REPORT_API_KEY`, chạy FE với:
-
-```bash
-VITE_REPORT_FEATURE_ENABLED=true npm run dev
-```
-
-Tab mới gọi riêng `/ai/v2/reports`; hai tab báo cáo cũ vẫn dùng API cũ. Người dùng nhập
-khóa báo cáo vào ô mật khẩu trên tab. Khóa chỉ giữ trong React state cho đến khi tải lại
-trang, không đặt trong `VITE_*`, URL hoặc localStorage. Đây là khóa chung của workspace,
-không phải tài khoản hay quyền sở hữu riêng của từng người.
-
-Tạo mẫu bằng form hoặc nhập `.docx`, `.md`, `.txt` tối đa 2 MiB. File nhập chỉ điền bản
-nháp để người dùng soát/sửa trước khi lưu. Có thể chọn mẫu đã lưu, sửa thành phiên bản
-mới, sinh báo cáo từ dữ liệu nguồn, mở báo cáo bằng ID và tạo bản sửa bằng prompt.
-UI hiển thị lịch sử bản sửa; backend kiểm tra phiên bản khi lưu/chỉnh để tránh ghi đè
-thay đổi đồng thời.
-
 ## Dịch nhiều tệp/ảnh (translation v2)
 
 Tab dịch tệp dùng API job v2 riêng, không phụ thuộc khả năng dịch văn bản v3. Đặt

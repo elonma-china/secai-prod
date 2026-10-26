@@ -135,6 +135,18 @@ def test_expired_lease_cannot_publish_or_heartbeat(tmp_path):
     assert store.finish(job["job_id"], claim["generation"], result={"x": 1}, now=expired) is False
 
 
+def test_finish_without_result_cannot_mark_job_succeeded(tmp_path):
+    store = _store(tmp_path)
+    job = store.admit("file", b"hello", ".txt", "en", "vi", "peer", None, now=1000)
+    claim = store.claim(now=1000)
+
+    assert store.finish(job["job_id"], claim["generation"], now=1001) is False
+    row = store.get(job["job_id"], now=1001)
+    assert row["status"] == "running"
+    assert row["result_json"] is None
+    assert Path(row["input_path"]).read_bytes() == b"hello"
+
+
 def test_simultaneous_same_key_creates_one_job(tmp_path):
     store = _store(tmp_path)
     def submit(_):

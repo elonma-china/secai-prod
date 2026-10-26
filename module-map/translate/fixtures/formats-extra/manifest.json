@@ -1,0 +1,629 @@
+{
+ "generator": "tools/gen_case_fixtures.py",
+ "source_cases": "09-case-tai-lieu-nguoi-dung-co-the-thu.txt (20 ca P0 đợt 1)",
+ "note": "Dữ liệu GIẢ. UC-I02 (so xem trước/tải TXT/JSON) dùng đầu ra của UC-C02. .doc chưa có (thiếu LibreOffice).",
+ "count": 22,
+ "items": [
+  {
+   "uc": "UC-C02",
+   "path": "formats-extra/sensitive-specialchars-vi.txt",
+   "format": "txt",
+   "bytes": 1135,
+   "preserve_literals": [
+    "Ab1!xY7!z",
+    "Ab2@xY4@z",
+    "Ab3#xY1#z",
+    "Ab4$xY8$z",
+    "Ab5%xY5%z",
+    "Ab6^xY2^z",
+    "Ab7&xY9&z",
+    "Ab8*xY6*z",
+    "Ab9(xY3(z",
+    "Ab0)xY0)z",
+    "Ab1_xY7_z",
+    "Ab2+xY4+z",
+    "Ab3=xY1=z",
+    "Ab4{xY8{z",
+    "Ab5}xY5}z",
+    "Ab6[xY2[z",
+    "Ab7]xY9]z",
+    "Ab8|xY6|z",
+    "Ab9\\xY3\\z",
+    "Ab0:xY0:z",
+    "Ab1;xY7;z",
+    "Ab2\"xY4\"z",
+    "Ab3'xY1'z",
+    "Ab4<xY8<z",
+    "Ab5>xY5>z",
+    "Ab6,xY2,z",
+    "Ab7.xY9.z",
+    "Ab8?xY6?z",
+    "Ab9/xY3/z",
+    "Ab0~xY0~z",
+    "Ab1`xY7`z",
+    "Ab2-xY4-z"
+   ],
+   "checks": {
+    "line_count": 33
+   },
+   "note": "vi->en/ja/ar; mỗi mật khẩu phải còn nguyên"
+  },
+  {
+   "uc": "UC-C01",
+   "path": "formats-extra/creds-30pairs-vi.txt",
+   "format": "txt",
+   "bytes": 1601,
+   "preserve_literals": [
+    "svc_user_01",
+    "Ab1@xY7@z",
+    "svc_user_02",
+    "Ab2#xY4#z",
+    "svc_user_03",
+    "Ab3$xY1$z",
+    "svc_user_04",
+    "Ab4%xY8%z",
+    "svc_user_05",
+    "Ab5^xY5^z",
+    "svc_user_06",
+    "Ab6&xY2&z",
+    "svc_user_07",
+    "Ab7*xY9*z",
+    "svc_user_08",
+    "Ab8(xY6(z",
+    "svc_user_09",
+    "Ab9)xY3)z",
+    "svc_user_10",
+    "Ab0_xY0_z",
+    "svc_user_11",
+    "Ab1+xY7+z",
+    "svc_user_12",
+    "Ab2=xY4=z",
+    "svc_user_13",
+    "Ab3{xY1{z",
+    "svc_user_14",
+    "Ab4}xY8}z",
+    "svc_user_15",
+    "Ab5[xY5[z",
+    "svc_user_16",
+    "Ab6]xY2]z",
+    "svc_user_17",
+    "Ab7|xY9|z",
+    "svc_user_18",
+    "Ab8\\xY6\\z",
+    "svc_user_19",
+    "Ab9:xY3:z",
+    "svc_user_20",
+    "Ab0;xY0;z",
+    "svc_user_21",
+    "Ab1\"xY7\"z",
+    "svc_user_22",
+    "Ab2'xY4'z",
+    "svc_user_23",
+    "Ab3<xY1<z",
+    "svc_user_24",
+    "Ab4>xY8>z",
+    "svc_user_25",
+    "Ab5,xY5,z",
+    "svc_user_26",
+    "Ab6.xY2.z",
+    "svc_user_27",
+    "Ab7?xY9?z",
+    "svc_user_28",
+    "Ab8/xY6/z",
+    "svc_user_29",
+    "Ab9~xY3~z",
+    "svc_user_30",
+    "Ab0`xY0`z"
+   ],
+   "checks": {
+    "line_count": 31
+   },
+   "note": "vi->en"
+  },
+  {
+   "uc": "UC-C07",
+   "path": "formats-extra/connstrings-en.txt",
+   "format": "txt",
+   "bytes": 1506,
+   "preserve_literals": [
+    "postgres://dbadmin:S3cr3t!@10.20.30.40:5432/prod?sslmode=require",
+    "mongodb+srv://app_user:P%40ss%23w0rd@cluster0.example.net/sales?retryWrites=true",
+    "Server=10.0.0.5,1433;Database=Hr;User Id=sa;Password=P@ssw0rd!2026;Encrypt=True;",
+    "jdbc:mysql://db.example.org:3306/shop?user=root&password=Tr0ub4dor&3",
+    "redis://:r3d!s_P@ss@10.0.0.9:6379/0",
+    "amqp://guest:g%2Fuest@mq.example.org:5672/%2F",
+    "AKIAFAKEFAKEFAKE0123",
+    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdmNfYmFja3VwXzAxIiwiaWF0IjoxNzkwMDAwMDAwfQ.c2lnbmF0dXJlLWZha2UtMDEyMzQ1Njc4OWFiY2RlZg",
+    "sk-test-9f8E7d6C5b4A3",
+    "ghp_FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE0123",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdmNfYmFja3VwXzAxIiwiaWF0IjoxNzkwMDAwMDAwfQ.c2lnbmF0dXJlLWZha2UtMDEyMzQ1Njc4OWFiY2RlZg",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFAKEKEYFAKEKEYFAKEKEYFAKEKEYFAKEKEYFAKEKEY0 ops@example.org",
+    "X+zrZv/IbzjZUnhsbWlsecLbwjndTpG0ZynXOif7V+lf7Otm/8hvONlSeGxtaWx5wtvCOd1OkbRnKdc6J/tX6Q==",
+    "a4ayc/80/OGda4BO/1o/V0etpOqiLx1JwB5S3beHW0trhrJz/zT84Z1rgE7/Wj9XR62k6qIvHUnAHlLdt4dbSw==",
+    "1HNeOiZeFu7gP1lxi5tdAwGcB9i2xR+Q2jpmbuwTqzXUc146Jl4W7uA/WXGLm10DAZwH2LbFH5DaOmZu7BOrNQ==",
+    "TgdAhWK+24tgzgXB3s/jrRa3IjCWfeAfZAt+Rym0n85OB0CFYr7bi2DOBcHez+OtFrciMJZ94B9kC35HKbSfzg==",
+    "SyJ3d9TdH8Ycb4hPSGQdArTRIdP9Moywi1Ux/Kzav4pLInd31N0fxhxviE9IZB0CtNEh0/0yjLCLVTH8rNq/ig==",
+    "7y0SfeN7lCuq0GFF5UsMYZofIjJ7LrvPvsePVWSv453vLRJ943uUK6rQYUXlSwxhmh8iMnsuu8++x49VZK/jnQ=="
+   ],
+   "checks": {
+    "keep_pem_lines": 8
+   },
+   "note": "en->vi; gồm UC-C05/C06"
+  },
+  {
+   "uc": "UC-C12",
+   "path": "formats-extra/config-json-vi.txt",
+   "format": "txt",
+   "bytes": 436,
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "192.168.10.25:8443",
+    "ops.team@example.org"
+   ],
+   "checks": {
+    "json_parse": true,
+    "json_keys_unchanged": [
+     "ten_dich_vu",
+     "mo_ta",
+     "tai_khoan",
+     "mat_khau",
+     "dia_chi",
+     "canh_bao",
+     "lien_he",
+     "so_lan_thu_lai",
+     "bat"
+    ]
+   },
+   "note": "vi->en; JSON còn parse được, khóa không đổi"
+  },
+  {
+   "uc": "UC-C13",
+   "path": "formats-extra/config-yaml.txt",
+   "format": "txt",
+   "bytes": 344,
+   "preserve_literals": [
+    "svc_backup_01",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "192.168.10.25:8443"
+   ],
+   "checks": {
+    "yaml_keys": [
+     "service",
+     "name",
+     "description",
+     "account",
+     "password",
+     "endpoints",
+     "alerts"
+    ]
+   },
+   "note": "vi->en; thụt lề và khóa YAML giữ nguyên"
+  },
+  {
+   "uc": "UC-C15",
+   "path": "formats-extra/log-200lines.txt",
+   "format": "txt",
+   "bytes": 23871,
+   "preserve_literals": [
+    "198.51.100.1",
+    "CORP\\svc_user_002",
+    "sqlmap/1.7",
+    "0xC000006D"
+   ],
+   "checks": {
+    "line_count": 200
+   },
+   "note": "en/vi->vi/en; số dòng ra = vào"
+  },
+  {
+   "uc": "UC-C24",
+   "path": "formats-extra/ioc-table-vi.docx",
+   "format": "docx",
+   "bytes": 39550,
+   "preserve_literals": [
+    "198[.]51[.]100[.]1",
+    "c81e728d9d4c2f636f067f89cc14862c",
+    "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+    "hxxp://evil4[.]example[.]com/payload4.bin",
+    "198[.]51[.]100[.]5",
+    "1679091c5a880faf6fb5e6087eb1b2dc",
+    "7902699be42c8a8e46fbbb4501726517e86b22c56a189f7625a6da49081b2451",
+    "hxxp://evil8[.]example[.]com/payload8.bin",
+    "198[.]51[.]100[.]9",
+    "d3d9446802a44259755d38e6d163e820",
+    "4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8",
+    "hxxp://evil12[.]example[.]com/payload12.bin",
+    "198[.]51[.]100[.]13",
+    "aab3238922bcc25a6f606eb525ffdc56",
+    "e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb",
+    "hxxp://evil16[.]example[.]com/payload16.bin",
+    "198[.]51[.]100[.]17",
+    "6f4922f45568161a8cdf4ad2299f6d23",
+    "9400f1b21cb527d7fa3d3eabba93557a18ebe7a2ca4e471cfe5e4c5b4ca7f767",
+    "hxxp://evil20[.]example[.]com/payload20.bin",
+    "198[.]51[.]100[.]21",
+    "b6d767d2f8ed5d21a44b0e5886680cb9",
+    "535fa30d7e25dd8a49f1536779734ec8286108d115da5045d77f3b4185d8f790",
+    "hxxp://evil24[.]example[.]com/payload24.bin",
+    "198[.]51[.]100[.]25",
+    "4e732ced3463d06de0ca9a15b6153677",
+    "670671cd97404156226e507973f2ab8330d3022ca96e0c93bdbdb320c41adcaf",
+    "hxxp://evil28[.]example[.]com/payload28.bin",
+    "198[.]51[.]100[.]29",
+    "34173cb38f07f89ddbebc2ac9128303f",
+    "eb1e33e8a81b697b75855af6bfcdbcbf7cbbde9f94962ceaec1ed8af21f5a50f",
+    "hxxp://evil32[.]example[.]com/payload32.bin",
+    "198[.]51[.]100[.]33",
+    "e369853df766fa44e1ed0ff613f563bd",
+    "9f14025af0065b30e47e23ebb3b491d39ae8ed17d33739e5ff3827ffb3634953",
+    "hxxp://evil36[.]example[.]com/payload36.bin",
+    "198[.]51[.]100[.]37",
+    "a5771bce93e200c36f7cd9dfd0e5deaa",
+    "0b918943df0962bc7a1824c0555a389347b4febdc7cf9d1254406d80ce44e3f9",
+    "hxxp://evil40[.]example[.]com/payload40.bin",
+    "198[.]51[.]100[.]41",
+    "a1d0c6e83f027327d8461063f4ac58a6",
+    "44cb730c420480a0477b505ae68af508fb90f96cf0ec54c6ad16949dd427f13a",
+    "hxxp://evil44[.]example[.]com/payload44.bin",
+    "198[.]51[.]100[.]45",
+    "d9d4f495e875a2e075a1a4a6e1b9770f",
+    "31489056e0916d59fe3add79e63f095af3ffb81604691f21cad442a85c7be617",
+    "hxxp://evil48[.]example[.]com/payload48.bin",
+    "198[.]51[.]100[.]49",
+    "c0c7c76d30bd3dcaefc96f40275bdc0a",
+    "031b4af5197ec30a926f48cf40e11a7dbc470048a21e4003b7a3c07c5dab1baa",
+    "hxxp://evil52[.]example[.]com/payload52.bin",
+    "198[.]51[.]100[.]53",
+    "a684eceee76fc522773286a895bc8436",
+    "02d20bbd7e394ad5999a4cebabac9619732c343a4cac99470c03e23ba2bdc2bc",
+    "hxxp://evil56[.]example[.]com/payload56.bin",
+    "198[.]51[.]100[.]57",
+    "66f041e16a60928b05a7e228a89c3799",
+    "3e1e967e9b793e908f8eae83c74dba9bcccce6a5535b4b462bd9994537bfe15c",
+    "hxxp://evil60[.]example[.]com/payload60.bin",
+    "198[.]51[.]100[.]61",
+    "44f683a84163b3523afe57c2e008bc8c",
+    "da4ea2a5506f2693eae190d9360a1f31793c98a1adade51d93533a6f520ace1c",
+    "hxxp://evil64[.]example[.]com/payload64.bin",
+    "198[.]51[.]100[.]65",
+    "3295c76acbf4caaed33c36b1b5fc2cb1",
+    "49d180ecf56132819571bf39d9b7b342522a2ac6d23c1418d3338251bfe469c8",
+    "hxxp://evil68[.]example[.]com/payload68.bin",
+    "198[.]51[.]100[.]69",
+    "7cbbc409ec990f19c78c75bd1e06f215",
+    "7f2253d7e228b22a08bda1f09c516f6fead81df6536eb02fa991a34bb38d9be8",
+    "hxxp://evil72[.]example[.]com/payload72.bin",
+    "198[.]51[.]100[.]73",
+    "ad61ab143223efbc24c7d2583be69251",
+    "f369cb89fc627e668987007d121ed1eacdc01db9e28f8bb26f358b7d8c4f08ac",
+    "hxxp://evil76[.]example[.]com/payload76.bin",
+    "198[.]51[.]100[.]77",
+    "35f4a8d465e6e1edc05f3d8ab658c551",
+    "98a3ab7c340e8a033e7b37b6ef9428751581760af67bbab2b9e05d4964a8874a",
+    "hxxp://evil80[.]example[.]com/payload80.bin",
+    "198[.]51[.]100[.]81",
+    "9778d5d219c5080b9a6a17bef029331c",
+    "bbb965ab0c80d6538cf2184babad2a564a010376712012bd07b0af92dcd3097d",
+    "hxxp://evil84[.]example[.]com/payload84.bin",
+    "198[.]51[.]100[.]85",
+    "93db85ed909c13838ff95ccfa94cebd9",
+    "bdd2d3af3a5a1213497d4f1f7bfcda898274fe9cb5401bbc0190885664708fc2",
+    "hxxp://evil88[.]example[.]com/payload88.bin",
+    "198[.]51[.]100[.]89",
+    "8613985ec49eb8f757ae6439e879bb2a",
+    "1da51b8d8ff98f6a48f80ae79fe3ca6c26e1abb7b7d125259255d6d2b875ea08",
+    "hxxp://evil92[.]example[.]com/payload92.bin",
+    "198[.]51[.]100[.]93",
+    "f4b9ec30ad9f68f89b29639786cb62ef",
+    "ad48ff99415b2f007dc35b7eb553fd1eb35ebfa2f2f308acd9488eeb86f71fa8",
+    "hxxp://evil96[.]example[.]com/payload96.bin",
+    "198[.]51[.]100[.]97",
+    "ed3d2c21991e3bef5e069713af9fa6ca",
+    "8c1f1046219ddd216a023f792356ddf127fce372a72ec9b4cdac989ee5b0b455",
+    "hxxp://evil100[.]example[.]com/payload100.bin"
+   ],
+   "checks": {
+    "tables": 1,
+    "table_rows": 101,
+    "cols": 4
+   },
+   "note": "vi->en; IOC defang giữ nguyên; 101 hàng x 4 cột"
+  },
+  {
+   "uc": "UC-A01",
+   "path": "formats-extra/pentest-report-vi.docx",
+   "format": "docx",
+   "bytes": 40544,
+   "preserve_literals": [
+    "CVE-2024-3091",
+    "https://portal.example.org/app/v1/search?q=1&token=Ab!1#x",
+    "CVE-2024-3092",
+    "https://portal.example.org/app/v2/search?q=2&token=Ab!2#x",
+    "CVE-2024-3093",
+    "https://portal.example.org/app/v3/search?q=3&token=Ab!3#x",
+    "CVE-2024-3094",
+    "https://portal.example.org/app/v4/search?q=4&token=Ab!4#x",
+    "CVE-2024-3095",
+    "https://portal.example.org/app/v5/search?q=5&token=Ab!5#x",
+    "CVE-2024-3096",
+    "https://portal.example.org/app/v6/search?q=6&token=Ab!6#x",
+    "CVE-2024-3097",
+    "https://portal.example.org/app/v7/search?q=7&token=Ab!7#x",
+    "CVE-2024-3098",
+    "https://portal.example.org/app/v8/search?q=8&token=Ab!8#x",
+    "CVE-2024-3099",
+    "https://portal.example.org/app/v9/search?q=9&token=Ab!9#x",
+    "CVE-2024-3100",
+    "https://portal.example.org/app/v10/search?q=10&token=Ab!10#x",
+    "CVE-2024-3101",
+    "https://portal.example.org/app/v11/search?q=11&token=Ab!11#x",
+    "CVE-2024-3102",
+    "https://portal.example.org/app/v12/search?q=12&token=Ab!12#x",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 3'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 4'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 5'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 6'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 7'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 8'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 9'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 10'",
+    "curl -k -X POST 'https://portal.example.org/login' -d 'user=admin&pass=P@ss!w0rd#2026$%^&*()_+' -H 'X-Id: 11'"
+   ],
+   "checks": {
+    "tables": 1,
+    "table_rows": 13,
+    "code_blocks": 9,
+    "approx_pages": 15
+   },
+   "note": "vi->en; khối lệnh Courier giữ nguyên từng ký tự; số trang ước tính (không có Word để đếm)"
+  },
+  {
+   "uc": "UC-A08",
+   "path": "formats-extra/inventory-300rows-vi.xlsx",
+   "format": "xlsx",
+   "bytes": 15176,
+   "preserve_literals": [
+    "srv-hn-000",
+    "10.20.0.1",
+    "srv-hn-299"
+   ],
+   "checks": {
+    "sheets": 1,
+    "rows": 300,
+    "merged": [
+     "A1:F1"
+    ],
+    "date_col": "E"
+   },
+   "note": "vi->en; hostname/IP/ngày giữ nguyên, chỉ dịch chữ; ô gộp tiêu đề còn"
+  },
+  {
+   "uc": "UC-B08",
+   "path": "formats-extra/sheets-special-names.xlsx",
+   "format": "xlsx",
+   "bytes": 7728,
+   "preserve_literals": [],
+   "checks": {
+    "sheets": 6,
+    "sheet_names": [
+     "Báo cáo & Phân tích",
+     "Dữ liệu (2026)",
+     "Danh sách máy chủ quan trọng",
+     "Tổng hợp quý 1 & quý 2",
+     "Cảnh báo (nghiêm trọng)",
+     "Ghi chú vận hành hàng ngày"
+    ],
+    "max_name_len": 31
+   },
+   "note": "vi->en; tên sheet không được làm hỏng tệp (ký tự cấm, >31 ký tự, trùng tên sau dịch)"
+  },
+  {
+   "uc": "UC-B10",
+   "path": "formats-extra/formulas-vi.xlsx",
+   "format": "xlsx",
+   "bytes": 5153,
+   "preserve_literals": [
+    "=SUM(B2:B4)",
+    "=IF(B6>40,\"Cao\",\"Thấp\")",
+    "=VLOOKUP(\"Máy chủ web\",A2:B4,2,FALSE)",
+    "https://portal.example.org/help"
+   ],
+   "checks": {
+    "formula_cells": [
+     "B6",
+     "B7",
+     "B8",
+     "B9"
+    ]
+   },
+   "note": "vi->en; công thức KHÔNG bị dịch (cả chuỗi 'Cao'/'Thấp' trong công thức) và vẫn tính được"
+  },
+  {
+   "uc": "UC-B13",
+   "path": "formats-extra/numbers-dates-vi.xlsx",
+   "format": "xlsx",
+   "bytes": 5169,
+   "preserve_literals": [
+    "0123"
+   ],
+   "checks": {
+    "cells": {
+     "B2": "0123 (text)",
+     "B3": 15000000000.0,
+     "B4": "2026-03-15",
+     "B5": 1250000.5,
+     "B6": 0.375
+    }
+   },
+   "note": "vi->en; '0123' còn là văn bản, số/ngày/định dạng không đổi"
+  },
+  {
+   "uc": "UC-B02",
+   "path": "formats-extra/nested-tables-vi.docx",
+   "format": "docx",
+   "bytes": 36897,
+   "preserve_literals": [
+    "10.0.0.0",
+    "10.0.1.1"
+   ],
+   "checks": {
+    "tables": 1,
+    "nested_tables": 1,
+    "outer": "3x3",
+    "inner": "2x2"
+   },
+   "note": "vi->en; bảng lồng còn nguyên 3x3 chứa 2x2"
+  },
+  {
+   "uc": "UC-A07",
+   "path": "formats-extra/invoice-en.pdf",
+   "format": "pdf",
+   "bytes": 15839,
+   "preserve_literals": [
+    "DE89 3704 0044 0532 0130 00",
+    "COBADEFFXXX",
+    "0312345678",
+    "billing@example.org",
+    "INV-2026-00123",
+    "SKU-1000",
+    "SKU-1007"
+   ],
+   "checks": {
+    "pages": 1,
+    "table_rows": 9,
+    "text_layer": true
+   },
+   "note": "en->vi; bảng giữ hàng/cột; IBAN/mã số thuế nguyên văn"
+  },
+  {
+   "uc": "UC-E18",
+   "path": "formats-extra/mixed-scan-text-5p.pdf",
+   "format": "pdf",
+   "bytes": 1167232,
+   "preserve_literals": [],
+   "checks": {
+    "pages": 5,
+    "page_kinds": [
+     "scan",
+     "scan",
+     "text",
+     "text",
+     "image+hidden-text"
+    ]
+   },
+   "note": "en->vi; 5 trang giữ thứ tự; trang scan được OCR, trang chữ không bị OCR thừa"
+  },
+  {
+   "uc": "UC-E07",
+   "path": "formats-extra/scan-10p-with-blank.pdf",
+   "format": "pdf-scan",
+   "bytes": 3260159,
+   "preserve_literals": [],
+   "checks": {
+    "pages": 10,
+    "blank_pages": [
+     4,
+     9
+    ],
+    "noise_pages": [
+     6
+    ]
+   },
+   "note": "en->vi; trang trắng không bịa nội dung; trang nhiễu không làm hỏng job; thứ tự 10 trang đúng"
+  },
+  {
+   "uc": "UC-E10",
+   "path": "formats-extra/terminal-nmap-dark.png",
+   "format": "png",
+   "bytes": 73208,
+   "preserve_literals": [
+    "192.168.10.25",
+    "CVE-2024-3094",
+    "P@ss!w0rd#2026$%^&*()_+",
+    "sk-test-9f8E7d6C5b4A3",
+    "svc_backup_01",
+    "nmap -sV -p 22,80,443,8443",
+    "https://portal.example.org/item?id=1"
+   ],
+   "checks": {
+    "dark_background": true
+   },
+   "note": "en->vi; lệnh/IP/CVE giữ nguyên; OCR đọc được chữ sáng trên nền tối"
+  },
+  {
+   "uc": "UC-G08a",
+   "path": "formats-extra/zipbomb-ratio.docx",
+   "format": "docx",
+   "bytes": 203137,
+   "preserve_literals": [],
+   "checks": {
+    "expect_error": "ARCHIVE_LIMIT_EXCEEDED/413 (tỉ lệ nén > 100:1 hoặc > 50 MiB giải nén)"
+   },
+   "note": "tệp nhỏ trên đĩa, giải nén rất lớn"
+  },
+  {
+   "uc": "UC-G08b",
+   "path": "formats-extra/zip-many-entries.docx",
+   "format": "docx",
+   "bytes": 292698,
+   "preserve_literals": [],
+   "checks": {
+    "expect_error": "ARCHIVE_LIMIT_EXCEEDED/413 (> 2.000 entry)"
+   },
+   "note": "2.100 entry"
+  },
+  {
+   "uc": "UC-G06",
+   "path": "formats-extra/docx-external-rel.docx",
+   "format": "docx",
+   "bytes": 36716,
+   "preserve_literals": [],
+   "checks": {
+    "expect_error": "UNSAFE_DOCUMENT (liên kết ngoài); không được truy cập URL"
+   },
+   "note": "ghi nhận: UI hiện chỉ báo 'Dịch thất bại' (rủi ro UX)"
+  },
+  {
+   "uc": "UC-G07",
+   "path": "formats-extra/docx-xxe.docx",
+   "format": "docx",
+   "bytes": 36664,
+   "preserve_literals": [],
+   "checks": {
+    "expect_error": "UNSAFE_DOCUMENT/CORRUPT_DOCUMENT",
+    "must_not_contain": [
+     "root:x:0:0",
+     "/bin/bash"
+    ]
+   },
+   "note": "kiểm hệ thống từ chối DOCTYPE/entity; đầu ra không chứa nội dung /etc/passwd"
+  },
+  {
+   "uc": "UC-H02/H01",
+   "path": null,
+   "format": "batch",
+   "bytes": 0,
+   "preserve_literals": [],
+   "checks": {
+    "batch_ok_5": [
+     "fixtures/files/vi-1000.txt",
+     "fixtures/formats/docx/short-vi.docx",
+     "fixtures/formats/png/short-vi.png",
+     "fixtures/formats/jpg/short-vi.jpg",
+     "fixtures/formats/xlsx/short-vi.xlsx"
+    ],
+    "batch_over_limit_6": [
+     "fixtures/files/vi-1000.txt",
+     "fixtures/formats/docx/short-vi.docx",
+     "fixtures/formats/png/short-vi.png",
+     "fixtures/formats/jpg/short-vi.jpg",
+     "fixtures/formats/xlsx/short-vi.xlsx",
+     "fixtures/formats/pdf/short-vi.pdf"
+    ],
+    "expect": "5 tệp trong 1 phiên chạy độc lập, kết quả không lẫn nhau; tệp thứ 6 bị chặn rõ ràng; FE không im lặng khi 429"
+   },
+   "note": "dùng tệp có sẵn trong fixtures/ (đường dẫn tương đối fixtures-root = module-map/translate)"
+  }
+ ]
+}

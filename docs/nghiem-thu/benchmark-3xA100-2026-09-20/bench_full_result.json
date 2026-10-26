@@ -1,0 +1,155 @@
+{
+    "meta": {
+        "generated_at_utc": "2026-09-20T13:07:41Z",
+        "target_gpus": [
+            0,
+            1,
+            2
+        ],
+        "note": "Đo TẠI-HOST (loopback trong instance) — không qua SSH-tunnel/WAN. Load test/CCU ramp xem bench_fullpipeline.py."
+    },
+    "llm": {
+        "tps": {
+            "n": 6,
+            "tok_s_p50": 139.01,
+            "tok_s_mean": 139.02,
+            "tok_s_min": 138.14,
+            "tok_s_max": 140.04,
+            "samples": [
+                {
+                    "port": 18101,
+                    "completion_tokens": 300,
+                    "tok_s": 139.31
+                },
+                {
+                    "port": 18102,
+                    "completion_tokens": 300,
+                    "tok_s": 138.63
+                },
+                {
+                    "port": 18103,
+                    "completion_tokens": 300,
+                    "tok_s": 139.15
+                },
+                {
+                    "port": 18101,
+                    "completion_tokens": 300,
+                    "tok_s": 140.04
+                },
+                {
+                    "port": 18102,
+                    "completion_tokens": 300,
+                    "tok_s": 138.14
+                },
+                {
+                    "port": 18103,
+                    "completion_tokens": 300,
+                    "tok_s": 138.87
+                }
+            ]
+        },
+        "ttft_raw": {
+            "n": 6,
+            "ttft_p50_ms": 55.4,
+            "ttft_mean_ms": 55.6,
+            "samples": [
+                {
+                    "port": 18101,
+                    "ttft_ms": 66.7
+                },
+                {
+                    "port": 18102,
+                    "ttft_ms": 65.0
+                },
+                {
+                    "port": 18103,
+                    "ttft_ms": 64.5
+                },
+                {
+                    "port": 18101,
+                    "ttft_ms": 46.3
+                },
+                {
+                    "port": 18102,
+                    "ttft_ms": 45.1
+                },
+                {
+                    "port": 18103,
+                    "ttft_ms": 46.2
+                }
+            ]
+        }
+    },
+    "embedding": {
+        "sequential_latency": {
+            "n": 30,
+            "p50_ms": 14.089,
+            "p95_ms": 17.859,
+            "p99_ms": 20.373,
+            "mean_ms": 14.54,
+            "min_ms": 13.75,
+            "max_ms": 21.29
+        },
+        "throughput_by_concurrency": {
+            "4": {
+                "n": 12,
+                "seconds": 0.053,
+                "per_s": 226.2
+            },
+            "8": {
+                "n": 24,
+                "seconds": 0.051,
+                "per_s": 474.4
+            },
+            "16": {
+                "n": 48,
+                "seconds": 0.068,
+                "per_s": 702.3
+            }
+        },
+        "latency_under_load": {
+            "concurrency": 16,
+            "n": 48,
+            "p50_ms": 14.402,
+            "p95_ms": 32.009,
+            "p99_ms": 35.945,
+            "mean_ms": 17.01
+        }
+    },
+    "reranker": {
+        "sequential_latency": {
+            "n": 30,
+            "p50_ms": 90.672,
+            "p95_ms": 93.246,
+            "p99_ms": 98.628,
+            "mean_ms": 89.53,
+            "min_ms": 81.9,
+            "max_ms": 100.74
+        },
+        "throughput_by_concurrency": {
+            "2": {
+                "n": 6,
+                "seconds": 0.267,
+                "per_s": 22.4
+            },
+            "4": {
+                "n": 12,
+                "seconds": 0.246,
+                "per_s": 48.8
+            },
+            "8": {
+                "n": 24,
+                "seconds": 0.249,
+                "per_s": 96.2
+            }
+        },
+        "latency_under_load": {
+            "concurrency": 8,
+            "n": 24,
+            "p50_ms": 69.57,
+            "p95_ms": 106.896,
+            "p99_ms": 119.338,
+            "mean_ms": 73.71
+        }
+    }
+}

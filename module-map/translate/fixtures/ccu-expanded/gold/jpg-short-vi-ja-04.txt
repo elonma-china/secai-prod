@@ -1,0 +1,13 @@
+SecAI jpg-short-vi-ja-04
+[jpg-short-vi-ja-04-0000] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-short-vi-ja-04-0001] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-short-vi-ja-04-0002] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-short-vi-ja-04-0003] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+Keywords: audit4 audit5 audit6 audit7
+Account: svc_ccu_efaaed13
+Password: Pw8bd9a411!0&*()_+
+URL: https://efaaed13.example.org/audit?id=15706861&mode=test
+IP: 192.0.2.112:8861
+CVE: CVE-2024-2861
+Email: audit.efaaed13@example.org
+Key: sk-test-56eec709825d2f54

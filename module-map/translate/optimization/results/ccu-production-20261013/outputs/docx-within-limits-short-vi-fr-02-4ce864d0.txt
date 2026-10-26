@@ -1,0 +1,255 @@
+SecAI - 1
+SecAI docx-within-limits-short-vi-fr-02-p01
+[docx-within-limits-short-vi-fr-02-p01-0000] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p01-0001] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p01-0002] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p01-0003] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p01-0004] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p01-0005] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p01-0006] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p01-0007] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p01-0008] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p01-0009] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p01-0010] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+Mots-clés : audit11 audit12 audit13 audit14
+Actif
+Propriétaire
+Priorité
+node-0-0
+SOC
+1
+node-0-1
+SOC
+2
+
+
+SecAI - 2
+SecAI docx-within-limits-short-vi-fr-02-p02
+[docx-within-limits-short-vi-fr-02-p02-0000] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p02-0001] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p02-0002] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p02-0003] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p02-0004] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p02-0005] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p02-0006] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p02-0007] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p02-0008] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p02-0009] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p02-0010] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+Mots-clés : audit11 audit12 audit13
+Actif
+Propriétaire
+Priorité
+node-1-0
+SOC
+1
+node-1-1
+SOC
+2
+
+
+SecAI - 3
+SecAI docx-within-limits-short-vi-fr-02-p03
+[docx-within-limits-short-vi-fr-02-p03-0000] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p03-0001] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p03-0002] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p03-0003] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p03-0004] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p03-0005] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p03-0006] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p03-0007] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p03-0008] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p03-0009] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p03-0010] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+Mots-clés : audit11 audit12 audit13 audit14 audit15 audit16 audit17 audit18 audit19
+Actif
+Propriétaire
+Priorité
+node-2-0
+SOC
+1
+node-2-1
+SOC
+2
+
+
+SecAI - 4
+SecAI docx-within-limits-short-vi-fr-02-p04
+[docx-within-limits-short-vi-fr-02-p04-0000] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p04-0001] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p04-0002] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p04-0003] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p04-0004] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p04-0005] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p04-0006] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p04-0007] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p04-0008] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p04-0009] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p04-0010] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+Mots-clés : audit11 audit12 audit13
+Actif
+Propriétaire
+Priorité
+node-3-0
+SOC
+1
+node-3-1
+SOC
+2
+
+
+SecAI - 5
+SecAI docx-within-limits-short-vi-fr-02-p05
+[docx-within-limits-short-vi-fr-02-p05-0000] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p05-0001] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p05-0002] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p05-0003] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p05-0004] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p05-0005] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p05-0006] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p05-0007] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p05-0008] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p05-0009] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p05-0010] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+Mots-clés : audit11 audit12 audit13 audit14
+Actif
+Propriétaire
+Priorité
+node-4-0
+SOC
+1
+node-4-1
+SOC
+2
+
+
+SecAI - 6
+SecAI docx-within-limits-short-vi-fr-02-p06
+[docx-within-limits-short-vi-fr-02-p06-0000] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p06-0001] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p06-0002] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p06-0003] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p06-0004] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p06-0005] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p06-0006] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p06-0007] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p06-0008] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p06-0009] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p06-0010] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+Mots-clés : audit11 audit12 audit13 audit14 audit15 audit16 audit17
+Actif
+Propriétaire
+Priorité
+node-5-0
+SOC
+1
+node-5-1
+SOC
+2
+
+
+SecAI - 7
+SecAI docx-within-limits-short-vi-fr-02-p07
+[docx-within-limits-short-vi-fr-02-p07-0000] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p07-0001] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p07-0002] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p07-0003] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p07-0004] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p07-0005] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p07-0006] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p07-0007] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p07-0008] L’évaluateur vérifie les preuves, attribue des niveaux de priorité et confirme les délais de traitement.
+[docx-within-limits-short-vi-fr-02-p07-0009] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p07-0010] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+Mots-clés : audit11 audit12 audit13
+Actif
+Propriétaire
+Priorité
+node-6-0
+SOC
+1
+node-6-1
+SOC
+2
+
+
+SecAI - 8
+SecAI docx-within-limits-short-vi-fr-02-p08
+[docx-within-limits-short-vi-fr-02-p08-0000] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p08-0001] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p08-0002] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p08-0003] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p08-0004] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p08-0005] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p08-0006] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p08-0007] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p08-0008] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p08-0009] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p08-0010] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+Mots-clés : audit11 audit12 audit13 audit14
+Actif
+Propriétaire
+Priorité
+node-7-0
+SOC
+1
+node-7-1
+SOC
+2
+
+
+SecAI - 9
+SecAI docx-within-limits-short-vi-fr-02-p09
+[docx-within-limits-short-vi-fr-02-p09-0000] La période de maintenance nécessite une sauvegarde vérifiée et des procédures de restauration clairement définies.
+[docx-within-limits-short-vi-fr-02-p09-0001] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+[docx-within-limits-short-vi-fr-02-p09-0002] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p09-0003] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p09-0004] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p09-0005] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p09-0006] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p09-0007] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p09-0008] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p09-0009] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p09-0010] Le rapport de vulnérabilité décrit les actifs affectés, les impacts opérationnels et les étapes de correction.
+Mots-clés : audit11 audit12 audit13 audit14
+Actif
+Propriétaire
+Priorité
+node-8-0
+SOC
+1
+node-8-1
+SOC
+2
+
+
+SecAI - 10
+SecAI docx-within-limits-short-vi-fr-02-p10
+[docx-within-limits-short-vi-fr-02-p10-0000] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p10-0001] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p10-0002] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+[docx-within-limits-short-vi-fr-02-p10-0003] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p10-0004] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p10-0005] Chaque modification est testée à l’aide d’un document de représentation avant d’être livrée au client.
+[docx-within-limits-short-vi-fr-02-p10-0006] L’équipe de sécurité informatique vérifie les droits d’accès et identifie la personne responsable de chaque service.
+[docx-within-limits-short-vi-fr-02-p10-0007] L’équipe de gestion surveille les ressources et vérifie que les demandes en file d’attente sont traitées dans les délais.
+[docx-within-limits-short-vi-fr-02-p10-0008] La période de maintenance nécessite une sauvegarde vérifiée et une procédure de restauration bien définie.
+[docx-within-limits-short-vi-fr-02-p10-0009] Le spécialiste de la corrélation avertit le réseau par rapport au journal des applications avant d’ouvrir le dossier de l’incident.
+[docx-within-limits-short-vi-fr-02-p10-0010] La liste comprend les bases de données, les équipements réseau, les postes de travail et les groupes responsables.
+Mots-clés : audit11 audit12 audit13 audit14 audit15 audit16
+Compte : svc_ccu_80812be2
+Password: Pw7327d27d!0&*()_+
+URL : https://80812be2.example.org/audit?id=8421675&mode=test
+IP : 192.0.2.176:8675
+CVE : CVE-2024-7675
+Email : audit.80812be2@example.org
+Clé : sk-test-2fa4a184fa7f253d
+Actif
+Propriétaire
+Priorité
+node-9-0
+SOC
+1
+node-9-1
+SOC
+2

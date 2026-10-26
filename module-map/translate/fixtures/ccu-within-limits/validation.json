@@ -1,0 +1,25 @@
+{
+  "count": 155,
+  "primary": 135,
+  "difficult": 20,
+  "blocked": 0,
+  "max_file_bytes": 16890352,
+  "max_source_chars": 776212,
+  "max_image_pixels": 9142560,
+  "max_rows": 4900,
+  "max_zip_ratio": 34.36,
+  "formats": {
+    "text": 15,
+    "txt": 15,
+    "docx": 15,
+    "doc": 15,
+    "pdf": 15,
+    "xlsx": 15,
+    "png": 30,
+    "jpg": 15,
+    "pdf-scan": 15,
+    "pdf-mixed": 5
+  },
+  "translation_tested": false,
+  "ccu_tested": false
+}

@@ -1,0 +1,45 @@
+# Dry-run baseline (mục 0 của 02-test-giao-dien-tung-buoc.txt) — 2026-10-12
+
+Phạm vi: chỉ mục 0. Không đăng nhập thật (không có thông tin tài khoản trong phiên). Không chạy case, không gửi input sinh PoC, không sửa tài liệu gốc.
+
+## Công cụ đã thử
+- MCP t3-code preview_open/preview_snapshot/preview_status/preview_wait_for: KHÔNG dùng được. preview_navigate báo "No active preview tab" sau khi preview_open; preview_snapshot lỗi "Preview automation snapshot failed"; preview_status và preview_wait_for báo không có preview automation host (server không có trình duyệt, cần app T3 Code desktop).
+- Thay thế: curl để kiểm tra khả năng truy cập, và Playwright MCP (mcp__playwright__browser_*) để render trang SPA.
+
+## Bước 1 — trang đăng nhập https://ias.id.vn/login
+- curl: HTTP 200, không redirect. HTML trả về là shell SPA gần như rỗng (~1.4 KB), selector chỉ có sau khi JS chạy.
+- Playwright (render): trang tải được, title "Intelligent AutoScan", URL giữ nguyên /login.
+- Accessibility snapshot: heading "Đăng nhập"; textbox "Tài khoản" (placeholder "Nhập tên đăng nhập"); textbox "Mật khẩu" (placeholder "Nhập mật khẩu của bạn"); button "Đăng nhập".
+- Kiểm DOM qua evaluate: #example-email CÓ (input type=text, name=example-email); #example-password CÓ (input type=password); button có text "Đăng nhập" (1 nút).
+- Kết quả: KHỚP tài liệu — 3 selector còn đúng. Không có khác biệt.
+- Đăng nhập thật: BLOCKED — thiếu thông tin đăng nhập (không thực hiện).
+
+## Bước 2 — Devspace http://127.0.0.1:5173
+- curl: HTTP 200.
+- Playwright: title "SecAI · DevSpace", trang chính tải được không cần đăng nhập. Banner hiển thị trạng thái "Hệ thống ổn định" (lần đầu thấy "health không phản hồi", sau đó đổi).
+- Menu "Nền tảng AI" có 4 nút: Dịch văn bản, Trợ lý ảo ATTT, Sinh mã khai thác, Báo cáo thông minh.
+
+## Bước 2a — URL /ai/exploit trên Devspace (5173)
+- http://127.0.0.1:5173/ai/exploit trả HTTP 405 với body {"detail":"Method Not Allowed"} — đường dẫn này được proxy tới API backend (POST-only), KHÔNG phải route giao diện.
+- Khác biệt so với tài liệu: tài liệu ghi URL giao diện là /ai/exploit; thực tế trên Devspace, giao diện "Sinh mã khai thác" mở trong trang gốc / bằng chuyển view tại chỗ (URL vẫn là http://127.0.0.1:5173/), không có route /ai/exploit ở phía giao diện.
+
+## Bước 4 — "Sinh mã khai thác" trên Devspace
+- Bấm nút "Sinh mã khai thác" trong menu Nền tảng AI (chỉ điều hướng view, không gửi gì): màn hình hiện heading "Sinh mã khai thác", badge "READ-ONLY · draft_not_executed".
+- Có: ô nhập "Mã CVE, mô tả lỗ hổng, hoặc target/ref…" (role=textbox); nút "Sinh mã khai thác" (đang disabled khi chưa nhập); nút "Chọn mã CVE" (disabled); nút "Tải PoC" (disabled); khối kết quả "exploit.py — Đã defang — không thể thực thi".
+- Selector `textarea`: KHÔNG khớp — document có 0 phần tử textarea. Ô nhập là textbox (vì vậy tài liệu mô tả `textarea` là SAI với UI hiện tại; cần dùng role=textbox hoặc input).
+- Nút "Sinh mã khai thác": có, đúng tên, nhưng disabled ở trạng thái rỗng. Không bấm để sinh (không có input).
+- Khác biệt tổng hợp so với tài liệu: (a) ô input không còn là textarea; (b) URL /ai/exploit không phải route giao diện trên 5173; (c) trạng thái nút disabled cần nhập input trước.
+- Không kiểm được textbox có phải element <input> hay thẻ khác; chỉ xác nhận không có <textarea>.
+
+## Tổng kết theo bước
+| Bước | Kết quả |
+|---|---|
+| 1. Trang login ias.id.vn: 3 selector | Đúng như tài liệu |
+| 1b. Đăng nhập thật | BLOCKED — thiếu thông tin đăng nhập |
+| 2. Devspace tải được không cần đăng nhập | Đạt |
+| 2a. Route /ai/exploit trên giao diện | Khác: 405 (API proxy); giao diện nằm ở / |
+| 4. Selector textarea | Khác: không có textarea, ô nhập là textbox |
+| 4. Nút "Sinh mã khai thác" | Đúng tên, đang disabled khi rỗng |
+| Preview tool MCP t3-code | Không khả dụng (không có host) |
+
+Không có kết luận PASS/FAIL; đây là ghi nhận quan sát để so với tài liệu.

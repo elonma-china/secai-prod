@@ -1,0 +1,43 @@
+SecAI text-medium-fr-vi-03
+[text-medium-fr-vi-03-0000] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-medium-fr-vi-03-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[text-medium-fr-vi-03-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[text-medium-fr-vi-03-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[text-medium-fr-vi-03-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-medium-fr-vi-03-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0015] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[text-medium-fr-vi-03-0016] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[text-medium-fr-vi-03-0017] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[text-medium-fr-vi-03-0018] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[text-medium-fr-vi-03-0019] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-medium-fr-vi-03-0020] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-medium-fr-vi-03-0021] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[text-medium-fr-vi-03-0022] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[text-medium-fr-vi-03-0023] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[text-medium-fr-vi-03-0024] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[text-medium-fr-vi-03-0025] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[text-medium-fr-vi-03-0026] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[text-medium-fr-vi-03-0027] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[text-medium-fr-vi-03-0028] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0029] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[text-medium-fr-vi-03-0030] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[text-medium-fr-vi-03-0031] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[text-medium-fr-vi-03-0032] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[text-medium-fr-vi-03-0033] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit34 audit35 audit36 audit37 audit38 audit39
+Account: svc_ccu_ae5c6bed
+Password: Pw5f7fde8a!0&*()_+
+URL: https://ae5c6bed.example.org/audit?id=11426923&mode=test
+IP: 192.0.2.174:8923
+CVE: CVE-2024-6923
+Email: audit.ae5c6bed@example.org
+Key: sk-test-fd46ed4842858401

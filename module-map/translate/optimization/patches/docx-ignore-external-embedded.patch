@@ -1,0 +1,46 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/documents.py.pre-ext	2026-10-11 09:22:01.712180624 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/documents.py	2026-10-11 09:22:01.742538623 +0700
+@@ -198,16 +198,22 @@
+     parts = _safe_zip(path, settings)
+     if "[Content_Types].xml" not in parts or "word/document.xml" not in parts:
+         raise TranslationError("CORRUPT_DOCUMENT", "Word document parts are missing.")
++    ignored_parts: set[str] = set()
+     for name, data in parts.items():
+         low = name.lower()
+-        if any(x in low for x in ("vbaproject", "activex", "embeddings/", "oleobject")):
++        # Macros / ActiveX are refused. Embedded OLE objects (equations, chart workbooks) and external links
++        # (hyperlinks, attached template) are never opened or fetched here — only text is extracted — so they
++        # are skipped with a warning instead of failing an ordinary paper.
++        if any(x in low for x in ("vbaproject", "activex")):
+             raise TranslationError("UNSAFE_DOCUMENT", "Active document content is unsupported.")
++        if "embeddings/" in low or "oleobject" in low:
++            ignored_parts.add("embedded objects")
+         if low.endswith(".xml") or low.endswith(".rels"):
+             root = _xml(data)
+             if low.endswith(".rels"):
+                 for rel in root:
+                     if rel.attrib.get("TargetMode", "").lower() == "external":
+-                        raise TranslationError("UNSAFE_DOCUMENT", "External document links are unsupported.")
++                        ignored_parts.add("external links")
+     root = _xml(parts["word/document.xml"])
+     content_types = parts["[Content_Types].xml"]
+     if b"wordprocessingml.document.main+xml" not in content_types:
+@@ -216,7 +222,8 @@
+     if body is None:
+         raise TranslationError("CORRUPT_DOCUMENT", "Word body is missing.")
+     items: list[tuple[str, str, dict]] = []
+-    warnings: list[WarningItem] = []
++    warnings: list[WarningItem] = [WarningItem(code="UNSUPPORTED_PART", message=f"Ignored (not translated or opened): {kind}.")
++                                   for kind in sorted(ignored_parts)]
+     table_number = 0
+     notes: dict[str, ET.Element] = {}
+     if "word/footnotes.xml" in parts:
+@@ -241,6 +248,8 @@
+     if "word/_rels/document.xml.rels" in parts:
+         for rel in _xml(parts["word/_rels/document.xml.rels"]):
+             target = rel.attrib.get("Target", "")
++            if rel.attrib.get("TargetMode", "").lower() == "external":
++                continue  # never dereferenced
+             resolved = posixpath.normpath("word/" + target)
+             if target.startswith("/") or resolved == ".." or resolved.startswith("../"):
+                 raise TranslationError("UNSAFE_DOCUMENT", "Document relationship is unsafe.")

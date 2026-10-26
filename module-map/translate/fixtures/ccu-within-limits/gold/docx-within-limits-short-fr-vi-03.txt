@@ -1,0 +1,238 @@
+SecAI - 1
+SecAI docx-within-limits-short-fr-vi-03-p01
+[docx-within-limits-short-fr-vi-03-p01-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p01-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p01-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p01-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p01-0004] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p01-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p01-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p01-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p01-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p01-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p01-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p01-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p01-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p01-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p01-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2
+
+SecAI - 2
+SecAI docx-within-limits-short-fr-vi-03-p02
+[docx-within-limits-short-fr-vi-03-p02-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p02-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p02-0002] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p02-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p02-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p02-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p02-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p02-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p02-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p02-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p02-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p02-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p02-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p02-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p02-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+Asset | Owner | Priority
+node-1-0 | SOC | 1
+node-1-1 | SOC | 2
+
+SecAI - 3
+SecAI docx-within-limits-short-fr-vi-03-p03
+[docx-within-limits-short-fr-vi-03-p03-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p03-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p03-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p03-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p03-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p03-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p03-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p03-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p03-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p03-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p03-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p03-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p03-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p03-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p03-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p03-0015] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+Keywords:
+
+Asset | Owner | Priority
+node-2-0 | SOC | 1
+node-2-1 | SOC | 2
+
+SecAI - 4
+SecAI docx-within-limits-short-fr-vi-03-p04
+[docx-within-limits-short-fr-vi-03-p04-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p04-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p04-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p04-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p04-0004] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p04-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p04-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p04-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p04-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p04-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p04-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p04-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p04-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p04-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p04-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19
+
+Asset | Owner | Priority
+node-3-0 | SOC | 1
+node-3-1 | SOC | 2
+
+SecAI - 5
+SecAI docx-within-limits-short-fr-vi-03-p05
+[docx-within-limits-short-fr-vi-03-p05-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p05-0001] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p05-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p05-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p05-0004] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p05-0005] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p05-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p05-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p05-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p05-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p05-0010] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p05-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p05-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p05-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p05-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+Asset | Owner | Priority
+node-4-0 | SOC | 1
+node-4-1 | SOC | 2
+
+SecAI - 6
+SecAI docx-within-limits-short-fr-vi-03-p06
+[docx-within-limits-short-fr-vi-03-p06-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p06-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p06-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p06-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p06-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p06-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p06-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p06-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p06-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p06-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p06-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p06-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p06-0012] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p06-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p06-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21
+
+Asset | Owner | Priority
+node-5-0 | SOC | 1
+node-5-1 | SOC | 2
+
+SecAI - 7
+SecAI docx-within-limits-short-fr-vi-03-p07
+[docx-within-limits-short-fr-vi-03-p07-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p07-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p07-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p07-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p07-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p07-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p07-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p07-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p07-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p07-0009] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p07-0010] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p07-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p07-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p07-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p07-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+Asset | Owner | Priority
+node-6-0 | SOC | 1
+node-6-1 | SOC | 2
+
+SecAI - 8
+SecAI docx-within-limits-short-fr-vi-03-p08
+[docx-within-limits-short-fr-vi-03-p08-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p08-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p08-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p08-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p08-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p08-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p08-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p08-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p08-0008] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p08-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p08-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p08-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p08-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p08-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p08-0014] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+Keywords: audit15 audit16
+
+Asset | Owner | Priority
+node-7-0 | SOC | 1
+node-7-1 | SOC | 2
+
+SecAI - 9
+SecAI docx-within-limits-short-fr-vi-03-p09
+[docx-within-limits-short-fr-vi-03-p09-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p09-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p09-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p09-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p09-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p09-0007] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p09-0008] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p09-0010] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p09-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p09-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-within-limits-short-fr-vi-03-p09-0015] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit16 audit17
+
+Asset | Owner | Priority
+node-8-0 | SOC | 1
+node-8-1 | SOC | 2
+
+SecAI - 10
+SecAI docx-within-limits-short-fr-vi-03-p10
+[docx-within-limits-short-fr-vi-03-p10-0000] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p10-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p10-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p10-0003] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-within-limits-short-fr-vi-03-p10-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p10-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p10-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-within-limits-short-fr-vi-03-p10-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p10-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-within-limits-short-fr-vi-03-p10-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-within-limits-short-fr-vi-03-p10-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-within-limits-short-fr-vi-03-p10-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p10-0012] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-within-limits-short-fr-vi-03-p10-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-within-limits-short-fr-vi-03-p10-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+Account: svc_ccu_9f30fa2f
+Password: Pwb5ce320c!0&*()_+
+URL: https://9f30fa2f.example.org/audit?id=10432762&mode=test
+IP: 192.0.2.13:8762
+CVE: CVE-2024-2762
+Email: audit.9f30fa2f@example.org
+Key: sk-test-d7213064e5fa34e0
+
+Asset | Owner | Priority
+node-9-0 | SOC | 1
+node-9-1 | SOC | 2

@@ -1,0 +1,29 @@
+SecAI - 1
+SecAI doc-short-fr-vi-03-p01
+[doc-short-fr-vi-03-p01-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[doc-short-fr-vi-03-p01-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[doc-short-fr-vi-03-p01-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[doc-short-fr-vi-03-p01-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[doc-short-fr-vi-03-p01-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[doc-short-fr-vi-03-p01-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[doc-short-fr-vi-03-p01-0006] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[doc-short-fr-vi-03-p01-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[doc-short-fr-vi-03-p01-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[doc-short-fr-vi-03-p01-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[doc-short-fr-vi-03-p01-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[doc-short-fr-vi-03-p01-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[doc-short-fr-vi-03-p01-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[doc-short-fr-vi-03-p01-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[doc-short-fr-vi-03-p01-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+Account: svc_ccu_0eb2eb77
+Password: Pw5ed596f0!0&*()_+
+URL: https://0eb2eb77.example.org/audit?id=963307&mode=test
+IP: 192.0.2.58:8307
+CVE: CVE-2024-1307
+Email: audit.0eb2eb77@example.org
+Key: sk-test-7d9b6946c2ce93b8
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2

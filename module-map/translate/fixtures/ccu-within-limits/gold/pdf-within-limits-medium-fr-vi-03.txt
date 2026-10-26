@@ -1,0 +1,578 @@
+SecAI pdf-within-limits-medium-fr-vi-03-p01
+[pdf-within-limits-medium-fr-vi-03-p01-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p01-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p01-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p01-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p01-0004] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p01-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p01-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p01-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p01-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p01-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p01-0010] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p01-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p01-0012] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p01-0013] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p01-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18 audit19
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p02
+[pdf-within-limits-medium-fr-vi-03-p02-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p02-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p02-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p02-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p02-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p02-0005] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p02-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p02-0007] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p02-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p02-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p02-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p02-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p02-0012] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p02-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p02-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p03
+[pdf-within-limits-medium-fr-vi-03-p03-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p03-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p03-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p03-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p03-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p03-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p03-0006] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p03-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p03-0008] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p03-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p03-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p03-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p03-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p03-0013] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p03-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p04
+[pdf-within-limits-medium-fr-vi-03-p04-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p04-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p04-0002] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p04-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p04-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p04-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p04-0006] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p04-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p04-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p04-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p04-0010] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p04-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p04-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p04-0013] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p04-0014] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+Keywords: audit15 audit16
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p05
+[pdf-within-limits-medium-fr-vi-03-p05-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p05-0001] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p05-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p05-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p05-0004] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p05-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p05-0006] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p05-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p05-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p05-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p05-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p05-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p05-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p05-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p05-0014] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p06
+[pdf-within-limits-medium-fr-vi-03-p06-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p06-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p06-0002] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p06-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p06-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p06-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p06-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p06-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p06-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p06-0009] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p06-0010] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p06-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p06-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p06-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p06-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p07
+[pdf-within-limits-medium-fr-vi-03-p07-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p07-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p07-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p07-0003] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p07-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p07-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p07-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p07-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p07-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p07-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p07-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p07-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p07-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p07-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p07-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p07-0015] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords:
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p08
+[pdf-within-limits-medium-fr-vi-03-p08-0000] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p08-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p08-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p08-0003] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p08-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p08-0005] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p08-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p08-0007] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p08-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p08-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p08-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p08-0011] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p08-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p08-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p08-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p09
+[pdf-within-limits-medium-fr-vi-03-p09-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p09-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p09-0002] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p09-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p09-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p09-0007] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p09-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p09-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p09-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p09-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p10
+[pdf-within-limits-medium-fr-vi-03-p10-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p10-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p10-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p10-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p10-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p10-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p10-0006] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p10-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p10-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p10-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p10-0010] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p10-0011] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p10-0012] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p10-0013] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p10-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27 audit28
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p11
+[pdf-within-limits-medium-fr-vi-03-p11-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p11-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p11-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p11-0003] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p11-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p11-0005] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p11-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p11-0007] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p11-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p11-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p11-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p11-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p11-0012] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p11-0013] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p11-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+Keywords: audit15 audit16
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p12
+[pdf-within-limits-medium-fr-vi-03-p12-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p12-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p12-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p12-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p12-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p12-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p12-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p12-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p12-0008] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p12-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p12-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p12-0011] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p12-0012] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p12-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p12-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p13
+[pdf-within-limits-medium-fr-vi-03-p13-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p13-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p13-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p13-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p13-0004] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p13-0005] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p13-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p13-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p13-0008] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p13-0009] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p13-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p13-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p13-0012] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p13-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p13-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p14
+[pdf-within-limits-medium-fr-vi-03-p14-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p14-0001] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p14-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p14-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p14-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p14-0005] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p14-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p14-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p14-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p14-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p14-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p14-0011] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p14-0012] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p14-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p14-0014] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p15
+[pdf-within-limits-medium-fr-vi-03-p15-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p15-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p15-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p15-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p15-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p15-0005] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p15-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p15-0007] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p15-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p15-0009] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p15-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p15-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p15-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p15-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p15-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p16
+[pdf-within-limits-medium-fr-vi-03-p16-0000] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p16-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p16-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p16-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p16-0004] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p16-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p16-0006] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p16-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p16-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p16-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p16-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p16-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p16-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p16-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p16-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p17
+[pdf-within-limits-medium-fr-vi-03-p17-0000] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p17-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p17-0002] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p17-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p17-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p17-0005] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p17-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p17-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p17-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p17-0009] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p17-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p17-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p17-0012] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p17-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p17-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p18
+[pdf-within-limits-medium-fr-vi-03-p18-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p18-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p18-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p18-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p18-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p18-0005] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p18-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p18-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p18-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p18-0009] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p18-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p18-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p18-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p18-0013] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p18-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p19
+[pdf-within-limits-medium-fr-vi-03-p19-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p19-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p19-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p19-0003] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p19-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p19-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p19-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p19-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p19-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p19-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p19-0010] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p19-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p19-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p19-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p19-0014] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p20
+[pdf-within-limits-medium-fr-vi-03-p20-0000] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p20-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p20-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p20-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p20-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p20-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p20-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p20-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p20-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p20-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p20-0010] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p20-0011] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p20-0012] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p20-0013] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p20-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p20-0015] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit16
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p21
+[pdf-within-limits-medium-fr-vi-03-p21-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p21-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p21-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p21-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p21-0004] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p21-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p21-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p21-0007] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p21-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p21-0009] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p21-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p21-0011] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p21-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p21-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p21-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p22
+[pdf-within-limits-medium-fr-vi-03-p22-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p22-0002] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p22-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p22-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p22-0005] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p22-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p22-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p22-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p22-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p22-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p23
+[pdf-within-limits-medium-fr-vi-03-p23-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p23-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p23-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p23-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p23-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p23-0005] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p23-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p23-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p23-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p23-0009] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p23-0010] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p23-0011] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p23-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p23-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p23-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p24
+[pdf-within-limits-medium-fr-vi-03-p24-0000] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p24-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p24-0002] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p24-0003] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p24-0004] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p24-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p24-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p24-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p24-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p24-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p24-0010] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p24-0011] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p24-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p24-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p24-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+Keywords: audit15 audit16 audit17 audit18 audit19
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p25
+[pdf-within-limits-medium-fr-vi-03-p25-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p25-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p25-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p25-0005] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p25-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p25-0008] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p25-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p25-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p25-0013] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p25-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p25-0015] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords: audit16
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p26
+[pdf-within-limits-medium-fr-vi-03-p26-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p26-0001] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p26-0002] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p26-0003] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p26-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p26-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p26-0006] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p26-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p26-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p26-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p26-0010] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p26-0011] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p26-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p26-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p26-0014] Chaque modification est testée avec des documents représentatifs avant la livraison.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p27
+[pdf-within-limits-medium-fr-vi-03-p27-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p27-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p27-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p27-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0007] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p27-0008] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p27-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0010] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p27-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p27-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p27-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p27-0014] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+Keywords:
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p28
+[pdf-within-limits-medium-fr-vi-03-p28-0000] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p28-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p28-0002] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p28-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p28-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p28-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p28-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p28-0007] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p28-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p28-0009] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p28-0010] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p28-0011] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p28-0012] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p28-0013] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p28-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p29
+[pdf-within-limits-medium-fr-vi-03-p29-0000] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p29-0001] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p29-0002] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p29-0003] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p29-0004] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p29-0005] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[pdf-within-limits-medium-fr-vi-03-p29-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p29-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p29-0008] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p29-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p29-0010] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p29-0011] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p29-0012] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p29-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p29-0014] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20
+
+
+SecAI pdf-within-limits-medium-fr-vi-03-p30
+[pdf-within-limits-medium-fr-vi-03-p30-0000] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p30-0001] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p30-0002] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p30-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[pdf-within-limits-medium-fr-vi-03-p30-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[pdf-within-limits-medium-fr-vi-03-p30-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[pdf-within-limits-medium-fr-vi-03-p30-0006] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[pdf-within-limits-medium-fr-vi-03-p30-0007] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p30-0008] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p30-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[pdf-within-limits-medium-fr-vi-03-p30-0010] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p30-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[pdf-within-limits-medium-fr-vi-03-p30-0012] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p30-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[pdf-within-limits-medium-fr-vi-03-p30-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26
+Account: svc_ccu_4306d098
+Password: Pw6801bef6!0&*()_+
+URL: https://4306d098.example.org/audit?id=4392656&mode=test
+IP: 192.0.2.157:8656
+CVE: CVE-2024-1656
+Email: audit.4306d098@example.org
+Key: sk-test-60d5191c06548acb

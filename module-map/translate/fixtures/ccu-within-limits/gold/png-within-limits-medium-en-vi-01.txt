@@ -1,0 +1,84 @@
+SecAI png-within-limits-medium-en-vi-01
+[png-within-limits-medium-en-vi-01-0000] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0001] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0002] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0003] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0004] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0005] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0006] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0007] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0008] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0009] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0010] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0011] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0012] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0014] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0015] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0016] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0017] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0018] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0019] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0020] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0021] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0022] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0023] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0024] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0025] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0026] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0027] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0028] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0029] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0030] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0031] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0032] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0033] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0034] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0035] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0036] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0037] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0038] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0039] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0040] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0041] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0042] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0043] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0044] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0045] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0046] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0047] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0048] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0049] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0050] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0051] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0052] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0053] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0054] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0055] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0056] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0057] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0058] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0059] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0060] Every change is tested with representative documents before release to the customer.
+[png-within-limits-medium-en-vi-01-0061] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0062] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0063] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0064] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-within-limits-medium-en-vi-01-0065] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-within-limits-medium-en-vi-01-0066] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0067] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0068] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[png-within-limits-medium-en-vi-01-0069] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0070] Analysts compare network alerts with application logs before opening an incident.
+[png-within-limits-medium-en-vi-01-0071] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-within-limits-medium-en-vi-01-0072] The security team reviews access permissions and records the owner of each service.
+[png-within-limits-medium-en-vi-01-0073] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-within-limits-medium-en-vi-01-0074] Every change is tested with representative documents before release to the customer.
+Keywords: audit75 audit76
+Account: svc_ccu_b2917b5a
+Password: Pwd582e4f7!0&*()_+
+URL: https://b2917b5a.example.org/audit?id=11702651&mode=test
+IP: 192.0.2.152:8651
+CVE: CVE-2024-3651
+Email: audit.b2917b5a@example.org
+Key: sk-test-ba4e9239671a1b91

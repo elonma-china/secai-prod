@@ -1,0 +1,15 @@
+SecAI jpg-short-en-vi-01
+[jpg-short-en-vi-01-0000] Analysts compare network alerts with application logs before opening an incident.
+[jpg-short-en-vi-01-0001] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[jpg-short-en-vi-01-0002] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[jpg-short-en-vi-01-0003] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-short-en-vi-01-0004] A vulnerability report describes the affected asset, business impact and remediation steps.
+[jpg-short-en-vi-01-0005] Analysts compare network alerts with application logs before opening an incident.
+Keywords: audit6 audit7 audit8 audit9 audit10
+Account: svc_ccu_99100513
+Password: Pw52834d4b!0&*()_+
+URL: https://99100513.example.org/audit?id=10031109&mode=test
+IP: 192.0.2.110:8109
+CVE: CVE-2024-6109
+Email: audit.99100513@example.org
+Key: sk-test-956a57a81edd3b28

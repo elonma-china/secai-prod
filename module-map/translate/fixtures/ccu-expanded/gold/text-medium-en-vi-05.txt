@@ -1,0 +1,45 @@
+SecAI text-medium-en-vi-05
+[text-medium-en-vi-05-0000] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-medium-en-vi-05-0001] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-medium-en-vi-05-0002] Every change is tested with representative documents before release to the customer.
+[text-medium-en-vi-05-0003] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-medium-en-vi-05-0004] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-medium-en-vi-05-0005] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0006] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-medium-en-vi-05-0007] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0008] The security team reviews access permissions and records the owner of each service.
+[text-medium-en-vi-05-0009] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-medium-en-vi-05-0010] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0011] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-medium-en-vi-05-0012] The security team reviews access permissions and records the owner of each service.
+[text-medium-en-vi-05-0013] Analysts compare network alerts with application logs before opening an incident.
+[text-medium-en-vi-05-0014] Every change is tested with representative documents before release to the customer.
+[text-medium-en-vi-05-0015] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-medium-en-vi-05-0016] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-medium-en-vi-05-0017] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0018] Every change is tested with representative documents before release to the customer.
+[text-medium-en-vi-05-0019] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-medium-en-vi-05-0020] The security team reviews access permissions and records the owner of each service.
+[text-medium-en-vi-05-0021] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-medium-en-vi-05-0022] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-medium-en-vi-05-0023] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-medium-en-vi-05-0024] The security team reviews access permissions and records the owner of each service.
+[text-medium-en-vi-05-0025] Analysts compare network alerts with application logs before opening an incident.
+[text-medium-en-vi-05-0026] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0027] Analysts compare network alerts with application logs before opening an incident.
+[text-medium-en-vi-05-0028] Every change is tested with representative documents before release to the customer.
+[text-medium-en-vi-05-0029] Analysts compare network alerts with application logs before opening an incident.
+[text-medium-en-vi-05-0030] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-medium-en-vi-05-0031] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0032] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0033] Analysts compare network alerts with application logs before opening an incident.
+[text-medium-en-vi-05-0034] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-medium-en-vi-05-0035] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit36 audit37 audit38 audit39 audit40 audit41
+Account: svc_ccu_42816cfb
+Password: Pw87f9afd7!0&*()_+
+URL: https://42816cfb.example.org/audit?id=4358508&mode=test
+IP: 192.0.2.9:8508
+CVE: CVE-2024-3508
+Email: audit.42816cfb@example.org
+Key: sk-test-5a3c12936a6b9325

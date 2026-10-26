@@ -34,6 +34,18 @@ both patches must be present and the lock paths must resolve to the same inode.
 This branch has CPU fake-child tests only. It has **not** activated OCR or MT
 on a GPU, and OCR quality qualification is outside this scheduling change.
 
+Failure semantics at preload: `503 GPU_RESERVE` raised before any child exists
+(free VRAM below the 8192 MiB reserve) is transient and retryable. It does
+**not** latch the queue, leaves no evidence directory, and the next request
+re-checks the GPU. `GPU_OWNER`, `GPU_SAMPLE`, `GPU_CLEANUP`, `GPU_BUDGET` and
+a `GPU_RESERVE` observed while a stage is running or after it is reaped still
+poison the queue until the process is restarted after cleanup proof. The
+reserve is sampled once before the model-file attestation (a cheap gate, so a
+sustained shortage does not rehash multi-GB files) and again after it. Every
+stage failure also emits one warning line, `gpu stage failure code=<CODE>
+poison=<bool>`, with the code and poison flag only, to stderr; confirm on
+deploy that it reaches `mt.log`.
+
 ## Optional warm lease (`GPU_MT_WARM_IDLE_SECONDS`)
 
 Default `0` keeps the behaviour above: one child per request. Set it to a small

@@ -1,0 +1,30 @@
+SecAI png-medium-en-vi-05
+[png-medium-en-vi-05-0000] Every change is tested with representative documents before release to the customer.
+[png-medium-en-vi-05-0001] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0002] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0003] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-medium-en-vi-05-0004] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-medium-en-vi-05-0005] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-medium-en-vi-05-0006] The security team reviews access permissions and records the owner of each service.
+[png-medium-en-vi-05-0007] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[png-medium-en-vi-05-0008] Every change is tested with representative documents before release to the customer.
+[png-medium-en-vi-05-0009] Every change is tested with representative documents before release to the customer.
+[png-medium-en-vi-05-0010] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0011] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0012] The security team reviews access permissions and records the owner of each service.
+[png-medium-en-vi-05-0013] The maintenance window requires a tested backup and a documented recovery procedure.
+[png-medium-en-vi-05-0014] A vulnerability report describes the affected asset, business impact and remediation steps.
+[png-medium-en-vi-05-0015] The security team reviews access permissions and records the owner of each service.
+[png-medium-en-vi-05-0016] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0017] Analysts compare network alerts with application logs before opening an incident.
+[png-medium-en-vi-05-0018] Every change is tested with representative documents before release to the customer.
+[png-medium-en-vi-05-0019] The inventory includes databases, network devices, endpoints and their responsible teams.
+[png-medium-en-vi-05-0020] The inventory includes databases, network devices, endpoints and their responsible teams.
+Keywords: audit21 audit22 audit23 audit24 audit25 audit26 audit27 audit28 audit29 audit30 audit31 audit32
+Account: svc_ccu_fd22adc5
+Password: Pw7c604958!0&*()_+
+URL: https://fd22adc5.example.org/audit?id=16589485&mode=test
+IP: 192.0.2.236:8485
+CVE: CVE-2024-3485
+Email: audit.fd22adc5@example.org
+Key: sk-test-4a388b0fbc815ac8

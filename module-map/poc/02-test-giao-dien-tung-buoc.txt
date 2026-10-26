@@ -1,0 +1,105 @@
+# Thứ tự kiểm thử sinh PoC như người dùng thường
+
+## 1. Xác minh lại danh sách trước khi chạy — BẮT BUỘC
+
+20 CVE trong [04-test-data.json](04-test-data.json) được xác định "có/không có trong DB" và "không tồn tại" tại **09/10/2026**. Catalog PoC và KB đều được đồng bộ tiếp sau đó (xem [readme.md](readme.md)), nên trước khi chạy một phiên test mới phải tra lại cả hai nguồn — không tin vào nhãn `group` cũ trong JSON nếu đã cách ngày xác minh nhiều hôm:
+
+```sh
+# 1a. Catalog PoC (artifact thật) — chạy trong container gateway
+docker exec -i secai-docker-gateway python3 - <<'PY'
+import sqlite3, json
+db = sqlite3.connect("/srv/poc/catalog.db")
+cves = [c["cve_id"] for c in json.load(open("/dev/stdin"))["cases"]] if False else []
+PY
+# Thực tế: với từng cve_id trong 04-test-data.json, chạy:
+docker exec -i secai-docker-gateway python3 -c "
+import sqlite3
+db = sqlite3.connect('/srv/poc/catalog.db')
+cve = 'CVE-XXXX-NNNNN'
+rows = db.execute('''select p.source, p.kind, p.language, (p.artifact_sha256 is not null) has_art
+    from poc p join poc_cve c on c.poc_id=p.id where c.cve_id=? and p.duplicate_of is null''', (cve,)).fetchall()
+print(cve, rows)
+"
+
+# 1b. KB nội bộ (Qdrant cve_kb_hybrid) — chạy từ host có truy cập :6333
+curl -s "http://127.0.0.1:6333/collections/cve_kb_hybrid/points/count" \
+  -H 'Content-Type: application/json' \
+  -d '{"filter":{"must":[{"key":"cve_id","match":{"value":"CVE-XXXX-NNNNN"}}]}}'
+```
+
+Nếu một case nhóm `fabricated` nay đã có dòng trong catalog hoặc `count>0` trong KB: **loại case đó khỏi phiên test**, thay bằng một mã khác chưa xuất hiện ở cả hai nguồn (lặp lại bước này cho mã thay thế), ghi rõ lý do thay trong file kết quả. Tương tự nếu một case nhóm `not_in_db` nay đã có artifact thật trong catalog, chuyển case đó sang nhóm `in_db` cho phiên này (tiêu chí PASS đổi theo, xem [03](03-tieu-chi-pass.txt)).
+
+## 2. Môi trường — ĐÃ XÁC NHẬN trực tiếp trên IAS ngày 09/10/2026
+
+Khác với bản trước của tài liệu này (chỉ xác nhận trên Devspace), đã đăng nhập thật và chạy thử trực tiếp trên `https://ias.id.vn` bằng MCP preview browser. Chức năng **Sinh mã khai thác** tồn tại NGAY TRÊN IAS, không cần qua Devspace:
+
+| Thông tin | Giá trị |
+|---|---|
+| URL đăng nhập | https://ias.id.vn/login |
+| Tài khoản test | `dev201` |
+| Mật khẩu | Dùng mật khẩu người phụ trách đã cấp trong phiên trao đổi; **không lưu bản rõ trong tài liệu Git** (giống quy ước ở [translate/02](../translate/02-test-giao-dien-tung-buoc.txt)) |
+| Trang sau đăng nhập | https://ias.id.vn/ai/exploit |
+| Menu | **Nền tảng AI → Sinh mã khai thác** |
+| Endpoint thật phía sau | `POST /ai/exploit` hoặc `/ai/exploit/stream` (chưa xác minh IAS gọi bản JSON hay SSE — trang không hiện token streaming từng chữ khi quan sát, có thể gọi bản non-stream) |
+| Dữ liệu | [04-test-data.json](04-test-data.json) |
+| Tiêu chí PASS | [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) |
+
+Devspace (`http://127.0.0.1:5173`, menu tương tự) vẫn dùng được để chẩn đoán cục bộ, nhưng **luồng chính để test là IAS thật** như trên — giống cấu trúc đã áp dụng cho chức năng dịch.
+
+### Selector thật quan sát được trên IAS (09/10/2026)
+
+- Login: `#example-email`, `#example-password`, nút `role=button[name='Đăng nhập']`.
+- Sau login chuyển `/dashboard`. Menu: `text=Nền tảng AI` (mở menu con) → `text=Sinh mã khai thác` → URL chuyển `/ai/exploit`.
+- Trên trang `/ai/exploit`: input là `textarea` (không có placeholder cố định ổn định qua các lần build, dùng selector `textarea` khi chỉ có một ô trên trang), nút `role=button[name='Sinh mã khai thác']`. Nút "Chọn mã CVE" quan sát được NHƯNG không bấm thử (có thể vẫn disabled như ghi chú cũ "chưa có danh mục CVE tra cứu trong bản này" — cần xác minh lại).
+- **Thời gian xử lý: lâu hơn 60 giây** — một lần `preview_wait_for` với timeout 60000ms bị timeout nhưng kết quả vẫn xuất hiện ngay sau đó khi snapshot lại; dùng timeout ≥ 90000ms hoặc poll lặp lại bằng `preview_snapshot`, không coi timeout 60s là lỗi/NOT PASS.
+
+## 3. Các bước lặp cho MỖI case trong 20 case
+
+1. Đăng nhập `https://ias.id.vn/login` (tài khoản `dev201`), bấm **Nền tảng AI → Sinh mã khai thác** (URL chuyển `/ai/exploit`) — đây là luồng chính đã xác nhận thật ở mục 2. Devspace chỉ dùng khi cần chẩn đoán cục bộ.
+2. Xóa sạch ô input nếu còn nội dung case trước — selector thật đã quan sát trên IAS là `textarea` (không có placeholder cố định ổn định, dùng selector `textarea` vì trang chỉ có một ô). Trên Devspace selector là `textarea[placeholder="Mã CVE, mô tả lỗ hổng, hoặc target/ref…"]` — hai bản có thể khác placeholder giữa các lần build, luôn `preview_snapshot` trước khi gõ để xác nhận lại.
+3. Nhập đúng `cve_id` của case (ví dụ `CVE-2026-33017`) — không kèm thêm mô tả tự do, để kết quả dễ đối chiếu `metadata`.
+4. Bấm nút **Sinh mã khai thác** (`role=button[name='Sinh mã khai thác']`).
+5. Chờ xử lý xong — **đã quan sát thật: có thể lâu hơn 60 giây** (xem mục 7), dùng timeout ≥90s hoặc poll lại bằng snapshot, không coi 60s timeout là lỗi. Quan sát:
+   - Panel **Mã khai thác** (Section 1) — nơi hiển thị mã PoC thật hoặc mã tổng hợp, đi kèm banner (xem mục 7 và [01](01-api-va-luong-xu-ly.txt) mục 3 để phân biệt banner thật/tổng hợp).
+   - Phần phân tích/hướng dẫn còn lại trong cùng khối nội dung.
+   - Trạng thái loading/nhãn hiển thị trên IAS CHƯA được xác nhận có đúng chuỗi `READ-ONLY · draft_not_executed` như Devspace hay không — ghi nguyên văn những gì thực tế thấy, không copy mô tả Devspace nếu chưa kiểm lại trên IAS.
+6. Mở DevTools/Network (hoặc dùng MCP devtool nếu có) bắt response của `/ai/exploit/stream`; trích nguyên văn `metadata.candidate_status`, `metadata.section1_tier`, `metadata.sha256`, `metadata.evidence_ids` — đây là dữ liệu quyết định PASS/NOT PASS, không phải cảm nhận giao diện.
+7. Nếu banner 422 "Đầu vào bị chặn" xuất hiện: ghi BLOCKED, không coi là NOT PASS tự động — đọc lý do, đây có thể là hành vi đúng nếu input chứa nội dung giống bí mật/PII.
+8. Ghi lại theo mẫu ở [03](03-tieu-chi-pass.txt) mục 4: input dùng, `metadata` trích được, nội dung Section 1/hướng dẫn quan sát (rút gọn nếu quá dài, giữ đủ để agent kiểm tra độc lập làm việc tiếp).
+9. Lặp lại cho case kế tiếp.
+
+## 4. Riêng nhóm `in_db` (10 case `POC-DB-*`) — bước thêm để agent kiểm tra độc lập dùng
+
+Sau khi có output ở bước 3 trên, với các case này KHÔNG tự so khớp mã nguồn tại bước này — chỉ **thu thập đủ dữ liệu** để agent kiểm tra độc lập #1 ([03](03-tieu-chi-pass.txt) mục 1) làm việc:
+
+1. Trích đoạn mã PoC hiển thị trong panel **Mã khai thác** (toàn bộ, không cắt bớt) — lưu kèm `metadata.sha256` thu được ở bước 2.6.
+2. Không tự vào `docker exec` để so khớp catalog ở vai trò agent thực thi — việc so khớp là của agent kiểm tra độc lập #1, tách vai trò theo [readme.md](readme.md).
+
+## 5. Riêng nhóm `not_in_db` (5 case `POC-SYN-*`) — thông tin lỗ hổng thật để agent chấm % dùng
+
+Agent kiểm tra độc lập #2 cần thông tin lỗ hổng THẬT để chấm, không phải chỉ đọc output của hệ thống. Lấy thông tin đó độc lập (không copy lại mô tả mà chính output vừa sinh ra):
+
+```sh
+curl -s "http://127.0.0.1:6333/collections/cve_kb_hybrid/points/scroll" \
+  -H 'Content-Type: application/json' \
+  -d '{"filter":{"must":[{"key":"cve_id","match":{"value":"CVE-XXXX-NNNNN"}}]},"limit":2,"with_payload":true}'
+```
+
+Ghi lại `cvss_score`, `cwe_refs`, `products`, trường `text`/`title` đầy đủ — đây là "đáp án thật" để agent #2 đối chiếu, tách biệt khỏi những gì model vừa viết ra.
+
+## 6. Riêng nhóm `fabricated` (5 case `POC-FAKE-*`)
+
+Ngoài bước 1 ở mục 1 (xác minh lại), khi chạy case này: nếu output mô tả CHI TIẾT một lỗ hổng cụ thể (CWE/CVSS/sản phẩm bị ảnh hưởng) như thể mã CVE đó có thật — ghi rõ nguyên văn phần đó, đây là dấu hiệu NOT PASS nghiêm trọng (hệ thống bịa), không chỉ ghi "sai". Nếu output đúng là câu từ chối cố định ở [01](01-api-va-luong-xu-ly.txt) mục 3 — ghi khớp nguyên văn hay không.
+
+## 7. Phát hiện thật từ 2 case thăm dò ngày 09/10/2026 (IAS thật, KHÔNG phải toàn bộ 20 case)
+
+Chạy thử 2/20 case bằng tài khoản `dev201` trên `https://ias.id.vn/ai/exploit` để kiểm luồng trước khi chạy đủ phiên — kết quả **khác dự đoán thuần từ catalog tĩnh ở mục [01](01-api-va-luong-xu-ly.txt)**, cho thấy không thể suy PASS chỉ từ việc catalog có artifact:
+
+- `CVE-2025-29927` (`POC-DB-09`): trả banner `ℹ️ PoC dưới đây là mã GỐC (giữ nguyên cấu trúc tệp)...CHƯA chạy thử; nguồn gốc (URL/sha256) ở metadata` — đúng tier `real`/`real_pruned` như dự đoán, kèm 2 file (`cve-2025-29927.py`, `requirements.txt`).
+- `CVE-2026-33017` (`POC-DB-04`): **trả banner `⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP...`** dù catalog (kiểm qua `docker exec secai-docker-gateway`) có artifact thật từ `metasploit`/`exploitdb`. Mã hiển thị tự nhận tham khảo hai link GitHub (`z4yd3/PoC-CVE-2026-33017`, `diamorphine666/CVE-2026-33017-Exploit`) — hai nguồn này KHÔNG khớp với nguồn `metasploit`/`exploitdb` đã thấy trong catalog, nghĩa là pipeline live không lấy đúng artifact đã xác nhận có trong DB cho case này.
+
+**Kết luận cần ghi rõ khi báo cáo phiên đầy đủ**: không giả định "catalog có artifact ⇒ hệ thống chắc chắn trả `draft_not_executed`". `POC-DB-04` phải được chạy lại và nếu vẫn ra `synthesized_not_executed`, đây là **NOT PASS thật** theo [03](03-tieu-chi-pass.txt) mục 1.1 bước 1 (hệ thống không coi là mã thật từ DB dù agent kiểm tra độc lập xác nhận catalog có), cần báo lỗi pipeline (có thể do kiểm license-redistributable hoặc on-demand fetch thất bại cho nguồn đó), không tự sửa case sang nhóm khác để "cho qua".
+
+## 8. Dùng MCP web (nếu chạy qua trình duyệt thay vì gọi API trực tiếp)
+
+Tương tự [translate/02](../translate/02-test-giao-dien-tung-buoc.txt) mục 9: `preview_status` → `preview_navigate` tới Devspace → `preview_snapshot` để lấy input/nút → `preview_type` vào ô input → `preview_click` nút Sinh mã khai thác → `preview_wait_for` tới khi hết spinner → `preview_snapshot` lại để đọc panel kết quả. Vì `/ai/exploit/stream` là SSE, `networkEntries` qua MCP có thể không bắt được từng frame — nếu vậy, gọi trực tiếp bằng `curl -N` tới `POST /ai/exploit/stream` để lấy `metadata` đầy đủ, ghi rõ đã chẩn đoán bằng cách nào.

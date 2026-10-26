@@ -1,0 +1,63 @@
+--- documents.py.pre-json	2026-10-11 06:36:10.858612675 +0700
++++ documents.py	2026-10-11 06:36:18.959798293 +0700
+@@ -1,6 +1,7 @@
+ """Bounded, logical-order text extraction for TXT and Word documents."""
+ from __future__ import annotations
+ 
++import json
+ import re
+ import os
+ import posixpath
+@@ -82,9 +83,52 @@
+     if _bad_controls(text) or "\x00" in text:
+         raise TranslationError("UNSUPPORTED_ENCODING", "Text contains invalid controls.")
+     text = text.replace("\r\n", "\n").replace("\r", "\n")
++    structured = _json_blocks(text)
++    if structured is not None:
++        return _make_blocks(structured, settings, warnings)
+     return _make_blocks([("paragraph", line, {}) for line in text.split("\n")], settings, warnings)
+ 
+ 
++_JSON_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"')
++
++
++def _json_blocks(text: str) -> list[tuple[str, str, dict]] | None:
++    """JSON text: only string VALUES are translatable; keys and punctuation stay verbatim.
++
++    Each value becomes a block holding the decoded string, with the text around it in
++    ``metadata["json_affix"]`` so the translation is re-escaped and wrapped back and the file
++    still parses. Structure between values is emitted as literal blocks (the output joins blocks
++    with newlines, which is only inserted between JSON tokens).
++    """
++    stripped = text.strip()
++    if not stripped or stripped[0] not in "{[":
++        return None
++    try:
++        if not isinstance(json.loads(stripped), (dict, list)):
++            return None
++    except ValueError:
++        return None
++    items: list[tuple[str, str, dict]] = []
++    for line in text.split("\n"):
++        pieces: list[tuple[int, int]] = []
++        for match in _JSON_STRING.finditer(line):
++            if re.match(r"\s*:", line[match.end():]):
++                continue  # object key
++            pieces.append((match.start(), match.end()))
++        if not pieces:
++            items.append(("literal", line, {}))
++            continue
++        previous_end = 0
++        for index, (start, end) in enumerate(pieces):
++            if index:
++                items.append(("literal", line[previous_end:start], {}))
++            prefix = (line[:start] if not index else "") + '"'
++            suffix = '"' + (line[end:] if index == len(pieces) - 1 else "")
++            items.append(("paragraph", json.loads(line[start:end]), {"json_affix": [prefix, suffix]}))
++            previous_end = end
++    return items
++
++
+ def _safe_zip(path: Path, settings: TranslationSettings) -> dict[str, bytes]:
+     try:
+         archive = zipfile.ZipFile(path)

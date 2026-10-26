@@ -1,0 +1,137 @@
+SecAI pdf-scan-within-limits-short-vi-ja-04-p01
+[pdf-scan-within-limits-short-vi-ja-04-p01-0000] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0001] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0002] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0003] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0004] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0005] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0006] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0007] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0008] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p01-0009] トラブル報告書を開く前に、ネットワークの監視データとアプリケーションのログを照合する担当者。
+キーワード：audit10 audit11 audit12 audit13 audit14 audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27 audit28
+SecAI pdf-scan-within-limits-short-vi-ja-04-p02  
+[pdf-scan-within-limits-short-vi-ja-04-p02-0000] 影響を受けた資産の詳細が記載された障害報告書、業務への影響と対処策。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0001] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0002] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0003] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0004] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0005] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0006] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0007] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0008] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0009] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p02-0010] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+キーワード：audit11 audit12 audit13 audit14
+SecAI pdf-scan-within-limits-short-vi-ja-04-p03
+[pdf-scan-within-limits-short-vi-ja-04-p03-0000] 保守作業には、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0001] 災害記録を開く前に、方向変更専門員がアプリケーションの署名を使ってネットワークに警告を発する。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0002] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0003] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0004] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0005] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0006] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0007] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0008] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0009] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p03-0010] トラブル報告書を開く前に、ネットワークの監視データとアプリケーションのログを照合する担当者。
+キーワード：audit11 audit12 audit13
+SecAI pdf-scan-within-limits-short-vi-ja-04-p04
+[pdf-scan-within-limits-short-vi-ja-04-p04-0000] 証拠をチェックする評価者、優先度の分類と処理期限の確認。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0001] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0002] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0003] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0004] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0005] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0006] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0007] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0008] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0009] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p04-0010] トラブル報告書を開く前に、ネットワークの監視データとアプリケーションのログを照合する担当者。
+キーワード：audit11 audit12 audit13 audit14 audit15
+SecAI pdf-scan-within-limits-short-vi-ja-04-p05
+[pdf-scan-within-limits-short-vi-ja-04-p05-0000] 保守作業には、検証済みのバックアップが必要です。
+復元手順が明記されている。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0001] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成される一覧。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0002] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0003] 保守作業には、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0004] 保守作業には、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0005] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0006] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0007] インシデント記録を開く前に、方向変更担当者がアプリケーションのログをもとにネットワークについて警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0008] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0009] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p05-0010] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+キーワード：audit11 audit12 audit13 audit14 audit15 audit16 audit17
+SecAI pdf-scan-within-limits-short-vi-ja-04-p06
+[pdf-scan-within-limits-short-vi-ja-04-p06-0000] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0001] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0002] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0003] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0004] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0005] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0006] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0007] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0008] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p06-0009] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+キーワード：audit10 audit11 audit12 audit13 audit14 audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27 audit28
+SecAI pdf-scan-within-limits-short-vi-ja-04-p07
+[pdf-scan-within-limits-short-vi-ja-04-p07-0000] 証拠をチェックする評価者、優先度の分類と処理期限の確認。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0001] 脆弱性報告書には、影響を受ける資産、業務への影響、および対処手順が記載されている。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0002] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0003] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0004] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0005] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0006] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0007] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0008] 災害記録を開く前に、方向変更専門員がアプリケーションの署名を使ってネットワークに警告を発する。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0009] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p07-0010] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+キーワード: audit11 audit12
+SecAI pdf-scan-within-limits-short-vi-ja-04-p08
+[pdf-scan-within-limits-short-vi-ja-04-p08-0000] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0001] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0002] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0003] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0004] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0005] 評価者は証拠を確認し、優先度を分類し、処理期限を決定する。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0006] インシデント記録を開く前に、方向変更担当者がアプリケーションのログをもとにネットワークについて警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0007] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0008] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0009] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p08-0010] トラブル報告書を開く前に、ネットワークの監視データとアプリケーションのログを照合する担当者。
+キーワード：audit11 audit12 audit13 audit14
+SecAI pdf-scan-within-limits-short-vi-ja-04-p09
+[pdf-scan-within-limits-short-vi-ja-04-p09-0000] データベース、ネットワーク機器、コンピュータなどを含むカテゴリ
+責任を負うステーションおよびチーム。  
+[pdf-scan-within-limits-short-vi-ja-04-p09-0001] 漏洩に関する報告書で、影響を受けた資産、業務への影響、および対処手順が記載されている。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0002] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0003] 実行グループはリソースを監視し、キュー内の要求が期日までに処理されるよう確認します。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0004] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0005] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0006] インシデント記録を開く前に、方向変更担当者がアプリケーションのログをもとにネットワークについて警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0007] 評価者は証拠を確認し、優先度を決定し、処理期限を承認する。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0008] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0009] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p09-0010] 影響を受けた資産、業務への影響、および対処手順を記述した障害報告書。
+キーワード：audit11 audit12 audit13 audit14 audit15
+SecAI pdf-scan-within-limits-short-vi-ja-04-p10  
+[pdf-scan-within-limits-short-vi-ja-04-p10-0000] 影響を受けた資産の詳細が記載された障害報告書、業務への影響と対処策。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0001] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0002] 情報セキュリティチームがアクセス権を確認し、各サービスの責任者を記録する。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0003] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0004] エンジニアは、障害記録を開く前にアプリケーションのログをもとにネットワーク上の問題を警告する。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0005] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0006] データベース、ネットワーク機器、ステーション、および責任を持つグループで構成されるカタログ。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0007] すべての変更は、顧客に引き渡す前に代表的な文書を用いてテストが行われます。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0008] 脆弱性報告書には、影響を受ける資産、業務への影響、および対処手順が記載されている。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0009] 脆弱性報告書には、影響を受ける資産、業務への影響、および対処手順が記載されている。
+[pdf-scan-within-limits-short-vi-ja-04-p10-0010] 保守を行うには、検証済みのバックアップと、明確に記載された復元手順が必要である。
+キーワード：audit11 audit12 audit13 audit14  
+アカウント：svc_ccu_32e5c6af  
+Password: Pwed899727!0&*()_+  
+URL：https://32e5c6af.example.org/audit?id=3335622&mode=test
+IP: 192.0.2.123:8622  
+CVE: CVE-2024-6622  
+メールアドレス: audit.32e5c6af@example.org  
+キー: sk-test-8dc469afdd9fd56e

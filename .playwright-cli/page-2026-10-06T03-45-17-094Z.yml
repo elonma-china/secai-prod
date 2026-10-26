@@ -1,0 +1,42 @@
+- generic [ref=f8e3]:
+  - banner [ref=f8e4]:
+    - generic [ref=f8e5]: INTELLIGENT AUTOSCAN
+    - generic [ref=f8e11]:
+      - textbox "Tra cứu ip hoặc tên miền" [ref=f8e12]
+      - button "Tra cứu" [ref=f8e13] [cursor=pointer]
+    - generic [ref=f8e17]:
+      - generic [ref=f8e18]:
+        - text: Demo
+        - combobox "Vai trò demo" [ref=f8e19]:
+          - option "Người dùng thường"
+          - option "Admin" [selected]
+      - generic [ref=f8e20]: Hệ thống ổn định
+      - textbox "user_id (owner-scoping cho project/session/chat)" [ref=f8e22]: demo-admin
+  - generic [ref=f8e27]:
+    - complementary [ref=f8e28]:
+      - generic [ref=f8e29]:
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e30]: Dashboard
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e36]: Hệ thống ẩn danh
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e41]: Quét diện rộng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e49]: Quét chuyên sâu
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e52]: Kiểm thử lỗ hổng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e62]: Engine quét
+        - generic [ref=f8e66]: Nền tảng AI
+        - generic [ref=f8e69]:
+          - button "Dịch văn bản" [ref=f8e70] [cursor=pointer]
+          - button "Trợ lý ảo ATTT" [ref=f8e72] [cursor=pointer]
+          - button "Sinh mã khai thác" [ref=f8e74] [cursor=pointer]
+          - button "Báo cáo thông minh" [ref=f8e76] [cursor=pointer]
+          - button "Đánh giá A/B" [active] [ref=f8e78] [cursor=pointer]
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e80]: Data lake
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e85]: Thiết lập nguồn thu thập
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e89]: Quản lý lịch
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f8e94]: Báo cáo
+      - generic [ref=f8e98] [cursor=pointer]: Thu gọn
+    - main [ref=f8e101]:
+      - generic [ref=f8e184]:
+        - heading "Phản hồi A/B" [level=2] [ref=f8e186]
+        - status [ref=f8e188]:
+          - heading "Chưa kết nối được công cụ đánh giá" [level=3] [ref=f8e189]
+          - alert [ref=f8e190]: "Lỗi 503: QA simulated connection failure"
+          - button "Thử lại" [ref=f8e191] [cursor=pointer]

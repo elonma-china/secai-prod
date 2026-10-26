@@ -58,9 +58,10 @@ async def test_cjk_target_stream_final_keeps_han_ideographs(target, output):
 
 
 @pytest.mark.asyncio
-async def test_non_cjk_target_still_strips_leaked_han():
+async def test_non_cjk_target_keeps_han_lossless():
+    # Lossless-translate contract: CJK is never deleted from translation output.
     resp = await _post(ScriptedRunner("Phát hiện 异常 trên mạng."), "/ai/translate",
                        {"text": "Anomaly detected on the network.", "source_lang": "en",
                         "target_lang": "vi"})
     assert resp.status_code == 200, resp.text
-    assert "异常" not in resp.json()["translation"]
+    assert "异常" in resp.json()["translation"]

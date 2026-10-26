@@ -1,0 +1,183 @@
+[
+ {
+  "uc": "UC-C02",
+  "file": "sensitive-specialchars-vi.txt",
+  "status": "succeeded",
+  "wall_s": 2.02,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C02: literal giữ 32/32"
+ },
+ {
+  "uc": "UC-C01",
+  "file": "creds-30pairs-vi.txt",
+  "status": "succeeded",
+  "wall_s": 2.62,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C01: literal giữ 60/60"
+ },
+ {
+  "uc": "UC-C07",
+  "file": "connstrings-en.txt",
+  "status": "succeeded",
+  "wall_s": 2.26,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C07: literal giữ 18/18"
+ },
+ {
+  "uc": "UC-C12",
+  "file": "config-json-vi.txt",
+  "status": "succeeded",
+  "wall_s": 1.95,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: FAIL json_parse",
+  "literal": "UC-C12: literal giữ 4/4"
+ },
+ {
+  "uc": "UC-C13",
+  "file": "config-yaml.txt",
+  "status": "succeeded",
+  "wall_s": 1.64,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C13: literal giữ 3/3"
+ },
+ {
+  "uc": "UC-C15",
+  "file": "log-200lines.txt",
+  "status": "succeeded",
+  "wall_s": 9.26,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C15: literal giữ 4/4"
+ },
+ {
+  "uc": "UC-C24",
+  "file": "ioc-table-vi.docx",
+  "status": "succeeded",
+  "wall_s": 1.96,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-C24: literal giữ 100/100"
+ },
+ {
+  "uc": "UC-A01",
+  "file": "pentest-report-vi.docx",
+  "status": "succeeded",
+  "wall_s": 3.86,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-A01: literal giữ 33/33"
+ },
+ {
+  "uc": "UC-A08",
+  "file": "inventory-300rows-vi.xlsx",
+  "status": "succeeded",
+  "wall_s": 1.95,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-A08: literal giữ 3/3"
+ },
+ {
+  "uc": "UC-B08",
+  "file": "sheets-special-names.xlsx",
+  "status": "succeeded",
+  "wall_s": 1.31,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-B08: literal giữ 0/0"
+ },
+ {
+  "uc": "UC-B10",
+  "file": "formulas-vi.xlsx",
+  "status": "succeeded",
+  "wall_s": 121.53,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-B10: literal giữ 4/4"
+ },
+ {
+  "uc": "UC-B13",
+  "file": "numbers-dates-vi.xlsx",
+  "status": "succeeded",
+  "wall_s": 1.31,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-B13: literal giữ 1/1"
+ },
+ {
+  "uc": "UC-B02",
+  "file": "nested-tables-vi.docx",
+  "status": "succeeded",
+  "wall_s": 1.67,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-B02: literal giữ 2/2"
+ },
+ {
+  "uc": "UC-A07",
+  "file": "invoice-en.pdf",
+  "status": "succeeded",
+  "wall_s": 2.61,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-A07: literal giữ 7/7"
+ },
+ {
+  "uc": "UC-E18",
+  "file": "mixed-scan-text-5p.pdf",
+  "status": "succeeded",
+  "wall_s": 11.26,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-E18: literal giữ 0/0"
+ },
+ {
+  "uc": "UC-E07",
+  "file": "scan-10p-with-blank.pdf",
+  "status": "succeeded",
+  "wall_s": 17.25,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-E07: literal giữ 0/0"
+ },
+ {
+  "uc": "UC-E10",
+  "file": "terminal-nmap-dark.png",
+  "status": "succeeded",
+  "wall_s": 7.02,
+  "error": null,
+  "check": "KẾT QUẢ giữ nguyên thông tin: PASS",
+  "literal": "UC-E10: literal giữ 7/7"
+ },
+ {
+  "uc": "UC-G08a",
+  "file": "zipbomb-ratio.docx",
+  "status": "failed",
+  "wall_s": 0.35,
+  "error": "ARCHIVE_LIMIT_EXCEEDED"
+ },
+ {
+  "uc": "UC-G08b",
+  "file": "zip-many-entries.docx",
+  "status": "failed",
+  "wall_s": 0.68,
+  "error": "ARCHIVE_LIMIT_EXCEEDED"
+ },
+ {
+  "uc": "UC-G06",
+  "file": "docx-external-rel.docx",
+  "status": "failed",
+  "wall_s": 0.68,
+  "error": "UNSAFE_DOCUMENT"
+ },
+ {
+  "uc": "UC-G07",
+  "file": "docx-xxe.docx",
+  "status": "failed",
+  "wall_s": 0.36,
+  "error": "UNSAFE_DOCUMENT"
+ }
+]

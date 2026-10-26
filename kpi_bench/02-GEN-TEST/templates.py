@@ -358,7 +358,7 @@ module.exports = { render };
 '''),
     ("CWE-798", "py", '''import requests
 
-API_TOKEN = "sk_live_9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c"
+API_TOKEN = "changeme-hardcoded-token"
 DB_PASSWORD = "P@ssw0rd123!"
 
 def call_api(path):

@@ -1,0 +1,24 @@
+# kpi_eval_v2 — canonical interpreter for the WHOLE suite (quality + performance + pii).
+# Install: python3 -m venv kpi_eval_v2/.venv && kpi_eval_v2/.venv/bin/pip install -r kpi_eval_v2/requirements.txt
+
+# ── quality (Agent 1: RAGAS faithfulness/relevancy, rubric judge, retrieval) ──
+ragas
+datasets
+openai
+langchain-openai
+langchain-huggingface        # HuggingFaceEmbeddings wrapper for RAGAS answer-relevancy (independent embedder)
+sentence-transformers
+qdrant-client
+fastembed                    # matches production BM25 sparse encoder (Qdrant/bm25) — retrieval/bm25.py parity, no oracle
+httpx
+numpy
+scikit-learn
+pandas
+tqdm
+
+# ── pii (Agent 2) ──
+presidio-analyzer
+
+# ── shared ──
+python-dotenv
+neo4j

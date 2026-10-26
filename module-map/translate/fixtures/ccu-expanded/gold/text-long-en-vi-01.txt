@@ -1,0 +1,159 @@
+SecAI text-long-en-vi-01
+[text-long-en-vi-01-0000] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0001] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0002] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0003] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0004] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0005] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0006] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0007] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0008] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0009] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0010] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0011] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0012] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0013] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0014] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0015] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0016] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0017] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0018] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0019] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0020] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0021] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0022] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0023] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0024] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0025] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0026] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0027] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0028] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0029] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0030] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0031] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0032] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0033] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0034] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0035] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0036] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0037] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0038] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0039] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0040] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0041] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0042] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0043] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0044] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0045] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0046] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0047] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0048] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0049] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0050] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0051] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0052] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0053] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0054] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0055] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0056] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0057] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0058] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0059] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0060] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0061] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0062] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0063] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0064] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0065] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0066] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0067] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0068] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0069] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0070] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0071] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0072] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0073] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0074] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0075] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0076] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0077] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0078] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0079] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0080] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0081] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0082] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0083] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0084] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0085] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0086] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0087] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0088] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0089] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0090] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0091] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0092] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0093] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0094] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0095] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0096] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0097] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0098] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0099] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0100] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0101] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0102] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0103] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0104] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0105] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0106] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0107] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0108] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0109] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0110] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0111] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0112] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0113] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0114] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0115] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0116] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0117] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0118] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0119] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0120] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0121] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0122] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0123] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0124] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0125] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0126] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0127] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0128] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0129] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0130] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0131] The maintenance window requires a tested backup and a documented recovery procedure.
+[text-long-en-vi-01-0132] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0133] A vulnerability report describes the affected asset, business impact and remediation steps.
+[text-long-en-vi-01-0134] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0135] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0136] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0137] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0138] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0139] Every change is tested with representative documents before release to the customer.
+[text-long-en-vi-01-0140] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0141] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0142] Analysts compare network alerts with application logs before opening an incident.
+[text-long-en-vi-01-0143] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0144] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0145] Operations monitor resource usage and verify that queued requests finish within the deadline.
+[text-long-en-vi-01-0146] The inventory includes databases, network devices, endpoints and their responsible teams.
+[text-long-en-vi-01-0147] The security team reviews access permissions and records the owner of each service.
+[text-long-en-vi-01-0148] The reviewer checks evidence, assigns a priority and confirms the expected resolution date.
+[text-long-en-vi-01-0149] Operations monitor resource usage and verify that queued requests finish within the deadline.
+Keywords: audit150 audit151 audit152 audit153 audit154 audit155
+Account: svc_ccu_5523359a
+Password: Pwf44673cf!0&*()_+
+URL: https://5523359a.example.org/audit?id=5579573&mode=test
+IP: 192.0.2.74:8573
+CVE: CVE-2024-9573
+Email: audit.5523359a@example.org
+Key: sk-test-c6b4569de25936c7

@@ -1,0 +1,121 @@
+SecAI - 1
+SecAI docx-medium-fr-vi-03-p01
+[docx-medium-fr-vi-03-p01-0000] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-medium-fr-vi-03-p01-0001] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-medium-fr-vi-03-p01-0002] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-medium-fr-vi-03-p01-0003] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p01-0004] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p01-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p01-0006] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p01-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p01-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p01-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p01-0010] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p01-0011] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p01-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p01-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p01-0014] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24
+
+Asset | Owner | Priority
+node-0-0 | SOC | 1
+node-0-1 | SOC | 2
+
+SecAI - 2
+SecAI docx-medium-fr-vi-03-p02
+[docx-medium-fr-vi-03-p02-0000] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p02-0001] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p02-0002] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p02-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p02-0004] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p02-0005] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p02-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-medium-fr-vi-03-p02-0007] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p02-0008] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p02-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p02-0010] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-medium-fr-vi-03-p02-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p02-0012] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p02-0013] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p02-0014] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21
+
+Asset | Owner | Priority
+node-1-0 | SOC | 1
+node-1-1 | SOC | 2
+
+SecAI - 3
+SecAI docx-medium-fr-vi-03-p03
+[docx-medium-fr-vi-03-p03-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p03-0001] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p03-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p03-0003] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p03-0004] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p03-0005] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p03-0006] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p03-0007] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p03-0008] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p03-0009] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p03-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p03-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p03-0012] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p03-0013] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p03-0014] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23
+
+Asset | Owner | Priority
+node-2-0 | SOC | 1
+node-2-1 | SOC | 2
+
+SecAI - 4
+SecAI docx-medium-fr-vi-03-p04
+[docx-medium-fr-vi-03-p04-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p04-0001] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-medium-fr-vi-03-p04-0002] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p04-0003] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-medium-fr-vi-03-p04-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p04-0005] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p04-0006] Les opérateurs surveillent les ressources et vérifient les délais des demandes en attente.
+[docx-medium-fr-vi-03-p04-0007] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+[docx-medium-fr-vi-03-p04-0008] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p04-0009] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p04-0010] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p04-0011] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p04-0012] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p04-0013] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p04-0014] L'inventaire comprend les bases de données, les postes de travail et les équipes responsables.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22
+
+Asset | Owner | Priority
+node-3-0 | SOC | 1
+node-3-1 | SOC | 2
+
+SecAI - 5
+SecAI docx-medium-fr-vi-03-p05
+[docx-medium-fr-vi-03-p05-0000] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p05-0001] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p05-0002] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p05-0003] Le rapport décrit les équipements concernés, les conséquences et les mesures correctives.
+[docx-medium-fr-vi-03-p05-0004] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p05-0005] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p05-0006] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p05-0007] Chaque modification est testée avec des documents représentatifs avant la livraison.
+[docx-medium-fr-vi-03-p05-0008] Le responsable examine les preuves, définit la priorité et confirme la date de résolution.
+[docx-medium-fr-vi-03-p05-0009] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p05-0010] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p05-0011] L'équipe de sécurité vérifie les autorisations et identifie le responsable de chaque service.
+[docx-medium-fr-vi-03-p05-0012] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+[docx-medium-fr-vi-03-p05-0013] Les analystes comparent les alertes réseau avec les journaux avant de déclarer un incident.
+[docx-medium-fr-vi-03-p05-0014] La maintenance nécessite une sauvegarde vérifiée et une procédure de restauration documentée.
+Keywords: audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25
+Account: svc_ccu_d4ffcd40
+Password: Pw3bc57282!0&*()_+
+URL: https://d4ffcd40.example.org/audit?id=13959117&mode=test
+IP: 192.0.2.118:8117
+CVE: CVE-2024-1117
+Email: audit.d4ffcd40@example.org
+Key: sk-test-3933b78ddcc6ad29
+
+Asset | Owner | Priority
+node-4-0 | SOC | 1
+node-4-1 | SOC | 2

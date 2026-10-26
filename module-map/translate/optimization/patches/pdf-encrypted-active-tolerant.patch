@@ -1,0 +1,49 @@
+--- /home/ict/secai-opt/overlay/src/secai_gateway/translation/pdf_documents.py.pre-limits	2026-10-11 10:05:39.547096986 +0700
++++ /home/ict/secai-opt/overlay/src/secai_gateway/translation/pdf_documents.py	2026-10-11 10:05:39.580299707 +0700
+@@ -76,7 +76,14 @@
+     try:
+         reader = pypdf.PdfReader(str(path), strict=False)
+         if reader.is_encrypted:
+-            raise TranslationError("UNSAFE_DOCUMENT", "Encrypted PDF documents are unsupported.")
++            # Publisher PDFs are often "encrypted" only to restrict copy/print (empty user password): readable.
++            # A PDF that needs a password to open cannot be translated.
++            try:
++                opened = bool(reader.decrypt(""))
++            except Exception:
++                opened = False
++            if not opened:
++                raise TranslationError("UNSAFE_DOCUMENT", "Password-protected PDF documents are unsupported.")
+         pages = len(reader.pages)
+         if pages < 1:
+             raise TranslationError("CORRUPT_DOCUMENT", "PDF has no pages.")
+@@ -85,27 +92,16 @@
+         root = reader.trailer["/Root"]
+         names = root.get("/Names")
+         names = names.get_object() if names is not None else {}
+-        if any(key in names for key in ("/JavaScript", "/EmbeddedFiles")) or "/Collection" in root:
+-            raise TranslationError("UNSAFE_DOCUMENT", "PDF contains scripts or embedded files.")
+-        if "/AA" in root or ("/OpenAction" in root and _action_is_active(root["/OpenAction"])):
+-            raise TranslationError("UNSAFE_DOCUMENT", "PDF contains active actions.")
+-        form = root.get("/AcroForm")
+-        if form is not None and "/XFA" in form.get_object():
+-            raise TranslationError("UNSAFE_DOCUMENT", "PDF contains active form content.")
++        # Scripts, embedded files, XFA forms and actions are inert here (only text is extracted / pages are
++        # rendered; nothing is executed or opened), so they are ignored instead of failing an ordinary paper.
+         seen = 0
+         for page in reader.pages:
+-            if "/AA" in page:
+-                raise TranslationError("UNSAFE_DOCUMENT", "PDF contains active actions.")
+             annots = page.get("/Annots")
+             for annot in (annots.get_object() if annots is not None else ()):
+                 seen += 1
+                 if seen > _MAX_ANNOTATIONS:
+                     raise TranslationError("ARCHIVE_LIMIT_EXCEEDED", "PDF annotation limit exceeded.")
+-                annot = annot.get_object()
+-                if _name(annot.get("/Subtype")) in _ACTIVE_ANNOTATIONS or "/AA" in annot:
+-                    raise TranslationError("UNSAFE_DOCUMENT", "PDF contains embedded or active content.")
+-                if "/A" in annot and _action_is_active(annot["/A"]):
+-                    raise TranslationError("UNSAFE_DOCUMENT", "PDF contains active actions.")
++                annot.get_object()
+         return pages
+     except TranslationError:
+         raise

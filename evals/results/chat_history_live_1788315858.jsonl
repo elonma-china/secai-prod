@@ -1,0 +1,20 @@
+{"kind": "recall", "id": "recall-000", "passed": false, "answer": "Tôi không có thông tin về mật danh chiến dịch nào mà bạn đã cung cấp trong cuộc trò chuyện này. Đây là lần đầu tiên chúng ta trao đổi, và tôi không lưu trữ thông tin từ các phiên làm việc trước đó.\n\nB"}
+{"kind": "recall", "id": "recall-001", "passed": false, "answer": "Tôi không có thông tin về mã dự án nào mà bạn đã cung cấp trong cuộc trò chuyện này. Nếu bạn cần hỗ trợ liên quan đến một dự án cụ thể, vui lòng cung cấp thêm chi tiết.\n\nBạn cần IAS.AI hỗ trợ thêm gì "}
+{"kind": "recall", "id": "recall-002", "passed": true, "answer": "Số hiệu nhóm ứng cứu mà bạn đã cung cấp là **IRT-8333**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "recall", "id": "recall-003", "passed": true, "answer": "Mã tài sản của bạn là **ASSET-6117**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "recall", "id": "recall-004", "passed": true, "answer": "Số hiệu nhóm ứng cứu của bạn là **IRT-3814**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "recall", "id": "recall-005", "passed": true, "answer": "Mã dự án bạn đã cung cấp là **PROJECT-4204**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "recall", "id": "recall-006", "passed": false, "answer": "Xin lỗi, tôi không có thông tin về mã tài sản nào mà bạn đã cung cấp trong cuộc trò chuyện này. Nếu bạn cần hỗ trợ thêm, vui lòng cung cấp chi tiết cụ thể.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "recall", "id": "recall-007", "passed": true, "answer": "Số hiệu nhóm ứng cứu của bạn là **IRT-4689**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "compaction", "id": "compaction-000", "passed": false, "answer": "Xin lỗi, tôi không có thông tin về mật danh chiến dịch mà bạn đã cung cấp. Trong cuộc trò chuyện này, bạn chưa đề cập đến bất kỳ mật danh hay chiến dịch cụ thể nào.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa "}
+{"kind": "compaction", "id": "compaction-001", "passed": false, "answer": "Tôi không có thông tin về mã dự án nào mà bạn đã cung cấp trong cuộc trò chuyện này. Nếu bạn cần hỗ trợ liên quan đến một dự án cụ thể, vui lòng cung cấp thêm chi tiết.\n\nBạn cần IAS.AI hỗ trợ thêm gì "}
+{"kind": "compaction", "id": "compaction-002", "passed": false, "answer": "Xin lỗi, tôi không có thông tin về mật danh chiến dịch mà bạn đã cung cấp. Trong cuộc trò chuyện này, bạn chưa đề cập đến bất kỳ mật danh hay chiến dịch cụ thể nào.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa "}
+{"kind": "compaction", "id": "compaction-003", "passed": true, "answer": "Số phòng máy chủ mà bạn đã cung cấp là **PHÒNG-4351**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "compaction", "id": "compaction-004", "passed": false, "answer": "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."}
+{"kind": "compaction", "id": "compaction-005", "passed": true, "answer": "Mã tài sản của bạn là **ASSET-3116**.\n\nBạn cần IAS.AI hỗ trợ thêm gì nữa không?"}
+{"kind": "isolation", "id": "isolation-000", "passed": true, "answer": "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."}
+{"kind": "isolation", "id": "isolation-001", "passed": true, "answer": "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."}
+{"kind": "isolation", "id": "isolation-002", "passed": true, "answer": "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."}
+{"kind": "isolation", "id": "isolation-003", "passed": true, "answer": "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."}
+{"kind": "isolation", "id": "isolation-004", "passed": true, "answer": "Không có."}
+{"kind": "isolation", "id": "isolation-005", "passed": true, "answer": "Không có."}

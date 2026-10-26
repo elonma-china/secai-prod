@@ -1,0 +1,111 @@
+# API và luồng xử lý sinh PoC
+
+## 1. Danh sách endpoint
+
+| Nhóm | Method | Endpoint | Công dụng | Giao diện hiện gọi |
+|---|---|---|---|---|
+| Sinh PoC (phạm vi tài liệu này) | POST | `/ai/exploit` | Sinh/lấy PoC, trả JSON một lần | Không (UI dùng bản stream) |
+| Sinh PoC (phạm vi tài liệu này) | POST | `/ai/exploit/stream` | Sinh/lấy PoC, trả SSE theo token + preview Section 1 sớm | Có — `ExploitScreen.tsx` |
+| Ngoài phạm vi | POST | `/ai/exploit/run` | Chạy PoC xác định (engine 5568) vào target thật | Không rõ UI |
+| Ngoài phạm vi | GET | `/ai/exploit-advance/fields` | Mô tả field form cho khai thác đa-bước | Không rõ UI |
+| Ngoài phạm vi | POST | `/ai/exploit-advance[/stream]` | Khai thác ĐA-BƯỚC một CVE vào target thật, vòng verify→sửa | Không rõ UI |
+| Ngoài phạm vi | POST | `/ai/exploit-advance/reply` | Trả lời câu hỏi khi lane1 đang paused | Không rõ UI |
+| Ngoài phạm vi | POST | `/ai/verify` | Verify PoC catalog trên target đã ủy quyền | Không rõ UI |
+
+`/ai/exploit/run`, `/ai/exploit-advance*`, `/ai/verify` đòi `POC_EXPLOIT_ENABLED=true` + target trong allowlist (`VERIFY_ALLOWED_TARGETS`/`VERIFY_ALLOW_ALL`) — đây là khai thác thật vào target thật, khác hẳn "sinh PoC để đọc". Tài liệu này **chỉ** phủ `/ai/exploit` và `/ai/exploit/stream`.
+
+### Vị trí và tham số
+
+Đường dẫn tính từ root `secai-agent-gateway`:
+
+| Endpoint | File định nghĩa / hàm | Tham số |
+|---|---|---|
+| POST `/ai/exploit` | `src/secai_gateway/api/routes.py:1914` → `exploit`/`_exploit` | `LegacyRequest` — `message`/`text`/alias chứa mã CVE hoặc mô tả lỗ hổng; `user_id` tùy chọn |
+| POST `/ai/exploit/stream` | Cùng file, `exploit_stream`/`_exploit_stream` (dòng 1998) | Cùng body; SSE: `token`, `tool_call`, `tool_result`, `section1` (preview), `final` |
+
+Input KHÔNG cần đúng format `CVE-YYYY-NNNNN` để gọi được — có thể là mô tả tự nhiên. Khi input chứa một mã khớp regex CVE (`_CVE_ANY`), hệ thống trích `cve_id` và chạy toàn bộ pipeline lấy bằng chứng theo đúng mã đó; mã sai hậu tố (ví dụ `CVE-2026-42533zz`) bị chặn sớm với lỗi định dạng, không tới pipeline lấy bằng chứng.
+
+## 2. Catalog PoC — nguồn "DB" để đối chiếu
+
+File: `src/secai_gateway/poc/catalog.py`, class `PocCatalog`. Lưu trữ: **SQLite** tại đường dẫn cấu hình `poc_catalog_db` (`config.py:172`, mặc định `/srv/exploitdb/poc-catalog.db`; deployment thực tế đang dùng `/srv/poc/catalog.db` trong container `secai-docker-gateway`).
+
+Bảng chính:
+
+| Bảng | Vai trò |
+|---|---|
+| `poc` | Một dòng = một PoC từ một nguồn (`exploitdb`/`metasploit`/`nuclei`/`poc_github`/`vulhub`/`vendor`); có `artifact_sha256`/`artifact_path` nếu đã có mã thật lưu offline |
+| `poc_cve` | Nhiều-nhiều `poc_id` ↔ `cve_id` |
+| `poc_canonical` | Operator đánh dấu PoC đã **thực thi thành công** trên lab cho một CVE — `/ai/exploit` phục vụ dòng này trước tiên nếu có |
+| `poc_file` | Tập file cho PoC dạng nhiều-file (repo-style, nguồn `poc_github`), mỗi dòng một file với `sha256`/`storage_path` |
+| `artifact` | Nội dung theo content-hash (`sha256` là khóa), dùng chung cho `poc`/`poc_file` |
+
+Truy vấn chính (`search(cve_id)`, `catalog.py:163`): CVE-exact match ưu tiên `is_canonical` → `kind='exploit'` trước `detection` → ngôn ngữ script chạy được (python/shell/php/js/ruby) trước binary/doc → nguồn `poc_github` trước → đã có artifact trước link-only → `rank`/`verified` → `id` để kết quả **xác định** (cùng CVE luôn trả cùng PoC giữa các lần gọi).
+
+Một CVE "**có trong DB**" nghĩa là tồn tại ít nhất một dòng `poc` nối với `cve_id` đó qua `poc_cve` **và có `artifact_sha256 IS NOT NULL`** (đã có mã thật lưu offline, không chỉ link-only). Một CVE chỉ có dòng link-only (chưa fetch mã) hoặc không có dòng nào thì KHÔNG tính là "có trong DB" theo nghĩa agent kiểm tra độc lập cần.
+
+## 3. Hai nhánh xử lý — quyết định bởi hệ thống, không phải lời model tự nhận
+
+File: `src/secai_gateway/poc/inject.py`, hàm `enforce_section1` (dòng 1106). Đây là **chốt chặn cuối** ghi đè Section 1 (phần mã PoC) trong response bất kể model tự viết gì — 4 tier:
+
+| Tier (`metadata.section1_tier`) | Điều kiện | `metadata.candidate_status` | Ý nghĩa cho agent kiểm tra |
+|---|---|---|---|
+| `real` / `real_pruned` / `real_consolidated` | Có mã thật từ catalog (`evidence` có `source_code`/`source_files`) | `draft_not_executed` | **CVE có trong DB** — Section 1 là mã THẬT lấy từ catalog, phải khớp artifact gốc |
+| `synthesized_readme` | Không có mã thật, nhưng catalog có mô tả/README thật cho CVE này | `synthesized_not_executed` | CVE có trong DB ở dạng mô tả, không có mã — model viết PoC dựa trên mô tả đó, gắn banner "ĐÃ TỔNG HỢP" |
+| `synthesized_cve` | Không có bất kỳ dòng catalog nào, nhưng CVE được xác nhận tồn tại qua CVE-KB (`cve_known=true`) | `synthesized_not_executed` | **CVE không có trong DB nhưng là CVE thật** — model tự viết PoC/hướng dẫn từ định nghĩa CVE, gắn banner "ĐÃ TỔNG HỢP" |
+| `synthesis_failed` | Có bằng chứng T2/T3 nhưng model không viết được Section 1 dùng được | `not_generated` | Lỗi hệ thống/model, không phải do CVE không tồn tại |
+| `not_found` | Không có bằng chứng nào VÀ CVE không được xác nhận trong CVE-KB | `not_generated` | **CVE không tồn tại/không xác định được** — hệ thống phải trả thông báo từ chối cố định, KHÔNG được tự bịa PoC |
+
+Thông báo từ chối cố định cho tier `not_found` (dùng đúng câu này khi `cve_id` đã trích được):
+
+```text
+Không tìm thấy <CVE-ID> trong dữ liệu nội bộ (KB) hoặc danh mục PoC công khai — không đủ căn cứ để phân tích hay sinh PoC cho mã CVE này.
+```
+
+**Banner cảnh báo thật đã quan sát trên `ias.id.vn` (09/10/2026) cho tier `synthesized_cve`/`synthesized_readme`** — PoC do model tự viết (không phải mã fetch từ catalog) LUÔN đi kèm banner này ở đầu Section 1, nguyên văn:
+
+```text
+⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP DỰA TRÊN BẰNG CHỨNG NỘI BỘ, KHÔNG PHẢI PoC ĐÃ FETCH THẬT, CHƯA ĐƯỢC THỰC THI HAY XÁC THỰC.
+```
+
+Và cuối bài có câu nhắc lại tương tự, ví dụ đã thấy: `"⚠️ Cảnh báo: Mã PoC/hướng dẫn ở trên là bản GỢI Ý do AI tự tổng hợp..., KHÔNG phải PoC đã fetch và xác thực từ nguồn thật..."`. Để đối chiếu, tier `real`/`real_pruned`/`real_consolidated` (mã thật từ catalog) có banner KHÁC hẳn, ví dụ đã quan sát: `"ℹ️ PoC dưới đây là mã GỐC (giữ nguyên cấu trúc tệp)...CHƯA chạy thử; nguồn gốc (URL/sha256) ở metadata."` — hai banner không được lẫn với nhau; agent kiểm tra độc lập dùng đúng banner quan sát được để xác định tier thật nhanh hơn là chỉ đọc `metadata` thô (xem [03](03-tieu-chi-pass.txt) mục 2.4 — banner thiếu/sai loại là NOT PASS ngay).
+
+Metadata khác agent kiểm tra độc lập cần đọc (đều nằm trong `metadata` của response, set bởi `_grounding_metadata`/`enforce_reference_code`, `inject.py` dòng ~1026–1079):
+
+| Field | Ý nghĩa |
+|---|---|
+| `metadata.sha256` | Danh sách sha256 của (các) artifact THẬT đã chèn vào Section 1 — tính **trước khi defang**, dùng để đối chiếu với `artifact_sha256`/`poc_file.sha256` trong catalog |
+| `metadata.evidence_ids` | ID bằng chứng đã dùng để chèn — trỏ lại đúng dòng catalog |
+| `metadata.edb_ids` | ID exploit-db nếu nguồn là `exploitdb` |
+| `metadata.provenance` | Nguồn gốc bằng chứng (source/url) |
+| `metadata.cwe_refs` | CWE từ CVE-record KB (độc lập với bằng chứng PoC) |
+| `metadata.kb_status` | Trạng thái tra KB (`not_queried`/đã tra) |
+| `metadata.poc_strategy` | Chiến lược hợp nhất PoC đang dùng (`_resolve_poc_strategy`) |
+
+Toàn bộ response text (`description`/`exploit_guide`) đã qua `neutralize_active_content` (defang XSS/active content) trước khi trả — **so khớp mã nguồn nên dựa vào `metadata.sha256` (tính trước defang), không so byte-for-byte text hiển thị**, vì defang có thể đổi một số ký tự/scheme trong đoạn mã hiển thị.
+
+## 4. Lấy mã thật khi chưa có sẵn offline (on-demand)
+
+`catalog.github_candidates(cve_id)` (catalog.py:331): nếu catalog chỉ có dòng `poc_github` link-only (chưa fetch), request path có thể fetch on-demand (budget giới hạn) rồi gọi `set_artifact` lưu lại — sau đó CVE đó chuyển từ "chưa có mã" sang "có trong DB" cho các lần gọi sau. Không giả định một CVE "chưa có mã" hôm nay sẽ mãi như vậy; agent kiểm tra độc lập phải tự tra lại catalog **tại thời điểm chạy test**, không dùng kết quả tra cứu cũ trong tài liệu này làm chân lý.
+
+## 5. Khi catalog không có gì — websearch tùy chọn
+
+`_exploit`/`_exploit_stream` gọi `_maybe_web_hints(prefetch_result)` (routes.py quanh dòng 1954–1957): chỉ hoạt động khi `web_search_enabled=true` (mặc định `false`, và bị ép `false` khi chạy air-gap — xem `config.py:504`). Khi tắt, không có gợi ý web nào, model chỉ còn catalog + CVE-KB để dựa vào — đúng với tier `synthesized_cve`/`not_found` ở mục 3.
+
+## 6. Lỗi và cấu hình
+
+| HTTP | Trường hợp |
+|---|---|
+| 422 | Input bị chặn bởi bộ lọc bí mật/PII (`require_public_input`) — UI hiện banner "Đầu vào bị chặn" |
+| 200 | Luôn 200 cho cả 3 nhánh ở mục 3, kể cả `not_found` — PASS/NOT PASS KHÔNG được suy từ mã HTTP, phải đọc `metadata.candidate_status`/`section1_tier` |
+
+Cấu hình liên quan (`src/secai_gateway/config.py`):
+
+| Biến | Mặc định | Ý nghĩa |
+|---|---|---|
+| `poc_catalog_db` | `/srv/exploitdb/poc-catalog.db` | Đường dẫn SQLite catalog; deployment thực tế có thể override |
+| `poc_exploit_enabled` | `false` | Bật `/ai/exploit/run`, `/ai/exploit-advance*` (NGOÀI phạm vi tài liệu này) |
+| `poc_exploit_simulate_delay_s` | `30.0` | Sàn độ trễ chống side-channel thời gian cho `/ai/exploit` — không phải lỗi hiệu năng |
+| `exploit_relevance_gate_enabled` | `true` | Cổng chặn câu hỏi không liên quan khai thác |
+| `web_search_enabled` | `false` | Bật gợi ý web khi catalog không có bằng chứng (mục 5); tự ép `false` khi air-gap |
+
+Test qua origin Devspace (`:5173` proxy `:8131`) để phủ luồng SSE thật; chỉ gọi backend trực tiếp khi cần chẩn đoán sâu (ví dụ đọc `metadata` thô không qua parser FE). Không sửa `poc_exploit_enabled`/deploy lại để viết tài liệu này.

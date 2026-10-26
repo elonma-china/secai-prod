@@ -38,3 +38,20 @@ it('submits Bỏ qua without requiring a comment', () => {
   fireEvent.click(screen.getByRole('button', {name:'Nộp phiếu đánh giá'}));
   expect(submit).toHaveBeenCalledWith({decision:'skip',error_tags:{left:[],right:[]},comment:''});
 });
+
+it('shows the chat question directly above A/B and still submits the selected answer', () => {
+  const submit = vi.fn();
+  const assignment = {id:'chat-qa', external_id:'internal-id', prompt_messages:[{role:'user',content:'Previous chat context'}],
+    evidence:'Expert evidence', left:{text:'Answer A'}, right:{text:'Answer B'}, rubric:'Expert instructions', judgment:null} as Assignment;
+  render(<ReviewPair assignment={assignment} showContext={false} focusHeading={false} closed={false} saving={false} error='' onSubmit={submit}/>);
+  expect(screen.getByRole('heading', {name:'Câu trả lời nào bạn thấy tốt hơn?'})).toBeTruthy();
+  expect(screen.queryByText('Previous chat context')).toBeNull();
+  expect(screen.queryByText('Expert instructions')).toBeNull();
+  expect(screen.queryByText('Expert evidence')).toBeNull();
+  expect(screen.queryByText('Mẫu internal-id')).toBeNull();
+  expect(screen.getByRole('heading', {name:'Câu trả lời A'})).toBeTruthy();
+  expect(screen.getByRole('heading', {name:'Câu trả lời B'})).toBeTruthy();
+  fireEvent.click(screen.getByRole('radio', {name:'A tốt hơn'}));
+  fireEvent.click(screen.getByRole('button', {name:'Nộp phiếu đánh giá'}));
+  expect(submit).toHaveBeenCalledWith({decision:'left',error_tags:{left:[],right:[]},comment:''});
+});

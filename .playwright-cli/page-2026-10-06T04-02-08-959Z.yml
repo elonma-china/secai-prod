@@ -1,0 +1,68 @@
+- generic [ref=f10e3]:
+  - banner [ref=f10e4]:
+    - generic [ref=f10e5]: INTELLIGENT AUTOSCAN
+    - generic [ref=f10e11]:
+      - textbox "Tra cứu ip hoặc tên miền" [ref=f10e12]
+      - button "Tra cứu" [ref=f10e13] [cursor=pointer]
+    - generic [ref=f10e17]:
+      - generic [ref=f10e18]:
+        - text: Demo
+        - combobox "Vai trò demo" [ref=f10e19]:
+          - option "Người dùng thường"
+          - option "Admin" [selected]
+      - generic [ref=f10e20]: Hệ thống gián đoạn
+      - textbox "user_id (owner-scoping cho project/session/chat)" [ref=f10e22]: demo-admin
+  - generic [ref=f10e27]:
+    - complementary [ref=f10e28]:
+      - generic [ref=f10e29]:
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e30]: Dashboard
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e36]: Hệ thống ẩn danh
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e41]: Quét diện rộng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e49]: Quét chuyên sâu
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e52]: Kiểm thử lỗ hổng
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e62]: Engine quét
+        - generic [ref=f10e66]: Nền tảng AI
+        - generic [ref=f10e69]:
+          - button "Dịch văn bản" [ref=f10e70] [cursor=pointer]
+          - button "Trợ lý ảo ATTT" [ref=f10e72] [cursor=pointer]
+          - button "Sinh mã khai thác" [ref=f10e74] [cursor=pointer]
+          - button "Báo cáo thông minh" [ref=f10e76] [cursor=pointer]
+          - button "Đánh giá A/B" [ref=f10e78] [cursor=pointer]
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e80]: Data lake
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e85]: Thiết lập nguồn thu thập
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e89]: Quản lý lịch
+        - generic "Phân hệ khác — chưa khả dụng trong bản này" [ref=f10e94]: Báo cáo
+      - generic [ref=f10e98] [cursor=pointer]: Thu gọn
+    - main [ref=f10e101]:
+      - generic [ref=f10e102]:
+        - generic [ref=f10e103]:
+          - heading "Cuộc trò chuyện mới" [level=3] [ref=f10e104]
+          - generic [ref=f10e105]: health không phản hồi
+        - generic [ref=f10e107]:
+          - complementary [ref=f10e108]:
+            - generic [ref=f10e109]:
+              - textbox "Tìm cuộc trò chuyện…" [ref=f10e114]
+              - button "Thu gọn rail" [ref=f10e115] [cursor=pointer]
+            - generic [ref=f10e118]:
+              - button "Cuộc trò chuyện mới" [ref=f10e119] [cursor=pointer]
+              - generic [ref=f10e122]:
+                - generic [ref=f10e123]: Dự án
+                - button "Dự án mới" [ref=f10e124] [cursor=pointer]
+              - generic [ref=f10e126]: Chưa có dự án nào.
+              - generic [ref=f10e127]: Cuộc trò chuyện
+              - generic [ref=f10e129]: Chưa có cuộc trò chuyện nào.
+          - generic [ref=f10e130]:
+            - generic [ref=f10e134]:
+              - heading "Bạn muốn hỏi gì hôm nay?" [level=4] [ref=f10e138]
+              - paragraph [ref=f10e139]: Đặt câu hỏi về CVE, cấu hình hoặc log — trợ lý sẽ trả lời ngay bên dưới.
+              - generic [ref=f10e140]:
+                - generic [ref=f10e141] [cursor=pointer]: Tóm tắt CVE mới nhất
+                - generic [ref=f10e144] [cursor=pointer]: Phân tích log này
+                - generic [ref=f10e148] [cursor=pointer]: Khuyến nghị vá
+            - generic [ref=f10e152]:
+              - generic [ref=f10e153]:
+                - textbox "Nhập nội dung…" [ref=f10e154]
+                - generic [ref=f10e155]:
+                  - button "Đính kèm" [disabled] [ref=f10e156]
+                  - button "Gửi" [disabled] [ref=f10e159]
+              - generic [ref=f10e163]: Đầu vào được kiểm tra secret/PII · nội dung Markdown được làm sạch (DOMPurify) trước khi hiển thị

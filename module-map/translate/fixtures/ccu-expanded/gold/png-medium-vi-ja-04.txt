@@ -1,0 +1,23 @@
+SecAI png-medium-vi-ja-04
+[png-medium-vi-ja-04-0000] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-medium-vi-ja-04-0001] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-medium-vi-ja-04-0002] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-medium-vi-ja-04-0003] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-medium-vi-ja-04-0004] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-medium-vi-ja-04-0005] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[png-medium-vi-ja-04-0006] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-medium-vi-ja-04-0007] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-medium-vi-ja-04-0008] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-medium-vi-ja-04-0009] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[png-medium-vi-ja-04-0010] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[png-medium-vi-ja-04-0011] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[png-medium-vi-ja-04-0012] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[png-medium-vi-ja-04-0013] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+Keywords: audit14 audit15 audit16 audit17 audit18 audit19 audit20 audit21 audit22 audit23 audit24 audit25 audit26 audit27
+Account: svc_ccu_a3ad6633
+Password: Pw479e3eab!0&*()_+
+URL: https://a3ad6633.example.org/audit?id=10726758&mode=test
+IP: 192.0.2.9:8758
+CVE: CVE-2024-8758
+Email: audit.a3ad6633@example.org
+Key: sk-test-b4932220ead04712

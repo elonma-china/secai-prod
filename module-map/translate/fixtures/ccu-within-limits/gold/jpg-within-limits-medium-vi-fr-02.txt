@@ -1,0 +1,59 @@
+SecAI jpg-within-limits-medium-vi-fr-02
+[jpg-within-limits-medium-vi-fr-02-0000] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0001] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[jpg-within-limits-medium-vi-fr-02-0002] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0003] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0004] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0005] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[jpg-within-limits-medium-vi-fr-02-0006] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0007] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0008] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0009] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0010] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0011] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0012] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0013] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[jpg-within-limits-medium-vi-fr-02-0014] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0015] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[jpg-within-limits-medium-vi-fr-02-0016] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[jpg-within-limits-medium-vi-fr-02-0017] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0018] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[jpg-within-limits-medium-vi-fr-02-0019] Đợt bảo trì cần bản sao lưu đã kiểm chứng và quy trình khôi phục được ghi rõ.
+[jpg-within-limits-medium-vi-fr-02-0020] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0021] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0022] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0023] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0024] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0025] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0026] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0027] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0028] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0029] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0030] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0031] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0032] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0033] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0034] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0035] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0036] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0037] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0038] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0039] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0040] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0041] Người đánh giá kiểm tra bằng chứng, phân mức ưu tiên và xác nhận thời hạn xử lý.
+[jpg-within-limits-medium-vi-fr-02-0042] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0043] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+[jpg-within-limits-medium-vi-fr-02-0044] Nhóm vận hành theo dõi tài nguyên và kiểm tra yêu cầu trong hàng đợi kết thúc đúng hạn.
+[jpg-within-limits-medium-vi-fr-02-0045] Nhóm an toàn thông tin kiểm tra quyền truy cập và ghi nhận người phụ trách từng dịch vụ.
+[jpg-within-limits-medium-vi-fr-02-0046] Báo cáo lỗ hổng mô tả tài sản bị ảnh hưởng, tác động nghiệp vụ và bước khắc phục.
+[jpg-within-limits-medium-vi-fr-02-0047] Chuyên viên đối chiếu cảnh báo mạng với nhật ký ứng dụng trước khi mở hồ sơ sự cố.
+[jpg-within-limits-medium-vi-fr-02-0048] Danh mục gồm cơ sở dữ liệu, thiết bị mạng, máy trạm và nhóm chịu trách nhiệm.
+[jpg-within-limits-medium-vi-fr-02-0049] Mỗi thay đổi được kiểm thử bằng tài liệu đại diện trước khi bàn giao cho khách hàng.
+Keywords: audit50 audit51 audit52 audit53 audit54 audit55 audit56 audit57 audit58 audit59 audit60
+Account: svc_ccu_7cbf8233
+Password: Pw8ae2f664!0&*()_+
+URL: https://7cbf8233.example.org/audit?id=8175490&mode=test
+IP: 192.0.2.241:8490
+CVE: CVE-2024-4490
+Email: audit.7cbf8233@example.org
+Key: sk-test-37ee9eaa724c7842
