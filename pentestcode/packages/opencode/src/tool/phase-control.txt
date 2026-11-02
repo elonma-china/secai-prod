@@ -1,0 +1,10 @@
+View and manage the engagement phase. Check current phase and progress, advance to the next phase, or jump to a specific phase. Phases: recon -> enumeration -> vuln_assess -> exploitation -> post_exploit -> reporting.
+
+Quality gates are enforced on forward transitions:
+- recon: requires at least one host discovered with services
+- enumeration: checks for service version coverage
+- vuln_assess: checks for confirmed/validated vulns (warns on unvalidated findings)
+- exploitation: checks for compromised hosts
+- post_exploit: checks for credential harvesting, lateral coverage, objective completion
+
+If a quality gate blocks the transition, the tool returns the missing requirements. Use force:true to skip gates and advance anyway.

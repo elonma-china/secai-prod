@@ -1,0 +1,5 @@
+Take a screenshot of a web page or URL for evidence collection.
+
+Uses available headless browser tools (firefox, chromium, cutycapt, wkhtmltoimage) to capture a screenshot without opening a visible browser window. Falls back through available tools in order of preference.
+
+Use this tool when you need visual evidence of a web vulnerability, configuration page, or application state. The screenshot is saved to disk and the path is returned.

@@ -1,0 +1,27 @@
+{
+  "id": "004-scope-check",
+  "name": "Verify scope enforcement for mixed targets",
+  "category": "scope",
+  "difficulty": 1,
+  "description": "Check that scope enforcement correctly handles CIDR ranges, wildcards, and exclusions.",
+  "setup": {
+    "engagement_name": "bench-004",
+    "scope": {
+      "targets": ["10.10.10.0/24", "*.corp.local", "192.168.1.100"],
+      "excludes": ["10.10.10.1", "*.admin.corp.local"]
+    }
+  },
+  "test_cases": [
+    {"target": "10.10.10.50", "expected_in_scope": true},
+    {"target": "10.10.10.1", "expected_in_scope": false, "reason": "excluded"},
+    {"target": "10.10.11.5", "expected_in_scope": false, "reason": "not in CIDR"},
+    {"target": "web.corp.local", "expected_in_scope": true},
+    {"target": "dc.admin.corp.local", "expected_in_scope": false, "reason": "excluded wildcard"},
+    {"target": "192.168.1.100", "expected_in_scope": true},
+    {"target": "192.168.1.101", "expected_in_scope": false}
+  ],
+  "scoring": {
+    "per_case": 14,
+    "total": 100
+  }
+}

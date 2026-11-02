@@ -1,0 +1,1 @@
+Place an optimized, muted, looping MP4 at assets/loop.mp4. Recommended: 1920x1080 or 1280x720, H.264, 24-30fps, 5-10MB, no audio. The site gracefully falls back to the dark CSS background if the video is absent.

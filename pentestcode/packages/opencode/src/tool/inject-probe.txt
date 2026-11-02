@@ -1,0 +1,54 @@
+Fire a battery of HTTP probes at a parameter-bearing request to detect injection vulnerabilities. Returns structured OBSERVATIONS — leads for the agent to verify, NOT confirmed vulnerabilities.
+
+Supported vuln_types: xss, ssti, cmdi, sqli, nosql, lfi, ssrf, ldap, xpath.
+
+## Parameters
+
+- method: HTTP method (GET, POST, PUT, DELETE, PATCH)
+- url: target URL (may include query params)
+- vuln_types: array of vulnerability classes to probe (e.g. ["sqli", "xss", "ssti"])
+- headers: optional JSON object of request headers (e.g. {"Cookie": "session=abc", "Authorization": "Bearer xyz"})
+- body: optional request body string
+- content_type: optional Content-Type (auto-detected from body if omitted)
+- injection_points: optional array of {location, name} to focus probing. Locations: query, body_form, body_json, header, cookie, path. Auto-enumerated if omitted.
+- target_param: optional — focus on a single parameter name across all locations
+- auto_update: auto-update engagement state with findings (default: true)
+
+## Behavior
+
+1. Enumerates injection points from the request (query params, form fields, JSON keys, cookies)
+2. Sends a baseline request to capture normal response (status, length, content)
+3. For each vuln_type × injection_point, fires class-specific probe payloads
+4. Analyzes response for indicators (reflection, error signatures, timing, boolean differentials)
+5. Detects WAF/filter blocking
+6. Returns per-point observations with evidence
+
+## Hard limits
+
+- Max 120 HTTP requests per tool call
+- Max 30 seconds timeout per request
+- Closed payload set — tool does not accept arbitrary payloads
+
+## Output
+
+Returns structured observations per injection point:
+- point: {location, name}
+- vuln_type: which class was probed
+- indicators: what was observed (reflection, error, differential, timing)
+- waf_blocked: whether WAF/filter interfered
+- lead_quality: "strong" | "weak" | "none"
+- evidence: raw observation text
+
+## When to use
+
+- When the webapp agent identifies a parameter-bearing endpoint and wants to test for injections
+- After discovering forms, API endpoints, or dynamic pages
+- Instead of manually crafting curl commands for each test
+- When you need systematic coverage across multiple vuln classes at once
+
+## Important
+
+- This tool fires REAL HTTP requests against the target — ensure the target is in scope
+- Observations are LEADS, not confirmed findings — always verify before marking as confirmed
+- Use vuln_types selectively — testing all 9 types on every parameter wastes the request budget
+- The tool auto-updates engagement state with SUSPECTED findings (not confirmed)
