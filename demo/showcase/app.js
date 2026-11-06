@@ -6,7 +6,7 @@
 const TABS = [
   { id: "finetune", label: "Finetuning", module: "./tabs/finetune.js" },
   { id: "testset-1000", label: "Dữ liệu huấn luyện chuẩn", module: "./tabs/testset-1000.js" },
-  { id: "retraining", label: "Huấn luyện lại", module: "./tabs/retraining.js" },
+  // { id: "retraining", label: "Huấn luyện lại", module: "./tabs/retraining.js" },
   { id: "retraining-auto", label: "Retraining tự động", module: "./tabs/retraining-auto.js" },
   { id: "model-info", label: "Model & phần cứng", module: "./tabs/model-info.js" },
   { id: "kpi-bench", label: "KPI Bench", module: "./tabs/kpi-bench.js" },

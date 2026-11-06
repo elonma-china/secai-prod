@@ -63,7 +63,7 @@ class SqliteLedger:
             return []
         with self._lock, self._connect() as conn:
             rows = conn.execute(
-                "select metadata from evidence_ledger where run_id = ? order by created_at asc",
+                "select metadata from evidence_ledger where run_id = ? order by created_at asc, rowid asc",
                 (run_id,),
             ).fetchall()
         return [json.loads(row[0]) for row in rows]

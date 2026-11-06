@@ -307,6 +307,84 @@ def _hardcoded_binds(orig: str, merged: str) -> list[Finding]:
     return findings
 
 
+# ── information-loss (literal preservation) ─────────────────────────────────
+#
+# The strongest failure mode of an LLM merge is NOT syntactically broken code — it's a merge that
+# still runs but SILENTLY DROPS a load-bearing literal: an endpoint path, a header/payload name, a
+# port, a version, an env-var name. `validation_failure` (compile/AST) and the CLI-surface checks
+# above never see these because the code stays valid. This check makes the LLM PROVE it kept every
+# significant literal from the source: any source literal that no longer appears (after defang
+# normalization) in the merged output is a finding, feeding the retry loop. Deterministic and
+# fail-open on parse miss.
+
+# Defang tokens `neutralize_active_content` may introduce, normalized so a legitimately defanged
+# copy still compares equal to the source.
+_DEFANG_PAIRS = (("hxxps", "https"), ("hxxp", "http"), ("[.]", "."), ("(.)", "."),
+                 ("[:]", ":"), ("[at]", "@"), ("{.}", "."),
+                 ("%2f", "/"), ("%2e", "."), ("%3a", ":"), ("%2F", "/"), ("%2E", "."))
+_TECH_PUNCT = ("/", ":", "=", "@", "_", "?")
+# Cosmetic argparse literals — help text/metavars are display-only; the merge may reword them.
+_COSMETIC_KWARGS = {"help", "metavar", "description", "epilog", "usage"}
+
+
+def _normalize_literal(s: str) -> str:
+    out = s.strip().lower()
+    for a, b in _DEFANG_PAIRS:
+        out = out.replace(a, b)
+    return " ".join(out.split())
+
+
+def _significant_literals(code: str) -> set[str]:
+    """String literals that carry technical information (endpoints, paths, payloads, header/env
+    names, versions, keys) — NOT prose, docstrings, f-string fragments, or cosmetic argparse
+    help/metavar text, all of which a merge may legitimately reword. Fail-open: unparseable →
+    empty set (no findings)."""
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return set()
+    parents: dict[int, ast.AST] = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[id(child)] = node
+    lits: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+            continue
+        s = node.value.strip()
+        if len(s) < 4:
+            continue
+        par = parents.get(id(node))
+        if isinstance(par, ast.JoinedStr):
+            continue  # f-string fragment, e.g. "http://" inside f"http://{h}:{p}"
+        if isinstance(par, ast.Expr):
+            continue  # bare string statement (docstring)
+        if isinstance(par, ast.keyword) and par.arg in _COSMETIC_KWARGS:
+            continue
+        if " " in s and not any(c in s for c in _TECH_PUNCT):
+            continue  # narrative prose — allowed to be rewritten
+        lits.add(s)
+    return lits
+
+
+def _missing_literals(orig: str, merged: str) -> list[Finding]:
+    """Source technical literals absent from the merged output (info dropped/renamed)."""
+    if not orig or not merged:
+        return []
+    merged_norm = _normalize_literal(merged)
+    missing = sorted(s for s in _significant_literals(orig)
+                     if _normalize_literal(s) not in merged_norm)
+    if not missing:
+        return []
+    shown = ", ".join(repr(m) for m in missing[:8])
+    extra = "" if len(missing) <= 8 else f" (+{len(missing) - 8})"
+    return [Finding(
+        "information_loss",
+        f"bản hợp nhất làm rớt literal kỹ thuật của PoC gốc: {shown}{extra} — giữ NGUYÊN mọi "
+        "endpoint/tham số/payload/tên header/hằng số; chỉ được bỏ phần thực sự không dùng",
+    )]
+
+
 def fidelity_check(code: str, orig_source: str) -> list[Finding]:
     """All deterministic fidelity findings for a merged ``code`` vs the original entry source.
     Returns an empty list when the merge preserves the original's CLI surface and binding."""
@@ -316,6 +394,7 @@ def fidelity_check(code: str, orig_source: str) -> list[Finding]:
     findings += _missing_flags(orig_source, code)
     findings += _orphan_args(code)
     findings += _hardcoded_binds(orig_source, code)
+    findings += _missing_literals(orig_source, code)
     return findings
 
 

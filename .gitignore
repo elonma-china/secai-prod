@@ -16,3 +16,18 @@ logs/
 .playwright-mcp/
 # vendored third-party repo (its own git history/remote) — not part of this project
 secai-serving-vast/
+jev-ultrafast/
+
+# cocoindex-code local index
+.cocoindex_code/
+
+# eval run rỗng/aborted — không commit
+evals/results/exploit_lab_1792085602_summary.json
+
+# ── Generated/junk trong gateway (không commit) ──
+output/
+.playwright-cli/
+.opencode/
+pentestcode/node_modules/
+**/__pycache__/
+output/*.png

@@ -17,7 +17,18 @@ _SENTENCE_BREAK = re.compile(r"(?<=[.!?…])\s+")
 
 def _hard_split(s: str, budget: int) -> list[str]:
     """Last resort for one sentence longer than the budget: cut on char boundaries."""
-    return [s[i:i + budget] for i in range(0, len(s), budget)] or [""]
+    out: list[str] = []
+    i = 0
+    while i < len(s):
+        j = min(len(s), i + budget)
+        if j < len(s):
+            # never cut inside a ⟦Ln⟧ placeholder (atomic token of the literal masker)
+            opener = s.rfind("⟦", i, j)
+            if opener > i and "⟧" not in s[opener:j]:
+                j = opener
+        out.append(s[i:j])
+        i = j
+    return out or [""]
 
 
 def _split_paragraph(para: str, budget: int) -> list[tuple[str, str]]:

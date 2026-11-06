@@ -29,6 +29,7 @@ dependencies = [
   # Runtime for the input-sanitization classifier head (matmul + softmax/sigmoid). Already
   # present transitively via fastembed; declared explicitly since we import it directly.
   "numpy>=1.26",
+  "docxtpl>=0.16",
 ]
 
 [project.optional-dependencies]

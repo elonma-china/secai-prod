@@ -208,3 +208,51 @@ def test_argparse_default_ignores_unrelated_and_benign_flags() -> None:
         "args = p.parse_args()\n"
     )
     assert fidelity_failure(orig, orig) is None
+
+
+_ORIG_LITS = """\
+import requests
+HEADER = "x-middleware-subrequest"
+def run(base, pid):
+    url = base + "/api/v4/projects/" + str(pid) + "/packages/npm"
+    payload = "../etc/passwd"
+    return requests.get(url, headers={HEADER: payload}, params={"ref": "main"})
+"""
+
+
+def test_information_loss_flags_dropped_technical_literal() -> None:
+    """A merge that silently drops an endpoint/payload/header literal must be flagged even though
+    the code still compiles and runs (the strongest, hardest-to-see LLM failure)."""
+    merged = (
+        "import requests\n\n"
+        "def run(base, pid):\n"
+        '    url = base + "/api/v4/projects/" + str(pid)\n'  # dropped /packages/npm
+        "    return requests.get(url)\n"                       # dropped header + payload + ref
+    )
+    kinds = {f.kind for f in fidelity_check(merged, _ORIG_LITS)}
+    assert "information_loss" in kinds
+    reason = fidelity_failure(merged, _ORIG_LITS)
+    assert "information_loss" in reason or "literal" in reason
+    assert "/packages/npm" in reason and "x-middleware-subrequest" in reason
+
+
+def test_information_loss_accepts_faithful_and_defanged_merge() -> None:
+    faithful = (
+        "import requests\n"
+        'url = base + "/api/v4/projects/" + str(pid) + "/packages/npm"\n'
+        'requests.get(url, headers={"x-middleware-subrequest": "../etc/passwd"}, params={"ref": "main"})\n'
+    )
+    assert [f for f in fidelity_check(faithful, _ORIG_LITS) if f.kind == "information_loss"] == []
+    # a legitimately DEFANGED copy must not be flagged as lossy
+    defanged = (
+        "import requests\n"
+        'url = base + "/api/v4/projects/" + str(pid) + "/packages/npm"\n'
+        'requests.get("http://x", headers={"x-middleware-subrequest": "../etc%2fpasswd"}, params={"ref": "main"})\n'
+    )
+    assert [f for f in fidelity_check(defanged, _ORIG_LITS) if f.kind == "information_loss"] == []
+
+
+def test_information_loss_ignores_prose_changes() -> None:
+    orig = 'import os\ndef f():\n    """Original long narrative docstring here about the exploit."""\n    return os.getcwd()\n'
+    merged = 'import os\ndef f():\n    """Rewritten shorter docstring."""\n    return os.getcwd()\n'
+    assert [f for f in fidelity_check(merged, orig) if f.kind == "information_loss"] == []

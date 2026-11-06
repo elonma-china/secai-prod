@@ -32,6 +32,26 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+_DIGEST_CACHE: dict[Path, tuple[tuple[int, int, int, int], str]] = {}
+
+
+def _cached_sha256(path: Path) -> str:
+    """Digest memoized per process; any size/mtime/inode/ctime change re-hashes.
+
+    The first call for a file always hashes it in full. The key is taken before
+    hashing, so a file modified mid-read stores a stale key that cannot match
+    the next stat and is re-hashed.
+    """
+    st = path.stat()
+    key = (st.st_size, st.st_mtime_ns, st.st_ino, st.st_ctime_ns)
+    hit = _DIGEST_CACHE.get(path)
+    if hit is not None and hit[0] == key:
+        return hit[1]
+    digest = _sha256(path)
+    _DIGEST_CACHE[path] = (key, digest)
+    return digest
+
+
 @dataclass(frozen=True)
 class PinnedCommand:
     binary: Path
@@ -45,9 +65,9 @@ class PinnedCommand:
     def attest(self) -> None:
         if (not self.binary.is_absolute() or not self.binary.is_file() or
                 not os.access(self.binary, os.X_OK) or
-                not self.sha256 or _sha256(self.binary) != self.sha256 or
+                not self.sha256 or _cached_sha256(self.binary) != self.sha256 or
                 not self.artifacts or any(not path.is_absolute() or not path.is_file() or
-                                          not expected or _sha256(path) != expected
+                                          not expected or _cached_sha256(path) != expected
                                           for path, expected in self.artifacts)):
             raise StageFailure("ARTIFACT", pre_admission=True)
 

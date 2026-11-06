@@ -141,6 +141,8 @@ def _paragraph_text(element: ET.Element) -> str:
             pieces.append("\n")
         elif node.tag == _W + "tab":
             pieces.append("\t")
+        elif node.tag == _W + "noBreakHyphen":
+            pieces.append("-")  # keeps "CVE-2024-1234" a CVE instead of "CVE20241234"
     return "".join(pieces)
 
 
@@ -283,6 +285,12 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
         elif child.tag == _W + "tbl":
             walk_table(child)
     emit_part("footer", section)
+    if any(child.tag in {_W + "sdt", _W + "customXml"} or child.tag.endswith("}AlternateContent")
+           for child in body):
+        # Content controls are not extracted; say so rather than dropping silently.
+        warnings.append(WarningItem(
+            code="UNSUPPORTED_PART",
+            message="Content controls (w:sdt) were not extracted and need review."))
     if any("endnotes" in name or "comments" in name for name in parts):
         warnings.append(WarningItem(code="UNSUPPORTED_PART", message="Some document parts are unsupported."))
     if any(node.tag.endswith("}txbxContent") or node.tag in {_W + "instrText", _W + "fldSimple"}

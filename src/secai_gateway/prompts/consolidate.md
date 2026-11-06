@@ -32,6 +32,8 @@ Ngoài việc hợp nhất, làm cho tệp CHẠY ĐƯỢC trên target thật m
 6. Dependency + verify bám sát mã/README gốc: ngay dưới dòng comment CVE ở đầu tệp, liệt kê MỌI thư viện ngoài standard library mã dùng kèm lệnh cài chính xác dưới dạng comment (vd `# Requirements: pip install requests requests_ntlm pyspnego`) — chỉ mang tính THAM KHẢO những gì cần có sẵn cục bộ (air-gap: đây KHÔNG phải bước tải/cài đặt lúc PoC chạy; không tự thêm thư viện mã gốc không dùng). Cách VERIFY thành công (chứng minh khai thác được, vd ghi file vào webroot rồi curl đúng path, hoặc in output trực tiếp) phải LẤY TỪ chính mã/README gốc và GIỮ NGUYÊN — KHÔNG tự bịa lệnh/port/đường dẫn verify mới không có căn cứ trong mã gốc; nếu mã gốc không có cách verify rõ ràng thì không thêm bước verify nào.
 
 - Khi thêm đối số CLI mới (`--callback-url`, `--username`…), cập nhật `argparse`/usage cho khớp để tệp vẫn parse và chạy được. KHÔNG thêm thư viện bên ngoài mới nếu mã gốc không dùng — chỉ dùng thư viện gốc + thư viện chuẩn.
+
+7. Python 2 → Python 3: môi trường thực thi dùng **python3**. Nếu mã gốc là Python 2, BẮT BUỘC port sang Python 3 chạy được: `urllib2`→`urllib.request`, `urlparse`→`urllib.parse`, `httplib`→`http.client`, `ConfigParser`→`configparser`, `StringIO`/`cStringIO`→`io.StringIO`, `raw_input`→`input`, `xrange`→`range`, `.iteritems()`/`.iterkeys()`/`.itervalues()`→`.items()`/`.keys()`/`.values()`, `.has_key(k)`→`k in d`, `except X, e`→`except X as e`, `print x`→`print(x)`, `unicode`→`str`, `basestring`→`str`. Giữ nguyên logic khai thác/payload; chỉ đổi cú pháp + import. Shebang đặt `#!/usr/bin/env python3`.
 </robustness>
 
 <output_contract>

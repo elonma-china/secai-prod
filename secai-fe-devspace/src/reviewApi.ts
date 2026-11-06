@@ -42,7 +42,7 @@ export function createReviewApi(token: string) {
     startTraining: (id:string) => request<TrainingJob>(`/reward/training/campaigns/${encodeURIComponent(id)}`, "POST", {}),
     reviseTemplate: (template: string, instruction: string) => request<{draft: string}>("/report-templates/revise", "POST", {template, instruction, input_clean_confirmed: true}),
     renderTemplate: (template: string, logs: string) => request<{report: string}>("/report-templates/render", "POST", {template, logs, input_clean_confirmed: true}),
-    livePair: (prompt_messages: PromptMessage[], answer: string, source_group: string) => request<{offered: false} | {offered: true; assignment: Assignment}>("/live-pairs", "POST", {prompt_messages, answer, source_group}),
+    livePair: (prompt_messages: PromptMessage[], answer: string, source_group: string) => request<{offered: false} | {offered: true; assignment: Assignment}>("/live-pairs", "POST", {prompt_messages, answer, source_group, always_offer: true}),
     me: () => request<Actor>("/me"),
     reviewers: () => all<Actor>("/reviewers"),
     campaigns: () => all<Campaign>("/campaigns"),

@@ -239,3 +239,68 @@ def test_rubric_hook_exhaustion_mutates_fabricated_draft_fail_closed():
     assert terminal.reason == "kb_search_before_synthesis_exhausted"
     assert DRAFT_MARKER not in terminal.final_text
     assert "Không thể xác thực thông tin lỗ hổng từ cơ sở dữ liệu nội bộ (KB)" in terminal.final_text
+
+
+# ── Mục 4 ("Giải thích quy trình tạo PoC") — wiring-level regression, xem poc/trace.py cho
+# unit test thuần (test_generation_trace.py). Đây chỉ kiểm end-to-end qua create_app() rằng
+# routes.py THỰC SỰ nối khối vào response — bắt regression nếu ai đó gỡ lời gọi
+# build_generation_trace/render_generation_trace khỏi _exploit()/_exploit_stream() mà không
+# đụng gì tới trace.py (nên unit test thuần sẽ không phát hiện ra).
+def test_generation_trace_appended_for_found_kb_json(monkeypatch):
+    install_kb(monkeypatch, "found", content=f"{CVE}\n{KB_MARKER}\nCWE-330", cwe_refs=["CWE-330"])
+    runner = CaptureRunner()
+    response = asyncio.run(request("/ai/exploit", runner,
+                                   {"user_id": "luna", "question": f"Analyze {CVE}"}))
+    result = response.json()
+    assert result["description"] == result["exploit_guide"]
+    assert "## 4. Quy trình tạo PoC" in result["description"]
+    assert "🔧 Quy trình hệ thống" in result["description"]
+    trace = result["metadata"].get("generation_trace")
+    assert isinstance(trace, list) and trace and isinstance(trace[0], str) and trace[0].strip()
+
+
+@pytest.mark.parametrize("status", ["not_found", "error", "insufficient"])
+def test_generation_trace_appended_for_unusable_kb_json(monkeypatch, status):
+    install_kb(monkeypatch, status)
+    runner = CaptureRunner()
+    response = asyncio.run(request("/ai/exploit", runner,
+                                   {"user_id": "luna", "question": f"Analyze {CVE}"}))
+    result = response.json()
+    assert "## 4. Quy trình tạo PoC" in result["description"]
+    assert result["metadata"].get("generation_trace")
+
+
+def test_generation_trace_appended_in_sse_final_event(monkeypatch):
+    install_kb(monkeypatch, "found", content=f"{CVE}\n{KB_MARKER}\nCWE-330", cwe_refs=["CWE-330"])
+    runner = CaptureRunner()
+    response = asyncio.run(request("/ai/exploit/stream", runner,
+                                   {"user_id": "luna", "question": f"Analyze {CVE}"}))
+    body = response.text
+    finals = [payload for name, payload in sse_events(body) if name == "final"]
+    assert len(finals) == 1
+    final = finals[0]
+    assert final["content"] == final["description"] == final["exploit_guide"]
+    assert "## 4. Quy trình tạo PoC" in final["content"]
+    assert final["metadata"].get("generation_trace")
+
+
+def test_generation_trace_absent_for_hook_exhaustion_refusal_byte_exact(monkeypatch):
+    """Ngoại lệ bắt buộc (xem routes.py comment tại chỗ gọi build_generation_trace): refusal
+    hook-exhaustion phải đi qua BYTE-EXACT, không bị nối thêm Mục 4 — bất biến này đã có test
+    riêng `test_exploit_kb_grounding.py::test_json_hook_exhaustion_refusal_is_not_relabelled_as_synthesized`
+    (assert full-string equality); test này chỉ xác nhận thêm KHÔNG có field `generation_trace`
+    trong metadata cho case đó, làm rõ ý định hơn là suy ra gián tiếp từ string equality."""
+    from secai_gateway.agent.hooks import _EXPLOIT_KB_SEARCH_EXHAUSTED
+
+    install_kb(monkeypatch, "found", content=f"{CVE}\n{KB_MARKER}", cwe_refs=[])
+
+    class RefusalRunner(CaptureRunner):
+        def __init__(self):
+            super().__init__(answer=_EXPLOIT_KB_SEARCH_EXHAUSTED)
+
+    response = asyncio.run(request("/ai/exploit", RefusalRunner(),
+                                   {"user_id": "luna", "question": f"Analyze {CVE}"}))
+    result = response.json()
+    assert result["description"] == _EXPLOIT_KB_SEARCH_EXHAUSTED
+    assert "## 4." not in result["description"]
+    assert "generation_trace" not in result["metadata"]

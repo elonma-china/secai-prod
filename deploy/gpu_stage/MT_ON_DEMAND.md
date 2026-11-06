@@ -45,3 +45,25 @@ sustained shortage does not rehash multi-GB files) and again after it. Every
 stage failure also emits one warning line, `gpu stage failure code=<CODE>
 poison=<bool>`, with the code and poison flag only, to stderr; confirm on
 deploy that it reaches `mt.log`.
+
+## Optional warm lease (`GPU_MT_WARM_IDLE_SECONDS`)
+
+Default `0` keeps the behaviour above: one child per request. Set it to a small
+value (suggested `20`, max 120) to keep the pinned child **and the shared GPU
+flock** alive after a request, so consecutive calls (a file is split into many)
+skip the spawn. The lease runs inside one `owner.run`, so sampling, the
+8192 MiB preload reserve, attestation, owner proof, poison and evidence vetoes
+are unchanged and happen once per child. Each job still obeys its own 105 s
+deadline. The child is torn down through `owner.close()` on idle expiry, on any
+job failure, timeout or disconnect (generation may still be running, so it is
+never reused), on `GPU_MT_WARM_MAX_SECONDS` (default 600) and on app shutdown.
+At most 2 requests are in flight; more get BUSY. Poisoned queue rejects new work.
+
+Trade-off: while warm, the flock is held, so OCR on the same GPU waits up to the
+idle window (plus teardown). OCR cannot signal this process; keep the window
+short. Another MT stage queued behind the lease, `request_release()` or
+shutdown closes the lease as soon as it is idle.
+
+Attestation digests (binary, GGUF, libraries) are cached in-process keyed by
+path, size, mtime, inode and ctime: the first spawn hashes fully, any stat
+change re-hashes. A restart always re-hashes.

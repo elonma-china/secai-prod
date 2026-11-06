@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cocoindex-code": {
+      "type": "stdio",
+      "command": "/home/ict/.local/bin/ccc",
+      "args": ["mcp"]
+    }
+  }
+}

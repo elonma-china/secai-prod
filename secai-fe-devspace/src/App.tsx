@@ -21,6 +21,7 @@ import type { AiScreenId, HealthStatus } from "./types";
 import ChatbotScreen from "./screens/ChatbotScreen";
 import TranslateScreen from "./screens/TranslateScreen";
 import ExploitScreen from "./screens/ExploitScreen";
+import ExploitV2Screen from "./screens/ExploitV2Screen";
 import ReportScreen from "./screens/ReportScreen";
 import ReviewScreen from "./screens/ReviewScreen";
 import DemoFeedback from "./screens/review/DemoFeedback";
@@ -32,6 +33,7 @@ const AI_ITEMS: { id: AiScreenId; label: string }[] = [
   { id: "translate", label: "Dịch văn bản" },
   { id: "chat", label: "Trợ lý ảo ATTT" },
   { id: "exploit", label: "Sinh mã khai thác" },
+  { id: "exploit-v2", label: "Sinh PoC (v2)" },
   { id: "report", label: "Báo cáo thông minh" },
   { id: "review", label: "Đánh giá A/B" },
 ];
@@ -177,6 +179,7 @@ export default function App() {
           {screen === "chat" && <ChatbotScreen userId={userId} health={health} />}
           {screen === "translate" && <TranslateScreen userId={userId} />}
           {screen === "exploit" && <ExploitScreen userId={userId} />}
+          <ExploitV2Screen userId={userId} hidden={screen !== "exploit-v2"} />
           {screen === "report" && <ReportScreen userId={userId} />}
           {screen === "review" && demoRole === "admin" && <ReviewScreen connecting={authState.loading} connectionError={authState.error} onReconnect={() => setAuthRefresh(value => value + 1)}/> }
         </main>

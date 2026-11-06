@@ -1,0 +1,63 @@
+{
+  "id": "003-cred-spray-plan",
+  "name": "Generate credential spray plan from engagement state",
+  "category": "credential_reuse",
+  "difficulty": 2,
+  "description": "Given an engagement with discovered services and a credential, generate a spray plan covering all eligible targets.",
+  "setup": {
+    "engagement_name": "bench-003",
+    "hosts": {
+      "10.10.10.5": {
+        "services": [
+          {"port": 445, "service": "microsoft-ds", "protocol": "tcp"},
+          {"port": 3389, "service": "ms-wbt-server", "protocol": "tcp"},
+          {"port": 5985, "service": "wsman", "protocol": "tcp"}
+        ]
+      },
+      "10.10.10.6": {
+        "services": [
+          {"port": 445, "service": "microsoft-ds", "protocol": "tcp"},
+          {"port": 22, "service": "ssh", "protocol": "tcp"},
+          {"port": 3306, "service": "mysql", "protocol": "tcp"}
+        ]
+      },
+      "10.10.10.7": {
+        "services": [
+          {"port": 445, "service": "microsoft-ds", "protocol": "tcp"},
+          {"port": 1433, "service": "ms-sql-s", "protocol": "tcp"}
+        ]
+      }
+    },
+    "credentials": {
+      "admin_cred": {
+        "username": "CORP\\svc_backup",
+        "value": "P@ssw0rd123!",
+        "cred_type": "password"
+      }
+    }
+  },
+  "input": {
+    "tool": "cred_spray",
+    "args": {
+      "action": "plan",
+      "credential_id": "admin_cred"
+    }
+  },
+  "expected": {
+    "target_count_min": 7,
+    "has_netexec_smb_commands": true,
+    "has_rdp_commands": true,
+    "has_winrm_commands": true,
+    "has_ssh_commands": true,
+    "has_mssql_commands": true,
+    "has_mysql_commands": true,
+    "no_duplicate_targets": true
+  },
+  "scoring": {
+    "targets_generated": 30,
+    "commands_valid": 25,
+    "service_coverage": 25,
+    "dedup_correct": 10,
+    "hash_detection": 10
+  }
+}

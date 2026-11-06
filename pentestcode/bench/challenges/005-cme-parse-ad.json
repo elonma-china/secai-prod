@@ -1,0 +1,30 @@
+{
+  "id": "005-cme-parse-ad",
+  "name": "Parse CrackMapExec output with AD context",
+  "category": "parsing",
+  "difficulty": 2,
+  "description": "Parse CME output containing host enumeration, valid credentials, and admin access markers. Verify relationships are created.",
+  "input": {
+    "tool": "cme_parse",
+    "args": {
+      "input": "SMB         10.10.10.5      445    DC01             [*] Windows Server 2019 Standard 17763 (name:DC01) (domain:corp.local) (signing:True) (SMBv1:False)\nSMB         10.10.10.6      445    WEB01            [*] Windows Server 2019 Standard 17763 (name:WEB01) (domain:corp.local) (signing:False) (SMBv1:False)\nSMB         10.10.10.5      445    DC01             [+] corp.local\\svc_backup:P@ssw0rd123!\nSMB         10.10.10.6      445    WEB01            [+] corp.local\\svc_backup:P@ssw0rd123! (Pwn3d!)\nSMB         10.10.10.5      445    DC01             [-] corp.local\\admin:WrongPass\nSMB         10.10.10.7      445    DB01             [+] corp.local\\svc_backup:P@ssw0rd123!"
+    }
+  },
+  "expected": {
+    "hosts_found": 2,
+    "credentials_found": 1,
+    "admin_access": 1,
+    "failures": 1,
+    "smb_signing_disabled_vuln": true,
+    "relationships_created": true,
+    "state_updated": true
+  },
+  "scoring": {
+    "hosts_parsed": 20,
+    "creds_parsed": 25,
+    "admin_detected": 20,
+    "signing_vuln": 15,
+    "relationships": 10,
+    "state_updated": 10
+  }
+}

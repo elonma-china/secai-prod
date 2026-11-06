@@ -1,0 +1,217 @@
+{
+  "function": "chat_history",
+  "mode": "offline",
+  "scores_0_100": {
+    "do_chinh_xac": 100.0,
+    "on_dinh": 100.0,
+    "nho_ngu_canh": 100.0
+  },
+  "old_contract_gate": "PASS",
+  "total_checks": 29,
+  "by_check": [
+    {
+      "criterion": "on_dinh",
+      "name": "old_chat_http200",
+      "passed": true,
+      "detail": "",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "old_chat_contract_keys",
+      "passed": true,
+      "detail": "keys=['answer', 'message', 'metadata', 'response']",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "old_chat_no_new_keys",
+      "passed": true,
+      "detail": "",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "old_stream_frames",
+      "passed": true,
+      "detail": "",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "old_stream_no_conversation_frame",
+      "passed": true,
+      "detail": "",
+      "gate": true
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_chat_superset",
+      "passed": true,
+      "detail": "keys=['answer', 'conversation_id', 'message', 'metadata', 'response']",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_chat_meta_has_cid",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_chat_session_owner_scoped",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_stream_conversation_frame",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_stream_frames",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "new_stream_final_has_cid",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "create_ok",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "list_ok",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "owner_isolation",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "anon_list_400",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "anon_create_400",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "spoof_get_404",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "spoof_delete_404",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "missing_id_404",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "on_dinh",
+      "name": "delete_ok",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "do_chinh_xac",
+      "name": "new_nonempty",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "do_chinh_xac",
+      "name": "parity_with_old",
+      "passed": true,
+      "detail": "endpoint mới không được biến đổi câu trả lời so với /ai/chat",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "same_session_across_turns",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "durable_turn_accumulation",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "transcript_order",
+      "passed": true,
+      "detail": "roles=['user', 'assistant', 'user', 'assistant']",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "transcript_recall_turn1",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "assistant_sanitized",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "conversation_isolation",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    },
+    {
+      "criterion": "nho_ngu_canh",
+      "name": "blocked_not_persisted",
+      "passed": true,
+      "detail": "",
+      "gate": false
+    }
+  ],
+  "failures": []
+}

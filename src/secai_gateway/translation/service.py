@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import re
+import secrets
 import unicodedata
 from functools import lru_cache
 
 from lingua import Language, LanguageDetectorBuilder
 import regex
 
-from .technical_tokens import _VERSION, literal_spans, protect_literals, restore_literals
+from .technical_tokens import _VERSION, literal_spans, protect_literals, restore_literals_with_ranges
 from .types import (DocumentBlock, ProcessingContext, SourceLang, TargetLang,
                     TranslatedBlock, TranslationError)
 
@@ -174,7 +175,7 @@ def detect_source_language(blocks: tuple[DocumentBlock, ...]) -> TargetLang | No
     return _LANGUAGE_CODES[primary]
 
 
-def _technical_cores(text: str) -> list[str]:
+def _technical_cores(text: str, skip_ranges: tuple[tuple[int, int], ...] = ()) -> list[str]:
     """Technical tokens in ``text`` without the prose word a version match absorbs.
 
     ``_VERSION`` treats any preceding ASCII word as a product name, so the span
@@ -184,7 +185,12 @@ def _technical_cores(text: str) -> list[str]:
     correct output; the number itself is the token that must not change.
     """
     cores: list[str] = []
-    for start, end in literal_spans(text):
+    for start, end in literal_spans(text, weak_labels=False):
+        # Text restored from a placeholder is already verified by count/order in
+        # restore_literals; a span that merely overlaps it (a translated label such
+        # as "password:" glued to the restored value) is not a new literal.
+        if any(start < b and end > a for a, b in skip_ranges):
+            continue
         token = text[start:end]
         match = _VERSION.fullmatch(token)
         if match:
@@ -247,6 +253,7 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
         source_lang = resolved
     if source_lang != target_lang and source_lang != "vi" and target_lang != "vi":
         raise TranslationError("UNSUPPORTED_LANGUAGE_PAIR", "Language pair is unsupported.")
+    salt = secrets.token_bytes(16)  # secret per request; nonce = HMAC(salt, block text)
     translated: list[TranslatedBlock] = []
     chunk_count = 0
     context_tokens = getattr(context, "model_context_tokens", 32768)
@@ -258,7 +265,7 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
         if not block.text.strip() or source_lang == target_lang:
             translated.append(TranslatedBlock(source=block, translated_text=block.text))
             continue
-        protected = protect_literals(block.text)
+        protected = protect_literals(block.text, salt)
         if _PLACEHOLDER.fullmatch(protected.text.strip()):
             translated.append(TranslatedBlock(source=block, translated_text=block.text))
             continue
@@ -315,9 +322,9 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                         pending_whitespace = trailing
                         previous = core
                     joined.append(pending_whitespace)
-                    output = restore_literals("".join(joined), protected)
+                    output, restored = restore_literals_with_ranges("".join(joined), protected)
                     if not all(_occurs_as_token(core, block.text)
-                               for core in _technical_cores(output)):
+                               for core in _technical_cores(output, restored)):
                         raise TranslationError("TOKEN_INTEGRITY_FAILED",
                                                "Technical literal integrity check failed.")
                 except TranslationError as exc:

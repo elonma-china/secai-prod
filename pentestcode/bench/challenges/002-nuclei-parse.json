@@ -1,0 +1,28 @@
+{
+  "id": "002-nuclei-parse",
+  "name": "Parse nuclei findings and create vulnerabilities",
+  "category": "parsing",
+  "difficulty": 1,
+  "description": "Agent should parse nuclei JSON lines output and create vulnerability entries with proper severity and evidence.",
+  "input": {
+    "tool": "nuclei_parse",
+    "args": {
+      "input": "{\"template-id\":\"cve-2021-44228-log4j-rce\",\"info\":{\"name\":\"Log4j RCE (CVE-2021-44228)\",\"severity\":\"critical\",\"tags\":[\"cve\",\"rce\",\"log4j\"],\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2021-44228\"]},\"type\":\"http\",\"host\":\"http://10.10.10.20:8080\",\"matched-at\":\"http://10.10.10.20:8080/api/login\",\"ip\":\"10.10.10.20\",\"port\":\"8080\",\"matcher-name\":\"jndi-ldap\",\"matcher-status\":true,\"timestamp\":\"2026-01-15T10:30:00Z\"}\n{\"template-id\":\"CVE-2023-22515\",\"info\":{\"name\":\"Confluence Auth Bypass (CVE-2023-22515)\",\"severity\":\"critical\",\"tags\":[\"cve\",\"auth-bypass\",\"confluence\"],\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2023-22515\"]},\"type\":\"http\",\"host\":\"http://10.10.10.20:8090\",\"matched-at\":\"http://10.10.10.20:8090/server-info.action\",\"ip\":\"10.10.10.20\",\"port\":\"8090\",\"matcher-name\":\"version-check\",\"matcher-status\":true,\"timestamp\":\"2026-01-15T10:32:00Z\"}\n{\"template-id\":\"ssh-weak-algos\",\"info\":{\"name\":\"SSH Weak Key Exchange Algorithms\",\"severity\":\"low\",\"tags\":[\"ssh\",\"misconfig\"]},\"type\":\"network\",\"host\":\"10.10.10.20:22\",\"ip\":\"10.10.10.20\",\"port\":\"22\",\"matcher-status\":true}"
+    }
+  },
+  "expected": {
+    "findings_count": 3,
+    "critical_count": 2,
+    "low_count": 1,
+    "has_cve_2021_44228": true,
+    "has_cve_2023_22515": true,
+    "state_updated": true
+  },
+  "scoring": {
+    "findings_parsed": 30,
+    "severity_correct": 25,
+    "cve_ids_extracted": 20,
+    "state_updated": 15,
+    "evidence_populated": 10
+  }
+}

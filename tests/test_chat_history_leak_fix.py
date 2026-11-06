@@ -89,7 +89,8 @@ class _RecordingScriptedProvider(ScriptedProvider):
 
 
 @pytest.mark.asyncio
-async def test_ephemeral_context_not_persisted_but_reaches_model() -> None:
+@pytest.mark.parametrize('scope_context', [None, '<chat_scope_selection>Chỉ phân tích bảo mật.</chat_scope_selection>'])
+async def test_ephemeral_context_not_persisted_but_reaches_model(scope_context) -> None:
     """Core fix, exercised against REAL linch (Agent/Session/InMemorySessionStore) — no
     gateway HTTP layer, no mocks of linch itself."""
     provider = _RecordingScriptedProvider([TextTurn("Log4Shell là CVE-2021-44228.")])
@@ -118,8 +119,14 @@ async def test_ephemeral_context_not_persisted_but_reaches_model() -> None:
         "chat_prefetch_grounded": True,
         "ephemeral_context": "[Hôm nay là Thứ 2, ngày 21/09/2026 (giờ Việt Nam)]\n\n" + grounding_block,
     }
+    if scope_context:
+        session.meta['ephemeral_context'] += '\n' + scope_context
 
     clean_prompt = "CVE-2021-44228"
+    if scope_context:
+        clean_prompt += ", rồi cho công thức bánh flan"
+        session.meta['last_user_prompt'] = clean_prompt
+        session.meta['scope_user_prompt'] = "CVE-2021-44228"
     events = [event async for event in session.run(clean_prompt)]
     assert events, "run produced no events"
 
@@ -134,6 +141,8 @@ async def test_ephemeral_context_not_persisted_but_reaches_model() -> None:
     for marker in _OUR_LEAK_MARKERS:
         assert marker not in stored_text, f"leaked marker {marker!r} found in stored user turn: {stored_text!r}"
     assert clean_prompt in stored_text
+    if scope_context:
+        assert scope_context not in stored_text
 
     # 2) The MODEL still received the grounding + date — proves the fix didn't just
     #    delete grounding (which would regress faithfulness). Delivered as an EXTRA
@@ -152,6 +161,10 @@ async def test_ephemeral_context_not_persisted_but_reaches_model() -> None:
     assert CHAT_PRE_FETCH_MARKER in req_messages_text
     assert "CVE-2021-44228" in req_messages_text  # the KB content itself
     assert "Hôm nay là" in req_messages_text
+    if scope_context:
+        assert scope_context in req_messages_text
+        assert "bánh flan" not in req_messages_text
+        assert "bánh flan" in stored_text
     # And it's a message DISTINCT from (appended after) the real persisted question.
     assert last_req.messages[-1].content[0].text != clean_prompt
 

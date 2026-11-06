@@ -1,0 +1,29 @@
+{
+  "id": "001-nmap-parse",
+  "name": "Parse nmap XML and update engagement state",
+  "category": "parsing",
+  "difficulty": 1,
+  "description": "Agent should parse nmap XML output, add hosts/services to engagement state, and suggest next steps.",
+  "input": {
+    "tool": "nmap_parse",
+    "args": {
+      "input": "<?xml version=\"1.0\"?>\n<nmaprun scanner=\"nmap\" args=\"-sV -sC -oX scan.xml 10.10.10.5\">\n<host><address addr=\"10.10.10.5\" addrtype=\"ipv4\"/><hostnames><hostname name=\"dc01.corp.local\" type=\"PTR\"/></hostnames><ports><port protocol=\"tcp\" portid=\"53\"><state state=\"open\"/><service name=\"domain\" product=\"Simple DNS Plus\"/></port><port protocol=\"tcp\" portid=\"88\"><state state=\"open\"/><service name=\"kerberos-sec\" product=\"Microsoft Windows Kerberos\"/></port><port protocol=\"tcp\" portid=\"135\"><state state=\"open\"/><service name=\"msrpc\" product=\"Microsoft Windows RPC\"/></port><port protocol=\"tcp\" portid=\"139\"><state state=\"open\"/><service name=\"netbios-ssn\" product=\"Microsoft Windows netbios-ssn\"/></port><port protocol=\"tcp\" portid=\"389\"><state state=\"open\"/><service name=\"ldap\" product=\"Microsoft Windows Active Directory LDAP\"/></port><port protocol=\"tcp\" portid=\"445\"><state state=\"open\"/><service name=\"microsoft-ds\" product=\"Windows Server 2019 Standard\"/></port><port protocol=\"tcp\" portid=\"3389\"><state state=\"open\"/><service name=\"ms-wbt-server\" product=\"Microsoft Terminal Services\"/></port></ports><os><osmatch name=\"Windows Server 2019\" accuracy=\"98\"/></os></host>\n</nmaprun>"
+    }
+  },
+  "expected": {
+    "hosts_found": 1,
+    "services_found": 7,
+    "host_ip": "10.10.10.5",
+    "hostname": "dc01.corp.local",
+    "has_service_53": true,
+    "has_service_445": true,
+    "state_updated": true
+  },
+  "scoring": {
+    "hosts_correct": 30,
+    "services_correct": 30,
+    "state_updated": 20,
+    "hostname_detected": 10,
+    "os_detected": 10
+  }
+}

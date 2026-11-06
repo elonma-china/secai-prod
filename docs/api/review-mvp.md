@@ -83,10 +83,12 @@ Manifest ghi schema_version, rubric_version, campaign_id, exported_at, format, c
 `POST /review-api/live-pairs`, bearer token review, JSON:
 
 ```json
-{"prompt_messages":[{"role":"user","content":"HTTPS có thay thế phân quyền không?"}],"answer":"Không. HTTPS bảo vệ đường truyền.","source_group":"session-reference"}
+{"prompt_messages":[{"role":"user","content":"HTTPS có thay thế phân quyền không?"}],"answer":"Không. HTTPS bảo vệ đường truyền.","source_group":"session-reference","always_offer":true}
 ```
 
 `source_group` chỉ là metadata, không cấp quyền đọc session. API không nhận session_id để ghi hội thoại. Chỉ nhận ngữ cảnh user/assistant công khai, tối đa 30 messages, tổng body 256 KiB và câu trả lời 64 KiB. Backend lấy mẫu/cooldown; không được mời trả `{offered:false}`; được mời trả `{offered:true,assignment:<blinded assignment>}`. Nộp nhãn qua endpoint judgment hiện có của module review. B được sinh độc lập ở session riêng với chat profile và guard hiện có. Không đổi contract hoặc hành vi của `/ai/chat` và `/sessions/{sid}/chat`.
+
+Khi tích “Nhận lời mời đánh giá A/B”, Devspace gửi `always_offer:true` cho từng lượt hoàn tất: bỏ qua lấy mẫu và tạm bỏ cooldown cho luồng chủ động này. Request cũ không có cờ vẫn dùng sampling/cooldown. Các lượt của cùng reviewer xếp hàng để mỗi người chỉ chạy một lần sinh B đồng thời. Auth, giới hạn request/body, redaction và trạng thái campaign vẫn áp dụng. Hai phương án được giữ dưới từng câu trong cuộc trò chuyện đang mở; chuyển cuộc trò chuyện hoặc tải lại trang không khôi phục widget. Nếu sinh B lỗi, timeout hoặc trùng A, frontend hiện lỗi và nút “Thử lại A/B”, không tạo nội dung giả hoặc cặp trùng nhau.
 
 
 ## Sửa template báo cáo bằng prompt

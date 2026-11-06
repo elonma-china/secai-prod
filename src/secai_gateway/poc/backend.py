@@ -27,13 +27,14 @@ _MAX_REFS = 20000  # cap the run-scoped ref map (evict oldest)
 # from 2k→6k tokens so a typical single-file PoC comes back COMPLETE, not cut mid-exploit:
 # the old 8k-char cap lost >half of an 18 KB PoC, which is what made output "lúc đủ lúc
 # thiếu". Big artifacts still cap here to bound context/latency on the public endpoint.
-_MAX_CODE_CHARS = 24000   # ~6k tokens; single-file PoC / entry file
+_MAX_CODE_CHARS = 40000   # ~10k tokens; single-file PoC / entry file
 # Multi-file PoCs (repo-style sources): the SAME total budget shared across the file set,
 # entry file first, so a repo can't blow the window; per-file cap stops one giant file from
-# eating the whole pool.
+# eating the whole pool. Raised 2026-10: a real one-file PoC of ~682 lines was truncated at
+# 12k chars → served code was cut mid-block → SyntaxError (CVE-2026-63030 / 25253).
 _MAX_SET_FILES = 12
 _MAX_SET_CHARS = _MAX_CODE_CHARS
-_MAX_SET_FILE_CHARS = 12000
+_MAX_SET_FILE_CHARS = 40000
 # Hard cap on poc_fetch calls per run — enforced HERE, not left to the system prompt. A
 # small model asked to "fetch 1-2 PoCs" will happily fetch every hit for a well-covered CVE
 # (Log4Shell alone has 64) if nothing stops it; prompt wording is advisory, this is not.
@@ -94,6 +95,95 @@ def _static_indicators(language: str, path: Path) -> dict[str, Any]:
         "writes_files": any(x in low for x in ("open(", "write(", "fopen", "with open")),
         "cve_refs": _DEDUP([c.upper() for c in _CVE.findall(text)], 5),
     }
+
+
+_README_FENCE = _re.compile(r"```(?:bash|sh|shell|console|http|https)?[ \t]*\n(.*?)```", _re.S)
+_SHELL_EXPLOIT_LINE = _re.compile(
+    r"^\s*\$?\s*(?:[A-Za-z_][A-Za-z0-9_]*=(?:\"[^\"]*\"|'[^']*'|[^\s]+)\s+)*"
+    r"(curl|wget|telnet|nc|ncat|ssh|python3?|ruby|perl|node|bash|sh|echo)\b", _re.M)
+_SHELL_EXPLOIT_HINT = _re.compile(r"\b(curl|wget|telnet|nc|ncat)\b")
+_HTTP_REQ_LINE = _re.compile(r"^(GET|POST|PUT|DELETE|PATCH|HEAD)\s+(\S+)\s+HTTP/1\.[01]\s*$", _re.M)
+
+
+def _http_block_to_curl(body: str) -> str | None:
+    """Turn a raw HTTP request block (``POST /path HTTP/1.1`` + headers + body — the common
+    vulhub README form) into a runnable ``curl`` against ``$TARGET``. This is the fix for
+    README-only labs whose exploit is shown as a raw request (observed: CVE-2026-21858 n8n)
+    where the API instead synthesised a wrong-endpoint placeholder PoC."""
+    m = _HTTP_REQ_LINE.search(body)
+    if not m:
+        return None
+    method, path = m.group(1), m.group(2)
+    rest = body[m.end():]
+    head, _, data = rest.partition("\n\n")
+    headers: list[str] = []
+    for line in head.splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            if k.strip().lower() in ("host", "content-length"):
+                continue
+            headers.append(f"-H '{k.strip()}: {v.strip()}'")
+    cmd = f'curl -sS -X {method} "$TARGET{path}"'
+    if headers:
+        cmd += " " + " ".join(headers)
+    if data.strip():
+        cmd += " --data-raw '" + data.strip().replace("'", "'\\''") + "'"
+    return cmd
+
+
+def _readme_to_shell_poc(md: str | None) -> str | None:
+    """Deterministically turn a vulhub README's runnable HTTP steps into ONE grounded shell PoC
+    — used when the lab ships no exploit script (only a README walkthrough). Handles both the
+    curl/telnet form and raw ``METHOD /path HTTP/1.1`` request blocks (→ curl). Never invents;
+    returns None when the README has no runnable step."""
+    if not md:
+        return None
+    blocks: list[str] = []
+    for m in _README_FENCE.finditer(md):
+        body = m.group(1)
+        curl = _http_block_to_curl(body)
+        if curl:
+            blocks.append(curl)
+        elif _SHELL_EXPLOIT_HINT.search(body):
+            blocks.append(body)
+    if not blocks:  # unfenced bare curl/telnet lines (network tools only — never setup)
+        lines = [ln for ln in md.splitlines()
+                 if _re.match(r"^\s*\$?\s*(curl|wget|telnet|nc|ncat)\b", ln)]
+        if lines:
+            blocks.append("\n".join(lines))
+    if not blocks:
+        return None
+    cleaned: list[str] = []
+    for b in blocks:
+        out_lines: list[str] = []
+        for line in b.splitlines():
+            if line.strip().startswith("$ "):
+                line = line.replace("$ ", "", 1)
+            out_lines.append(line)
+        cleaned.append("\n".join(out_lines))
+    # Multi-step wiring: a later step uses a placeholder (`{job_id}`) produced by an earlier
+    # curl's JSON response. Capture each curl output and resolve the placeholder from it, so a
+    # 2-step walkthrough (POST → poll by id) becomes ONE runnable script instead of leaving a
+    # literal `{job_id}` (observed: CVE-2026-33017 langflow).
+    header = '#!/bin/sh\nset -e\n\nTARGET="${1:-${TARGET:-http://127.0.0.1}}"\n\n'
+    body_lines: list[str] = []
+    prev = False
+    for chunk in cleaned:
+        for line in chunk.splitlines():
+            if line.strip():
+                phs = _re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", line)
+                for name in phs:
+                    if prev:
+                        body_lines.append(
+                            f'{name}=$(grep -o \'"{name}":"[^"]*"\' /tmp/poc_prev.json 2>/dev/null '
+                            f'| head -1 | sed \'s/.*:"//;s/"$//\')')
+                        line = line.replace("{" + name + "}", "${" + name + "}")
+                if line.lstrip().startswith("curl"):
+                    body_lines.append(line + " | tee /tmp/poc_prev.json")
+                    prev = True
+                else:
+                    body_lines.append(line)
+    return header + "\n".join(body_lines) + "\n"
 
 
 class LocalPocBackend:
@@ -315,13 +405,61 @@ class LocalPocBackend:
         hits = []
         for r in rows:
             ref = self._issue(run_id, r["id"])
+            bundled = False
+            if r["source"] == "vulhub":
+                ap = r.get("artifact_path")
+                bundled = bool(self._vulhub_bundled_scripts(ap)) or bool(
+                    _readme_to_shell_poc(self._vulhub_readme_text(ap)))
             hits.append(SearchHit(
                 ref=ref, title=r["title"], source=r["source"], kind=r["kind"],
                 cve_ids=r["cve_ids"], verified=bool(r["verified"]), url=r["url"] or "",
                 platform=r.get("platform"), language=r.get("language"),
                 canonical=bool(r.get("is_canonical")),
-                has_artifact=bool(r.get("artifact_sha256") or r.get("artifact_path"))).to_dict())
+                has_artifact=bool(r.get("artifact_sha256") or r.get("artifact_path")),
+                bundled_poc=bundled).to_dict())
         return {"hits": hits}
+
+    # Exploit-script extensions a vulhub lab carries next to its docker-compose.yml.
+    _VULHUB_SCRIPT_EXTS = {".py", ".sh", ".rb", ".pl", ".php", ".js", ".go"}
+
+    def _vulhub_bundled_scripts(self, artifact_path: str | None) -> list[str]:
+        """Names of real exploit scripts in a vulhub lab dir (siblings of docker-compose.yml).
+        Path-escape guarded; empty list on any miss. The lab's own script targets the exact
+        version/config the lab runs, so it is the highest-fidelity grounding available."""
+        if not artifact_path:
+            return []
+        root = self.roots.get("vulhub")
+        if root is None:
+            return []
+        lab_dir = (root / Path(artifact_path).parent).resolve()
+        try:
+            lab_dir.relative_to(root)
+        except ValueError:
+            return []
+        if not lab_dir.is_dir():
+            return []
+        out: list[str] = []
+        try:
+            for p in sorted(lab_dir.iterdir()):
+                if p.is_file() and p.suffix.lower() in self._VULHUB_SCRIPT_EXTS and p.name != "__init__.py":
+                    out.append(p.name)
+        except OSError:
+            return []
+        return out
+
+    def _vulhub_readme_text(self, artifact_path: str | None) -> str | None:
+        """The lab README body (grounding for a lab that ships no runnable script)."""
+        if not artifact_path:
+            return None
+        root = self.roots.get("vulhub")
+        if root is None:
+            return None
+        try:
+            p = (root / Path(artifact_path).parent / "README.md").resolve()
+            p.relative_to(root)
+            return p.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            return None
 
     def _check_fetch_budget(self, run_id: str) -> None:
         key = run_id or ""
@@ -368,11 +506,72 @@ class LocalPocBackend:
             file_rows = await asyncio.to_thread(self.catalog.get_files, poc_id)
             if file_rows:
                 source_files = await asyncio.to_thread(self._read_file_set, poc["source"], file_rows)
+            elif poc["source"] == "vulhub":
+                # A vulhub lab often ships the REAL exploit script next to its compose
+                # (poc.py/exploit.py/…). Use THAT as the entry code (highest-fidelity grounding
+                # for the exact lab version) instead of only the compose yaml, and keep the
+                # compose + README as supporting files. Missing script → fall back to compose.
+                scripts = self._vulhub_bundled_scripts(poc.get("artifact_path"))
+                lab_dir = (root / Path(poc["artifact_path"]).parent).resolve()
+                built: list[dict[str, Any]] = []
+                entry_text, entry_trunc = None, False
+                for i, name in enumerate(scripts[:_MAX_SET_FILES]):
+                    sp = (lab_dir / name).resolve()
+                    try:
+                        sp.relative_to(root)
+                        sbytes = await asyncio.to_thread(sp.read_bytes)
+                    except (OSError, ValueError):
+                        continue
+                    stext = sbytes[:_MAX_SET_FILE_CHARS].decode("utf-8", errors="replace")
+                    built.append({"path": f"{Path(poc['artifact_path']).parent}/{name}",
+                                  "code": stext, "sha256": hashlib.sha256(sbytes).hexdigest(),
+                                  "language": (sp.suffix[1:] or None),
+                                  "truncated": len(sbytes) > _MAX_SET_FILE_CHARS,
+                                  "role": "entry" if entry_text is None else "exploit"})
+                    if entry_text is None:
+                        entry_text, entry_trunc = stext, len(sbytes) > _MAX_SET_FILE_CHARS
+                if entry_text is None:
+                    # No script shipped → the README IS the walkthrough. Extract its real
+                    # curl/HTTP steps into a grounded shell PoC rather than letting the model
+                    # synthesise a wrong-endpoint PoC from prose.
+                    shell = _readme_to_shell_poc(self._vulhub_readme_text(poc.get("artifact_path")))
+                    if shell:
+                        sb = shell.encode("utf-8")
+                        built.append({"path": f"{Path(poc['artifact_path']).parent}/poc.sh",
+                                      "code": shell, "sha256": hashlib.sha256(sb).hexdigest(),
+                                      "language": "sh", "truncated": False, "role": "entry"})
+                        entry_text, entry_trunc = shell, False
+                # always attach the compose (target config) + README (how-to) as supporting files
+                built.append({"path": poc["artifact_path"], "code": code,
+                              "sha256": hashlib.sha256(blob).hexdigest(),
+                              "language": poc.get("language"),
+                              "truncated": truncated, "role": "config"})
+                doc_rel = self._companion_doc_path("vulhub", poc["artifact_path"])
+                doc_path = (root / doc_rel).resolve() if doc_rel else None
+                if doc_path is not None and doc_path.is_file():
+                    try:
+                        doc_path.relative_to(root)
+                        doc_bytes = await asyncio.to_thread(doc_path.read_bytes)
+                        built.append({"path": doc_rel, "code": doc_bytes[:_MAX_SET_FILE_CHARS].decode("utf-8", "replace"),
+                                      "sha256": hashlib.sha256(doc_bytes).hexdigest(), "language": "md",
+                                      "truncated": len(doc_bytes) > _MAX_SET_FILE_CHARS, "role": "readme"})
+                    except ValueError:
+                        pass
+                if entry_text is not None:
+                    code, truncated, source_files = entry_text, entry_trunc, built
+                    companion_doc_only = True
+                else:
+                    # no script AND no runnable README step → the lab has NO PoC code. Serve the
+                    # compose + README as DESCRIPTION evidence only (code=None), so a
+                    # docker-compose.yml is never mistaken for the runnable PoC and injected as
+                    # Section-1 code (observed: CVE-2026-25887 served a YAML as the PoC).
+                    code, truncated = None, False
+                    source_files = [f for f in built if f["role"] in ("config", "readme")] or None
+                    companion_doc_only = True
             else:
-                # Single-artifact sources (metasploit/vulhub) may still have a real
-                # companion "how to run" doc on disk — attach it dynamically (no catalog
-                # row needed) rather than leaving the model with only the raw module/compose
-                # file, which rarely states how to actually invoke the PoC.
+                # Single-artifact sources (metasploit) may still have a real companion "how to
+                # run" doc on disk — attach it dynamically rather than leaving the model with
+                # only the raw module file, which rarely states how to actually invoke the PoC.
                 doc_rel = self._companion_doc_path(poc["source"], poc["artifact_path"])
                 doc_path = (root / doc_rel).resolve() if doc_rel else None
                 if doc_path is not None and doc_path.is_file():

@@ -1,0 +1,9 @@
+Cross-engagement knowledge store. Query past engagement learnings, tool effectiveness stats, false positive patterns, and save reflection data.
+
+Actions:
+- query: Search for relevant knowledge — tool effectiveness for a service/technique, or FP patterns for a vuln title. Use filter parameter.
+- record_effectiveness: Record a tool+technique outcome. data = JSON: {tool, technique, service_fingerprint, attempts, successes}
+- record_fp: Record a false positive pattern. data = JSON: {id, vuln_pattern, service_pattern?, reporting_tool, reason}
+- save_reflection: Save structured engagement reflection. data = JSON of full EngagementReflection object.
+- list_reflections: List past engagement reflections. No parameters needed.
+- suggest: Get contextual suggestions for current engagement based on discovered services. filter = comma-separated service fingerprints.

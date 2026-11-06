@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import json
+import math
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -199,4 +200,31 @@ async def run_events(rid:str,request:Request,after_seq:int=Query(0,ge=0),limit:i
     from .reviews import call
     run=await call(request,'training_run',rid)
     if not run['remote_job_id']: return {'items':[],'next_seq':after_seq}
-    return await upstream(request,'/jobs/'+quote(run['remote_job_id'],safe='')+'/events?after_seq='+str(after_seq)+'&limit='+str(limit))
+    result=await upstream(request,'/jobs/'+quote(run['remote_job_id'],safe='')+'/events?after_seq='+str(after_seq)+'&limit='+str(limit))
+    try:
+        if not isinstance(result.get('items'),list) or type(result.get('next_seq')) is not int or result['next_seq']<0:
+            raise ValueError()
+        items=[]
+        stages=(ACTIVE-{'dispatching'})|{'prepare','succeeded','failed','interrupted'}
+        for event in result['items']:
+            if not isinstance(event,dict):
+                raise ValueError()
+            if (type(event.get('seq')) is not int or event['seq']<1
+                    or not isinstance(event.get('time'),str)
+                    or not isinstance(event.get('stage'),str) or event['stage'] not in stages):
+                raise ValueError()
+            clean={name:event[name] for name in ('seq','time','stage')}
+            for name in ('epoch','step','total_steps'):
+                if name in event:
+                    if type(event[name]) is not int or event[name]<0:
+                        raise ValueError()
+                    clean[name]=event[name]
+            if 'loss' in event:
+                loss=event['loss']
+                if type(loss) not in (int,float) or (type(loss) is float and not math.isfinite(loss)):
+                    raise ValueError()
+                clean['loss']=loss
+            items.append(clean)
+        return {'items':items,'next_seq':result['next_seq']}
+    except ValueError:
+        raise HTTPException(503,'Không kết nối được dịch vụ huấn luyện Vast.ai.') from None

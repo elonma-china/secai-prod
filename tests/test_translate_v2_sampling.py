@@ -83,11 +83,13 @@ async def test_only_translate_v2_uses_dedicated_agent(monkeypatch):
     scoped.run_store = object()
     scoped.ledger = object()
 
-    assert (await scoped.complete("translate", "old"))[0] == "legacy"
+    # Both translation profiles decode deterministically (temperature 0); other profiles keep the shared agent.
+    assert (await scoped.complete("chat", "chat-msg"))[0] == "legacy"
+    assert (await scoped.complete("translate", "old"))[0] == "translate_v2"
     assert (await scoped.complete("translate_v2", "new"))[0] == "translate_v2"
     assert (await scoped.complete("translate_v2", "again"))[0] == "translate_v2"
     assert built == [0.0]
-    assert calls == [("legacy", "old"), ("translate_v2", "new"),
+    assert calls == [("legacy", "chat-msg"), ("translate_v2", "old"), ("translate_v2", "new"),
                      ("translate_v2", "again")]
 
 

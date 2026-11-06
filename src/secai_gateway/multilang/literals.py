@@ -1,6 +1,8 @@
 """Occurrence-preserving literal protection. Source text is never logged or persisted."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
 import secrets
 import unicodedata
@@ -13,8 +15,8 @@ PATTERNS = (
     re.compile(r"```[\s\S]*?```|`[^`\n]+`"),
     re.compile(r"-----BEGIN [^-]+-----[\s\S]*?-----END [^-]+-----"),
     re.compile(r"\b(?:Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/=-]{8,}", re.I),
-    re.compile(r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+)", re.I),
-    re.compile(r"\b(?:https?|ftp|ssh|file)://[^\s<>\"')\]]+", re.I),
+    re.compile(r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key|mật\s*khẩu|tài\s*khoản)\s*[:=]\s*(\S+?)(?=[,;]?(?:\s|$))", re.I),
+    re.compile(r"\b(?:https?|ftp|ssh|file)://[^\s<>\"')\]]*[^\s<>\"')\].,;:!?]", re.I),
     re.compile(r"\b[\w.+-]+@[\w.-]+\.[\w.-]+\b"),
     re.compile(r"(?<![A-Za-z0-9_-])(?:CVE|CWE)-\d{1,7}(?:-\d{4,7})?(?![A-Za-z0-9_-])", re.I),
     re.compile(r"(?<![A-Za-z0-9_.-])(?:\d{1,3}\.){3}\d{1,3}(?:/\d{1,2})?(?::\d+)?(?![A-Za-z0-9_-]|\.\d)"),
@@ -42,17 +44,35 @@ class Protected:
         return TOKEN_SHAPE.sub(lambda m: lookup[m.group(0)], output)
 
 
-def protect(text: str) -> Protected:
-    spans: list[tuple[int, int]] = []
+def _nonce(text: str, salt: bytes | None) -> str:
+    """HMAC(salt, text): reproducible for a given request salt, unguessable without it."""
+    if salt is None:
+        return secrets.token_hex(8)
+    counter = 0
+    while True:
+        digest = hmac.new(salt, f"{counter}\x00{text}".encode(), hashlib.sha256).hexdigest()[:16]
+        if f"⟦ML-{digest}-" not in text:
+            return digest
+        counter += 1
+
+
+def protect(text: str, salt: bytes | None = None) -> Protected:
+    found: list[tuple[int, int]] = []
     for rx in PATTERNS:
         for match in rx.finditer(text):
             start, end = match.span(1) if rx is PATTERNS[3] else match.span()
-            if start < 0 or any(start < e and end > s for s, e in spans):
-                continue
+            if start >= 0 and end > start:
+                found.append((start, end))
+    # Overlapping matches are unioned (never dropped): a dropped longer match would
+    # leave its remainder unprotected and open to rewriting by the model.
+    spans: list[tuple[int, int]] = []
+    for start, end in sorted(found):
+        if spans and start < spans[-1][1]:
+            spans[-1] = (spans[-1][0], max(end, spans[-1][1]))
+        else:
             spans.append((start, end))
-    spans.sort()
-    nonce = secrets.token_hex(8)
-    while f"⟦ML-{nonce}-" in text:
+    nonce = _nonce(text, salt)
+    while f"⟦ML-{nonce}-" in text:  # only reachable for the random (salt=None) path
         nonce = secrets.token_hex(8)
     chunks: list[str] = []
     literals: list[str] = []

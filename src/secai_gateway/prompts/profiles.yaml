@@ -9,7 +9,9 @@ chat:
   # xem evidence thật (mã/README) thay vì bịa — cùng gate license với exploit_research
   # (poc/backend.py::_allow_code), KHÔNG mở quyền exec/verify nào thêm. Xem chat.md's
   # poc_drilldown_policy.
-  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, web_fetch, fetch_reference]
+  # howto_search thêm 2026-11-04: route product_howto (classify_chat_grounding) tra KB
+  # hướng dẫn sử dụng IAS (collection ias_howto_kb, riêng khỏi cve_kb_hybrid/Neo4j).
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, web_fetch, fetch_reference, howto_search]
   base: true
   max_turns: 10
 

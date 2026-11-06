@@ -9,6 +9,11 @@ dist-ssr
 .report-upstream
 .translation-upstream
 .reward-training-upstream
+.exploit-v2-upstream
+
+# Playwright run artifacts (không commit)
+test-results/
+playwright-report/
 
 # design handoff (không commit)
 *.zip

@@ -1,0 +1,28 @@
+[
+  {
+    "function": "translate",
+    "total": 16,
+    "passed": 14,
+    "pass_rate": 87.5,
+    "wall_s": 61.8,
+    "by_category": {
+      "literal_preservation": {
+        "total": 6,
+        "passed": 4,
+        "pass_rate": 66.7
+      },
+      "explicit_target": {
+        "total": 10,
+        "passed": 10,
+        "pass_rate": 100.0
+      }
+    },
+    "top_failure_reasons": [
+      [
+        "HTTP 422",
+        2
+      ]
+    ],
+    "results_file": "/home/ict/AIEngines/secai/secai-agent-gateway/evals/results/translate_1788407851.jsonl"
+  }
+]

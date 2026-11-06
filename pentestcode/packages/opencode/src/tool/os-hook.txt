@@ -1,0 +1,1 @@
+Generate structured post-exploitation commands for a specific OS and module. Returns ready-to-run commands with explanations and prerequisites. Use instead of constructing commands from memory — the hook knows the right syntax, flags, and tool alternatives for each OS. Modules: recon, credential, privesc, lateral, persistence, evasion.

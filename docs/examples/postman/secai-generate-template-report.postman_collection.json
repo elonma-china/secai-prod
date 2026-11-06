@@ -1,0 +1,256 @@
+{
+  "info": {
+    "_postman_id": "7ec2386f-fb7a-4228-b198-template-report-collection",
+    "name": "SecAI — Generate Template Report API",
+    "description": "Bộ sưu tập Postman cho API `/ai/generate-template-report`.\n\n### Đặc tả API:\n- **Method**: `POST`\n- **Endpoint**: `{{base_url}}/ai/generate-template-report`\n- **Content-Type**: `multipart/form-data`\n- **Output**: JSON chứa cả văn bản `markdown` (để FE hiển thị xem trước) và `file_base64` (để FE giải mã cho người dùng tải file DOCX/PDF).\n\n### Hướng dẫn cho Frontend (FE):\n```javascript\n// 1. Hiển thị nội dung báo cáo dạng Markdown:\nconst markdownText = response.data.markdown;\n// Render markdownText bằng thư viện (react-markdown, marked, v.v.)\n\n// 2. Tải file về máy từ chuỗi Base64:\nconst byteCharacters = atob(response.data.file_base64);\nconst byteNumbers = new Array(byteCharacters.length);\nfor (let i = 0; i < byteCharacters.length; i++) {\n  byteNumbers[i] = byteCharacters.charCodeAt(i);\n}\nconst byteArray = new Uint8Array(byteNumbers);\nconst blob = new Blob([byteArray], { type: response.data.media_type });\nconst link = document.createElement('a');\nlink.href = URL.createObjectURL(blob);\nlink.download = response.data.file_name;\nlink.click();\n```",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8131",
+      "type": "string",
+      "description": "Địa chỉ Gateway API (thay đổi thành IP/domain server triển khai)"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Sinh báo cáo PDF (Template Text -> Markdown + File PDF Base64)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "template_text",
+              "value": "1. Tổng quan kiểm thử\n2. Bảng chi tiết lỗ hổng bảo mật\n3. Khuyến nghị và biện pháp khắc phục\n4. Kết luận",
+              "type": "text",
+              "description": "Khung đề mục văn bản báo cáo (mỗi dòng một đề mục)"
+            },
+            {
+              "key": "data",
+              "value": "{\n  \"scan_time\": \"2026-10-12 10:30:00\",\n  \"target\": \"https://portal.example.gov.vn\",\n  \"summary\": {\n    \"critical\": 1,\n    \"high\": 1,\n    \"medium\": 1,\n    \"low\": 0\n  },\n  \"vulnerabilities\": [\n    {\n      \"name\": \"SQL Injection (Blind Boolean-based)\",\n      \"severity\": \"Critical\",\n      \"description\": \"Lỗ hổng xảy ra tại API endpoint /api/v1/auth/login qua tham số username.\",\n      \"recommendation\": \"Sử dụng truy vấn tham số hóa (Prepared Statements), kiểm tra dữ liệu đầu vào và bật WAF.\"\n    },\n    {\n      \"name\": \"Reflected Cross-Site Scripting (XSS)\",\n      \"severity\": \"High\",\n      \"description\": \"Endpoint tìm kiếm /search?q= không lọc ký tự đặc biệt trước khi hiển thị.\",\n      \"recommendation\": \"Mã hóa HTML (HTML entity encoding) toàn bộ dữ liệu phản hồi, áp dụng CSP header.\"\n    },\n    {\n      \"name\": \"Missing Secure & HttpOnly Flags on Session Cookies\",\n      \"severity\": \"Medium\",\n      \"description\": \"Cookie phiên làm việc chưa cấu hình thuộc tính bảo vệ HttpOnly và Secure.\",\n      \"recommendation\": \"Thiết lập Set-Cookie với Secure, HttpOnly và SameSite=Strict.\"\n    }\n  ]\n}",
+              "type": "text",
+              "description": "Dữ liệu JSON chứa thông tin quét an ninh"
+            },
+            {
+              "key": "output_format",
+              "value": "pdf",
+              "type": "text",
+              "description": "Chọn 'pdf' để nhận Markdown kèm file PDF Base64"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/ai/generate-template-report",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ai",
+            "generate-template-report"
+          ]
+        },
+        "description": "Gửi `template_text` và dữ liệu quét `data`. API trả về JSON gồm: `markdown` (để FE hiển thị giao diện) và `file_base64` (để FE tải xuống file PDF)."
+      },
+      "response": [
+        {
+          "name": "200 Success — Trả về Markdown và PDF Base64",
+          "originalRequest": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "template_text",
+                  "value": "1. Tổng quan kiểm thử\n2. Bảng chi tiết lỗ hổng\n3. Khuyến nghị\n4. Kết luận",
+                  "type": "text"
+                },
+                {
+                  "key": "data",
+                  "value": "{\"summary\": \"Phát hiện 3 lỗ hổng\", \"vulnerabilities\": [{\"name\": \"SQLi\", \"severity\": \"Critical\"}]}",
+                  "type": "text"
+                },
+                {
+                  "key": "output_format",
+                  "value": "pdf",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/ai/generate-template-report",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "ai",
+                "generate-template-report"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"status\": \"success\",\n  \"format\": \"pdf\",\n  \"file_name\": \"report.pdf\",\n  \"media_type\": \"application/pdf\",\n  \"markdown\": \"# Báo Cáo An Toàn Thông Tin\\n\\n## 1. Tổng quan kiểm thử\\n\\n### 1.1. Phạm vi và tóm tắt kiểm thử...\",\n  \"file_base64\": \"JVBERi0xLjcKJeLjz9MK...[Base64 bytes]...\",\n  \"sections\": {\n    \"1. Tổng quan kiểm thử\": \"1.1. Phạm vi kiểm thử: ...\",\n    \"2. Bảng chi tiết lỗ hổng bảo mật\": \"...\",\n    \"3. Khuyến nghị và biện pháp khắc phục\": \"...\",\n    \"4. Kết luận\": \"...\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "02. Sinh báo cáo DOCX (Template Text -> Markdown + File Word Base64)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "template_text",
+              "value": "1. Tổng quan kiểm thử\n2. Bảng chi tiết lỗ hổng bảo mật\n3. Khuyến nghị và biện pháp khắc phục\n4. Kết luận",
+              "type": "text",
+              "description": "Khung đề mục báo cáo"
+            },
+            {
+              "key": "data",
+              "value": "{\n  \"summary\": {\n    \"critical\": 1,\n    \"high\": 1,\n    \"medium\": 0,\n    \"low\": 1\n  },\n  \"vulnerabilities\": [\n    {\n      \"name\": \"Remote Code Execution via File Upload\",\n      \"severity\": \"Critical\",\n      \"description\": \"Tải tệp không kiểm duyệt phần mở rộng cho phép thực thi mã từ xa.\",\n      \"recommendation\": \"Chỉ cho phép các đuôi tệp an toàn, đổi tên ngẫu nhiên và lưu trữ tại máy chủ riêng biệt.\"\n    }\n  ]\n}",
+              "type": "text",
+              "description": "Dữ liệu JSON kết quả quét an ninh"
+            },
+            {
+              "key": "output_format",
+              "value": "docx",
+              "type": "text",
+              "description": "Chọn 'docx' (mặc định) để nhận Markdown kèm file Word (.docx) Base64"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/ai/generate-template-report",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ai",
+            "generate-template-report"
+          ]
+        },
+        "description": "Gửi `template_text` và `output_format=docx`. API trả về JSON gồm: `markdown` và file Word DOCX mã hóa `file_base64`."
+      },
+      "response": []
+    },
+    {
+      "name": "03. Upload file mẫu Word (.docx) -> Markdown + File PDF Base64",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "",
+              "description": "Chọn file mẫu Word (.docx) từ máy của bạn"
+            },
+            {
+              "key": "data",
+              "value": "{\n  \"summary\": \"Kiểm tra hệ thống quản lý nhân sự\",\n  \"vulnerabilities\": [\n    {\n      \"name\": \"Broken Authentication\",\n      \"severity\": \"High\",\n      \"description\": \"Thiếu cơ chế Rate Limiting tại form đăng nhập.\",\n      \"recommendation\": \"Giới hạn số lần thử đăng nhập (tối đa 5 lần) và áp dụng CAPTCHA.\"\n    }\n  ]\n}",
+              "type": "text",
+              "description": "Dữ liệu quét"
+            },
+            {
+              "key": "output_format",
+              "value": "pdf",
+              "type": "text",
+              "description": "Định dạng file xuất ra ('pdf' hoặc 'docx')"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/ai/generate-template-report",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ai",
+            "generate-template-report"
+          ]
+        },
+        "description": "Sử dụng khi người dùng tải lên file mẫu Word (.docx). AI sẽ tự động điền các trường {{ biến }} và bổ sung nội dung các đề mục rồi trả về Markdown + File Base64."
+      },
+      "response": []
+    },
+    {
+      "name": "04. Tải trực tiếp Binary file (Raw Download Stream)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "template_text",
+              "value": "1. Tổng quan kiểm thử\n2. Chi tiết lỗ hổng\n3. Khuyến nghị",
+              "type": "text"
+            },
+            {
+              "key": "data",
+              "value": "{\"summary\": \"Đã kiểm tra\", \"vulnerabilities\": []}",
+              "type": "text"
+            },
+            {
+              "key": "output_format",
+              "value": "pdf",
+              "type": "text"
+            },
+            {
+              "key": "raw_binary",
+              "value": "true",
+              "type": "text",
+              "description": "Đặt 'true' nếu muốn API trả về thẳng binary file stream thay vì JSON"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/ai/generate-template-report",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "ai",
+            "generate-template-report"
+          ]
+        },
+        "description": "Nếu truyền `raw_binary=true`, API sẽ trả về thẳng file binary đính kèm (`Content-Disposition: attachment; filename=report.pdf`)."
+      },
+      "response": []
+    }
+  ]
+}

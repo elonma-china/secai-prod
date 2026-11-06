@@ -23,6 +23,8 @@ TRANSLATION_UPSTREAM_FILE = Path(__file__).resolve().parent / ".translation-upst
 TRANSLATION_GATEWAY = os.environ.get("TRANSLATION_GATEWAY_PROXY", TRANSLATION_UPSTREAM_FILE.read_text().strip() if TRANSLATION_UPSTREAM_FILE.exists() else GATEWAY)
 TRAINING_UPSTREAM_FILE = Path(__file__).resolve().parent / ".reward-training-upstream"
 TRAINING_GATEWAY = os.environ.get("REWARD_TRAINING_GATEWAY_PROXY", TRAINING_UPSTREAM_FILE.read_text().strip() if TRAINING_UPSTREAM_FILE.exists() else GATEWAY)
+EXPLOIT_V2_UPSTREAM_FILE = Path(__file__).resolve().parent / ".exploit-v2-upstream"
+EXPLOIT_V2_GATEWAY = os.environ.get("EXPLOIT_V2_GATEWAY_PROXY", EXPLOIT_V2_UPSTREAM_FILE.read_text().strip() if EXPLOIT_V2_UPSTREAM_FILE.exists() else "")
 REPORT_KEY_FILE = Path(os.environ.get("REPORT_KEY_FILE", str(Path(__file__).resolve().parent / ".report-api-key.local")))
 REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
 REVIEW_ALLOW_LOOPBACK = os.environ.get("DEVSPACE_REVIEW_ALLOW_LOOPBACK", "false").lower() == "true"
@@ -168,6 +170,8 @@ class Handler(BaseHTTPRequestHandler):
         if any(path == prefix or path.startswith(prefix + "/")
                for prefix in ("/ai/v2/translate", "/ai/v3/translate")):
             target = TRANSLATION_GATEWAY
+        if EXPLOIT_V2_GATEWAY and (path == "/ai/exploit-v2" or path.startswith("/ai/exploit-v2/")):
+            target = EXPLOIT_V2_GATEWAY
         host, port, tls = _gw_parts(target)
         length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(length) if length else None

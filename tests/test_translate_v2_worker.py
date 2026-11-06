@@ -77,6 +77,105 @@ async def test_running_cancel_aborts_specialist_and_becomes_terminal(tmp_path, m
 
 
 @pytest.mark.asyncio
+async def test_external_worker_cancellation_propagates_and_keeps_input_reclaimable(tmp_path, monkeypatch):
+    from pathlib import Path
+    from secai_gateway.translation import worker
+
+    class SlowAgent:
+        started = asyncio.Event()
+        recovered = False
+
+        def __init__(self, settings):
+            pass
+
+        async def translate(self, text, source_lang, target_lang, *, timeout_seconds=None):
+            if type(self).recovered:
+                return 'Recovered translation'
+            self.started.set()
+            await asyncio.sleep(100)
+
+    monkeypatch.setattr(worker, 'TranslationAgent', SlowAgent)
+    settings = TranslationSettings(db_path=str(tmp_path / 'jobs.db'),
+                                   artifact_dir=str(tmp_path / 'artifacts'),
+                                   lease_seconds=1, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit('file', b'Hello', '.txt', 'en', 'vi', '127.0.0.1', None)
+    input_path = Path(job['input_path'])
+    work = asyncio.create_task(worker.Worker(store, settings, None).run_once())
+    await asyncio.wait_for(SlowAgent.started.wait(), 2)
+
+    work.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await work
+
+    row = store.get(job['job_id'])
+    assert row['status'] == 'running'
+    assert row['result_json'] is None
+    assert input_path.read_bytes() == b'Hello'
+    await asyncio.sleep(1.05)
+    SlowAgent.recovered = True
+    assert await worker.Worker(store, settings, None).run_once()
+    recovered = store.get(job['job_id'])
+    assert recovered['status'] == 'succeeded'
+    assert recovered['generation'] == row['generation'] + 1
+    assert 'Recovered translation' in recovered['result_json']
+    assert not input_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_reclaimed_generation_stops_old_specialist_and_finishes_new_claim(tmp_path, monkeypatch):
+    from pathlib import Path
+    from secai_gateway.translation import worker
+
+    class TwoGenerationAgent:
+        started = asyncio.Event()
+        stopped = asyncio.Event()
+        calls = 0
+
+        def __init__(self, settings):
+            pass
+
+        async def translate(self, text, source_lang, target_lang, *, timeout_seconds=None):
+            type(self).calls += 1
+            if type(self).calls == 1:
+                type(self).started.set()
+                try:
+                    await asyncio.sleep(100)
+                except asyncio.CancelledError:
+                    type(self).stopped.set()
+                    raise
+            return 'Current owner translation'
+
+    monkeypatch.setattr(worker, 'TranslationAgent', TwoGenerationAgent)
+    settings = TranslationSettings(db_path=str(tmp_path / 'jobs.db'),
+                                   artifact_dir=str(tmp_path / 'artifacts'),
+                                   lease_seconds=1, max_reclaims=2, _env_file=None)
+    store = JobStore(settings)
+    job = store.admit('file', b'Hello', '.txt', 'en', 'vi', '127.0.0.1', None)
+    input_path = Path(job['input_path'])
+    old_work = asyncio.create_task(worker.Worker(store, settings, None).run_once())
+    await asyncio.wait_for(TwoGenerationAgent.started.wait(), 2)
+    await asyncio.sleep(1.05)
+
+    reclaimed = store.claim()
+    assert reclaimed['job_id'] == job['job_id']
+    assert reclaimed['generation'] == 2
+    await asyncio.wait_for(old_work, 2)
+
+    row = store.get(job['job_id'])
+    assert TwoGenerationAgent.stopped.is_set()
+    assert row['status'] == 'running' and row['generation'] == 2
+    assert row['result_json'] is None
+    assert input_path.read_bytes() == b'Hello'
+    await asyncio.sleep(max(0, row['lease_until'] - time.time()) + 0.1)
+    assert await worker.Worker(store, settings, None).run_once()
+    recovered = store.get(job['job_id'])
+    assert recovered['status'] == 'succeeded'
+    assert recovered['generation'] == 3
+    assert 'Current owner translation' in recovered['result_json']
+
+
+@pytest.mark.asyncio
 async def test_auto_non_vi_cross_pair_fails_after_admission(tmp_path, monkeypatch):
     from secai_gateway.translation import worker
     monkeypatch.setattr(worker, 'TranslationAgent', EchoAgent)

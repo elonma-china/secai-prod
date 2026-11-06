@@ -49,7 +49,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 # bash: the vendored searchsploit is a bash script. tini: correct PID-1 signals.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends bash tini fonts-dejavu-core \
+ && apt-get install -y --no-install-recommends bash tini fonts-dejavu-core libreoffice-writer \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --create-home --uid 10001 app

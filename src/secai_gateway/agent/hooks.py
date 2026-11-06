@@ -23,6 +23,11 @@ from ..poc.prefetch import (
     get_session_kb_searched, get_session_real_code_evidence,
     get_session_synthesis_evidence,
 )
+try:
+    from ..poc.prefetch import get_session_kb_searched
+except ImportError:
+    def get_session_kb_searched(session_id: str | None) -> bool:
+        return False
 from ..security import wrap_untrusted_content
 
 _MAX_TRACKED_RUNS = 20000
@@ -105,6 +110,18 @@ class EphemeralTurnContextHook:
         from linch.context import ContextBuildResult
         from linch.types import Message, TextBlock
 
+        selected = meta.get("scope_user_prompt") if isinstance(meta, dict) else None
+        original = meta.get("last_user_prompt") if isinstance(meta, dict) else None
+        if selected and original:
+            # Linch already appended the original to the durable store/full_history.
+            # Replace only its derived provider view; never mutate shared Message objects.
+            for index in range(len(session.provider_view) - 1, -1, -1):
+                message = session.provider_view[index]
+                if message.role == "user" and any(
+                        isinstance(block, TextBlock) and block.text == original
+                        for block in message.content):
+                    session.provider_view[index] = Message(role="user", content=[TextBlock(text=selected)])
+                    break
         return ContextBuildResult(messages=[Message(role="user", content=[TextBlock(text=text)])])
 
 
@@ -260,9 +277,12 @@ class RequireKbSearchBeforeSynthesisHook:
             "No CVE/CWE/CAPEC/Technique/Tactic ID or product name found",
         )):
             return None
-        from secai_gateway.retrieval.kb_context import has_technical_description
-        if not has_technical_description(content):
-            return None
+        try:
+            from secai_gateway.retrieval.kb_context import has_technical_description
+            if not has_technical_description(content):
+                return None
+        except ImportError:
+            pass
         self._searched[ctx.run_id] = True
         self._searched.move_to_end(ctx.run_id)
         _trim(self._searched)
@@ -525,6 +545,49 @@ _ID_LOOKUP_RE = re.compile(
 )
 
 
+# IAS product user-guide questions (route "product_howto", KB target ias_howto_kb —
+# see retrieval/howto.py). Deliberately checked AFTER has_entity/id_lookup below so a
+# question that also names a CVE/CWE id still goes to the security KB; this only
+# catches generic "how do I use feature X" questions that would otherwise fall into
+# the "concept" route and get no KB grounding at all (model answers from parametric
+# knowledge, can fabricate steps that don't match the real product).
+_IAS_HOWTO_RE = re.compile(
+    r"(?:"
+    r"(?:cách|làm\s*sao|làm\s*thế\s*nào|làm\s*gì)\s+(?:để\s+)?"
+    r"(?:dùng|sử\s*dụng|thao\s*tác|thiết\s*lập|cấu\s*hình|tạo|thêm|xóa|sửa|đổi|cấp\s*lại|"
+    r"ngưng|tạm\s*dừng|bật|tắt)"
+    r"|hướng\s*dẫn\s+(?:sử\s*dụng|dùng|thao\s*tác)"
+    r"|thao\s*tác\s+(?:trên|với|ở)"
+    r"|màn\s*hình\s+(?:nào|gì)"
+    r"|giao\s*diện\s+(?:nào|phần\s*mềm|IAS)"
+    r"|chức\s*năng\s+(?:này|nào|gì)\s+(?:dùng|ở\s*đâu|nằm\s*ở)"
+    r"|(?:hệ\s*thống\s*ẩn\s*danh|quét\s*diện\s*rộng|quét\s*chuyên\s*sâu|scan\s*engine|"
+    r"engine\s*quét|nền\s*tảng\s*AI|dịch\s*văn\s*bản|sinh\s*mã\s*khai\s*thác|"
+    r"data\s*lake|phân\s*hệ\s*báo\s*cáo|dashboard|phân\s*hệ\s*quản\s*lý\s*lịch|"
+    r"đối\s*tượng\s*theo\s*dõi|quản\s*lý\s*vai\s*trò|quản\s*lý\s*người\s*dùng|"
+    r"xác\s*thực\s*hai\s*yếu\s*tố|2FA|tài\s*khoản\s*lộ\s*lọt|trợ\s*lý\s*ảo\s*ATTT|"
+    r"đổi\s*mật\s*khẩu|cấp\s*lại\s*mật\s*khẩu|nhận\s*thông\s*báo\s*qua\s*telegram)"
+    r")",
+    re.I | re.S,
+)
+
+
+_CODE_AUDIT_RE = re.compile(
+    r"(?:"
+    r"---\s*Nội dung tệp"
+    r"|rà\s*soát\s+(?:tệp\s+)?mã(?:\s*nguồn)?"
+    r"|kiểm\s*tra\s+mã\s*nguồn"
+    r"|phân\s*tích\s+mã\s*nguồn"
+    r"|\bSAST\b"
+    r"|audit\s+code"
+    r"|code\s+review"
+    r"|review\s+code"
+    r"|source\s+code"
+    r")",
+    re.I,
+)
+
+
 # Knowledge-KB routing (docs/plans/kb-knowledge-grounding.md). Only consulted when the caller
 # passes knowledge_enabled=True, so the flag-off behaviour of classify_chat_grounding is untouched.
 # Concept/remediation questions carry no CVE/CWE id, so they are recognised by vocabulary: the
@@ -680,9 +743,12 @@ class ChatGroundingPlan:
     mitigations). It never forces the model to call a tool (need_kb stays False for
     ``concept_kb``), so no enforcement hook can turn it into a retry loop."""
 
-    route: str  # taxonomy | entity | id_lookup | concept | concept_kb
+    route: str  # taxonomy | entity | id_lookup | product_howto | concept | concept_kb | cve_search
     need_web: bool
     need_kb: bool
+    # "security" (cve_kb_hybrid via qdrant_search/neo4j_search) or "howto" (ias_howto_kb
+    # via howto_search). Only "howto" ever skips the security KB/Neo4j entirely.
+    kb_target: str = "security"
     knowledge: bool = False
 
 
@@ -698,6 +764,10 @@ def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
     if not text:
         return ChatGroundingPlan("concept", False, False)
 
+    # SAST / Code audit (rà soát mã nguồn, file đính kèm): trả lời bằng suy luận phân tích mã của mô hình, không ép tra Qdrant KB
+    if bool(_CODE_AUDIT_RE.search(text)):
+        return ChatGroundingPlan("concept", False, False)
+
     need_web = bool(_TAXONOMY_RE.search(text))
     has_entity = bool(_ENTITY_ID_RE.search(text))
     id_lookup = bool(_ID_LOOKUP_RE.search(text))
@@ -710,6 +780,8 @@ def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
         return ChatGroundingPlan("entity", False, True, knowledge=knowledge_enabled and bool(_REMEDIATION_RE.search(_fold_text(text))))
     if id_lookup:
         return ChatGroundingPlan("id_lookup", False, True)
+    if bool(_IAS_HOWTO_RE.search(text)):
+        return ChatGroundingPlan("product_howto", False, True, kb_target="howto")
     if knowledge_enabled and _TAXONOMY_LIST_RE.search(text):
         return ChatGroundingPlan("taxonomy", False, False, knowledge=True)
     if cve_search_enabled and (_is_cve_style(text) or (discovery_enabled and _is_cve_discovery(text))):
@@ -1031,11 +1103,12 @@ class RequireChatGroundingHook:
             return None
         if ctx.tool_name == "web_fetch":
             RequireSearchBeforeAnswerHook._mark(self._web, ctx.run_id)
-        elif ctx.tool_name in ("qdrant_search", "neo4j_search", "poc_search"):
+        elif ctx.tool_name in ("qdrant_search", "neo4j_search", "poc_search", "howto_search"):
             # poc_search counts as KB grounding: a "does CVE-X have a public PoC?" question
             # is grounded by the PoC catalog, so a redundant qdrant/neo4j retry is not forced
             # (that forced regenerate is what spent the single reentry and drove the empty
-            # closer-only answer for q022/q025/q026).
+            # closer-only answer for q022/q025/q026). howto_search (route product_howto,
+            # ias_howto_kb) added 2026-11-04 — same grounding contract, separate collection.
             RequireSearchBeforeAnswerHook._mark(self._kb, ctx.run_id)
         return None
 
@@ -1126,6 +1199,14 @@ class RequireChatGroundingHook:
                 '(kind=["weakness"] when resolving a CWE). Do not invent CVE/CWE IDs.'
             )
             reason = "chat_id_lookup_required"
+        elif plan.route == "product_howto":
+            feedback = (
+                "Route=product_howto: call howto_search with the user's question about "
+                "IAS product usage. Do not call qdrant_search/neo4j_search for this "
+                "(those are the CVE/CWE security KB, not the user guide). Do not invent "
+                "steps/menus/features not returned by howto_search."
+            )
+            reason = "chat_howto_required"
         else:
             feedback = (
                 "Route=entity/kb: call qdrant_search or neo4j_search for CVE/CWE/ATT&CK "

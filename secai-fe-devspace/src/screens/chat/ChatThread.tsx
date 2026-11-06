@@ -51,7 +51,7 @@ export default function ChatThread({
   onCopy: (text: string) => void;
   onRegenerate: (assistantId: string) => void;
   onSuggestion: (text: string) => void;
-  reviewWidget?: ReactNode;
+  reviewWidget?: (assistantId: string) => ReactNode;
 }) {
   const isDraftEmpty = view.kind === "draft" && items.length === 0;
 
@@ -178,12 +178,12 @@ export default function ChatThread({
                     )}
                     {!cve && it.error && <div style={{ color: "var(--danger)", fontSize: 12 }}>{it.error}</div>}
                     {!cve && foot}
+                    {reviewWidget?.(it.id)}
                   </div>
                 </div>
               );
             })
           )}
-          {reviewWidget}
         </div>
       </div>
 

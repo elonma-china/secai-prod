@@ -1,0 +1,1 @@
+Check which security tools are installed and optionally install missing ones. Use at engagement start to verify the toolkit is ready. Supports: nmap, nuclei, ffuf, gobuster, httpx, subfinder, sqlmap, netexec, hydra, hashcat, john, impacket, chisel, ligolo-ng, certipy, bloodhound-python, feroxbuster, whatweb, nikto, wfuzz, seclists.

@@ -866,8 +866,8 @@ def test_e_training_upstream_failures_do_not_leak_url_token_or_remote_body(clien
             assert needle not in r.text, (path, needle)
 
 
-def test_e_training_responses_pass_through_remote_fields_unfiltered(client, tmp_path):
-    """Defense-in-depth probe: the gateway relays whatever the (trusted) training service returns."""
+def test_e_training_events_whitelist_structured_telemetry_and_preserve_cursor(client, tmp_path):
+    """Training event responses expose only the public telemetry fields and preserve paging."""
     t = Training(client, tmp_path)
     approved_world(client)
     version = t.eligibility()['snapshot_version']
@@ -876,18 +876,41 @@ def test_e_training_responses_pass_through_remote_fields_unfiltered(client, tmp_
     run = created.json()['runs'][0]
     state = client.app.state.gateway
 
+    requests = []
+
     def hostile(request):
+        requests.append(request)
         if request.url.path.endswith('/events'):
-            return httpx.Response(200, json={'items': [{'seq': 1, 'time': 't', 'stage': 'training', 'stdout': 'WORKER-STDOUT', 'token': 'WORKER-TOKEN'}], 'next_seq': 1})
+            return httpx.Response(200, json={'items': [
+                {'seq': 8, 'time': 't', 'stage': 'training', 'epoch': 2, 'step': 4,
+                 'total_steps': 12, 'loss': 0.25, 'stdout': 'WORKER-STDOUT',
+                 'token': 'WORKER-TOKEN', 'unknown': 'private'},
+            ], 'next_seq': 8})
         return httpx.Response(404, json={'detail': 'x'})
     state.reward_training_transport = httpx.MockTransport(hostile)
-    r = client.get(f'{TRAIN}/runs/{run["id"]}/events', headers=ADMIN)
+    r = client.get(f'{TRAIN}/runs/{run["id"]}/events?after_seq=5&limit=7', headers=ADMIN)
     assert r.status_code == 200
-    leaked = 'WORKER-STDOUT' in r.text or 'WORKER-TOKEN' in r.text
-    # Recorded as T4-M5 when True: events are forwarded verbatim; only the Vast service whitelists fields.
-    assert leaked in {True, False}
-    if leaked:
-        pytest.xfail('T4-M5: gateway forwards unknown event fields verbatim (relies on training service whitelist)')
+    assert r.json() == {'items': [{
+        'seq': 8, 'time': 't', 'stage': 'training', 'epoch': 2, 'step': 4,
+        'total_steps': 12, 'loss': 0.25,
+    }], 'next_seq': 8}
+    assert len(requests) == 1
+    assert dict(requests[0].url.params) == {'after_seq': '5', 'limit': '7'}
+
+    invalid_payloads = [
+        {'items': [{'seq': True, 'time': 't', 'stage': 'training'}], 'next_seq': 8},
+        {'items': [{'seq': 8, 'time': 1, 'stage': 'training'}], 'next_seq': 8},
+        {'items': [{'seq': 8, 'time': 't', 'stage': 'private-stage'}], 'next_seq': 8},
+        {'items': [{'seq': 8, 'time': 't', 'stage': 'training', 'epoch': True}], 'next_seq': 8},
+        {'items': [{'seq': 8, 'time': 't', 'stage': 'training', 'loss': float('inf')}], 'next_seq': 8},
+        {'items': [{'seq': 8, 'time': 't', 'stage': 'training'}], 'next_seq': True},
+    ]
+    for payload in invalid_payloads:
+        state.reward_training_transport = httpx.MockTransport(
+            lambda request, payload=payload: httpx.Response(200, json=payload))
+        malformed = client.get(f'{TRAIN}/runs/{run["id"]}/events?after_seq=5&limit=7', headers=ADMIN)
+        assert malformed.status_code == 503
+        assert 'Traceback' not in malformed.text and 'WORKER-TOKEN' not in malformed.text
 
 
 def test_e_real_training_service_events_expose_only_structured_telemetry(client, tmp_path):

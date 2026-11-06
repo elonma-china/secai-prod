@@ -295,6 +295,8 @@ class JobStore:
                 return False
             if row["lease_until"] <= now or row["deadline"] <= now:
                 return False
+            if not error_code and (not isinstance(result, dict) or not result):
+                return False
             self._terminal(db, job_id, "failed" if error_code else "succeeded", now, error_code, result)
             return True
 

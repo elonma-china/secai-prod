@@ -3,7 +3,7 @@
 import { mdToHtml } from "../md.js";
 const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
-// Nhãn nhịp đối soát: "hằng tháng (ngày 15)" khi policy có evaluation_day.
+// Nhãn nhịp đối soát: "hằng tháng (ngày 07)" khi policy có evaluation_day.
 const CADENCE_VI = { monthly: "hằng tháng", weekly: "hằng tuần", daily: "hằng ngày", quarterly: "hằng quý" };
 function cadenceLabel(p) {
   const base = CADENCE_VI[(p && p.cadence) || "monthly"] || (p && p.cadence) || "hằng tháng";

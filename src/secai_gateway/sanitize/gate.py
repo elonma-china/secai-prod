@@ -21,6 +21,24 @@ from .classifier import InputVerdict
 # observed false positive.
 _SECURITY_DOMAIN_RE = re.compile(r"\b(?:CWE|CVE|CAPEC|CVSS|OWASP|SANS|ATT&CK|MITRE)\b", re.I)
 
+# IAS product-feature markers (2026-11-04, found via the ias_howto_kb eval batch): a
+# legitimate "how do I use feature X" question about THIS product (e.g. "Các bước thực
+# hiện dịch văn bản trong Nền tảng AI như thế nào?") scored offtopic=0.62/security=0.38 —
+# a security-flavoured question about the product's own AI translate feature, but with no
+# CWE/CVE-style marker to trip the override above. Same override shape as
+# _SECURITY_DOMAIN_RE: naming one of the product's own module/feature names is itself
+# evidence the question is in-scope (it's a question about this security product), so it
+# bypasses the off-topic refusal the same way a CWE/CVE id does. Kept to the product's own
+# chapter/menu names (see data/ias_howto chunking) — generic words are excluded.
+_IAS_PRODUCT_DOMAIN_RE = re.compile(
+    r"(?:hệ\s*thống\s*ẩn\s*danh|quét\s*diện\s*rộng|quét\s*chuyên\s*sâu|scan\s*engine|"
+    r"engine\s*quét|nền\s*tảng\s*AI|dịch\s*văn\s*bản|trợ\s*lý\s*ảo\s*ATTT|sinh\s*mã\s*khai\s*thác|"
+    r"data\s*lake|tài\s*khoản\s*lộ\s*lọt|phân\s*hệ\s*báo\s*cáo|phân\s*hệ\s*quản\s*lý\s*lịch|"
+    r"đối\s*tượng\s*theo\s*dõi|quản\s*lý\s*vai\s*trò|xác\s*thực\s*hai\s*yếu\s*tố|"
+    r"\bIAS\b|\bIAS\.AI\b)",
+    re.I,
+)
+
 # Off-topic refusal — MUST match prompts/base_system.md <scope_policy> verbatim so the
 # deterministic gate and the LLM fallback speak with one voice.
 REFUSE_OFFTOPIC_MSG = "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."
@@ -46,6 +64,8 @@ class Action(str, Enum):
     BLOCK_INJECTION = "block_injection"   # short-circuit: injection refusal
     REFUSE_OFFTOPIC = "refuse_offtopic"   # short-circuit: scope_policy refusal
     GREET_CHITCHAT = "greet_chitchat"     # short-circuit: bare greeting (opt-in)
+    ASK_CLARIFICATION = "ask_clarification"
+    SCOPE_UNAVAILABLE = "scope_unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +78,22 @@ class Decision:
     @property
     def short_circuit(self) -> bool:
         return self.action is not Action.PASS
+
+
+def has_scope_marker(text: str | None, settings: Any) -> bool:
+    """True if ``text`` names an explicit security taxonomy (CWE/CVE/...) or an IAS
+    product/feature name — either is itself evidence the question is in-scope for this
+    product's chatbot, overriding a classifier off-topic call. Shared by ``decide()``'s
+    own margin-guard branch and by the routes.py judge-cascade hard-override (2026-11-04:
+    that second call site used to bypass this marker entirely, re-forcing REFUSE_OFFTOPIC
+    on a legitimate "how do I use feature X" question even after decide() had cleared it)."""
+    if not text:
+        return False
+    if (bool(getattr(settings, "input_classifier_security_marker_override", True))
+            and _SECURITY_DOMAIN_RE.search(text)):
+        return True
+    return (bool(getattr(settings, "input_classifier_ias_marker_override", True))
+            and bool(_IAS_PRODUCT_DOMAIN_RE.search(text)))
 
 
 def decide(verdict: InputVerdict, settings: Any, text: str | None = None) -> Decision:
@@ -105,16 +141,11 @@ def decide(verdict: InputVerdict, settings: Any, text: str | None = None) -> Dec
     off_thr = float(getattr(settings, "input_classifier_offtopic_threshold", 0.5) or 0.5)
     sec_p = float(verdict.scores.get("security", 0.0))
     margin = float(getattr(settings, "input_classifier_offtopic_margin", 0.15))
-    security_marker = bool(
-        text
-        and bool(getattr(settings, "input_classifier_security_marker_override", True))
-        and _SECURITY_DOMAIN_RE.search(text)
-    )
     if (
         verdict.intent == "offtopic"
         and off_p >= off_thr
         and (off_p - sec_p) >= margin
-        and not security_marker
+        and not has_scope_marker(text, settings)
         and bool(getattr(settings, "input_classifier_block_offtopic", True))
     ):
         return Decision(Action.REFUSE_OFFTOPIC, REFUSE_OFFTOPIC_MSG, "offtopic", pii=verdict.pii)

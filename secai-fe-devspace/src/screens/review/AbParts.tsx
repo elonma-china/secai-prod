@@ -38,9 +38,10 @@ const stack:object[]=[];
  * Dialog modal thật: backdrop, aria-modal, focus vào dialog khi mở, bẫy Tab, Esc/backdrop đóng, khoá cuộn nền,
  * trả focus về opener (restoreRef, hoặc phần tử đang focus lúc mở); nếu opener đã mất thì về vùng cuộn của màn.
  */
-export function AbDialog({label,title,onClose,footer,children,size,hideClose,restoreRef,dirty}:{label:string;title:ReactNode;onClose:()=>void;footer?:ReactNode;children:ReactNode;size?:'narrow'|'wide';hideClose?:boolean;restoreRef?:RefObject<HTMLElement|null>;dirty?:boolean}){
+export function AbDialog({label,title,onClose,footer,children,size,hideClose,restoreRef,dirty,busy}:{label:string;title:ReactNode;onClose:()=>void;footer?:ReactNode;children:ReactNode;size?:'narrow'|'wide';hideClose?:boolean;restoreRef?:RefObject<HTMLElement|null>;dirty?:boolean;busy?:boolean}){
  const box=useRef<HTMLDivElement>(null),close=useRef(onClose),keep=useRef(!!dirty);
- close.current=onClose;keep.current=!!dirty;
+ keep.current=!!dirty;
+ close.current=()=>{if(busy)return;if(keep.current&&!window.confirm('Bỏ các thay đổi chưa lưu?'))return;onClose();};
  useEffect(()=>{
   const el=box.current,token={};
   const opener=restoreRef?.current||(document.activeElement instanceof HTMLElement?document.activeElement:null);
@@ -73,7 +74,7 @@ export function AbDialog({label,title,onClose,footer,children,size,hideClose,res
  },[]);
  return <div className="ab-overlay" onMouseDown={e=>{if(e.target===e.currentTarget&&!keep.current)close.current();}}>
   <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={label} className={'iascard ab-dialog'+(size?' '+size:'')}>
-   <div className="ab-dialog-head"><h3>{title}</h3>{!hideClose&&<button type="button" className="iasbtn ghost sm" onClick={()=>close.current()}>Đóng</button>}</div>
+   <div className="ab-dialog-head"><h3>{title}</h3>{!hideClose&&<button type="button" className="iasbtn ghost sm" disabled={busy} onClick={()=>close.current()}>Đóng</button>}</div>
    <div className="ab-dialog-body">{children}</div>
    {footer&&<div className="ab-dialog-foot">{footer}</div>}
   </div>
