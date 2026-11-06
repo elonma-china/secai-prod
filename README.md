@@ -324,4 +324,7 @@ Full documentation is under [`docs/`](docs/); start with the [index](docs/README
   design.
 - `docs/nghiem-thu-showcase/` — `/showcase-api/*` design + API reference (start at
   `00-TONG-QUAN.md`).
-- `docs/nghiem-thu/` — acceptance/hand-over paperwork (start at `docs/nghiem-thu/INDEX.md`).
+
+The acceptance/hand-over paperwork and the KPI/finetune evidence dossier live outside this
+repository (bind-mounted at deploy time for the `/showcase-*` endpoints); see the "Deploy"
+section for the external paths.
