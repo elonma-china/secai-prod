@@ -7,8 +7,8 @@ low-level *public-content* fetcher, so that even a code path which bypassed the 
 (a bug, a future feature, a direct call in a test/script) still cannot reach the internet
 while air-gap is on.
 
-Deliberately scoped to PUBLIC-CONTENT fetch only (web_fetch / fetch_reference / websearch /
-on-demand GitHub). The internal service clients — Qdrant, Neo4j, Redis, and the LLM /
+Deliberately scoped to PUBLIC-CONTENT fetch only (web_fetch / fetch_reference / websearch).
+The internal service clients — Qdrant, Neo4j, Redis, and the LLM /
 embedding / reranker serving — are NOT guarded here: air-gap means "no internet", not "no
 network", and those endpoints are expected to be in-network at deploy time.
 """

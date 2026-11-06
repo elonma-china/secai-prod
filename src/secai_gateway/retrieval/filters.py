@@ -22,6 +22,44 @@ ENTITY_ID_RES = {
 }
 
 
+# Knowledge chunks (OWASP cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations) live in the same
+# collection as the CVE/CWE/CAPEC/ATT&CK entity docs. They carry cwe_id/cwe_refs/technique ids
+# too, so without a scope an entity lookup ("CWE-89 là gì") would match them. Scopes:
+#   entity    (default) — never return knowledge chunks; behaviour identical to before they existed.
+#   knowledge           — only knowledge chunks, minus ones flagged as holding attack payloads.
+#   all                 — no kind restriction (internal/debug).
+KNOWLEDGE_KINDS = ("cheatsheet", "requirement", "mitigation", "taxonomy")
+ATTACK_EXAMPLE = "contains_attack_example"
+SCOPES = ("entity", "knowledge", "all")
+
+
+def resolve_scope(scope: str | None, kind: list[str] | None) -> str:
+    """Explicit scope wins; otherwise infer it from the requested kinds."""
+    if scope in SCOPES:
+        return str(scope)
+    kinds = list(kind or [])
+    if kinds and all(k in KNOWLEDGE_KINDS for k in kinds):
+        return "knowledge"
+    if any(k in KNOWLEDGE_KINDS for k in kinds):
+        return "all"
+    return "entity"
+
+
+def entity_scope_filter() -> dict[str, Any]:
+    """Qdrant filter for callers that search the raw collection and must stay entity-only."""
+    return {"must_not": [{"key": "kind", "match": {"any": list(KNOWLEDGE_KINDS)}}]}
+
+
+def scope_ok(payload: dict[str, Any], scope: str | None) -> bool:
+    """Local mirror of the scope predicate, for hits that did not come through a Qdrant filter."""
+    if scope in (None, "all"):
+        return True
+    is_knowledge = (payload.get("kind") or payload.get("chunk_kind")) in KNOWLEDGE_KINDS
+    if scope == "knowledge":
+        return is_knowledge and payload.get("sensitivity") != ATTACK_EXAMPLE
+    return not is_knowledge
+
+
 def upper_list(value: Any) -> list[str]:
     """Normalise a str | list id filter into a de-duplicated list of upper-cased ids."""
     if value is None:
@@ -32,6 +70,8 @@ def upper_list(value: Any) -> list[str]:
 
 def build_filter(p: dict[str, Any]) -> dict[str, Any] | None:
     must: list[dict[str, Any]] = []
+    must_not: list[dict[str, Any]] = []
+    scope = resolve_scope(p.get("scope"), p.get("kind"))
 
     def add(key: str, value: Any) -> None:
         if isinstance(value, list):
@@ -48,6 +88,12 @@ def build_filter(p: dict[str, Any]) -> dict[str, Any] | None:
 
     if p.get("kind"):
         add("kind", list(p["kind"]))
+    elif scope == "knowledge":
+        add("kind", list(KNOWLEDGE_KINDS))
+    if scope == "entity":
+        must_not.append({"key": "kind", "match": {"any": list(KNOWLEDGE_KINDS)}})
+    elif scope == "knowledge":
+        must_not.append({"key": "sensitivity", "match": {"value": ATTACK_EXAMPLE}})
     # Entity IDs accept str or list (auto-detected IDs arrive as lists).
     if p.get("cve_id"):
         add("cve_id", upper_list(p["cve_id"]))
@@ -72,7 +118,12 @@ def build_filter(p: dict[str, Any]) -> dict[str, Any] | None:
         must.append({"key": "cvss_score", "range": rng})
     if p.get("kev_only"):
         add("is_in_kev", True)
-    return {"must": must} if must else None
+    out: dict[str, Any] = {}
+    if must:
+        out["must"] = must
+    if must_not:
+        out["must_not"] = must_not
+    return out or None
 
 
 def boost(payload: dict[str, Any], score: float) -> float:
@@ -109,6 +160,8 @@ def passes_filter(payload: dict[str, Any], p: dict[str, Any]) -> bool:
                 return True
         return False
 
+    if not scope_ok(payload, resolve_scope(p.get("scope"), p.get("kind"))):
+        return False
     if p.get("kind") and not kw(payload.get("kind") or payload.get("chunk_kind"), p["kind"]):
         return False
     if p.get("cve_id") and str(payload.get("cve_id", "")).upper() not in set(upper_list(p["cve_id"])):

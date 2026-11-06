@@ -238,6 +238,7 @@ def test_rubric_hook_exhaustion_mutates_fabricated_draft_fail_closed():
     assert terminal.action == repeated.action == "mutate"
     assert terminal.reason == "kb_search_before_synthesis_exhausted"
     assert DRAFT_MARKER not in terminal.final_text
+    assert "Không thể xác thực thông tin lỗ hổng từ cơ sở dữ liệu nội bộ (KB)" in terminal.final_text
 
 
 # ── Mục 4 ("Giải thích quy trình tạo PoC") — wiring-level regression, xem poc/trace.py cho

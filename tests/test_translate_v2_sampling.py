@@ -53,7 +53,7 @@ async def test_only_translate_v2_uses_dedicated_agent(monkeypatch):
         def __init__(self, name):
             self.name = name
 
-        async def run(self, prompt):
+        async def run(self, prompt, *args, **kwargs):
             calls.append((self.name, prompt))
             yield ResultEvent(subtype="success", stop_reason="end_turn",
                               total_usage=Usage(), duration_ms=0, final_text=self.name)

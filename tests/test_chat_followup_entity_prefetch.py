@@ -154,24 +154,38 @@ async def test_uc2_chained_followup_resolves_across_multiple_hops(monkeypatch) -
     assert "CWE-89" in captured[-1], f"expected CWE-89 resolved from the earliest user turn: {captured}"
 
 
-# ── UC3 — no prior entity anywhere → falls back to old behavior (no pre-fetch) ──────
+# ── UC3 — no prior entity anywhere ────────────────────────────────────────────────
+# Before 2026-10-06 this fell back to "no pre-fetch" and the model, left to call the tool itself, usually
+# did not (core eval: "CVE nào…" questions answered with the default apology). Now the question itself is
+# searched; CHAT_CVE_SEARCH_PREFETCH_ENABLED=false restores the old behaviour.
 
 @pytest.mark.asyncio
-async def test_uc3_no_prior_entity_no_prefetch(monkeypatch) -> None:
+async def test_uc3_no_prior_entity_searches_with_the_question_itself(monkeypatch) -> None:
     captured: list[str] = []
     monkeypatch.setattr(routes, "_qdrant_search", _fake_qdrant_search(captured))
     runner = _FollowupFakeRunner()
     async with _client(runner) as client:
         created = await client.post("/sessions", json={"user_id": "u1", "title": "t"})
         sid = created.json()["session_id"]
-        # First-ever turn in the session IS the id_lookup question — no history at all.
         resp = await client.post(f"/sessions/{sid}/chat/stream",
                                  json={"user_id": "u1", "message": "có CVE nào?"})
     assert resp.status_code == 200
-    assert not captured, "must not pre-fetch when no entity can be resolved from history"
-    assert _prefetch_qdrant_frame(resp.text) is None
-    _, _, _, grounding_context = runner.calls[-1]
-    assert not grounding_context
+    assert captured == ["có CVE nào?"]
+    assert _prefetch_qdrant_frame(resp.text) is not None
+    assert runner.calls[-1][3]
+
+
+@pytest.mark.asyncio
+async def test_uc3_flag_off_keeps_the_old_no_prefetch_behaviour(monkeypatch) -> None:
+    captured: list[str] = []
+    monkeypatch.setattr(routes, "_qdrant_search", _fake_qdrant_search(captured))
+    monkeypatch.setenv("CHAT_CVE_SEARCH_PREFETCH_ENABLED", "false")
+    runner = _FollowupFakeRunner()
+    async with _client(runner) as client:
+        sid = (await client.post("/sessions", json={"user_id": "u1", "title": "t"})).json()["session_id"]
+        resp = await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "u1", "message": "có CVE nào?"})
+    assert resp.status_code == 200 and not captured
+    assert _prefetch_qdrant_frame(resp.text) is None and not runner.calls[-1][3]
 
 
 # ── UC4 — a concept question (no id, not an id_lookup phrasing) is untouched ────────
@@ -256,4 +270,5 @@ async def test_uc7_no_session_id_fails_open_no_crash(monkeypatch) -> None:
     async with _client(runner) as client:
         resp = await client.post("/ai/chat/stream", json={"user_id": "fresh-user", "message": "có CVE nào?"})
     assert resp.status_code == 200
-    assert not captured  # brand-new derived session has no history → no entity to resolve
+    # brand-new derived session has no history → no entity to resolve; the question itself is searched
+    assert captured == ["có CVE nào?"]

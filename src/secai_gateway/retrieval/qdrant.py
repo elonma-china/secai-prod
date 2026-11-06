@@ -4,6 +4,10 @@ collection, RRF-fused and reranked, with exact entity-ID grounding.
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
+import uuid
+from collections import Counter
 from typing import Any
 
 import httpx
@@ -14,14 +18,20 @@ from ..config import get_settings
 from .bm25 import BM25_FANOUT, BM25_VECTOR, bm25_search, rrf_merge
 from .cve_overrides import apply_cve_override
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
+from .discovery import DISCOVER_KEV_K, DISCOVER_RERANK_WINDOW, expand_discovery_query
+from .vi_en import expand_for_bm25
 from .neo4j import NEO4J_DATABASE, _auth_header, _neo4j_http_url
-from .filters import ENTITY_ID_RES, boost, build_filter, passes_filter, upper_list
+from .filters import (ENTITY_ID_RES, KNOWLEDGE_KINDS, boost, build_filter, entity_scope_filter,
+                      passes_filter, resolve_scope, scope_ok, upper_list)
+
+logger = logging.getLogger(__name__)
 
 _settings = get_settings()
 QDRANT_URL = _settings.qdrant_url
 COLLECTION = _settings.qdrant_collection
 CANDIDATE_LIMIT = 20
 MAX_TEXT_CHARS = 800
+KNOWLEDGE_TEXT_CHARS = 1400  # knowledge chunks are written to fit one embedding window (~1.2k chars)
 DEFAULT_TOP_K = 5
 
 # Schema kept deliberately small for a small (30B-A3B) model: it only sees `query`
@@ -44,11 +54,34 @@ _INPUT_SCHEMA = {
 }
 
 
-def _truncate(s: str) -> str:
-    return s[:MAX_TEXT_CHARS] + "…" if len(s) > MAX_TEXT_CHARS else s
+def _truncate(s: str, limit: int = MAX_TEXT_CHARS) -> str:
+    return s[:limit] + "…" if len(s) > limit else s
+
+
+def _format_knowledge_hit(index: int, score: float, payload: dict[str, Any], rerank_score: float | None) -> str:
+    """Cheat sheet / ASVS / mitigation chunk: the model must be able to cite source + licence."""
+    lines = [
+        f"### Result {index + 1} (score: {score:.4f}" + (f", rerank: {rerank_score:.4f})" if rerank_score is not None else ")"),
+        f"**Type:** {payload.get('kind')} (knowledge)",
+        f"**Title:** {payload.get('title') or payload.get('name') or ''}",
+        f"**Source:** {payload.get('source', '')} {payload.get('version', '')}".rstrip(),
+    ]
+    if payload.get("doc_id"):
+        lines.append(f"**Ref:** {payload['doc_id']}")
+    if payload.get("source_url"):
+        lines.append(f"**URL:** {payload['source_url']}")
+    if payload.get("attribution"):
+        lines.append(f"**License:** {payload.get('license', '')} — {payload['attribution']}")
+    for label, key in (("CWE", "cwe_refs"), ("CAPEC", "capec_entries"), ("Techniques", "mitre_techniques")):
+        if payload.get(key):
+            lines.append(f"**{label}:** {', '.join(payload[key][:5])}")
+    lines += ["", _truncate(str(payload.get("text") or ""), KNOWLEDGE_TEXT_CHARS)]
+    return "\n".join(lines)
 
 
 def _format_hit(index: int, score: float, payload: dict[str, Any], rerank_score: float | None) -> str:
+    if (payload.get("kind") or payload.get("chunk_kind")) in KNOWLEDGE_KINDS:
+        return _format_knowledge_hit(index, score, payload, rerank_score)
     lines = [
         f"### Result {index + 1} (score: {score:.4f}" + (f", rerank: {rerank_score:.4f})" if rerank_score is not None else ")"),
         f"**Type:** {payload.get('kind') or payload.get('chunk_kind') or 'unknown'}",
@@ -62,8 +95,8 @@ def _format_hit(index: int, score: float, payload: dict[str, Any], rerank_score:
         lines.append(f"**CAPEC:** {', '.join(entries[:5])}" + ("…" if len(entries) > 5 else ""))
     if payload.get("mitre_techniques"):
         lines.append(f"**Techniques:** {', '.join(payload['mitre_techniques'][:5])}")
-    if payload.get("title"):
-        lines.append(f"**Title:** {payload['title']}")
+    if payload.get("title") or payload.get("name"):
+        lines.append(f"**Title:** {payload.get('title') or payload.get('name')}")
     if payload.get("severity"):
         lines.append(f"**Severity:** {payload['severity']}")
     if payload.get("cvss_score"):
@@ -131,16 +164,40 @@ async def _scroll_by_filter(client: httpx.AsyncClient, qfilter: dict[str, Any] |
             for p in result["points"]]
 
 
+_DEFINITION_PREFIX = {"cwe_id": "cwe", "capec_id": "capec", "technique_id": "mitre"}
+
+
+def _definition_point_id(field: str, ident: str) -> str:
+    """Point id of a CWE/CAPEC/ATT&CK definition node: uuid5(NAMESPACE_URL, chunk_id) with chunk_id
+    `cwe::CWE-79` / `capec::CAPEC-66` / `mitre::T1190` (holds for all 2,275 nodes in cve_kb_hybrid)."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"{_DEFINITION_PREFIX[field]}::{ident}"))
+
+
 async def _fetch_definition_nodes(client: httpx.AsyncClient, ids_by_field: dict[str, list[str]]) -> dict[str, dict[str, Any]]:
-    """Directly fetch the CWE/CAPEC/ATT&CK *definition* nodes for the named ids, matched
-    on each node's own id field. Needed because a single definition node is easily crowded
-    out of the dense/BM25 candidate pool by the thousands of CVEs that reference it."""
-    should = [{"key": field, "match": {"any": vals}} for field, vals in ids_by_field.items() if vals]
-    if not should:
+    """Directly fetch the CWE/CAPEC/ATT&CK *definition* nodes for the named ids. Needed because a single
+    definition node is easily crowded out of the dense/BM25 candidate pool by the thousands of CVEs that
+    reference it.
+
+    By point id (a ~2 ms lookup). The old filter scroll on cwe_id/capec_id/technique_id (not payload-indexed)
+    costs ~2.1 s on the 763k-point production collection; it stays as the fallback if the id lookup finds
+    nothing (e.g. a node stored under a different id scheme)."""
+    wanted = {_definition_point_id(field, ident): field for field, vals in ids_by_field.items() if field in _DEFINITION_PREFIX for ident in vals}
+    if not wanted:
         return {}
+    try:
+        resp = await client.post(f"{QDRANT_URL}/collections/{COLLECTION}/points",
+                                 json={"ids": list(wanted), "with_payload": True}, timeout=10)
+        resp.raise_for_status()
+        found = {str(pt["id"]): apply_cve_override(pt.get("payload") or {}) for pt in resp.json().get("result", [])}
+        if found:
+            return found
+    except Exception:
+        pass  # fall through to the scan
+    should = [{"key": field, "match": {"any": vals}} for field, vals in ids_by_field.items() if vals]
+    # must_not: knowledge chunks carry cwe_id/capec_id/technique_id too, but are not definitions.
     resp = await client.post(
         f"{QDRANT_URL}/collections/{COLLECTION}/points/scroll",
-        json={"filter": {"should": should}, "limit": 16, "with_payload": True, "with_vector": False},
+        json={"filter": {"should": should, **entity_scope_filter()}, "limit": 16, "with_payload": True, "with_vector": False},
         timeout=20,
     )
     resp.raise_for_status()
@@ -224,10 +281,14 @@ async def _qdrant_search(
     cvss_min: float | None = None,
     cvss_max: float | None = None,
     kev_only: bool = False,
+    scope: str | None = None,
+    discover: bool = False,
+    gate: str | None = None,
 ) -> ToolResult:
     # Exact-ID grounding: if the caller didn't pin an entity but the query names one
     # (or more), filter to those exact IDs so a bare "CVE-2025-0282" / "CWE-89" / "T1059"
     # can't be out-ranked by fuzzy same-token matches. Multiple IDs → match any.
+    scope = resolve_scope(scope, kind)
     _locals = {"cve_id": cve_id, "cwe_id": cwe_id, "capec_id": capec_id, "technique_id": technique_id}
     for field, regex in ENTITY_ID_RES.items():
         if not _locals[field]:
@@ -237,6 +298,14 @@ async def _qdrant_search(
     cve_id, cwe_id, capec_id, technique_id = (
         _locals["cve_id"], _locals["cwe_id"], _locals["capec_id"], _locals["technique_id"],
     )
+    kn_ids: dict[str, list[str]] = {}
+    if scope == "knowledge":
+        # Knowledge chunks never carry a cve_id, and only ~1% carry a cwe/capec/technique id, so
+        # hard-filtering on a detected id returns nothing ("how do I fix CVE-X"). The semantic pass
+        # stays unpinned; CWE/CAPEC/ATT&CK ids only add a second, pinned pass (their mitigations).
+        cve_id = None
+        kn_ids = {f: upper_list(v) for f, v in (("cwe_id", cwe_id), ("capec_id", capec_id), ("technique_id", technique_id)) if v}
+        cwe_id = capec_id = technique_id = None
 
     # year is a keyword field (no Qdrant range), so expand an inclusive year span into
     # an explicit list of years and merge it with any exact years supplied.
@@ -249,14 +318,29 @@ async def _qdrant_search(
         except ValueError:
             pass
 
+    # Discovery (flag-gated by the caller): free-text CVE search only, never with a pinned CVE id or caller filters.
+    discover = bool(discover) and scope == "entity" and not cve_id and not kev_only
+    dense_query = expand_discovery_query(query) if discover else query
+    kev_extra: list[dict[str, Any]] = []
+    kev_candidates: set[str] = set()  # pool members that only the KEV pass brought in
+
     params = {
         "query": query, "top_k": top_k, "kind": kind, "cve_id": cve_id, "cwe_id": cwe_id,
         "capec_id": capec_id, "technique_id": technique_id, "product": product,
         "severity": severity, "year": year, "cvss_min": cvss_min, "cvss_max": cvss_max,
-        "kev_only": kev_only,
+        "kev_only": kev_only, "scope": scope,
     }
+    t_start = time.monotonic()
+    params["scope"] = scope
     top_k = min(top_k or DEFAULT_TOP_K, CANDIDATE_LIMIT)
     qfilter = build_filter(params)
+    # What the CALLER asked to filter on, scope aside: only that decides whether BM25 hits need
+    # the extra payload fetch + wider fan-out (scope alone is enforced after the normal fetch below).
+    user_filtered = bool(build_filter({**params, "scope": "all"}))
+    scope_filter = build_filter({"scope": scope})  # scope clause alone: applied inside Qdrant on the BM25 leg too
+    # Pinned pass = what the document says about these ids: mitigations, cheat sheets, requirements. Not the
+    # Top-10 / Top-25 lists, which also carry cwe ids and would crowd the mitigations out.
+    ids_filter = build_filter({"scope": "knowledge", "kind": ["mitigation", "cheatsheet", "requirement"], **kn_ids}) if kn_ids else None
 
     # EXACT-CVE FAST PATH. A pinned cve_id makes the filter a hard `must` on that exact
     # record, so the full pipeline can only ever return that CVE's own chunk(s) anyway —
@@ -286,12 +370,36 @@ async def _qdrant_search(
         async def _dense_path() -> list[dict[str, Any]]:
             if not EMBEDDING_URL:
                 return []
-            vector = await embed(client, query)
-            return await _dense_search(client, vector, qfilter, CANDIDATE_LIMIT)
+            vector = await embed(client, dense_query)
+            main = await _dense_search(client, vector, qfilter, CANDIDATE_LIMIT)
+            if discover:
+                # What people mean by "which <product> flaw" is almost always an actively exploited one.
+                try:
+                    kev_extra.extend(await _dense_search(client, vector, build_filter({**params, "kev_only": True}), DISCOVER_KEV_K))
+                except Exception:
+                    pass  # best-effort: discovery never costs the normal result
+            if ids_filter:
+                pinned = await _dense_search(client, vector, ids_filter, 4)
+                seen = {h["id"] for h in pinned}
+                return pinned + [h for h in main if h["id"] not in seen]
+            return main
 
-        bm25_fanout = BM25_FANOUT * 3 if qfilter else BM25_FANOUT
-        dense_res, bm25_res = await asyncio.gather(
-            _dense_path(), bm25_search(query, bm25_fanout), return_exceptions=True)
+        async def _bm25_path() -> list[tuple[str, float]]:
+            # Entity scope: the scope's must_not runs inside Qdrant, so knowledge chunks cannot crowd
+            # the top-k and a CVE query keeps exactly the candidates it had before knowledge existed.
+            # Knowledge scope: Vietnamese words are given English terms (the chunks are English).
+            bq = expand_for_bm25(query) if scope == "knowledge" else dense_query
+            if not scope_filter:
+                return await bm25_search(bq, bm25_fanout)
+            hits = await bm25_search(bq, bm25_fanout, scope_filter)
+            if ids_filter:
+                pinned = await bm25_search(bq, 4, ids_filter)
+                seen = {pid for pid, _ in pinned}
+                hits = pinned + [h for h in hits if h[0] not in seen]
+            return hits
+
+        bm25_fanout = BM25_FANOUT * 3 if user_filtered else BM25_FANOUT
+        dense_res, bm25_res = await asyncio.gather(_dense_path(), _bm25_path(), return_exceptions=True)
         if isinstance(dense_res, Exception):
             return ToolResult(content=f"KB dense search failed: {dense_res}",
                               summary=f"qdrant_search({query}) error", is_error=True)
@@ -303,7 +411,7 @@ async def _qdrant_search(
 
         # 2b. Post-filter BM25 hits against the same predicate Qdrant applied to dense.
         bm25_hits: list[tuple[str, float]] = bm25_raw
-        if qfilter and bm25_raw:
+        if user_filtered and bm25_raw:
             need = [pid for pid, _ in bm25_raw if pid not in payloads]
             try:
                 fetched = await _retrieve_by_ids(client, need)
@@ -315,6 +423,20 @@ async def _qdrant_search(
                 if pid in payloads and passes_filter(payloads[pid], params)
             ][:BM25_FANOUT]
 
+        top_dense = max((h["score"] for h in dense_hits), default=0.0)
+        min_dense = _settings.knowledge_min_dense
+        if gate == "semantic":  # no keyword asked for reference text: only a clearly close chunk may bring it in
+            min_dense = max(min_dense, _settings.semantic_route_min_dense)
+        if (scope == "knowledge" and dense_hits and min_dense > 0
+                and top_dense < min_dense):
+            # Nothing in the knowledge base is semantically close: better no reference than a random one.
+            logger.info("qdrant_search scope=knowledge gated top_dense=%.3f < %.3f", top_dense, min_dense)
+            dense_hits, bm25_hits = [], []
+        if gate == "cve" and scope == "entity" and dense_hits:
+            # Semantic CVE routing probe: no CVE record is even close to the question → skip the reranker call altogether.
+            close = max((h["score"] for h in dense_hits if h["payload"].get("cve_id")), default=0.0)
+            if close < _settings.semantic_route_min_dense_cve:
+                return ToolResult(content="Không tìm thấy kết quả trong knowledge base.", summary=f"qdrant_search({query}) 0 hits")
         if not dense_hits and not bm25_hits:
             note = "" if (EMBEDDING_URL or BM25_VECTOR) else " (no embedding / BM25 configured)"
             return ToolResult(content=f"Không tìm thấy kết quả trong knowledge base.{note}", summary=f"qdrant_search({query}) 0 hits")
@@ -329,7 +451,7 @@ async def _qdrant_search(
                 payloads.update(await _retrieve_by_ids(client, missing))
             except Exception:
                 pass
-        merged = [(pid, s) for pid, s in merged if pid in payloads]
+        merged = [(pid, s) for pid, s in merged if pid in payloads and scope_ok(payloads[pid], scope)]
 
         # 4b. Guarantee the named entity's own definition node is a candidate (see
         # _fetch_definition_nodes) — prepend it so it enters the rerank window and the
@@ -338,7 +460,8 @@ async def _qdrant_search(
             "cwe_id": upper_list(cwe_id), "capec_id": upper_list(capec_id),
             "technique_id": upper_list(technique_id),
         }
-        if any(defn_ids_by_field.values()):
+        entity_pinned = scope == "entity" and any(defn_ids_by_field.values())
+        if entity_pinned:
             try:
                 defn = await _fetch_definition_nodes(client, defn_ids_by_field)
             except Exception:
@@ -352,7 +475,7 @@ async def _qdrant_search(
         # 4c. Graph-augmented fusion: bring the graph's CVEs for a named class (CWE/CAPEC/
         # ATT&CK), KEV/CVSS-ranked, into the candidate pool so they reach rerank. Only fires
         # for class queries — leaves alias/description/product/exact-id retrieval untouched.
-        if any(defn_ids_by_field.values()):
+        if entity_pinned:
             try:
                 graph_cands = await _graph_reverse_candidates(client, defn_ids_by_field)
             except Exception:
@@ -367,11 +490,23 @@ async def _qdrant_search(
             if add:
                 merged = add + merged
 
+        # 4d. Discovery: KEV-only candidates join the pool; the reranker decides whether they are relevant.
+        if kev_extra:
+            existing = {pid for pid, _ in merged}
+            add_kev = []
+            for h in kev_extra:
+                if h["id"] not in existing and scope_ok(h["payload"], scope):
+                    payloads[h["id"]] = h["payload"]
+                    add_kev.append((h["id"], 0.85))
+                    existing.add(h["id"])
+                    kev_candidates.add(h["id"])
+            merged = add_kev + merged
+
         # 5. Rerank the top fused candidates (best-effort; skipped without a reranker).
         rerank_scores: dict[str, float] = {}
         if RERANKER_URL and merged:
             try:
-                candidates = merged[: min(20, len(merged))]
+                candidates = merged[: min(10 if scope == "knowledge" else (DISCOVER_RERANK_WINDOW if discover else 20), len(merged))]
                 docs = [str(payloads[pid].get("text") or "") for pid, _ in candidates]
                 results = await rerank(client, query, docs, len(docs))
                 for r in results:
@@ -381,13 +516,19 @@ async def _qdrant_search(
             except Exception:
                 pass  # best-effort, same fallback as production
 
+    if gate == "cve" and scope == "entity":
+        # The probe only passes when the reranker found a CVE record that unmistakably answers the question.
+        best_cve = max((v for pid, v in rerank_scores.items() if payloads.get(pid, {}).get("cve_id")), default=None)
+        if best_cve is None or best_cve < _settings.semantic_route_min_rerank_cve:
+            return ToolResult(content="Không tìm thấy kết quả trong knowledge base.", summary=f"qdrant_search({query}) 0 hits")
+
     # 6. Final score: rerank if available else RRF, then payload boost. When the query
     # names a CWE/CAPEC/ATT&CK entity, its own definition node should outrank the CVEs
     # that merely reference it ("CWE-89 là gì" wants the CWE definition first).
     pinned_ids = set(upper_list(cwe_id)) | set(upper_list(capec_id)) | set(upper_list(technique_id))
 
     def _is_pinned_definition(pl: dict[str, Any]) -> bool:
-        if not pinned_ids:
+        if not pinned_ids or (pl.get("kind") or pl.get("chunk_kind")) in KNOWLEDGE_KINDS:
             return False
         own = str(pl.get("cwe_id") or pl.get("capec_id") or pl.get("technique_id") or "").upper()
         return bool(own) and own in pinned_ids
@@ -396,7 +537,9 @@ async def _qdrant_search(
     for pid, rrf in merged:
         reranked = rerank_scores.get(pid)
         base = reranked if reranked is not None else rrf
-        score = boost(payloads[pid], base)
+        # Rerank scores saturate near 1, so the x1.5 KEV boost alone would put every KEV-only candidate on top of
+        # the relevant ones: those must win on relevance, not on the boost.
+        score = boost({**payloads[pid], "is_in_kev": False} if pid in kev_candidates else payloads[pid], base)
         if _is_pinned_definition(payloads[pid]):
             score *= 2.0
         scored.append({"point_id": pid, "score": score, "payload": payloads[pid], "rerank_score": reranked})
@@ -405,18 +548,80 @@ async def _qdrant_search(
     # nhiều chunk cùng 1 CVE chiếm slot). Node định nghĩa (CWE/CAPEC/T) không có cve_id → giữ.
     deduped: list[dict[str, Any]] = []
     seen_cve: set[str] = set()
+    per_parent: dict[str, int] = {}
     for h in scored:
+        if scope == "knowledge":
+            # At most 2 chunks per source document so one cheat sheet cannot fill every slot.
+            parent = str(h["payload"].get("parent_id") or h["payload"].get("doc_id") or h["point_id"])
+            per_parent[parent] = per_parent.get(parent, 0) + 1
+            if per_parent[parent] > 2:
+                continue
         cve = str(h["payload"].get("cve_id") or "").upper()
         if cve:
             if cve in seen_cve:
                 continue
             seen_cve.add(cve)
         deduped.append(h)
+    if scope == "knowledge" and gate and _settings.knowledge_min_rerank > 0:
+        # Semantic routing (CHAT_SEMANTIC_ROUTING_ENABLED). The reranker judged the top candidates; a candidate it did not
+        # judge is not evidence, so it never passes (the plain rule below lets those through). "confirm": a keyword already
+        # asked for reference text, so a weak match is enough to keep it from being dropped; "semantic": no keyword did, so
+        # the best candidate has to be an unmistakable match. A strong best match keeps only strong chunks.
+        if gate == "semantic":
+            floor = _settings.semantic_route_min_rerank
+        else:
+            floor = _settings.knowledge_confirm_min_rerank
+        best = max(rerank_scores.values(), default=None)
+        if best is None and gate == "confirm":
+            pass  # no reranker output (serving down): behave as before
+        elif best is None or best < floor:
+            deduped = []
+        else:
+            hit_min = _settings.knowledge_min_rerank if best >= _settings.knowledge_min_rerank else floor
+            deduped = [h for h in deduped if h["rerank_score"] is not None and h["rerank_score"] >= hit_min]
+    elif scope == "knowledge" and _settings.knowledge_min_rerank > 0:
+        # Only meaningful when a reranker scored the hit; without one we keep the RRF order.
+        deduped = [h for h in deduped if h["rerank_score"] is None or h["rerank_score"] >= _settings.knowledge_min_rerank]
     final_hits = deduped[:top_k]
+    if not final_hits:  # everything was scoped out / cut off: say so instead of returning an empty tool result
+        return ToolResult(content="Không tìm thấy kết quả trong knowledge base.", summary=f"qdrant_search({query}) 0 hits")
 
     output = "\n\n---\n\n".join(_format_hit(i, h["score"], h["payload"], h["rerank_score"]) for i, h in enumerate(final_hits))
     mode = "hybrid" if (dense_hits and bm25_used) else ("dense" if dense_hits else "bm25")
+    logger.info(
+        "qdrant_search scope=%s mode=%s top_dense=%.3f hits=%d kinds=%s sensitivity=%s ms=%d",
+        scope, mode, top_dense, len(final_hits),
+        dict(Counter(str(h["payload"].get("kind") or h["payload"].get("chunk_kind")) for h in final_hits)),
+        dict(Counter(str(h["payload"].get("sensitivity", "-")) for h in final_hits)),
+        int((time.monotonic() - t_start) * 1000))
     return ToolResult(content=output, summary=f"qdrant_search({query}) {len(final_hits)} hits [{mode}]")
+
+
+async def _qdrant_search_tool(
+    query: str,
+    ctx: ToolContext,
+    top_k: int = DEFAULT_TOP_K,
+    kind: list[str] | None = None,
+    cve_id: str | None = None,
+    cwe_id: str | None = None,
+    capec_id: str | None = None,
+    technique_id: str | None = None,
+    product: str | None = None,
+    severity: list[str] | None = None,
+    year: list[str] | None = None,
+    year_from: str | None = None,
+    year_to: str | None = None,
+    cvss_min: float | None = None,
+    cvss_max: float | None = None,
+    kev_only: bool = False,
+) -> ToolResult:
+    """What the model can call. It has no `scope` parameter (linch drops unknown keys) and cannot ask
+    for knowledge kinds: the knowledge KB reaches the model only through the server-side pre-fetch."""
+    entity_kinds = [k for k in (kind or []) if k not in KNOWLEDGE_KINDS] or None
+    return await _qdrant_search(
+        query, ctx, top_k=top_k, kind=entity_kinds, cve_id=cve_id, cwe_id=cwe_id, capec_id=capec_id,
+        technique_id=technique_id, product=product, severity=severity, year=year, year_from=year_from,
+        year_to=year_to, cvss_min=cvss_min, cvss_max=cvss_max, kev_only=kev_only, scope="entity")
 
 
 qdrant_search = tool(
@@ -430,4 +635,4 @@ qdrant_search = tool(
     scope="read",
     parallel=True,
     summary=lambda input: f"qdrant_search({input.get('query', '?')[:50]})",
-)(_qdrant_search)
+)(_qdrant_search_tool)

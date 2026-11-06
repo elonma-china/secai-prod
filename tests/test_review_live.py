@@ -183,7 +183,7 @@ def test_live_history_does_not_override_current_question(client,tmp_path,monkeyp
     original_session=runner.agent.session
     async def session(*args,**kwargs):
         current=await original_session(*args,**kwargs)
-        async def run(self,prompt):
+        async def run(self,prompt,*_a,**_k):
             rows=await runner.session_store.load_messages(kwargs['id'])
             seen.append((prompt,current.meta.copy(),[r.message for r in rows]))
             yield ResultEvent(subtype='success',stop_reason='end_turn',total_usage=Usage(),duration_ms=1,final_text='MFA là xác thực đa yếu tố.')

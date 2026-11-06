@@ -1,0 +1,563 @@
+{
+ "core-035": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-036": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-037": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CVE-2016-6662 mislabeled as SQL injection (it is MySQL config RCE)."
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-038": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-039": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-040": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-041": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-042": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-043": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-044": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-045": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-046": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-047": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-048": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-049": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Vague: 'no authoritative info' instead of clearly saying no PoC found."
+  },
+  "B": {
+   "v": "FAIL",
+   "fab": false,
+   "note": "Never answers; defers lookup with an unfinished statement."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-050": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "FAIL",
+   "fab": true,
+   "note": "Altered/abridged code presented as real; invented Metasploit module path log4j_shell."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-051": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-052": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Example says BinaryFormatter deserializes JSON, which is wrong."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-053": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-054": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-055": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "CWE-915 title given wrongly (that is CWE-99's name)."
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-056": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-057": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-058": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Claims containers share host network stack; muddled MAC/VM points."
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-059": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-060": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-061": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-062": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Suggests axios-cookiejar-support for React CSRF, which is irrelevant; answer truncated."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "Rails param name '_authenticity_token' is wrong (authenticity_token)."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-063": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-064": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": true,
+   "note": "'PPBKDF2 variants with cost' dubious/unsupported recommendation."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-065": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Says passwords stored via 'encryption'; omits TLS; untranslated headings."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-066": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-067": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ }
+}

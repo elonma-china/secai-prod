@@ -76,6 +76,12 @@ translation_orchestrator:
   base: false
   max_turns: 3
 
+document_ocr:
+  prompt: document_ocr.md
+  tools: [ocr_extract, ocr_result]
+  base: false
+  max_turns: 3
+
 # lane1 ReAct: mỗi lượt LLM xuất MỘT action JSON có cấu trúc; code (poc/lane1.py) parse + điều phối
 # tool trong sandbox. KHÔNG native tool-call (Cyber-F1 gãy) → tools rỗng, base false (pure transform).
 lane1_react:
@@ -85,6 +91,15 @@ lane1_react:
 # No tools — pure text-in, JSON-out; never sees anything beyond the one message + its score.
 injection_judge:
   prompt: injection_judge.md
+  tools: []
+  base: false
+  max_turns: 2
+
+# Single-shot conversation auto-title (api/routes.py::_maybe_autotitle): summarizes the first
+# Q&A pair of a new /ai/conversations/* thread into a short display title. Runs in the
+# background after the first turn — never blocks the chat response. No tools, pure text→text.
+conversation_title:
+  prompt: conversation_title.md
   tools: []
   base: false
   max_turns: 2

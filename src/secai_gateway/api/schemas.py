@@ -179,7 +179,7 @@ class LegacyRequest(BaseModel):
     listData: list[dict[str, Any]] | None = None
     scan_type: int | None = None
 
-    def supplied_text(self) -> str:
+    def supplied_text(self) -> str:  # noqa: D401 — see subclass reuse below
         """Return the first non-empty user text across legacy request shapes."""
         for candidate in (self.message, self.question, self.prompt, self.content, self.text):
             if isinstance(candidate, str) and candidate.strip():
@@ -251,3 +251,32 @@ class UpdateSessionRequest(BaseModel):
     user_id: str | None = None
     title: str | None = None
     project_id: str | None = None
+
+
+class ConversationChatRequest(LegacyRequest):
+    """POST /ai/conversations/chat(/stream) — a chat turn scoped to a named conversation.
+
+    Subclasses ``LegacyRequest`` so the permissive drift-tolerance, ``user_id`` resolution
+    and ``supplied_text()`` are reused verbatim; adds only the conversation selector. Omit
+    ``conversation_id`` to start a new conversation (the server mints one)."""
+
+    conversation_id: str | None = None
+    title: str | None = None
+
+
+class CreateConversationRequest(BaseModel):
+    """POST /ai/conversations — create an empty conversation (for a "new chat" button)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | int | None = None
+    title: str | None = None
+
+
+class RenameConversationRequest(BaseModel):
+    """PATCH /ai/conversations/{id} — set a user-chosen title, overriding the auto-title."""
+
+    model_config = ConfigDict(extra="allow")
+
+    user_id: str | int | None = None
+    title: str | None = None

@@ -1,0 +1,563 @@
+{
+ "core-068": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-069": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Omits RBAC and secrets management; only host, pod security, network policy covered."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-070": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-071": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-072": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-073": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-074": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Mislabels CWE-863 as authentication; claims latest without KB caveat; list truncated."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-075": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-076": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-077": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-078": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-079": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-080": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-081": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-082": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-083": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-084": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-085": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-086": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-087": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-088": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-089": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-090": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-091": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Refuses as out of scope rather than stating it cannot scan/exploit; no fake execution."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Refuses as out of scope rather than stating it cannot scan/exploit; no fake execution."
+  }
+ },
+ "core-092": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-093": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Says 2.12.2/2.12.3/2.3.1 only disable by default, but functionality is removed there."
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-094": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-095": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-096": {
+  "A": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Includes CVE-2026-76461 (email gateway RCE) as CWE-89 example, not SQLi; no CWE-89 explanation."
+  },
+  "B": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Includes CVE-2026-76461 (email gateway RCE) as CWE-89 example, not SQLi; no CWE-89 explanation."
+  },
+  "C": {
+   "v": "PARTIAL",
+   "fab": false,
+   "note": "Includes CVE-2026-76461 (email gateway RCE) as CWE-89 example, not SQLi; no CWE-89 explanation. Labels CVSS 10.0 CVE-2026-20030 as HIGH."
+  }
+ },
+ "core-097": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-098": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-099": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ },
+ "core-100": {
+  "A": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "B": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  },
+  "C": {
+   "v": "PASS",
+   "fab": false,
+   "note": ""
+  }
+ }
+}

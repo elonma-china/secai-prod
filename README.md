@@ -179,6 +179,30 @@ Long chats stay under the context window via Linch's proactive compaction
 - **qdrant_search** — hybrid dense (fine-tuned `sec-embedding`) + BM25 retrieval over the
   `cve_kb_hybrid` collection, RRF-fused and reranked (`sec-rerank`). CVE/CWE/CAPEC/ATT&CK
   IDs in the query are auto-detected and pinned.
+- **Knowledge chunks** (OWASP Cheat Sheets, ASVS 5.0, CWE/CAPEC/ATT&CK mitigations, OWASP Top 10 and CWE Top 25 lists; `kind` =
+  `cheatsheet` / `requirement` / `mitigation` / `taxonomy`) share the collection but are **scoped**:
+  `qdrant_search` defaults to `scope="entity"` and never returns them; `scope="knowledge"` returns
+  only them (minus chunks flagged `contains_attack_example`). Chat uses them only when
+  `CHAT_KNOWLEDGE_GROUNDING_ENABLED=true` (default `false`): concept / how-to-fix questions without an id
+  route to `concept_kb` and get a pre-fetched, cited reference block; a "fix CVE-X" question also gets
+  the mitigations of that CVE's CWEs. Ingest, verify and rollback: `secai/scripts/knowledge/`
+  (`kb_knowledge.py`, refuses `cve_kb_hybrid` without `--allow-prod`). Plan, criteria and results:
+  `docs/plans/kb-knowledge-grounding*.md`, `docs/test-results/`.
+- **Chat pre-fetch for open-ended CVE questions** (`CHAT_CVE_SEARCH_PREFETCH_ENABLED`, default **on**): questions
+  about a named vulnerability with no id ("Lỗ hổng Log4Shell là gì?", "CVE nào…") are searched server-side; PoC
+  questions get a de-duplicated PoC-catalog summary (and the real artifact when the user asks to see the code);
+  CWE/CAPEC/ATT&CK ids in a CVE record come with their official names; English questions get an English reminder.
+  Off = the original routing, prompt and context (`prompts/chat_prefetch.md` is only loaded with this flag on).
+- **CVE discovery + serving latency** (all default **off**; off = previous routing, search and connections):
+  `CHAT_DISCOVERY_ENABLED` routes "which <product> flaw …?" questions to the CVE search, adds vendor synonyms and a
+  KEV-only candidate pass (`retrieval/discovery.py`); `EMBEDDING_KEEPALIVE_ENABLED` reuses connections to the
+  embedding/rerank host (a new connection costs one extra ~240 ms round trip); `EMBEDDING_CACHE_TTL_S` (e.g. 300) keeps
+  the vector of a prompt the input classifier already embedded. `CHAT_SEMANTIC_ROUTING_ENABLED` (needs the knowledge
+  flag) lets the databases themselves decide which one a question needs: a keyword hit must be confirmed by the
+  reranker, a question with no keyword still gets reference text when its best chunk matches unmistakably, and a CVE
+  record that answers the question almost verbatim turns it into a CVE lookup (`gate=` in `retrieval/qdrant.py`,
+  thresholds `KNOWLEDGE_CONFIRM_MIN_RERANK`, `SEMANTIC_ROUTE_*`). Results and rollback notes:
+  `docs/test-results/kb-knowledge-followups-2026-10-07.md`.
 - **neo4j_search** — graph traversal (CVE↔CWE↔CAPEC↔Technique↔Tactic↔Product), plus
   product entry-points and count/statistics queries.
 
