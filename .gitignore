@@ -23,3 +23,11 @@ jev-ultrafast/
 
 # eval run rỗng/aborted — không commit
 evals/results/exploit_lab_1792085602_summary.json
+
+# ── Generated/junk trong gateway (không commit) ──
+output/
+.playwright-cli/
+.opencode/
+pentestcode/node_modules/
+**/__pycache__/
+output/*.png
