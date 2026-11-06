@@ -126,15 +126,31 @@ def _targets_match(host: str, port: str | None, entry: Any) -> bool:
 
 
 def resolve_fixed_dir(settings: Any) -> Path | None:
-    """The verified-good store directory from settings, defaulting to
-    ``<poc_artifact_store>/../pocs-fixed``. ``None`` only if no base path can be derived."""
+    """The verified-good store directory from settings.
+
+    Priority:
+    1. explicit ``poc_fixed_dir``;
+    2. ``<poc_artifact_store>/../pocs-fixed`` — the historical default;
+    3. ``<poc_catalog_db>/../pocs-fixed`` — the DEPLOYED layout, where the catalog DB and the
+       ``pocs-fixed`` store both live in the same mounted ``/srv/poc`` directory. Preferred as a
+       fallback because the historical default resolves to an UNMOUNTED, non-writable path
+       (``/srv/pocs-fixed`` when the store is ``/srv/poc-store``), silently orphaning every
+       operator-verified PoC. Falls back to (2) when neither exists so a fresh checkout still
+       writes somewhere predictable.
+    """
     explicit = (getattr(settings, "poc_fixed_dir", "") or "").strip()
     if explicit:
         return Path(explicit)
     store = (getattr(settings, "poc_artifact_store", "") or "").strip()
-    if store:
-        return Path(store).parent / "pocs-fixed"
-    return None
+    store_fixed = (Path(store).parent / "pocs-fixed") if store else None
+    catalog = (getattr(settings, "poc_catalog_db", "") or "").strip()
+    catalog_fixed = (Path(catalog).parent / "pocs-fixed") if catalog else None
+    # Prefer whichever actually exists; the deployed /srv/poc/pocs-fixed wins over the
+    # unmounted /srv/pocs-fixed default when both paths are computable.
+    for cand in (catalog_fixed, store_fixed):
+        if cand is not None and cand.is_dir():
+            return cand
+    return store_fixed or catalog_fixed
 
 
 def _fixed_file(cache_dir: Path, cve_id: str) -> Path | None:

@@ -449,6 +449,12 @@ def _rank(hit: dict[str, Any]) -> tuple[int, int, bool, bool, bool, int, bool, s
     license-friendly sources."""
     if hit.get("canonical"):
         return (0, 0, False, False, False, 0, False, str(hit.get("ref") or ""))
+    # A vulhub lab WITH a bundled exploit script is the PoC written for exactly this lab's
+    # version/config — prefer it right after the operator-verified canonical, ahead of any
+    # same-CVE community artifact (which may target a different variant/format, e.g. the
+    # CVE-2026-27944 backup-decrypt format mismatch).
+    if hit.get("bundled_poc"):
+        return (0, 1, False, False, False, 0, False, str(hit.get("ref") or ""))
     kind = str(hit.get("kind") or "").strip().lower()
     source = str(hit.get("source") or "").strip().lower()
     if kind == "exploit" or source in {"exploitdb", "metasploit", "poc_github", "vendor"}:
@@ -463,7 +469,11 @@ def _rank(hit: dict[str, Any]) -> tuple[int, int, bool, bool, bool, int, bool, s
     # over a community poc_github repo; when neither does, keep the legacy poc_github-first order
     # (a repo PoC is what the consolidation step merges into one runnable file).
     if has_artifact:
-        source_pref = source not in {"exploitdb", "metasploit"}
+        # Prefer RUNNABLE standalone sources (exploitdb/poc_github/vulhub-lab) over a metasploit
+        # module: MSF modules import the Msf framework and never run standalone — any LLM
+        # "port" of one is fragile (observed: several rewritten .rb PoCs broke). MSF still ranks
+        # (just after these) when it is the only artifact.
+        source_pref = 0 if source in {"exploitdb", "poc_github", "vulhub"} else 1
     else:
         source_pref = source != "poc_github"
     return (1, tier, not has_artifact, source_pref, not hit.get("verified"), _lang_rank(hit),
@@ -486,7 +496,11 @@ async def prefetch_evidence(poc: LocalPocBackend, ledger: SqliteLedger, prompt: 
     if not query:
         return {"prefetched": False, "reason": "empty_prompt", "coverage": "failed"}
     try:
-        result = await poc.search(query, 10, run_id)
+        # Search WIDE enough that a CVE's own vulhub lab row (often ranked past #10 once a
+        # popular exploitdb/msf/poc_github row exists) is still considered — the lab-with-poc
+        # row is the highest-fidelity grounding. Only the top _MAX_PREFETCH are fetched, so a
+        # wider search costs one extra DB query, not extra fetches.
+        result = await poc.search(query, 25, run_id)
     except PocError:
         return {"prefetched": False, "reason": "search_error", "query": query, "coverage": "failed"}
     hits = result.get("hits", [])

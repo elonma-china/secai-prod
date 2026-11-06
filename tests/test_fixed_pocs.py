@@ -112,3 +112,39 @@ def test_save_fixed_rejects_targets_without_target(tmp_path):
     # the normal target-specific-variant path (target= alone) is unaffected
     assert save_fixed(tmp_path, "CVE-2026-11111", "code", target="1.2.3.4:80") is True
     assert load_fixed(tmp_path, "CVE-2026-11111", "1.2.3.4:80") is not None
+
+
+class _S:
+    def __init__(self, **kw):
+        self.poc_fixed_dir = kw.get("poc_fixed_dir", "")
+        self.poc_artifact_store = kw.get("poc_artifact_store", "")
+        self.poc_catalog_db = kw.get("poc_catalog_db", "")
+
+
+def test_resolve_fixed_dir_prefers_explicit(tmp_path):
+    from secai_gateway.poc.fixed_pocs import resolve_fixed_dir
+    assert resolve_fixed_dir(_S(poc_fixed_dir=str(tmp_path / "x"))) == tmp_path / "x"
+
+
+def test_resolve_fixed_dir_prefers_deployed_catalog_side(tmp_path):
+    """Regression (2026-10): the deployed layout mounts /srv/poc (catalog.db + pocs-fixed) but
+    sets poc_artifact_store=/srv/poc-store, whose `../pocs-fixed` (/srv/pocs-fixed) is UNMOUNTED
+    and non-writable. resolve must pick the catalog-side dir that actually exists, else every
+    operator-verified PoC is silently orphaned."""
+    from secai_gateway.poc.fixed_pocs import resolve_fixed_dir
+    catalog_dir = tmp_path / "poc"
+    catalog_dir.mkdir()
+    (catalog_dir / "pocs-fixed").mkdir()
+    (catalog_dir / "catalog.db").write_text("", encoding="utf-8")
+    store_dir = tmp_path / "poc-store"          # /srv/poc-store analogue
+    store_dir.mkdir()
+    s = _S(poc_artifact_store=str(store_dir), poc_catalog_db=str(catalog_dir / "catalog.db"))
+    assert resolve_fixed_dir(s) == catalog_dir / "pocs-fixed"
+
+
+def test_resolve_fixed_dir_falls_back_to_store_side(tmp_path):
+    from secai_gateway.poc.fixed_pocs import resolve_fixed_dir
+    store_dir = tmp_path / "poc-store"
+    store_dir.mkdir()
+    s = _S(poc_artifact_store=str(store_dir), poc_catalog_db=str(tmp_path / "none" / "catalog.db"))
+    assert resolve_fixed_dir(s) == tmp_path / "pocs-fixed"

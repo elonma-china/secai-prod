@@ -51,6 +51,11 @@ class SearchHit:
     # a link-only poc_github cannot consume the top-2 fetch budget over an exploitdb/metasploit
     # artifact. Boolean only — never a path.
     has_artifact: bool = False
+    # True when a `vulhub` lab row has a REAL bundled exploit script next to its
+    # docker-compose.yml (poc.py/exploit.py/*.py/*.sh/…). Such a row is the exploit that was
+    # actually written for THIS lab, so ranking prefers it over a same-CVE community artifact
+    # that may target a different variant/format. Boolean only — never a path.
+    bundled_poc: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

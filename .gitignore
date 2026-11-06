@@ -20,3 +20,6 @@ jev-ultrafast/
 
 # cocoindex-code local index
 .cocoindex_code/
+
+# eval run rỗng/aborted — không commit
+evals/results/exploit_lab_1792085602_summary.json
