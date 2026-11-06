@@ -1,1 +1,0 @@
-" Khi phát hiện ra hoạt động bất thường, nhóm phải ngay lập tức cô lập máy chủ khỏi mạng nội bộ. "

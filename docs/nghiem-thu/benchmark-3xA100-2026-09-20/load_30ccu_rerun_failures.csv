@@ -1,2 +1,0 @@
-Method,Name,Error,Occurrences,First Seen,Last Seen
-POST,/ai/chat,HTTPError('429 Client Error: Too Many Requests for url: /ai/chat'),78995,2026-10-10T05:12:54Z,2026-10-10T05:14:22Z

@@ -1,1 +1,0 @@
-"Wenn ungewöhnliche Aktivität erkannt wird, muss das Team den Server sofort vom internen Netzwerk isolieren."

@@ -1,1 +1,0 @@
-"Cuando se detecta actividad inusual, el equipo debe aislar el servidor de la red interna de inmediato."

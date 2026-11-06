@@ -1,1 +1,0 @@
-"Đừng xóa nhật ký. Kiểm tra CVE-2024-12345 trên 192.0.2.10, phiên bản 1.2.3. Mở https://example.com/security và chạy `curl -I https://example.com`. Thời gian chờ là 30 giây."

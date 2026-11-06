@@ -1,1 +1,0 @@
-" Upon detecting abnormal signs, the rescue team must immediately isolate the server and initiate an internal shutdown. "

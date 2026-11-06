@@ -1,1 +1,0 @@
-"Lorsqu'une activité anormale est détectée, l'équipe doit isoler immédiatement le serveur du réseau interne."

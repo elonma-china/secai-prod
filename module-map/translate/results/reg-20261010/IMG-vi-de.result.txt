@@ -1,1 +1,0 @@
-" Bei Auftreten von Anomalien muss das Rettungsteam den Server umgehend isolieren und den internen Betrieb einstellen. "

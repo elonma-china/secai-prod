@@ -1,1 +1,0 @@
-" Khi phát hiện hoạt động bất thường,\nđội ngũ phản ứng phải ngay lập tức cô lập máy chủ\nkhỏi mạng nội bộ. "

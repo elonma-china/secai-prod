@@ -1,1 +1,0 @@
-"Server access (fake test data)\nAccount: admin_demo\nPassword: Zk9#mPq2!vL7\nAPI key: sk_live_51HqDemo0000AbCdEf1234567890\nSSH: ssh root@203.0.113.45 -p 2222\nContact: soc.team@example.com CVE-2024-21412"

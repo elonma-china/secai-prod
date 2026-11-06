@@ -1,1 +1,0 @@
-" Cuando se detectan signos anormales, el equipo de rescate debe aislar el servidor e iniciar inmediatamente las medidas internas. "

@@ -1,1 +1,0 @@
-"When unusual activity is detected, the response team must isolate the server from the internal network immediately."

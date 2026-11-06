@@ -1,1 +1,0 @@
-" Lorsqu’un signe anormal est détecté, l’équipe de secours doit isoler le serveur et lancer immédiatement une procédure interne. "
