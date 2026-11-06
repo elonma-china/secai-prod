@@ -1,0 +1,27 @@
+{
+  "run_id": "2026-10-15-01",
+  "note": "Smoke test smoke-3case.json (HOÀN TẤT): API :8131 + UI thật ias.id.vn + lab vulhub cho case 1. Chi tiết bằng chứng xem 2026-10-15-01.txt",
+  "cases": [
+    {
+      "id": "SMOKE3-01",
+      "cve_id": "CVE-2025-29927",
+      "group": "in_db",
+      "status": "pass",
+      "reason": null
+    },
+    {
+      "id": "SMOKE3-02",
+      "cve_id": "CVE-2026-17666",
+      "group": "not_in_db",
+      "status": "fail",
+      "reason": "tiêu chí #3: minh hoạ là khung HTTP Python/requests chung, không khớp stack Chrome/Enterprise (CVE là lỗi mật mã ở tầng Chrome, không phải endpoint API server GET/POST) — 'khung mẫu' mà #3 loại trừ"
+    },
+    {
+      "id": "SMOKE3-03",
+      "cve_id": "CVE-2026-99999",
+      "group": "fabricated",
+      "status": "pass",
+      "reason": null
+    }
+  ]
+}

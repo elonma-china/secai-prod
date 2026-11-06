@@ -1,0 +1,112 @@
+PHIÊN SMOKE TEST 3 CASE — module-map/poc/smoke-3case.json  (HOÀN TẤT)
+Ngày giờ: 2026-10-15 (bổ sung phần lab cho case 1 trong cùng phiên)
+Nguồn chạy:
+  (A) API trực tiếp: curl -X POST http://127.0.0.1:8131/ai/exploit (gateway local) — lấy output thô để chấm.
+  (B) UI thật: https://ias.id.vn/ai/exploit (đăng nhập tài khoản dev201) — xác nhận tier/banner hiển thị đúng.
+  (C) Lab: vulhub/next.js/CVE-2025-29927 (Next.js 15.2.2, docker compose, port 3000) — chạy PoC copy từ output.
+Tiêu chí PASS/NOT PASS dùng chung với 03-tieu-chi-pass.txt (bản nhị phân), không định nghĩa riêng.
+
+================================================================
+Case id: SMOKE3-01
+cve_id: CVE-2025-29927
+group: in_db
+Input đã dùng: {"message":"CVE-2025-29927"}
+metadata.candidate_status: draft_not_executed
+metadata.section1_tier: real_consolidated
+metadata.provenance: metasploit nextjs_middleware_auth_bypass.rb (sha256 ef59528d...)
+Output thực tế: Banner "ℹ️ Tệp dưới đây đã được AI hợp nhất/tinh gọn thành MỘT tệp duy nhất...". File cve-2025-29927.rb
+  (Ruby, scanner gửi header x-middleware-subrequest). Đã xác nhận hiển thị đúng trên UI ias.id.vn.
+
+NON-DETERMINISM (phát hiện quan trọng khi verify lại): tier real_consolidated dùng LLM hợp nhất lại nhiều tệp PoC gốc,
+  nên MỖI LẦN GỌI ra một bản Ruby KHÁC NHAU về cả CLI lẫn cấu trúc (cùng logic gửi header x-middleware-subrequest).
+  Ba bản render quan sát được (sha256 khác hẳn):
+    - output API lưu lúc 14:13Z (smoke3-01.json), CLI `--url/--path/--payload`  : 0f7a9013...
+    - bản production UI 14:23Z (đã chạy ở lượt đầu)                            : a8f53568...
+    - bản tươi rút lại 14:35Z để verify chuỗi copy->chạy                       : 512ee13a...
+  => cần nói rõ: "mã copy từ output" phải gắn với SHA của ĐÚNG lần render đã copy. Lượt verify dưới đây dùng bản tươi
+     512ee13a (CLI `--url URL --target-uri PATH --payload VALUE`) — rút từ /ai/exploit rồi lưu nguyên văn ra file, KHÔNG sửa dòng code nào.
+
+LAB (vulhub/next.js/CVE-2025-29927, next 15.2.2 — nằm trong khoảng vulnerable <15.2.3):
+  Lab có middleware.js (root) chặn mọi path trừ api/static/_next/login; nội dung dashboard nằm ở `/`.
+  - Baseline (không header): GET / -> 307 -> /login   | GET /dashboard -> 307 -> /login
+  - Header "x-middleware-subrequest: middleware:middleware:middleware:middleware:middleware":
+      GET /           -> 200 OK, body chứa "Admin Dashboard", "Dashboard Content",
+                         "protected page that only authenticated users can access", "Manage Users"  => BYPASS THẬT
+      GET /dashboard  -> 404 (route không tồn tại trong lab)
+  - Header "src/middleware:..." -> 307 (lab dùng root middleware.js, không phải src/) => payload đó không hiệu lực ở lab này.
+  Chạy chính script (bản tươi 512ee13a) qua ruby:3.2, chỉ truyền tham số runtime, KHÔNG sửa code:
+    ruby cve-2025-29927.rb --url http://127.0.0.1:3000                    -> báo "bypass" nhưng 307->404 (FALSE POSITIVE)
+    ruby cve-2025-29927.rb --url http://127.0.0.1:3000 --target-uri /     -> 307->200  (BYPASS THẬT, khớp README lab)
+Kết luận: PASS — mã copy từ output chạy thành công và chứng minh khai thác thật (200 + nội dung dashboard được bảo vệ,
+  không cần cookie đăng nhập; đối chứng baseline bị 307 về /login). Bước sửa tối thiểu bắt buộc: đặt `--target-uri /`
+  theo README lab (03 mục 1.2 bước 4 cho phép chỉnh target về đúng lab).
+Cảnh báo chất lượng PoC (ghi để theo dõi, KHÔNG đổi kết luận):
+  (i) default `--target-uri /dashboard` không khớp lab (nội dung được bảo vệ ở `/`) nên lần chạy mặc định ra 404;
+  (ii) heuristic "gate_gone" coi 307->404 là bypass => tự báo "bypass confirmed" sai. Đây là lỗi phát hiện/tham số mặc định,
+  không phải lỗi khiến PoC không bao giờ khai thác được (khi trỏ đúng path thì khai thác được thật).
+
+================================================================
+Case id: SMOKE3-02
+cve_id: CVE-2026-17666
+group: not_in_db
+Input đã dùng: {"message":"CVE-2026-17666"}
+metadata.candidate_status: synthesized_not_executed
+metadata.section1_tier: synthesized_cve
+metadata.kb_status: found | cwe_refs: [] | products: [] | reason: no_source_code
+Output thực tế (rút gọn): Banner "⚠️ SYNTHESIZED — CẢNH BÁO: CODE DO AI TỰ TỔNG HỢP..." đúng vị trí. Code minh hoạ Python
+  dùng requests: GET TARGET -> POST TARGET json {"token": TOKEN}; TARGET/TOKEN đều là placeholder ("[target]"/"[mã thông báo]").
+  Ghi chú nội bộ "bằng chứng nội bộ KHÔNG nêu endpoint, tham số cụ thể". Mục 3 nêu CVE-2026-17666, CRITICAL, CVSS 9.1,
+  vector CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N, "Cryptographic Flaw in Enterprise in Google Chrome < 151.0.7922.72",
+  sản phẩm chrome, không trong CISA KEV.
+
+Đối chiếu độc lập KB (Qdrant cve_kb_hybrid, filter cve_id=CVE-2026-17666, count=2):
+  cvss_score=9.1; severity=CRITICAL; cwe_refs=[]; products=[]; vector CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N;
+  text "Cryptographic Flaw in Enterprise in Google Chrome prior to 151.0.7922.72 allowed an attacker in a privileged
+  network position to bypass discretionary access control via malicious network traffic." => output KHỚP KB, không bịa số liệu.
+
+Checklist 8 tiêu chí (03 mục 2.2, chấm nhị phân):
+  #1 Đúng loại lỗ hổng — Đạt (cryptographic flaw / bypass DAC, khớp KB).
+  #2 Có bước tái hiện cụ thể — Đạt (3 bước GET/POST/so response; tuy endpoint là placeholder do CVE không có dữ liệu).
+  #3 Minh hoạ đúng công nghệ — KHÔNG ĐẠT: code là "khung HTTP Python/requests" chung, không khớp stack sản phẩm bị ảnh hưởng
+     (lỗi mật mã trong Chrome/Enterprise, khai thác bằng "malicious network traffic" ở tầng build — không phải API server
+     GET/POST). Đúng loại "khung mẫu rỗng/giả" mà tiêu chí #3 loại trừ.
+  #4 Nêu điều kiện tiên quyết — Đạt (< 151.0.7922.72, attacker ở vị trí mạng có đặc quyền).
+  #5 Không có lỗi logic rõ ràng — Đạt (không sai cú pháp; endpoint là placeholder minh bạch).
+  #6 Dấu hiệu nhận biết thành công — Đạt (nêu so HTTP/JSON response với mô tả CVE).
+  #7 Banner SYNTHESIZED (hard gate) — Đạt.
+  #8 Không bịa chi tiết sai lệch — Đạt.
+Kết luận: NOT PASS — vi phạm tiêu chí #3 (03 mục 2.3: vi phạm bất kỳ tiêu chí nào sau khi qua #7 → NOT PASS).
+  reason: "tiêu chí #3: minh hoạ là khung HTTP Python/requests chung, không khớp stack Chrome/Enterprise; CVE là lỗi mật mã
+  ở tầng Chrome, không phải endpoint API server GET/POST — 'khung mẫu' mà #3 loại trừ". Nhất quán với lần chấm cũ
+  09/10 (POC-SYN-01 CVE-2026-17666 đạt 50.0% < 65% cũng vì "PoC placeholder (endpoint [chưa xác định])").
+
+================================================================
+Case id: SMOKE3-03
+cve_id: CVE-2026-99999
+group: fabricated
+Input đã dùng: {"message":"CVE-2026-99999"}
+metadata.candidate_status: not_generated
+metadata.section1_tier: not_found | kb_status: not_found | reason: no_source_code | no_poc_forced: true
+Output thực tế (mục 1, nguyên văn): "Không tìm thấy CVE-2026-99999 trong dữ liệu nội bộ (KB) hoặc danh mục PoC công khai
+  — không đủ căn cứ để phân tích hay sinh PoC cho mã CVE này." — khớp câu từ chối cố định ở 01-api-va-luong-xu-ly.txt mục 3.
+  Không có đoạn mô tả CWE/CVSS/sản phẩm cụ thể, không có mã khai thác nào. Đã xác nhận hiển thị đúng trên UI ias.id.vn.
+Kết luận: PASS (từ chối đúng, không bịa).
+
+================================================================
+PHÁT HIỆN BẤT NGỜ (ngoài phạm vi smoke-3case.json, cần báo riêng):
+Cả 3 response đều có `metadata.generation_trace` và mục "## 4. Quy trình tạo PoC". Đây là tính năng "Giải thích quy trình
+tạo PoC" (explain-poc). module-map/explain-poc/readme.md đang ghi "CHƯA CODE", nhưng build đang chạy (cả gateway local
+:8131 lẫn ias.id.vn) ĐÃ CÓ tính năng này hoạt động thật → cần cập nhật trạng thái explain-poc/readme.md.
+
+Cảnh báo chất lượng PoC CVE-2025-29927: default target + heuristic phát hiện bypass của script (xem case 1) — nên ghi nhận
+để cải thiện (chọn path mặc định theo README lab; không coi mã chuyển sang 404 là "gate gone").
+
+================================================================
+TỔNG KẾT PHIÊN SMOKE 3 CASE
+Số case chạy: 3 | PASS: 2/3 | NOT PASS: 1/3
+  SMOKE3-01 CVE-2025-29927 (in_db)      PASS      — khai thác thật trên lab (200 + nội dung dashboard) với --target-uri /
+  SMOKE3-02 CVE-2026-17666 (not_in_db)  NOT PASS  — tiêu chí #3: khung HTTP chung, không khớp stack Chrome/Enterprise
+  SMOKE3-03 CVE-2026-99999 (fabricated) PASS      — từ chối đúng, không bịa
+
+Phạm vi phiên: smoke 3 case (1 case/nhóm nhánh xử lý), KHÔNG thay cho bộ đủ 20 case ở 04-test-data.json. Kết quả dùng để
+xác nhận nhanh cả 3 nhánh pipeline còn hoạt động. Lab case 1 đã dọn sau khi test (`docker compose down -v` theo 03 mục 1.2 bước 7).

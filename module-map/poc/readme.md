@@ -8,9 +8,10 @@ Cập nhật theo checkout ngày **09/10/2026**, cấu trúc mô phỏng [module
 |---|---|
 | [01-api-va-luong-xu-ly.txt](01-api-va-luong-xu-ly.txt) | Endpoint `/ai/exploit*`, cấu trúc catalog PoC (SQLite), 2 nhánh xử lý khi có/không có PoC thật trong DB, và cơ chế từ chối khi CVE không tồn tại |
 | [02-test-giao-dien-tung-buoc.txt](02-test-giao-dien-tung-buoc.txt) | Các bước bấm trên `ias.id.vn` (`Sinh mã khai thác`) cho từng nhóm CVE |
-| [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) | Tiêu chí PASS cho 3 nhóm CVE: khai thác thật trên lab (in_db), % hữu ích (not_in_db), từ chối/bịa (fabricated); vai trò agent tổng hợp; mẫu báo cáo |
+| [03-tieu-chi-pass.txt](03-tieu-chi-pass.txt) | Tiêu chí PASS cho 3 nhóm CVE, cả 3 đều nhị phân đạt/không đạt: khai thác thật trên lab (in_db), checklist 8 tiêu chí (not_in_db), từ chối/bịa (fabricated); vai trò agent tổng hợp; mẫu báo cáo `.txt` + schema JSON tóm tắt |
 | [04-test-data.json](04-test-data.json) | 20 CVE: 10 có PoC thật trong catalog, 5 CVE thật nhưng chưa có PoC trong catalog, 5 mã CVE không tồn tại (xuyên tạc) |
-| [results/](results/) | Kết quả mỗi lần chạy, một file `.txt` mỗi phiên |
+| [smoke-3case.json](smoke-3case.json) | Bộ test ĐẦU TIÊN rút gọn — đúng 3 case, 1 case/nhánh (in_db/not_in_db/fabricated), xác minh live 15/10/2026, chạy trước bộ đủ 20 case để kiểm nhanh cả 3 nhánh |
+| [results/](results/) | Kết quả mỗi lần chạy: một file `.txt` (bằng chứng chi tiết) + một file `.json` (tóm tắt `cve_id`/`status`/`reason` máy đọc được, xem [03](03-tieu-chi-pass.txt) mục 7.1) mỗi phiên |
 
 ## Vì sao 20 CVE này được chọn (không phải tự bịa)
 
@@ -55,6 +56,23 @@ Cách chấm khác nhau theo từng nhóm — xem chi tiết đầy đủ ở [0
 - **Agent tổng hợp** (vai trò mới, chạy sau cùng): gom kết quả cả 3 nhóm trên thành MỘT báo cáo duy nhất, không tự chấm lại, nhưng **với mỗi case không PASS phải ghi rõ 1 dòng nguyên nhân cụ thể** (không viết chung "lỗi hệ thống") — mẫu và yêu cầu chi tiết ở [03](03-tieu-chi-pass.txt) mục 4 và 6.
 
 Tách vai trò để agent sinh PoC không tự chấm điểm chính nó, giống nguyên tắc đã áp dụng ở [module-map/translate](../translate/readme.md#tổ-chức-agent-khi-chạy-một-phiên-test).
+
+## Luồng 2 agent chạy song song (UI lấy mã ‖ lab chạy khai thác)
+
+Với case nhóm `in_db` (và mọi case có lab), chạy **2 agent song song** thay vì tuần tự, để không chết thời gian chờ: sinh PoC trên UI tốn ~30–60s+ (floor delay ở [02](02-test-giao-dien-tung-buoc.txt) mục 6), còn lab Docker phải pull image + khởi động vài phút. Dựng lab trong lúc chờ UI sinh mã.
+
+```
+t0   Orchestrator:  Agent A (UI)     ||   Agent B (lab)
+t0   Agent B:  pull image -> (sửa compose nếu trùng cổng) -> up -d -> chờ readiness
+t0   Agent A:  mở ias.id.vn/ai/exploit -> nhập CVE -> chờ -> ghi mã + meta
+     Agent B:  poll file mã của A -> copy NGUYÊN mã -> thay tham số -> chạy vs lab -> ghi log
+tend Orchestrator: chờ cả hai -> gom -> agent chấm ([03](03-tieu-chi-pass.txt))
+```
+
+- **Agent A (UI-extractor):** lấy mã + `metadata` (`candidate_status`/`section1_tier`/`sha256`/banner) từ **giao diện CHÍNH `https://ias.id.vn/ai/exploit`** (đăng nhập `dev201`; Devspace `http://127.0.0.1:5173` chỉ để chẩn đoán cục bộ, không dùng làm nguồn ghi kết quả), ghi ra `results/<run>/<case>-code.<ext>` + `<case>-meta.json`. Không tự chấm.
+- **Agent B (lab-runner):** đọc file mã đó, **thay tham số bắt buộc** (target URL, token, path theo lab), chạy nhắm lab, ghi `results/<run>/<case>-exploit.log` + `<case>-verdict.json`. Không sửa logic.
+- **Định nghĩa PASS:** *nguyên mã → chỉ thay tham số → chạy → khai thác thành công.* Phải sửa logic mới chạy ⇒ NOT PASS loại (b) lỗi logic. Lab lệch version CVE ⇒ loại (c). Chi tiết đầy đủ (hợp đồng file handoff, danh mục "thay tham số" được phép, các bẫy lab) ở [02](02-test-giao-dien-tung-buoc.txt) **mục 3.1**.
+- Ví dụ thật: CVE-2026-10053 — mã synthesized + tham số hoá không đủ (auth header sai kiểu) + lab GitLab 17.11.0 ngoài dải bị ảnh hưởng 18.8–19.2 ⇒ NOT PASS, xem [results/2026-10-15-02.txt](results/2026-10-15-02.txt).
 
 ## Chức năng đang dùng
 
