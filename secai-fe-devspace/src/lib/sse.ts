@@ -16,6 +16,13 @@
  *   - `final`         {content, answer, message, metadata: {run_id, profile, tool_registry}}
  *   - `data: [DONE]`  — end of stream (not JSON — must NOT be parsed/dispatched as a frame)
  *
+ * `/ai/exploit-v2/stream` (poc/exploit_v2.py — different shape, own handlers below):
+ *   - `step`          {index, name, status: "running"|"done"|"error", detail, verdict}
+ *   - `log`           {stream, line}                      (shares `onLog` with the above)
+ *   - `question`      {run_id, question_id, text}          — agent paused, needs operator input
+ *   - `final`         {ok, reason, code, run_instructions, run_id}  (DIFFERENT shape from the
+ *                       FinalPayload above — see `ExploitV2FinalPayload`)
+ *
  * `event: <name>\ndata: <json>\n\n` framing, terminated by a literal `data: [DONE]` line.
  */
 
@@ -53,6 +60,34 @@ export interface PhaseEvent {
   structured_error?: string | null;
 }
 
+/** `/ai/exploit-v2/stream` step event — terminal-log line, one per tool call lifecycle. */
+export interface StepEvent {
+  index?: number;
+  name?: string;
+  status?: "running" | "done" | "error";
+  detail?: string;
+  verdict?: string | null;
+}
+
+/** `/ai/exploit-v2/stream` question event — agent paused, needs operator input. Answer via
+ * `POST /ai/exploit-v2/reply {run_id, question_id, answer}` (see api.ts `exploitV2Reply`). */
+export interface QuestionEvent {
+  run_id?: string;
+  question_id?: string;
+  text?: string;
+}
+
+/** `/ai/exploit-v2/stream` final event — DIFFERENT shape from `FinalPayload` above (that one
+ * is for /ai/exploit, /ai/translate, etc.). `ok=false` means FAILED, not a stream error —
+ * `reason` is always human-readable (target thiếu gì / cần gì / không xác định được...). */
+export interface ExploitV2FinalPayload {
+  ok: boolean;
+  reason: string | null;
+  code: string | null;
+  run_instructions: string | null;
+  run_id: string | null;
+}
+
 export interface FinalPayload {
   content?: string;
   answer?: string;
@@ -76,6 +111,10 @@ export interface StreamHandlers {
   onError?: (msg: string) => void;
   onErrorPayload?: (payload: Record<string, unknown>) => void;
   onFinal?: (payload: FinalPayload) => void;
+  /** exploit-v2 only. */
+  onStep?: (s: StepEvent) => void;
+  onQuestion?: (q: QuestionEvent) => void;
+  onExploitV2Final?: (payload: ExploitV2FinalPayload) => void;
 }
 
 function dispatch(ev: string, payload: Record<string, unknown>, h: StreamHandlers): void {
@@ -104,12 +143,19 @@ function dispatch(ev: string, payload: Record<string, unknown>, h: StreamHandler
     case "log":
       h.onLog?.(payload as { stream?: string; line?: string; run_id?: string });
       break;
+    case "step":
+      h.onStep?.(payload as StepEvent);
+      break;
+    case "question":
+      h.onQuestion?.(payload as QuestionEvent);
+      break;
     case "error":
       h.onErrorPayload?.(payload);
       h.onError?.(String(payload.error ?? payload.message ?? "stream error"));
       break;
     case "final":
       h.onFinal?.(payload as FinalPayload);
+      h.onExploitV2Final?.(payload as unknown as ExploitV2FinalPayload);
       break;
     default:
       // Unknown/legacy event carrying token-shaped content — still surface it as a token

@@ -96,6 +96,37 @@ class ExploitAdvanceReplyRequest(BaseModel):
     user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
 
 
+class ExploitV2Request(BaseModel):
+    """POST /ai/exploit-v2/stream — sinh PoC qua pentestcode (IAS.AI), tự khai thác target thật.
+    User CHỈ cần cve+target; `[4]` cơ chế lỗ hổng pentestcode tự websearch (không gateway KB) —
+    xem poc/exploit_v2_prompt.py. Chỉ hoạt động khi IAS_SERVER_URL đã cấu hình + target thuộc
+    allowlist (VERIFY_ALLOWED_TARGETS/VERIFY_ALLOW_ALL), giống mọi exploit endpoint khác."""
+
+    model_config = ConfigDict(extra="allow")
+
+    cve: str = Field(description="Mã CVE, ví dụ CVE-2026-63030.")
+    target: str = Field(description="Target ĐẦY ĐỦ host:port hoặc http(s)://host:port (bắt buộc có port).")
+    mechanism: str | None = Field(
+        default=None,
+        description="Mô tả kỹ thuật cơ chế lỗ hổng do operator tự viết sẵn (tuỳ chọn) — khi có, "
+                    "thay thế bước pentestcode tự websearch ([4] trong prompt 6 phần), ép agent "
+                    "theo đúng mô tả đã nghiên cứu trước thay vì tự mò.")
+    goal: str | None = Field(default=None, description="Tiêu chí thành công cụ thể (tuỳ chọn, có default).")
+    extra_requirements: str | None = Field(default=None, description="Yêu cầu thêm từ user (tuỳ chọn).")
+    user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
+
+
+class ExploitV2ReplyRequest(BaseModel):
+    """POST /ai/exploit-v2/reply — trả lời câu hỏi pentestcode đặt ra giữa chừng (event `question`)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    run_id: str = Field(description="run_id (= session id pentestcode) từ event `question`.")
+    question_id: str = Field(description="question_id từ event `question`.")
+    answer: str = Field(description="Câu trả lời tự do từ user.")
+    user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
+
+
 class BughuntRequest(BaseModel):
     """POST /ai/bughunt/stream — a target-only BugHunter run."""
 

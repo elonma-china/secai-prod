@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # Optional advisory/patch collections queried only for exact, linked CVE refs.
     # Empty by default so deployments opt in after provisioning the collection.
     qdrant_kb_supplemental_collections: str = ""
+    # Separate product-usage-guide collection (IAS user manual), queried by howto_search
+    # for the chat "product_howto" route — never mixed into cve_kb_hybrid, no Neo4j.
+    qdrant_howto_collection: str = "ias_howto_kb"
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
     embedding_api_url: str = ""
@@ -128,6 +131,9 @@ class Settings(BaseSettings):
     # the agent (which still has the LLM <scope_policy> as a second line of defense). True →
     # keep the override; False → restore the pre-fix threshold+margin-only behavior (rollback).
     input_classifier_security_marker_override: bool = True
+    # Same override shape, for IAS product/feature names (see sanitize/gate.py
+    # _IAS_PRODUCT_DOMAIN_RE) — a howto question about this product's own modules.
+    input_classifier_ias_marker_override: bool = True
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
     # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
@@ -283,6 +289,18 @@ class Settings(BaseSettings):
     poc_exploit_api_url: str = ""
     poc_exploit_timeout_s: int = 180
     poc_exploit_node_name: str = "secai-gateway"
+
+    # ── exploit-v2 (pentestcode/IAS.AI làm engine, xem poc/exploit_v2.py) ────────
+    # TẮT mặc định (rỗng = route trả 404, giống pattern poc_exploit_api_url). Sidecar
+    # `@ias/server` chạy CỤC BỘ, không expose ra ngoài — chỉ gateway gọi tới. Authz target
+    # tái dùng verify_allow_all/verify_allowed_targets, giống mọi exploit endpoint khác.
+    ias_server_url: str = ""
+    ias_server_timeout_s: int = 900
+    # ── pool nhiều instance @ias/server để chạy nhiều exploit-v2 ĐỒNG THỜI ─────
+    # Rỗng = 1 slot duy nhất dùng ias_server_url (hành vi cũ, không đổi). Có giá trị =
+    # "url|home" cách nhau bằng dấu phẩy, mỗi slot là 1 process bun riêng với HOME riêng
+    # (engagement/log/session-db tách biệt) — xem poc/ias_pool.py.
+    ias_server_pool: str = ""
 
     # ── lane1 (ReAct kiểu hacker) cho exploit-advance ────────────────────────────
     # TẮT mặc định. Khi CVE KHÔNG có primitive tất định VÀ engine pocsuite không có module

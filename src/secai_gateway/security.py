@@ -275,12 +275,24 @@ def has_hidden_smuggling(text: str) -> bool:
 _THINK_BLOCK = re.compile(r"(?is)<think>.*?</think>")
 _THINK_TAG = re.compile(r"(?is)</?think>")
 _REASONING_LEAK_MARKERS = re.compile(
-    r"(tool_discipline|qdrant_search|neo4j_search|poc_search|web_fetch"
+    r"(tool_discipline|qdrant_search|neo4j_search|poc_search|web_fetch|howto_search"
     r"|Ngữ cảnh\s*:|Người dùng (?:hỏi|đang hỏi|muốn)"
     r"|tôi (?:đã có|cần|nên|sẽ) (?:gọi|tra cứu|trả lời)"
     r"|Kết thúc bằng câu hỏi hỗ trợ"
     r"|Trả lời ngắn gọn, không thêm lời dẫn"
-    r"|Cần tuân thủ ngôn ngữ)",
+    r"|Cần tuân thủ ngôn ngữ"
+    # 2026-11-04: the model occasionally leaks its planning prose in ENGLISH instead of
+    # Vietnamese (observed live on a "kho"-level cross-module comparison question —
+    # "The user asks in Vietnamese about... I should use howto_search...") — the
+    # Vietnamese-only markers above never matched, so the leak shipped verbatim to the
+    # user. These are the self-referential English planning phrases actually observed;
+    # kept narrow (first-person deliberation about the user's request, not just any
+    # English text) so a legitimate English-language answer is never falsely flagged.
+    r"|\bThe user (?:asks|is asking|wants)\b"
+    r"|\bI should (?:use|call|answer)\b"
+    r"|\bThis is a .{0,40}question,? so\b"
+    r"|\bthe context note already\b"
+    r"|\blet me (?:answer|check|use)\b)",
     re.I,
 )
 _ANSWER_PIVOT = re.compile(
@@ -291,6 +303,12 @@ _ANSWER_PIVOT = re.compile(
     r"|dưới\s+đây\s+là\s+câu\s+trả\s+lời)"
     r"\s*:?\s*$",
 )
+# English-leak fallback: when a marker above matches but there is no Vietnamese pivot line
+# (the leak is English prose that just runs straight into the Vietnamese answer with no
+# explicit "here's my answer" marker), cut at the first line that is itself substantially
+# Vietnamese — i.e. contains a Vietnamese-only diacritic letter. A plain English answer
+# never trips this (no such letters), so it cannot mangle a legitimate English reply.
+_VIETNAMESE_LINE = re.compile(r"(?m)^.*[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ].*$", re.I)
 
 
 def strip_reasoning_leak(text: str) -> str:
@@ -304,6 +322,12 @@ def strip_reasoning_leak(text: str) -> str:
             tail = cleaned[pivots[-1].end():].strip()
             if tail:  # never blank out the whole message
                 cleaned = tail
+        else:
+            first_vi = _VIETNAMESE_LINE.search(cleaned)
+            if first_vi:
+                tail = cleaned[first_vi.start():].strip()
+                if tail:
+                    cleaned = tail
     return cleaned.strip() or text.strip()
 
 

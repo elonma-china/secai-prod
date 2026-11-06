@@ -17,7 +17,15 @@ import type {
 } from "./types";
 
 export { ApiError };
-export type { FinalPayload, PhaseEvent, StreamHandlers, ToolCall } from "./lib/sse";
+export type {
+  ExploitV2FinalPayload,
+  FinalPayload,
+  PhaseEvent,
+  QuestionEvent,
+  StepEvent,
+  StreamHandlers,
+  ToolCall,
+} from "./lib/sse";
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "") || "";
 
@@ -237,6 +245,26 @@ export function exploitStream(
   signal?: AbortSignal,
 ): Promise<void> {
   return streamRequest(`${BASE}/ai/exploit/stream`, body, handlers, signal);
+}
+
+/** `POST /ai/exploit-v2/stream` — body: {cve, target, goal?, extra_requirements?, user_id}.
+ * `target` PHẢI đầy đủ host:port — gateway trả `final {ok:false, reason: "..."}` ngay (không
+ * chạy pentestcode) nếu thiếu, xem `poc/exploit_v2_prompt.py::validate_full_target`. */
+export function exploitV2Stream(
+  body: { cve: string; target: string; goal?: string; extra_requirements?: string; user_id?: string },
+  handlers: StreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamRequest(`${BASE}/ai/exploit-v2/stream`, body, handlers, signal);
+}
+
+/** `POST /ai/exploit-v2/reply` — trả lời event `question` nhận được TRÊN kết nối stream đang
+ * mở; KHÔNG mở stream mới, kết nối gốc sẽ tự tiếp tục nhận step/log sau khi gọi hàm này. */
+export async function exploitV2Reply(
+  body: { run_id: string; question_id: string; answer: string; user_id?: string },
+  signal?: AbortSignal,
+): Promise<{ ok: boolean }> {
+  return postJson("/ai/exploit-v2/reply", body, signal);
 }
 
 export async function report(body: Record<string, unknown> & { user_id: string }, signal?: AbortSignal): Promise<Record<string, unknown>> {

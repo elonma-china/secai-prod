@@ -59,10 +59,13 @@ from ..poc.verify import verify_poc
 from ..retrieval import gather_web_hints
 from ..retrieval.filters import ENTITY_ID_RES
 from ..retrieval.qdrant import _qdrant_search
+from ..retrieval.howto import _howto_search
 from ..retrieval.date_lookup import _date_grounding
 from ..sanitize import classify_input, decide, judge_injection
 from ..sanitize.classifier import note_verdict, verdict_stats
-from ..sanitize.gate import Action, Decision, GREET_MSG, REFUSE_OFFTOPIC_MSG, REFUSE_INJECTION_MSG
+from ..sanitize.gate import (
+    Action, Decision, GREET_MSG, REFUSE_OFFTOPIC_MSG, REFUSE_INJECTION_MSG, has_scope_marker,
+)
 from ..sanitize.cascade import is_direct_override, judge_chat_scope, judge_security_input
 from ..security import (
     UNSUPPORTED_LANGUAGE_MSG, has_hidden_smuggling, is_unsupported_language,
@@ -85,6 +88,8 @@ from .schemas import (
     ExploitAdvanceRequest,
     ExploitAdvanceReplyRequest,
     ExploitRunRequest,
+    ExploitV2Request,
+    ExploitV2ReplyRequest,
     LegacyRequest,
     ToolRequest,
     VerifyRequest,
@@ -807,7 +812,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # a streaming client, just without the raw `result` body.
         if prompt_override is None and grounding:
             metadata = {**metadata, "sources": [{
-                "name": "qdrant_search",
+                "name": grounding.get("tool", "qdrant_search"),
                 "query": grounding.get("query"),
                 "summary": grounding.get("summary"),
             }]}
@@ -981,6 +986,21 @@ def register_routes(app: FastAPI, state: Any) -> None:
         query = prompt
         if not any(regex.search(prompt or "") for regex in ENTITY_ID_RES.values()):
             plan = classify_chat_grounding(prompt)
+            if plan.route == "product_howto":
+                # IAS user-guide question: pre-fetch from ias_howto_kb via howto_search,
+                # never qdrant_search/neo4j_search — cve_kb_hybrid/Neo4j stay untouched.
+                try:
+                    _t0 = time.monotonic()
+                    howto_result = await _howto_search(query=prompt, ctx=None, top_k=5)
+                    howto_ms = int(round((time.monotonic() - _t0) * 1000))
+                except Exception:
+                    logger.exception("howto pre-fetch lỗi — dùng nguyên prompt gốc, không chặn chat")
+                    return prompt, None
+                if not howto_result.content:
+                    return prompt, None
+                return prompt, {"query": prompt, "result": howto_result.content,
+                                "summary": howto_result.summary, "duration_ms": howto_ms,
+                                "tool": "howto_search"}
             if plan.route != "id_lookup":
                 return prompt, None
             entity_id = await _resolve_followup_entity_id(session_id)
@@ -1007,7 +1027,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # "query" phản ánh CHUỖI THẬT đã gửi cho qdrant_search (có thể là entity-id resolved
         # + câu hỏi gốc, không chỉ câu hỏi gốc) — minh bạch cho FE ToolTimeline/API JSON.
         return prompt, {"query": query, "result": result.content,
-                        "summary": result.summary, "duration_ms": grounding_ms}
+                        "summary": result.summary, "duration_ms": grounding_ms,
+                        "tool": "qdrant_search"}
 
     def _grounding_context_text(grounding: dict[str, Any] | None) -> str | None:
         """Builds the KB-grounding block delivered to the model via LinchRunner's
@@ -1041,13 +1062,17 @@ def register_routes(app: FastAPI, state: Any) -> None:
             return []
         tool_id = f"pre-fetch-{uuid4()}"
         summary = grounding.get("summary")
+        # "tool" defaults to qdrant_search: date_lookup's grounding dicts predate this key
+        # and were always rendered as qdrant_search; howto pre-fetch sets it explicitly
+        # (see _ground_chat_prompt's product_howto branch) so ToolTimeline shows howto_search.
+        tool_name = grounding.get("tool", "qdrant_search")
         return [
             sse_frame("tool_call", {
-                "id": tool_id, "name": "qdrant_search",
+                "id": tool_id, "name": tool_name,
                 "input": {"query": grounding["query"]}, "summary": summary,
             }),
             sse_frame("tool_result", {
-                "id": tool_id, "name": "qdrant_search", "is_error": False,
+                "id": tool_id, "name": tool_name, "is_error": False,
                 "duration_ms": int(grounding.get("duration_ms", 0) or 0),
                 "summary": summary,
                 "result": (grounding.get("result") or "")[:_SSE_RESULT_PREVIEW_CHARS],
@@ -1176,7 +1201,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         verdict = replace(verdict, injection=injection,
                                           intent="security" if security else "offtopic")
                         decision = decide(verdict, state.settings, text=prompt)
-                        if not injection and not security:
+                        # 2026-11-04: don't re-force REFUSE_OFFTOPIC over an explicit scope
+                        # marker (CWE/CVE/... or an IAS product/feature name, see gate.py::
+                        # has_scope_marker) — a "how do I use feature X" howto question is
+                        # neither an injection nor a textbook security topic, so the judge's
+                        # (injection=False, security=False) verdict is CORRECT, but that is
+                        # not evidence the question is off-topic for THIS product's chatbot.
+                        if not injection and not security and not has_scope_marker(prompt, state.settings):
                             decision = Decision(Action.REFUSE_OFFTOPIC, REFUSE_OFFTOPIC_MSG, "offtopic", pii=verdict.pii)
                         logger.info("input-security-judge run_id=%s injection=%s security=%s action=%s",
                                     run_id, injection, security, decision.action.value)
@@ -4313,6 +4344,104 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return StreamingResponse(gen(), media_type="text/event-stream",
             headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive",
                      "X-Accel-Buffering": "no"})
+
+    def _exploit_v2_authz(target: str) -> None:
+        """Fail-closed authz cho exploit-v2 — tái dùng NGUYÊN allowlist của exploit-advance
+        (`target_allowed`/`verify_allow_all`), cộng thêm việc sidecar phải được cấu hình."""
+        from ..poc.verify import target_allowed
+        if not (state.settings.ias_server_url or "").strip() and not (state.settings.ias_server_pool or "").strip():
+            raise HTTPException(404, "exploit-v2 disabled (IAS_SERVER_URL/IAS_SERVER_POOL chưa cấu hình)")
+        if not target_allowed(state.settings, target) and not getattr(state.settings, "verify_allow_all", False):
+            raise HTTPException(403, f"Target '{target}' ngoài allowlist (VERIFY_ALLOWED_TARGETS/VERIFY_ALLOW_ALL)")
+
+    @app.post("/ai/exploit-v2/stream")
+    async def exploit_v2_stream(body: ExploitV2Request) -> StreamingResponse:
+        """Sinh PoC qua pentestcode (IAS.AI): user chỉ nhập cve+target, pentestcode tự
+        websearch cơ chế + khai thác target thật, stream step/log/question/final cho FE.
+        Output contract (`RESULT:`/`REASON:`/`## Cách chạy`) parse ở poc/exploit_v2.py."""
+        _exploit_v2_authz(body.target)
+        from ..poc.exploit_v2 import run_exploit_v2
+        run_id = f"ev2:{uuid4().hex}"
+        _audit(run_id, "exploit_v2_http", f"{body.cve}:{body.target}",
+               {"user_id": body.user_id, "target": body.target, "cve": body.cve})
+
+        async def gen() -> AsyncIterator[bytes]:
+            final_seen = False
+            # Queue để bridge giữa producer (run_exploit_v2) và SSE generator,
+            # cho phép yield keepalive khi model chưa emit event (tránh Cloudflare 100s timeout).
+            ev_queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+            async def _fill() -> None:
+                try:
+                    async for ev in run_exploit_v2(
+                            cve=body.cve, target=body.target,
+                            extra_requirements=body.extra_requirements,
+                            goal=body.goal, mechanism=body.mechanism,
+                            ias_server_pool=state.settings.ias_server_pool,
+                            ias_server_url=state.settings.ias_server_url):
+                        await ev_queue.put(ev)
+                except Exception:
+                    logger.exception("exploit-v2 stream failed target=%s cve=%s",
+                                     body.target, body.cve)
+                    await ev_queue.put({"type": "_error"})
+                finally:
+                    await ev_queue.put(None)
+
+            fill_task = asyncio.create_task(_fill())
+            try:
+                while True:
+                    try:
+                        ev = await asyncio.wait_for(ev_queue.get(), timeout=20)
+                    except asyncio.TimeoutError:
+                        yield b": ka\n\n"  # keepalive — giữ Cloudflare tunnel sống
+                        continue
+                    if ev is None:
+                        break
+                    et = ev.get("type")
+                    if et == "_error":
+                        yield sse_frame("error", {"error": STREAM_ERROR_MESSAGE})
+                        if not final_seen:
+                            yield sse_frame("final", {"ok": False, "reason": STREAM_ERROR_MESSAGE,
+                                                      "code": None, "run_instructions": None,
+                                                      "run_id": None})
+                        break
+                    if et == "final":
+                        final_seen = True
+                        _audit(run_id, "exploit_v2_final", f"{body.cve}:{body.target}",
+                               {"ok": ev.get("ok"), "reason": ev.get("reason"),
+                                "session_id": ev.get("run_id")})
+                        yield sse_frame("final", {k: ev.get(k) for k in
+                                                  ("ok", "reason", "code", "run_instructions", "run_id")})
+                    elif et == "step":
+                        yield sse_frame("step", {k: ev.get(k) for k in
+                                                 ("index", "name", "status", "detail", "verdict")})
+                    elif et == "log":
+                        yield sse_frame("log", {"stream": ev.get("stream", "stdout"),
+                                                "line": ev.get("line", "")})
+                    elif et == "question":
+                        yield sse_frame("question", {k: ev.get(k) for k in
+                                                     ("run_id", "question_id", "text")})
+            finally:
+                fill_task.cancel()
+            yield b"data: [DONE]\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache, no-transform", "Connection": "keep-alive",
+                     "X-Accel-Buffering": "no"})
+
+    @app.post("/ai/exploit-v2/reply")
+    async def exploit_v2_reply(body: ExploitV2ReplyRequest) -> dict[str, Any]:
+        """Trả lời câu hỏi pentestcode đặt giữa chừng (event `question` trên kết nối
+        `/ai/exploit-v2/stream` ĐANG MỞ — khác exploit-advance, KHÔNG cần stream riêng ở đây:
+        session pentestcode tự resume, kết nối stream gốc sẽ tiếp tục nhận step/log sau đó)."""
+        from ..poc import ias_pool
+        from ..poc.exploit_v2 import reply_exploit_v2_question
+        _audit(body.run_id, "exploit_v2_reply", body.question_id,
+               {"user_id": body.user_id, "answer_len": len(body.answer)})
+        slot = ias_pool.slot_for_run(body.run_id)
+        url = slot["url"] if slot else state.settings.ias_server_url
+        await reply_exploit_v2_question(url, body.question_id, body.answer)
+        return {"ok": True}
 
     @app.post("/ai/exploit-advance")
     async def exploit_advance(body: ExploitAdvanceRequest) -> dict[str, Any]:
