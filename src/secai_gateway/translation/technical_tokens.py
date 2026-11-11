@@ -30,8 +30,8 @@ _PLACEHOLDER_LIKE = re.compile(r"⟦[A-Za-z][A-Za-z0-9:]*⟧")
 # secret). Over-masking is harmless: mask-all-then-restore is lossless.
 _CREDENTIAL = re.compile(
     r"(?i)(?<![A-Za-z0-9_])(?:(?:password|passwd|pwd|secret|token|api[_-]?key|authorization|"
-    r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*|mật\s*khẩu\s+là\s+)"
-    r"(\S+?)(?=[,;]?(?:\s|$))")
+    r"mật\s*khẩu|tài\s*khoản)\s*[:=]\s*|(?P<prose>mật\s*khẩu\s+là\s+))"
+    r"(?P<value>\S+?)(?=[,;]?(?:\s|$))")
 # Weaker labels also get masked in the source, but a translated label ("Người dùng:"
 # -> "User:") must not turn its translated value into an "invented literal" when the
 # output is re-scanned, so these are skipped by the output-side integrity check.
@@ -130,7 +130,8 @@ def _url_spans(text: str) -> tuple[tuple[int, int], ...]:
     return tuple(spans)
 
 
-def literal_spans(text: str, *, weak_labels: bool = True) -> tuple[tuple[int, int], ...]:
+def literal_spans(text: str, *, weak_labels: bool = True,
+                  prose_secrets_only: bool = False) -> tuple[tuple[int, int], ...]:
     """Return maximal disjoint technical spans in source code-point offsets."""
     candidates: list[tuple[int, int]] = []
     for match in _IP.finditer(text):
@@ -154,7 +155,12 @@ def literal_spans(text: str, *, weak_labels: bool = True) -> tuple[tuple[int, in
                 candidates.append((match.start(), match.start() + len(token)))
                 break
     for match in _CREDENTIAL.finditer(text):
-        candidates.append(match.span(1))
+        # "mật khẩu là <word>" is ordinary Vietnamese prose ("the password is a long string"):
+        # when re-scanning a *translation*, only a secret-looking value (digit/symbol) counts.
+        if (prose_secrets_only and match.group("prose")
+                and all(ch.isalpha() for ch in match.group("value").strip(".,;:!?()\"'")) ):
+            continue
+        candidates.append(match.span("value"))
     if weak_labels:
         for match in _CREDENTIAL_WEAK.finditer(text):
             candidates.append(match.span(1))

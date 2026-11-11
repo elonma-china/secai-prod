@@ -4,7 +4,7 @@ Toàn bộ API AI **đang chạy thật trên production**. Base URL: `http://<g
 
 **Không cần header xác thực** cho các endpoint AI (trừ `/admin/refresh-models`). **Không CORS-preflight** — chỉ `POST`/`GET`, header `Content-Type: application/json`.
 
-**Ngôn ngữ:** chỉ nhận **tiếng Việt hoặc tiếng Anh**. Tin nhắn phần lớn ký tự phi Latin (Trung/Nhật/Hàn/Cyrillic...) bị từ chối tự động ở mọi endpoint chat — xem [§8 Mã lỗi](#8-mã-lỗi-chung).
+**Ngôn ngữ:** chỉ nhận **tiếng Việt hoặc tiếng Anh**. Tin nhắn phần lớn ký tự phi Latin (Trung/Nhật/Hàn/Cyrillic...) bị từ chối tự động ở mọi endpoint chat — xem [§9 Mã lỗi](#9-mã-lỗi-chung).
 
 ---
 
@@ -19,9 +19,10 @@ Toàn bộ API AI **đang chạy thật trên production**. Base URL: `http://<g
 4. [Báo cáo](#4-báo-cáo--aigenerate-report)
 5. [Báo cáo thống kê](#5-báo-cáo-thống-kê--aigenerate-statistical-report)
 6. [Nghiên cứu khai thác (exploit)](#6-nghiên-cứu-khai-thác--aiexploit)
-7. [Health / Admin](#7-health--admin)
-8. [Mã lỗi chung](#8-mã-lỗi-chung)
-9. [Ghi chú vận hành & giới hạn đã biết](#9-ghi-chú-vận-hành--giới-hạn-đã-biết)
+7. [Sinh PoC tự động khai thác target thật (exploit-v2)](#7-sinh-poc-tự-động-khai-thác-target-thật--aiexploit-v2)
+8. [Health / Admin](#8-health--admin)
+9. [Mã lỗi chung](#9-mã-lỗi-chung)
+10. [Ghi chú vận hành & giới hạn đã biết](#10-ghi-chú-vận-hành--giới-hạn-đã-biết)
 
 ---
 
@@ -348,7 +349,99 @@ POST /ai/exploit/stream
 
 ---
 
-## 7. Health / Admin
+## 7. Sinh PoC tự động khai thác target thật — `/ai/exploit-v2`
+
+```
+POST /ai/exploit-v2/stream
+POST /ai/exploit-v2/reply
+```
+
+Khác hẳn `/ai/exploit` (§6 — chỉ sinh PoC bằng LLM + tra KB nội bộ): `/ai/exploit-v2` giao việc cho
+**pentestcode (IAS.AI, sidecar `@ias/server`)** — một agent tự websearch cơ chế lỗ hổng rồi **tự
+thực sự khai thác target thật** (không mô phỏng), trả log từng bước kiểu TUI pentest. Dùng bởi màn
+hình FE "Sinh PoC (v2)" (`ExploitV2Screen.tsx`).
+
+**Điều kiện bật tính năng (fail-closed, kiểm tra TRƯỚC khi stream mở):**
+- Cần cấu hình `IAS_SERVER_URL` hoặc `IAS_SERVER_POOL` trên gateway — thiếu cả hai →
+  `404 {"detail": "exploit-v2 disabled (IAS_SERVER_URL/IAS_SERVER_POOL chưa cấu hình)"}`.
+- `target` phải nằm trong allowlist `VERIFY_ALLOWED_TARGETS` (hoặc `VERIFY_ALLOW_ALL=true`) — dùng
+  chung cơ chế với `/ai/exploit-advance`. Ngoài allowlist → `403`.
+
+### 7.1 `POST /ai/exploit-v2/stream`
+
+**Request:**
+```json
+{
+  "cve": "CVE-2026-63030",
+  "target": "172.19.0.3:80",
+  "extra_requirements": "credential seed, flag path... (tuỳ chọn)",
+  "goal": "tiêu chí thành công cụ thể (tuỳ chọn, có default)",
+  "mechanism": "mô tả kỹ thuật cơ chế lỗ hổng do operator tự viết sẵn (tuỳ chọn)",
+  "user_id": "user-123"
+}
+```
+- `cve`, `target` **bắt buộc**. `target` phải **đầy đủ `host:port`** (hoặc `http(s)://host:port`) —
+  thiếu port → `final {"ok": false, "reason": "..."}` trả ngay, **không** chạy pentestcode.
+- `mechanism`: khi có, thay thế bước agent tự websearch cơ chế lỗ hổng, ép agent theo đúng mô tả đã
+  nghiên cứu sẵn thay vì tự mò.
+- `extra_requirements`, `goal`, `user_id` đều tuỳ chọn.
+
+**Response:** `text/event-stream` — **shape khác hoàn toàn** bộ event dùng chung ở §0/§6 (không có
+`token`/`tool_call`/`section1`/`regenerate`):
+
+| `event:` | `data` payload | Ý nghĩa |
+|---|---|---|
+| `step` | `{"index","name","status":"running"\|"done"\|"error","detail","verdict"}` | Một bước trong vòng đời tool call (dòng log terminal) |
+| `log` | `{"stream":"stdout"\|"stderr","line":"..."}` | Log thô từ lệnh agent đang chạy trên target |
+| `question` | `{"run_id","question_id","text"}` | Agent **dừng lại**, cần operator trả lời (vd thiếu credential) — trả lời qua [§7.2](#72-post-aiexploit-v2reply) |
+| `error` | `{"error": "..."}` | Lỗi runtime — sau đó vẫn có `final` với `ok:false` |
+| `final` | `{"ok","reason","code","run_instructions","attempted_steps","run_id"}` | **Nguồn chân lý**, chỉ gửi **1 lần**, field khác hẳn `final` của mọi endpoint khác |
+| — | `data: [DONE]` | Đóng stream |
+
+`final` fields:
+- `ok` (bool) — `true` = đã **verify khai thác chạy được thật** trên target.
+- `reason` (string\|null) — lý do thất bại khi `ok:false`, luôn human-readable.
+- `code` (string\|null) — mã PoC sinh ra (best-effort, có cả khi `ok:false`).
+- `run_instructions` (string\|null) — hướng dẫn chạy lại dạng numbered-list markdown (khi `ok:true`).
+- `attempted_steps` (string\|null) — **chỉ có khi `ok:false`**: các lệnh/bước agent đã thực sự thử
+  trước khi dừng, cùng định dạng numbered-list, để user tiếp tục điều tra từ đó.
+- `run_id` (string\|null) — session id phía pentestcode; dùng làm `run_id` khi trả lời `question`
+  ([§7.2](#72-post-aiexploit-v2reply)).
+
+> ⚠️ Stream gửi dòng keepalive `: ka\n\n` (comment SSE, không phải JSON) mỗi 20s khi agent chưa có
+> event mới, để giữ tunnel Cloudflare không timeout ở 100s. Parser FE phải bỏ qua dòng bắt đầu bằng
+> `:` thay vì cố `JSON.parse` nó.
+
+### 7.2 `POST /ai/exploit-v2/reply`
+
+Trả lời event `question` nhận được **trên kết nối `/ai/exploit-v2/stream` đang mở** — **không mở
+stream mới**; session pentestcode tự resume, kết nối gốc tự tiếp tục nhận `step`/`log` sau đó.
+
+**Request:**
+```json
+{ "run_id": "<run_id từ event question>", "question_id": "<question_id từ event question>",
+  "answer": "câu trả lời tự do", "user_id": "user-123" }
+```
+**Response:** `{"ok": true}`
+
+### 7.3 Luồng phụ sau khi thành công: tự tóm tắt CVE qua session-chat
+
+Màn hình "Sinh PoC (v2)" tự động gọi thêm (không phải field riêng của exploit-v2, nhưng là một phần
+hành vi của màn hình này) ngay khi nhận `final.ok === true`:
+1. `POST /sessions` ([§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)) — tạo 1
+   session standalone mới, tiêu đề `cve-info-<CVE>`.
+2. `POST /sessions/{sid}/chat/stream` ([§1.1](#11-chat-theo-session-cụ-thể--sessionssidchat)) — hỏi
+   model tóm tắt CVE bằng tiếng Việt (mô tả lỗ hổng, phiên bản ảnh hưởng, CVSS, cách khai thác tóm
+   tắt, cách vá).
+
+Đây là lý do DevTools thấy một request `/sessions/sess:.../chat/stream` xuất hiện ngay sau khi chạy
+"Sinh PoC (v2)" dù nó không nằm trong mục exploit — request đó dùng **đúng** API session-chat đã
+tài liệu hoá ở §1.1/§1.2, chỉ là được gọi **tự động từ bên trong flow exploit-v2** (không phải user
+tự gõ chat), nên dễ gây nhầm "thiếu tài liệu" khi đọc riêng mục exploit.
+
+---
+
+## 8. Health / Admin
 
 ```
 GET /health
@@ -365,13 +458,13 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 ---
 
-## 8. Mã lỗi chung
+## 9. Mã lỗi chung
 
 | Mã | Khi nào | Body |
 |---|---|---|
 | `400` | Quản lý session (§1.2): thiếu `name`/`title`, `title` > 200 ký tự, `POST /sessions` có `project_id` khác null, hoặc PATCH không có gì để cập nhật. Quản lý project (§1.3): thiếu `name` khi tạo/đổi tên project | `{"error","message"}` |
-| `403` | Sửa/xoá session/project không phải của mình (mutate sai chủ — §1.2/§1.3) | `{"error","message"}` |
-| `404` | Session/project không tồn tại hoặc đọc sai chủ (không tiết lộ tồn tại); PATCH lên row hội thoại cũ (`chat:`/`exploit:`); **hoặc endpoint đã bị gỡ** (`/ai/conversations/*`, §2) | `{"detail"}` hoặc `{"error","message"}` |
+| `403` | Sửa/xoá session/project không phải của mình (mutate sai chủ — §1.2/§1.3); hoặc `target` của `/ai/exploit-v2/*` ngoài allowlist (§7) | `{"error","message"}` hoặc `{"detail"}` |
+| `404` | Session/project không tồn tại hoặc đọc sai chủ (không tiết lộ tồn tại); PATCH lên row hội thoại cũ (`chat:`/`exploit:`); endpoint đã bị gỡ (`/ai/conversations/*`, §2); **hoặc `/ai/exploit-v2/*` khi `IAS_SERVER_URL`/`IAS_SERVER_POOL` chưa cấu hình (§7)** | `{"detail"}` hoặc `{"error","message"}` |
 | `422` | Request rỗng — thiếu mọi field text hợp lệ; hoặc `scope` không hợp lệ ở `GET /sessions` | `{"detail": "..."}` |
 | `429` | Vượt rate limit | `{"detail": "rate limit exceeded"}` |
 | `503` | Model tạm thời không phản hồi | `{"detail": "AI service unavailable: ..."}` |
@@ -385,9 +478,9 @@ POST /admin/refresh-models   (header X-API-Key bắt buộc)
 
 ---
 
-## 9. Ghi chú vận hành & giới hạn đã biết
+## 10. Ghi chú vận hành & giới hạn đã biết
 
-- **Rate limit** (mỗi IP): `/ai/chat`, `/sessions/{sid}/chat[/stream]` = **90 req/60s**; `/sessions`, `/projects`, và mọi path bắt đầu bằng `/projects/`/`/sessions/` (ngoại trừ chat ở trên) = **120 req/60s** (xem [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)); `/ai/exploit` = 20/60s; `/ai/translate`, `/ai/generate-report`, `/ai/generate-statistical-report` = 10/60s; còn lại = 15/60s mặc định. `/stream` tính chung hạn ngạch với bản không-stream.
+- **Rate limit** (mỗi IP): `/ai/chat`, `/sessions/{sid}/chat[/stream]` = **90 req/60s** (hiện tại hàng đợi thực tế đã nâng lên **150**, xem `route_limit()` trong `src/secai_gateway/api/middleware.py`); `/sessions`, `/projects`, và mọi path bắt đầu bằng `/projects/`/`/sessions/` (ngoại trừ chat ở trên) = **120 req/60s** (xem [§1.2](#12-quản-lý-cuộc-trò-chuyện--sessions-projectspidsessions)); `/ai/exploit` = 20/60s; `/ai/translate`, `/ai/generate-report`, `/ai/generate-statistical-report` = 10/60s; **`/ai/exploit-v2/stream` và `/ai/exploit-v2/reply` KHÔNG có case riêng → rơi về mức mặc định 15 req/60s** (xem [§7](#7-sinh-poc-tự-động-khai-thác-target-thật--aiexploit-v2)), thấp hơn hẳn `/ai/exploit` dù là endpoint "nặng" hơn — cân nhắc khi FE retry/poll; còn lại = 15/60s mặc định. `/stream` tính chung hạn ngạch với bản không-stream.
 - **Air-gap:** hệ thống **không gọi internet** khi trả lời (không `web_fetch`, không tra OWASP/CWE Top-N từ web) — toàn bộ dựa trên KB nội bộ (Qdrant/Neo4j) + kiến thức model.
 - **SSE `regenerate`:** khi hook grounding buộc model viết lại (force-continue, thường khi câu hỏi CVE/CWE được trả lời mà chưa tra KB), stream phát 1 frame `regenerate` `{"hook","reason"}` đánh dấu ranh giới, rồi stream lại `token` mới. FE reset buffer khi nhận frame này (xem [§0](#0-sse--quy-ước-dùng-chung)); và bất kể có `regenerate` hay không, luôn ghi đè bằng `final.content` làm nội dung persistent — đừng dùng chuỗi `token` ghép lại.
 - **Bộ nhớ hội thoại:**

@@ -561,15 +561,48 @@ _IAS_HOWTO_RE = re.compile(
     r"|màn\s*hình\s+(?:nào|gì)"
     r"|giao\s*diện\s+(?:nào|phần\s*mềm|IAS)"
     r"|chức\s*năng\s+(?:này|nào|gì)\s+(?:dùng|ở\s*đâu|nằm\s*ở)"
-    r"|(?:hệ\s*thống\s*ẩn\s*danh|quét\s*diện\s*rộng|quét\s*chuyên\s*sâu|scan\s*engine|"
-    r"engine\s*quét|nền\s*tảng\s*AI|dịch\s*văn\s*bản|sinh\s*mã\s*khai\s*thác|"
-    r"data\s*lake|phân\s*hệ\s*báo\s*cáo|dashboard|phân\s*hệ\s*quản\s*lý\s*lịch|"
-    r"đối\s*tượng\s*theo\s*dõi|quản\s*lý\s*vai\s*trò|quản\s*lý\s*người\s*dùng|"
-    r"xác\s*thực\s*hai\s*yếu\s*tố|2FA|tài\s*khoản\s*lộ\s*lọt|trợ\s*lý\s*ảo\s*ATTT|"
-    r"đổi\s*mật\s*khẩu|cấp\s*lại\s*mật\s*khẩu|nhận\s*thông\s*báo\s*qua\s*telegram)"
     r")",
     re.I | re.S,
 )
+
+# Multi-word Vietnamese names of IAS modules from the user-guide ToC — specific enough that
+# they don't collide with ordinary English-language CVE/security prose, so they are safe to
+# match standalone (no context qualifier required).
+_IAS_HOWTO_SAFE_KEYWORDS_RE = re.compile(
+    r"hệ\s*thống\s*ẩn\s*danh|quét\s*diện\s*rộng|quét\s*chuyên\s*sâu|sinh\s*mã\s*khai\s*thác|"
+    r"phân\s*hệ\s*báo\s*cáo|phân\s*hệ\s*quản\s*lý\s*lịch|đối\s*tượng\s*theo\s*dõi|"
+    r"quản\s*lý\s*vai\s*trò|quản\s*lý\s*người\s*dùng|tài\s*khoản\s*lộ\s*lọt|"
+    r"trợ\s*lý\s*ảo\s*ATTT|nhận\s*thông\s*báo\s*qua\s*telegram",
+    re.I | re.S,
+)
+
+# Generic terms ("dashboard", "2FA", "data lake", …) that are common vocabulary in genuine
+# security/CVE prose too (e.g. "Kubernetes dashboard RCE", "bypass 2FA trong GitLab") — on
+# their own these caused real misrouting (see code-review 2026-11-06). Only treated as an IAS
+# howto signal when ALSO qualified by an explicit product/software context word nearby.
+_IAS_HOWTO_GENERIC_KEYWORDS_RE = re.compile(
+    r"scan\s*engine|engine\s*quét|nền\s*tảng\s*AI|dịch\s*văn\s*bản|data\s*lake|dashboard|"
+    r"xác\s*thực\s*hai\s*yếu\s*tố|2FA|đổi\s*mật\s*khẩu|cấp\s*lại\s*mật\s*khẩu",
+    re.I | re.S,
+)
+_IAS_CONTEXT_QUALIFIER_RE = re.compile(
+    r"\bIAS\b|hệ\s*thống|phần\s*mềm|module|phân\s*hệ|tính\s*năng|màn\s*hình|giao\s*diện",
+    re.I | re.S,
+)
+
+
+def _is_ias_howto_question(text: str) -> bool:
+    """True when ``text`` is a genuine IAS product how-to question.
+
+    Split out of a single big regex (see code-review 2026-11-06) because bare generic
+    keywords like "dashboard"/"2FA"/"data lake" are also ordinary security vocabulary —
+    matching them anywhere misrouted real CVE/security questions away from cve_kb_hybrid.
+    Generic keywords now require a nearby IAS/product qualifier word to count."""
+    if _IAS_HOWTO_RE.search(text) or _IAS_HOWTO_SAFE_KEYWORDS_RE.search(text):
+        return True
+    if _IAS_HOWTO_GENERIC_KEYWORDS_RE.search(text) and _IAS_CONTEXT_QUALIFIER_RE.search(text):
+        return True
+    return False
 
 
 _CODE_AUDIT_RE = re.compile(
@@ -780,7 +813,7 @@ def classify_chat_grounding(prompt: str, knowledge_enabled: bool = False,
         return ChatGroundingPlan("entity", False, True, knowledge=knowledge_enabled and bool(_REMEDIATION_RE.search(_fold_text(text))))
     if id_lookup:
         return ChatGroundingPlan("id_lookup", False, True)
-    if bool(_IAS_HOWTO_RE.search(text)):
+    if _is_ias_howto_question(text):
         return ChatGroundingPlan("product_howto", False, True, kb_target="howto")
     if knowledge_enabled and _TAXONOMY_LIST_RE.search(text):
         return ChatGroundingPlan("taxonomy", False, False, knowledge=True)
@@ -848,6 +881,25 @@ _DEFLECTION_RE = re.compile(
     r"|không\s*tìm\s*thấy\s*thông\s*tin",
     re.I,
 )
+# Observed in production (2026-11-10, "CVE nào mới nhất" / a howto question with 0 KB hits):
+# asked an aggregate/no-match question, the model invented a plausible-sounding "kết nối
+# đang lỗi" excuse instead of reporting what the tool actually returned — a clean 200
+# response, either real hits or an honest "Không tìm thấy..." string (see
+# retrieval/qdrant.py / retrieval/howto.py's own empty-result ToolResult text). Verified
+# against the gateway's own httpx logs for both incidents: qdrant_search and howto_search
+# both logged 200 OK at the exact timestamp the model claimed a connection failure. The
+# claim is never grounded in a real tool outcome — check it against ctx.result.is_error
+# (set to True ONLY by linch's own exception/timeout wrapper, scheduler.py::_execute_one),
+# not by trusting the model's self-report.
+_FALSE_INFRA_ERROR_RE = re.compile(
+    r"lỗi\s*kết\s*nối"
+    r"|kết\s*nối.{0,20}(đang\s*)?(bị\s*)?(lỗi|gián\s*đoạn|thất\s*bại|không\s*ổn\s*định)"
+    r"|mất\s*kết\s*nối"
+    r"|không\s*kết\s*nối\s*được"
+    r"|connection\s*(error|failed|timed?\s*out|refused)"
+    r"|(server|hệ\s*thống|dịch\s*vụ)\s*(đang\s*)?(bị\s*)?lỗi\s*(tạm\s*thời)?",
+    re.I,
+)
 
 _META_UPDATE_ANSWER = (
     "Dữ liệu được tổng hợp từ các nguồn công khai (NVD, MITRE, CAPEC, CISA KEV và catalog "
@@ -880,6 +932,12 @@ _CHAT_EMPTY_FALLBACK = (
     "Xin lỗi, tôi chưa tổng hợp được câu trả lời từ dữ liệu nội bộ cho yêu cầu này. Bạn thử "
     "nêu lại cụ thể hơn — ví dụ một mã CVE/CWE (như `CVE-2021-44228`, `CWE-89`), tên sản "
     "phẩm, hoặc một khái niệm ATTT — để tôi tra cứu lại nhé.\n\n" + _CHAT_CLOSER
+)
+_CHAT_FALSE_INFRA_ERROR_ANSWER = (
+    "Tôi đã tra cứu nhưng không tìm thấy nội dung phù hợp cho câu hỏi này trong dữ liệu nội bộ — "
+    "đây KHÔNG phải do lỗi kết nối hay lỗi hệ thống. Bạn thử nêu cụ thể hơn — ví dụ một mã "
+    "CVE/CWE, tên màn hình/chức năng cụ thể, hoặc từ khóa khác — để tôi tra lại nhé.\n\n"
+    + _CHAT_CLOSER
 )
 _CHAT_VAGUE_CLARIFY = (
     "Bạn muốn tra cứu về vấn đề gì cụ thể? Ví dụ: một mã CVE (`CVE-2021-44228`), một loại "
@@ -918,13 +976,31 @@ def _chat_body_is_empty(text: str) -> bool:
     return not stripped.replace(_CHAT_CLOSER, "").strip()
 
 
-def _chat_final_guarantee(prompt: str, text: str) -> HookResult | None:
+def _chat_final_guarantee(prompt: str, text: str, *, any_tool_called: bool = False,
+                          had_real_tool_error: bool = False) -> HookResult | None:
     """Deterministic floor for a chat final answer. Returns a mutate-HookResult that
     REPLACES the text, or None to leave the model's answer as-is. Checked before the
-    grounding enforcement so an empty/deflecting answer can never slip through."""
+    grounding enforcement so an empty/deflecting answer can never slip through.
+
+    ``any_tool_called``/``had_real_tool_error`` ground the TOP-0 check below against what
+    actually happened this turn (linch's own exception/timeout wrapper sets
+    ``ToolResult.is_error``, not the model) — both default False so every OTHER caller of
+    this function (there is exactly one today, but the signature is public within the
+    module) keeps its prior behavior unchanged if it doesn't pass them.
+    """
     p = (prompt or "").strip()
     body_empty = _chat_body_is_empty(text)
     deflected = body_empty or bool(_DEFLECTION_RE.search(text or ""))
+
+    # (TOP-0) False infra-error claim — the model said "lỗi kết nối" (or equivalent) for a
+    # turn where a tool actually ran and none of them failed. Whatever it found (hits or an
+    # honest 0-hits message) is not a connection problem; ship the honest no-match answer
+    # instead of an invented excuse. Checked first and unconditionally (not gated on
+    # `deflected`): the false claim can ride along with otherwise-plausible prose, same as
+    # the production incidents that motivated this (see _FALSE_INFRA_ERROR_RE comment).
+    if any_tool_called and not had_real_tool_error and _FALSE_INFRA_ERROR_RE.search(text or ""):
+        return HookResult.mutate(final_text=_CHAT_FALSE_INFRA_ERROR_ANSWER,
+                                 reason="chat_false_infra_error_claim")
 
     # (TOP-3) Aggregate CVSS-superlative — no whole-KB stats tool exists, so any specific
     # "highest/lowest CVSS" claim from a retrieval sample is unreliable → answer honestly.
@@ -978,7 +1054,15 @@ def chat_final_text(prompt: str, text: str) -> str:
     depends on ``HookResult``'s internal shape to recover the replacement text, and so the
     same source of truth for the answers/regex constants is shared with no data duplication.
     Decision order matches the hook: aggregate CVSS-superlative (unconditional) → meta
-    canonical repair (only when the model deflected/emptied) → anti-empty fallback/clarify."""
+    canonical repair (only when the model deflected/emptied) → anti-empty fallback/clarify.
+
+    Deliberately does NOT replicate ``_chat_final_guarantee``'s TOP-0 false-infra-error-claim
+    check: that check needs per-run tool-call telemetry (``any_tool_called``/
+    ``had_real_tool_error``), which this value-layer function has no access to by design (see
+    "no data duplication" above — it only ever sees prompt/text). The hook layer is this
+    check's only line of defense; acceptable because the "hook chain is inert" concern this
+    backstop exists for was a misdiagnosis (see the CORRECTION note above) and
+    RequireChatGroundingHook.on_before_final_answer is confirmed to run in production."""
     p = (prompt or "").strip()
     body_empty = _chat_body_is_empty(text)
     deflected = body_empty or bool(_DEFLECTION_RE.search(text or ""))
@@ -1049,6 +1133,13 @@ class RequireChatGroundingHook:
         self._web: OrderedDict[str, bool] = OrderedDict()
         self._kb: OrderedDict[str, bool] = OrderedDict()
         self._attempts: OrderedDict[str, int] = OrderedDict()
+        # Any-tool / real-error trackers for the false-infra-error-claim guard in
+        # _chat_final_guarantee (see that function's TOP-0 check). Separate from
+        # _web/_kb, which only mark specific tool NAMES — this marks EVERY call
+        # regardless of which tool, and whether linch's own exception/timeout wrapper
+        # (scheduler.py::_execute_one) actually set is_error=True on it.
+        self._any_call: OrderedDict[str, bool] = OrderedDict()
+        self._tool_error: OrderedDict[str, bool] = OrderedDict()
 
     @staticmethod
     def _prompt_of(ctx: Any) -> str:
@@ -1099,7 +1190,9 @@ class RequireChatGroundingHook:
     async def on_post_tool_use(self, ctx: PostToolUseContext) -> None:
         if _profile_of(ctx) != self.profile:
             return None
+        RequireSearchBeforeAnswerHook._mark(self._any_call, ctx.run_id)
         if getattr(ctx.result, "is_error", False):
+            RequireSearchBeforeAnswerHook._mark(self._tool_error, ctx.run_id)
             return None
         if ctx.tool_name == "web_fetch":
             RequireSearchBeforeAnswerHook._mark(self._web, ctx.run_id)
@@ -1118,9 +1211,14 @@ class RequireChatGroundingHook:
         prompt = self._prompt_of(ctx)
 
         # Deterministic floor FIRST: never ship an empty/closer-only answer, a bare meta
-        # deflection, or a false "highest CVSS" claim. Replaces via mutate (unbounded by the
-        # single before-final reentry the grounding force_continue below usually spends).
-        guard = _chat_final_guarantee(prompt, ctx.final_text or "")
+        # deflection, a false "highest CVSS" claim, or a false "lỗi kết nối" claim. Replaces
+        # via mutate (unbounded by the single before-final reentry the grounding
+        # force_continue below usually spends).
+        run_id = ctx.run_id
+        guard = _chat_final_guarantee(
+            prompt, ctx.final_text or "",
+            any_tool_called=RequireSearchBeforeAnswerHook._get(self._any_call, run_id, False),
+            had_real_tool_error=RequireSearchBeforeAnswerHook._get(self._tool_error, run_id, False))
         if guard is not None:
             return guard
 
@@ -1140,7 +1238,6 @@ class RequireChatGroundingHook:
         if plan.need_kb and prefetch_grounded:
             plan = replace(plan, need_kb=False)
 
-        run_id = ctx.run_id
         has_web = RequireSearchBeforeAnswerHook._get(self._web, run_id, False)
         has_kb = RequireSearchBeforeAnswerHook._get(self._kb, run_id, False)
         missing_web = plan.need_web and not has_web
