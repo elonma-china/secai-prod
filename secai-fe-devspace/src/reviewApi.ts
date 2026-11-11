@@ -43,6 +43,11 @@ export function createReviewApi(token: string) {
     reviseTemplate: (template: string, instruction: string) => request<{draft: string}>("/report-templates/revise", "POST", {template, instruction, input_clean_confirmed: true}),
     renderTemplate: (template: string, logs: string) => request<{report: string}>("/report-templates/render", "POST", {template, logs, input_clean_confirmed: true}),
     livePair: (prompt_messages: PromptMessage[], answer: string, source_group: string) => request<{offered: false} | {offered: true; assignment: Assignment}>("/live-pairs", "POST", {prompt_messages, answer, source_group, always_offer: true}),
+    // Parallel-generation path: call liveDecide + liveAlternative at the same time as the
+    // caller's own chat request for A, instead of waiting for A to finish before starting B.
+    liveDecide: () => request<{sampled: boolean}>("/live-pairs/decide", "POST", {always_offer: true}),
+    liveAlternative: (prompt_messages: PromptMessage[]) => request<{text: string}>("/live-pairs/alternative", "POST", {prompt_messages}),
+    liveCreatePair: (prompt_messages: PromptMessage[], answer: string, alternative: string, source_group: string) => request<{offered: false} | {offered: true; assignment: Assignment}>("/live-pairs", "POST", {prompt_messages, answer, alternative, source_group, always_offer: true}),
     me: () => request<Actor>("/me"),
     reviewers: () => all<Actor>("/reviewers"),
     campaigns: () => all<Campaign>("/campaigns"),

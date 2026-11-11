@@ -115,10 +115,32 @@ class LivePairInput(Input):
     prompt_messages: list[Message] = Field(min_length=1,max_length=30)
     answer: str = Field(min_length=1,max_length=65536)
     source_group: str = Field(default='unknown',min_length=1,max_length=200)
+    # Parallel-generation path (2026-11-10): when the caller already produced B itself —
+    # via /live-pairs/decide + /live-pairs/alternative run concurrently with its own chat
+    # request — it passes that text here and this endpoint only validates + persists,
+    # skipping the server-side sampling roll and generation entirely.
+    alternative: str | None = Field(default=None,max_length=65536)
     @model_validator(mode='after')
     def live_context(self):
         if self.prompt_messages[0].role != 'user' or self.prompt_messages[-1].role != 'user':
             raise ValueError('visible context must start with user and end at the user question, excluding produced answer')
         if not self.answer.strip() or len(self.answer.encode('utf-8'))>65536:
             raise ValueError('answer must be nonblank and at most 64 KiB')
+        if self.alternative is not None and (not self.alternative.strip() or len(self.alternative.encode('utf-8'))>65536):
+            raise ValueError('alternative, when given, must be nonblank and at most 64 KiB')
+        return self
+
+class LiveDecideInput(Input):
+    """Body for POST /live-pairs/decide. Same always_offer escape hatch as LivePairInput,
+    for callers (like the devspace client today) that bypass sampling on every turn."""
+    always_offer: bool = False
+
+class LiveAlternativeInput(Input):
+    """Body for POST /live-pairs/alternative — generates B independently of A, so the
+    caller can fire it in parallel with its own chat request instead of waiting for A."""
+    prompt_messages: list[Message] = Field(min_length=1,max_length=30)
+    @model_validator(mode='after')
+    def live_context(self):
+        if self.prompt_messages[0].role != 'user' or self.prompt_messages[-1].role != 'user':
+            raise ValueError('visible context must start with user and end at the user question, excluding produced answer')
         return self

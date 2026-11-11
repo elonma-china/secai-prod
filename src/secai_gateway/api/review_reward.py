@@ -16,24 +16,26 @@ from .review_training import router as training_router
 router.include_router(training_router)
 
 
-@router.post('/score')
-async def score(request:Request,actor:ReviewActor=Depends(require_review_admin)):
-    state=request.app.state.gateway
+class RewardUnavailable(ValueError):
+    """Raised by `score_with_reward_model` for every failure mode — disabled, misconfigured,
+    unreachable, or an invalid/mismatched response. Callers outside the HTTP route (the
+    background autolabel job) only need to catch this one type, never an HTTPException."""
+
+
+async def score_with_reward_model(state, payload:ScoreInput) -> dict:
+    """Core of `POST /reward/score`, factored out so `reward/autolabel.py`'s background
+    job can call it directly with `state` (``request.app.state.gateway``) instead of going
+    through HTTP+admin-auth. Returns {'artifact_id','scores','preferred_index','margin'} or
+    raises `RewardUnavailable` — never partial/best-effort success."""
     settings=state.settings
-    if not getattr(settings,'reward_enabled',False):raise HTTPException(404,'reward scoring disabled')
+    if not getattr(settings,'reward_enabled',False):raise RewardUnavailable('reward scoring disabled')
     url=getattr(settings,'reward_service_url','').rstrip('/')
     digest=getattr(settings,'reward_artifact_sha256','')
     token=getattr(settings,'reward_service_token','')
     try:parsed=urlsplit(url)
-    except ValueError:raise HTTPException(503,'reward service not configured') from None
+    except ValueError:raise RewardUnavailable('reward service not configured') from None
     if parsed.scheme not in {'http','https'} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or not token or not re.fullmatch('[0-9a-f]{64}',digest):
-        raise HTTPException(503,'reward service not configured')
-    body=bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body)>262144:raise HTTPException(413,'reward request exceeds limit')
-    try:payload=ScoreInput.model_validate_json(body)
-    except ValidationError:raise HTTPException(422,'invalid reward scoring input') from None
+        raise RewardUnavailable('reward service not configured')
     try:
         async with httpx.AsyncClient(timeout=getattr(settings,'reward_timeout_seconds',30),
                                      transport=getattr(state,'reward_transport',None),follow_redirects=False) as http:
@@ -49,12 +51,26 @@ async def score(request:Request,actor:ReviewActor=Depends(require_review_admin))
         if (result['artifact_id']!=digest or not isinstance(scores,list) or len(scores)!=len(payload.answers) or
                 any(type(s) not in (int,float) or not math.isfinite(s) for s in scores)):
             raise ValueError('invalid reward response')
-    except (httpx.HTTPError,ValueError,KeyError,TypeError):
-        raise HTTPException(503,'reward scoring unavailable or artifact mismatch') from None
+    except (httpx.HTTPError,ValueError,KeyError,TypeError) as exc:
+        raise RewardUnavailable('reward scoring unavailable or artifact mismatch') from exc
     best=max(range(len(scores)),key=lambda i:scores[i])
     ordered=sorted(scores,reverse=True)
     margin=ordered[0]-ordered[1] if len(ordered)>1 else None
     if margin is not None and not math.isfinite(margin):
-        raise HTTPException(503,'reward scoring returned invalid margin')
+        raise RewardUnavailable('reward scoring returned invalid margin')
     return {'artifact_id':digest,'scores':scores,'preferred_index':best if margin is not None and margin>1e-8 else None,
             'margin':margin}
+
+
+@router.post('/score')
+async def score(request:Request,actor:ReviewActor=Depends(require_review_admin)):
+    body=bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body)>262144:raise HTTPException(413,'reward request exceeds limit')
+    try:payload=ScoreInput.model_validate_json(body)
+    except ValidationError:raise HTTPException(422,'invalid reward scoring input') from None
+    try:
+        return await score_with_reward_model(request.app.state.gateway,payload)
+    except RewardUnavailable as exc:
+        raise HTTPException(404 if str(exc)=='reward scoring disabled' else 503,str(exc)) from None

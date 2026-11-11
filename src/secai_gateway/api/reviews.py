@@ -237,41 +237,14 @@ async def put_live_settings(request: Request, actor: ReviewActor = Depends(requi
     return live_settings_response(request, value)
 
 
-@router.post('/live-pairs')
-async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor)):
-    """Generate an independent B, on every opted-in turn or by legacy sampling."""
-    import secrets
-    import time
+async def _generate_alternative(state,actor:ReviewActor,messages:list[dict]) -> str | None:
+    """Run an independent regeneration of the last message in `messages`, in an isolated
+    session seeded with the prior turns. Shared by the legacy sequential /live-pairs path,
+    the standalone /live-pairs/alternative endpoint (parallel-generation path), and the
+    background reward-autolabel job (`reward/autolabel.py`) — takes `state`
+    (``request.app.state.gateway``) directly so non-review-api callers can reuse it too."""
     from uuid import uuid4
-    from .review_schemas import LivePairInput
-    from ..security import redact_public_input
-
-    # Bound actual streamed bytes before decoding Pydantic input.
-    data=bytearray()
-    async for chunk in request.stream():
-        if len(data)+len(chunk)>262144:
-            raise HTTPException(413,'live context exceeds 256 KiB')
-        data.extend(chunk)
-    try:
-        payload=LivePairInput.model_validate_json(bytes(data))
-    except ValidationError as exc:
-        raise HTTPException(422,[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
-    state=request.app.state.gateway
     settings=state.settings
-    live_config=await call(request, 'live_settings', live_defaults(request))
-    sample_rate=live_config['sample_percent']/100
-    if not payload.always_offer and (sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000):
-        return {'offered':False}
-    # Reserving before any await prevents two simultaneous actor requests spending twice.
-    if not hasattr(state,'review_live_inflight'):
-        state.review_live_inflight=set()
-        state.review_live_next={}
-    current=time.monotonic()
-    if not payload.always_offer and (actor.actor_id in state.review_live_inflight or state.review_live_next.get(actor.actor_id,0)>current):
-        return {'offered':False}
-    if not payload.always_offer:
-        state.review_live_inflight.add(actor.actor_id)
-        state.review_live_next[actor.actor_id]=current+getattr(settings,'review_live_cooldown_seconds',600)
     # Every opted-in turn gets a chance; serialize model work instead of dropping turns.
     if not hasattr(state,'review_live_locks'):
         state.review_live_locks={}
@@ -281,10 +254,6 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
     try:
         await generation_lock.acquire()
         lock_acquired=True
-        if not await call(request,'live_campaign_is_open'):
-            return {'offered':False}
-        messages=[{'role':m.role,'content':redact_public_input(m.content).text} for m in payload.prompt_messages]
-        original=redact_public_input(payload.answer).text
         # Seed only the isolated session with prior public turns. The runner's guards
         # must receive the current question, not history masquerading as a new prompt.
         async def generate():
@@ -299,19 +268,8 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
         try:
             generated,_metadata=await asyncio.wait_for(generate(),timeout=getattr(settings,'review_live_timeout_seconds',45))
         except Exception:
-            return {'offered':False}
-        if not isinstance(generated,str): return {'offered':False}
-        alternative=redact_public_input(generated).text
-        if not alternative.strip() or original.strip()==alternative.strip(): return {'offered':False}
-        try:
-            item=ReviewItemInput.model_validate({'external_id':str(uuid4()),'prompt_messages':messages,'candidates':[{'id':'original','text':original,'provenance':{'source':'original_chat_final','model':'unknown'}},{'id':'generated','text':alternative,'provenance':{'source':'review_generation','model':'unknown','profile':'chat'}}],'source_group':redact_public_input(payload.source_group).text,'evidence':'','provenance':{'source':'live_chat','retrieved_context':'unknown','comparison':'independent regeneration from visible context'}})
-        except ValidationError:
-            return {'offered':False}
-        try:
-            aid=await call(request,'create_live_assignment',item,actor.actor_id)
-        except HTTPException:
-            return {'offered':False}
-        return {'offered':True,'assignment':await call(request,'assignment_detail',aid,actor.actor_id)}
+            return None
+        return generated if isinstance(generated,str) else None
     finally:
         try:
             # Release Linch's live session registry/work before removing durable history.
@@ -330,10 +288,148 @@ async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor))
                 # Only this isolated UUID is ever targeted; cleanup failure cannot touch chat.
                 pass
         finally:
-            if not payload.always_offer:
-                state.review_live_inflight.discard(actor.actor_id)
             if lock_acquired:
                 generation_lock.release()
+
+
+@router.post('/live-pairs/decide')
+async def live_pair_decide(request:Request,actor:ReviewActor=Depends(get_review_actor)):
+    """Roll the sampling decision BEFORE the main chat answer exists, so the FE can fire
+    the normal chat request (A) and /live-pairs/alternative (B) at the same time instead
+    of waiting for A to finish first. Reserves the per-actor cooldown immediately on a
+    sampled turn, same window as the legacy /live-pairs path, so the two can't double-spend
+    a turn against each other."""
+    import secrets
+    import time
+    from .review_schemas import LiveDecideInput
+    payload=await small_body(request,LiveDecideInput)
+    state=request.app.state.gateway
+    settings=state.settings
+    live_config=await call(request, 'live_settings', live_defaults(request))
+    sample_rate=live_config['sample_percent']/100
+    if not payload.always_offer and (sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000):
+        return {'sampled':False}
+    if not hasattr(state,'review_live_inflight'):
+        state.review_live_inflight=set()
+        state.review_live_next={}
+    current=time.monotonic()
+    if not payload.always_offer and (actor.actor_id in state.review_live_inflight or state.review_live_next.get(actor.actor_id,0)>current):
+        return {'sampled':False}
+    if not await call(request,'live_campaign_is_open'):
+        return {'sampled':False}
+    if not payload.always_offer:
+        state.review_live_next[actor.actor_id]=current+getattr(settings,'review_live_cooldown_seconds',600)
+    return {'sampled':True}
+
+
+@router.post('/live-pairs/alternative')
+async def live_pair_alternative(request:Request,actor:ReviewActor=Depends(get_review_actor)):
+    """Generate B on its own, independent of A — call only after /live-pairs/decide
+    returned sampled=true, in parallel with the caller's own chat request for A."""
+    from .review_schemas import LiveAlternativeInput
+    from ..security import redact_public_input
+    data=bytearray()
+    async for chunk in request.stream():
+        if len(data)+len(chunk)>262144:
+            raise HTTPException(413,'live context exceeds 256 KiB')
+        data.extend(chunk)
+    try:
+        payload=LiveAlternativeInput.model_validate_json(bytes(data))
+    except ValidationError as exc:
+        raise HTTPException(422,[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
+    if not await call(request,'live_campaign_is_open'):
+        raise HTTPException(409,'review campaign is closed')
+    messages=[{'role':m.role,'content':redact_public_input(m.content).text} for m in payload.prompt_messages]
+    generated=await _generate_alternative(request.app.state.gateway,actor,messages)
+    alternative=redact_public_input(generated).text if generated is not None else ''
+    if not alternative.strip():
+        raise HTTPException(503,'could not generate an alternative answer')
+    return {'text':alternative}
+
+
+@router.post('/live-pairs')
+async def live_pair(request:Request,actor:ReviewActor=Depends(get_review_actor)):
+    """Create a live A/B pair. Two shapes:
+    - pre-generated (parallel path): payload.alternative is set — caller already ran
+      /live-pairs/decide + /live-pairs/alternative itself, concurrently with its own chat
+      request; this only validates + persists, no sampling or generation here.
+    - legacy (sequential path, kept for always_offer / any caller not yet using the split
+      flow): payload.alternative is absent — rolls sampling and generates B itself, same
+      behavior as before this endpoint was split.
+    """
+    import secrets
+    import time
+    from uuid import uuid4
+    from .review_schemas import LivePairInput
+    from ..security import redact_public_input
+
+    # Bound actual streamed bytes before decoding Pydantic input.
+    data=bytearray()
+    async for chunk in request.stream():
+        if len(data)+len(chunk)>262144:
+            raise HTTPException(413,'live context exceeds 256 KiB')
+        data.extend(chunk)
+    try:
+        payload=LivePairInput.model_validate_json(bytes(data))
+    except ValidationError as exc:
+        raise HTTPException(422,[{'loc':list(e['loc']),'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
+    state=request.app.state.gateway
+    messages=[{'role':m.role,'content':redact_public_input(m.content).text} for m in payload.prompt_messages]
+    original=redact_public_input(payload.answer).text
+
+    def build_item(alternative:str):
+        return ReviewItemInput.model_validate({'external_id':str(uuid4()),'prompt_messages':messages,'candidates':[{'id':'original','text':original,'provenance':{'source':'original_chat_final','model':'unknown'}},{'id':'generated','text':alternative,'provenance':{'source':'review_generation','model':'unknown','profile':'chat'}}],'source_group':redact_public_input(payload.source_group).text,'evidence':'','provenance':{'source':'live_chat','retrieved_context':'unknown','comparison':'independent regeneration from visible context'}})
+
+    if payload.alternative is not None:
+        if not await call(request,'live_campaign_is_open'):
+            return {'offered':False}
+        alternative=redact_public_input(payload.alternative).text
+        if not alternative.strip() or original.strip()==alternative.strip():
+            return {'offered':False}
+        try:
+            item=build_item(alternative)
+        except ValidationError:
+            return {'offered':False}
+        try:
+            aid=await call(request,'create_live_assignment',item,actor.actor_id)
+        except HTTPException:
+            return {'offered':False}
+        return {'offered':True,'assignment':await call(request,'assignment_detail',aid,actor.actor_id)}
+
+    settings=state.settings
+    live_config=await call(request, 'live_settings', live_defaults(request))
+    sample_rate=live_config['sample_percent']/100
+    if not payload.always_offer and (sample_rate<=0 or secrets.randbelow(1000000)>=sample_rate*1000000):
+        return {'offered':False}
+    # Reserving before any await prevents two simultaneous actor requests spending twice.
+    if not hasattr(state,'review_live_inflight'):
+        state.review_live_inflight=set()
+        state.review_live_next={}
+    current=time.monotonic()
+    if not payload.always_offer and (actor.actor_id in state.review_live_inflight or state.review_live_next.get(actor.actor_id,0)>current):
+        return {'offered':False}
+    if not payload.always_offer:
+        state.review_live_inflight.add(actor.actor_id)
+        state.review_live_next[actor.actor_id]=current+getattr(settings,'review_live_cooldown_seconds',600)
+    try:
+        if not await call(request,'live_campaign_is_open'):
+            return {'offered':False}
+        generated=await _generate_alternative(state,actor,messages)
+        if generated is None: return {'offered':False}
+        alternative=redact_public_input(generated).text
+        if not alternative.strip() or original.strip()==alternative.strip(): return {'offered':False}
+        try:
+            item=build_item(alternative)
+        except ValidationError:
+            return {'offered':False}
+        try:
+            aid=await call(request,'create_live_assignment',item,actor.actor_id)
+        except HTTPException:
+            return {'offered':False}
+        return {'offered':True,'assignment':await call(request,'assignment_detail',aid,actor.actor_id)}
+    finally:
+        if not payload.always_offer:
+            state.review_live_inflight.discard(actor.actor_id)
 
 # Template assistance shares review identity only; no existing IAS report route changes.
 from .review_templates import router as template_router

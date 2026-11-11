@@ -266,3 +266,28 @@ class ReviewStore(TrainingLedger):
         with self.connection() as db:
             row=db.execute('SELECT state FROM campaigns WHERE id=?',('641f3b8e-8bbe-4603-bf12-fbb181e86d20',)).fetchone()
             return row is None or row['state']=='open'
+
+    def create_autolabeled_item(self, value, winning_candidate_id, reviewer_id):
+        """Reward-model pre-labeled pair (reward/autolabel.py): same server-owned live
+        campaign as create_live_assignment, but also writes a 'submitted' assignment +
+        judgment under `reviewer_id` (e.g. 'reward-model-auto') right away — so the item
+        lands in the SAME pending queue a human-reviewed pair would, with no adjudication
+        of its own. An admin still has to approve it before it counts toward training;
+        the reward model only pre-labels the comparison, it never approves itself."""
+        cid = '641f3b8e-8bbe-4603-bf12-fbb181e86d20'
+        with self.connection(True) as db:
+            db.execute('INSERT OR IGNORE INTO campaigns VALUES (?,?,?,?,?,?)',(cid,'Đánh giá từ chat','security_qa_v1','open','review-live-system',now()))
+            self.campaign(db,cid,True)
+            iid, aid, jid = str(uuid4()), str(uuid4()), str(uuid4())
+            snapshot=encode(value.model_dump())
+            db.execute('INSERT INTO items VALUES (?,?,?,?,?)',(iid,cid,value.external_id,snapshot,hashlib.sha256(snapshot.encode()).hexdigest()))
+            candidates=[candidate.id for candidate in value.candidates]
+            if secrets.randbelow(2): candidates.reverse()
+            db.execute('INSERT INTO assignments VALUES (?,?,?,?,?,?)',(aid,iid,reviewer_id,candidates[0],candidates[1],now()))
+            decision='left' if winning_candidate_id==candidates[0] else 'right'
+            payload={'decision':decision,'error_tags':{'left':[],'right':[]},'comment':'Tự động theo điểm reward model.'}
+            normalized={'decision':decision,'winning_candidate_id':winning_candidate_id,
+                       'candidate_error_tags':{candidates[0]:[],candidates[1]:[]},'comment':payload['comment']}
+            db.execute('INSERT INTO judgments VALUES (?,?,?,?,?)',(jid,aid,encode(payload),encode(normalized),now()))
+            self.audit(db,reviewer_id,'live_pair.autolabel',iid,{'assignment_id':aid})
+        return iid

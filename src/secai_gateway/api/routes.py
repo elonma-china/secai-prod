@@ -1693,6 +1693,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
             # bookkeeping (title/last_activity) already happened above, before streaming
             # started — see the comment there for why. `text` is the ORIGINAL clean prompt
             # (see _ground_chat_prompt()'s docstring), so the persisted turn is clean too.
+            # Scheduled here, not awaited: the response below is already fully built by
+            # this point, so this can never add latency to what the user sees. No-op
+            # unless reward autolabeling is explicitly turned on (see config.py).
+            from ..reward.autolabel import maybe_schedule as _maybe_schedule_autolabel
+            _maybe_schedule_autolabel(state, sid, text, final)
             return {"content": final, "answer": final, "message": final, "metadata": base_meta("chat", run_id)}
 
         return stream("chat", text, sid, build_final, pre_frames=_grounding_sse_frames(grounding),

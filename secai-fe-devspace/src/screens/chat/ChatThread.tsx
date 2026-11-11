@@ -36,6 +36,7 @@ export default function ChatThread({
   onRegenerate,
   onSuggestion,
   reviewWidget,
+  reviewOffered,
 }: {
   view: ChatView;
   projectName: string | null;
@@ -52,6 +53,9 @@ export default function ChatThread({
   onRegenerate: (assistantId: string) => void;
   onSuggestion: (text: string) => void;
   reviewWidget?: (assistantId: string) => ReactNode;
+  // True once this assistant turn's live A/B pair was actually offered — the original
+  // bubble then collapses instead of repeating the same text as "Câu trả lời A" below.
+  reviewOffered?: (assistantId: string) => boolean;
 }) {
   const isDraftEmpty = view.kind === "draft" && items.length === 0;
 
@@ -168,10 +172,16 @@ export default function ChatThread({
                             </div>
                           </>
                         )}
-                        {/* Explicit key: keeps this exact Markdown instance across the streaming→
-                            final transition even though CVE-only siblings (corners/h4/tags) get
-                            inserted before it, so the body doesn't re-parse/flash on that switch. */}
-                        <Markdown key="body">{cve && cveSplit ? cveSplit.body : it.text}</Markdown>
+                        {reviewOffered?.(it.id) ? (
+                          <p className="review-muted" style={{ fontStyle: "italic" }}>
+                            Câu trả lời này đã đưa vào đánh giá A/B — xem so sánh bên dưới ↓
+                          </p>
+                        ) : (
+                          // Explicit key: keeps this exact Markdown instance across the streaming→
+                          // final transition even though CVE-only siblings (corners/h4/tags) get
+                          // inserted before it, so the body doesn't re-parse/flash on that switch.
+                          <Markdown key="body">{cve && cveSplit ? cveSplit.body : it.text}</Markdown>
+                        )}
                         {it.streaming && it.text && <span className="blink" style={{ color: "var(--teal)", fontWeight: 700 }}>▌</span>}
                         {cve && foot}
                       </div>

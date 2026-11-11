@@ -4,7 +4,7 @@ import {afterEach,expect,test,vi} from 'vitest';
 
 const mocks=vi.hoisted(()=>({
   chatStream:vi.fn(),createStandaloneSession:vi.fn(),listProjects:vi.fn(),listUserSessions:vi.fn(),
-  livePair:vi.fn(),
+  liveDecide:vi.fn(),liveAlternative:vi.fn(),liveCreatePair:vi.fn(),
 }));
 vi.mock('../api',()=>({
   chatStream:mocks.chatStream,createStandaloneSession:mocks.createStandaloneSession,
@@ -34,22 +34,25 @@ test('each opted-in chat keeps its own two choices when the next message is sent
   mocks.listUserSessions.mockResolvedValue([]);
   mocks.createStandaloneSession.mockResolvedValue({session_id:'session-1',title:''});
   mocks.chatStream.mockImplementation(async(_sid:string,message:string,_userId:string,handlers:{onFinal:(payload:{content:string})=>void})=>handlers.onFinal({content:`Completed ${message}`}));
-  mocks.livePair.mockImplementation(async(messages:{content:string}[])=>{
+  mocks.liveDecide.mockResolvedValue({sampled:true});
+  mocks.liveAlternative.mockImplementation(async(messages:{content:string}[])=>{
     if (messages.length > 30) throw new Error('live context exceeds 30 messages');
-    return {offered:true,assignment:{
-    id:messages.at(-1)!.content,external_id:'turn',prompt_messages:messages,evidence:'',
-    left:{text:`A ${messages.at(-1)!.content}`},right:{text:`B ${messages.at(-1)!.content}`},rubric:'',rubric_version:'v1',judgment:null,
-  }};});
+    return {text:`B ${messages.at(-1)!.content}`};
+  });
+  mocks.liveCreatePair.mockImplementation(async(messages:{content:string}[],answer:string,alternative:string)=>({offered:true,assignment:{
+    id:messages.at(-1)!.content,campaign_id:'c',campaign_title:'t',status:'pending',external_id:'turn',prompt_messages:messages,evidence:'',
+    left:{text:answer},right:{text:alternative},rubric:'',rubric_version:'v1',judgment:null,
+  }}));
   setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});
   render(<ChatbotScreen userId="ab-every-turn" health={null}/>);
   for (const message of ['First','Second',...Array.from({length:14},(_,i)=>`Question ${i+3}`)]) {
     fireEvent.change(screen.getByRole('textbox',{name:'Chat message'}),{target:{value:message}});
     fireEvent.click(screen.getByRole('button',{name:'Send chat'}));
-    expect((await screen.findAllByText(`A ${message}`)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(`Completed ${message}`)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(`B ${message}`)).length).toBeGreaterThan(0);
     await waitFor(()=>expect(screen.queryByRole('status',{name:'Sending chat'})).toBeNull());
   }
-  expect(screen.getAllByText('A First').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('Completed First').length).toBeGreaterThan(0);
   expect(screen.getAllByText('B First').length).toBeGreaterThan(0);
 });
 
@@ -63,8 +66,10 @@ test('a completed chat turn is retained when reviewer identity arrives after str
     handlers.onFinal({content:'Completed answer'});
     await streamFinished.promise;
   });
-  mocks.livePair.mockResolvedValue({offered:true,assignment:{
-    id:'assignment-1',external_id:'turn-1',prompt_messages:[{role:'user',content:'Question'}],evidence:'',
+  mocks.liveDecide.mockResolvedValue({sampled:true});
+  mocks.liveAlternative.mockResolvedValue({text:'Reviewer answer B'});
+  mocks.liveCreatePair.mockResolvedValue({offered:true,assignment:{
+    id:'assignment-1',campaign_id:'c',campaign_title:'t',status:'pending',external_id:'turn-1',prompt_messages:[{role:'user',content:'Question'}],evidence:'',
     left:{text:'Reviewer answer A'},right:{text:'Reviewer answer B'},rubric:'',rubric_version:'v1',judgment:null,
   }});
   clearReviewIdentity();
@@ -77,10 +82,13 @@ test('a completed chat turn is retained when reviewer identity arrives after str
   await waitFor(()=>expect(screen.queryByRole('status',{name:'Sending chat'})).toBeNull());
   expect(screen.getByText('Completed answer')).toBeTruthy();
 
-  expect(mocks.livePair).not.toHaveBeenCalled();
+  // Identity wasn't ready while A was streaming, so the parallel path never started — this
+  // falls back to firing decide+alternative sequentially once identity does arrive, instead
+  // of permanently missing the turn.
+  expect(mocks.liveDecide).not.toHaveBeenCalled();
   await act(async()=>{setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});});
 
-  await waitFor(()=>expect(mocks.livePair).toHaveBeenCalledTimes(1));
+  await waitFor(()=>expect(mocks.liveCreatePair).toHaveBeenCalledTimes(1));
   expect((await screen.findAllByText('Reviewer answer A')).length).toBeGreaterThan(0);
 });
 
@@ -104,6 +112,6 @@ test('an explicit reviewer opt-out skips the live pair for that chat turn',async
   await act(async()=>{streamFinished.resolve();});
   await waitFor(()=>expect(screen.queryByRole('status',{name:'Sending chat'})).toBeNull());
 
-  expect(mocks.livePair).not.toHaveBeenCalled();
+  expect(mocks.liveDecide).not.toHaveBeenCalled();
   expect(screen.queryByRole('complementary',{name:'Phản hồi A/B trong chat'})).toBeNull();
 });
