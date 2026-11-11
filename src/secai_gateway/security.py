@@ -305,10 +305,18 @@ _ANSWER_PIVOT = re.compile(
 )
 # English-leak fallback: when a marker above matches but there is no Vietnamese pivot line
 # (the leak is English prose that just runs straight into the Vietnamese answer with no
-# explicit "here's my answer" marker), cut at the first line that is itself substantially
-# Vietnamese — i.e. contains a Vietnamese-only diacritic letter. A plain English answer
-# never trips this (no such letters), so it cannot mangle a legitimate English reply.
-_VIETNAMESE_LINE = re.compile(r"(?m)^.*[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ].*$", re.I)
+# explicit "here's my answer" marker), cut right before the first WORD that contains a
+# Vietnamese-only diacritic letter. A plain English answer never trips this (no such
+# letters), so it cannot mangle a legitimate English reply.
+#
+# NOTE (code-review 2026-11-06): this used to be a whole-LINE regex
+# (`^.*[diacritic].*$`, re.M) and cut from `match.start()`. When the English leak and the
+# Vietnamese answer sit on the SAME physical line (no newline between them — the common
+# case in practice), `match.start()` is the start of that same line, i.e. position 0 —
+# so the "cut" reproduced the original string unchanged. Finding the diacritic
+# character's own position and backing up only to the nearest whitespace (its word
+# boundary) fixes the same-line case while still working for the multi-line case.
+_VIETNAMESE_CHAR = re.compile(r"[àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ]", re.I)
 
 
 def strip_reasoning_leak(text: str) -> str:
@@ -323,9 +331,12 @@ def strip_reasoning_leak(text: str) -> str:
             if tail:  # never blank out the whole message
                 cleaned = tail
         else:
-            first_vi = _VIETNAMESE_LINE.search(cleaned)
+            first_vi = _VIETNAMESE_CHAR.search(cleaned)
             if first_vi:
-                tail = cleaned[first_vi.start():].strip()
+                boundary = max(cleaned.rfind(" ", 0, first_vi.start()),
+                               cleaned.rfind("\n", 0, first_vi.start()))
+                cut = boundary + 1 if boundary != -1 else 0
+                tail = cleaned[cut:].strip()
                 if tail:
                     cleaned = tail
     return cleaned.strip() or text.strip()

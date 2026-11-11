@@ -20,8 +20,8 @@
  *   - `step`          {index, name, status: "running"|"done"|"error", detail, verdict}
  *   - `log`           {stream, line}                      (shares `onLog` with the above)
  *   - `question`      {run_id, question_id, text}          — agent paused, needs operator input
- *   - `final`         {ok, reason, code, run_instructions, run_id}  (DIFFERENT shape from the
- *                       FinalPayload above — see `ExploitV2FinalPayload`)
+ *   - `final`         {ok, reason, code, run_instructions, attempted_steps, run_id}  (DIFFERENT
+ *                       shape from the FinalPayload above — see `ExploitV2FinalPayload`)
  *
  * `event: <name>\ndata: <json>\n\n` framing, terminated by a literal `data: [DONE]` line.
  */
@@ -85,6 +85,9 @@ export interface ExploitV2FinalPayload {
   reason: string | null;
   code: string | null;
   run_instructions: string | null;
+  /** Chỉ có khi `ok === false` — các bước/lệnh engine đã thực sự thử trước khi dừng lại,
+   * cùng định dạng numbered-list như `run_instructions`, để user tiếp tục điều tra từ đó. */
+  attempted_steps: string | null;
   run_id: string | null;
 }
 

@@ -39,6 +39,23 @@ _IAS_PRODUCT_DOMAIN_RE = re.compile(
     re.I,
 )
 
+# Conversation-meta marker (2026-11-11, acceptance-test repro): "Tóm tắt lại toàn bộ cuộc
+# trò chuyện từ đầu đến giờ cho tôi" — a request to recap/repeat THIS conversation — scored
+# confidently offtopic (no CWE/CVE/IAS token in the sentence itself) and got refused, even
+# though every prior turn in that same session was in-scope security content. The question's
+# real topic is "whatever we already discussed", not the literal words in this one message,
+# so the classifier's per-message score cannot see it. Same override shape as the two regexes
+# above: naming an explicit "summarize/recap our conversation" intent is itself evidence the
+# request is in-scope (it is asking to re-surface prior in-scope turns), independent of what
+# that prior content was.
+_CONVERSATION_META_RE = re.compile(
+    r"(?:tóm\s*tắt|nhắc\s*lại|xem\s*lại|liệt\s*kê\s*lại).{0,40}"
+    r"(?:cuộc\s*trò\s*chuyện|hội\s*thoại|đoạn\s*chat|những\s*gì\s*(?:đã|vừa)\s*(?:nói|hỏi|trao\s*đổi)|"
+    r"từ\s*đầu\s*(?:đến|tới)\s*(?:giờ|nay))|"
+    r"(?:summarize|recap).{0,40}(?:conversation|chat|discussion|everything\s+(?:we|I)\s+(?:said|asked))",
+    re.I,
+)
+
 # Off-topic refusal — MUST match prompts/base_system.md <scope_policy> verbatim so the
 # deterministic gate and the LLM fallback speak with one voice.
 REFUSE_OFFTOPIC_MSG = "Xin lỗi, câu hỏi này không thuộc phạm vi An toàn thông tin."
@@ -92,8 +109,11 @@ def has_scope_marker(text: str | None, settings: Any) -> bool:
     if (bool(getattr(settings, "input_classifier_security_marker_override", True))
             and _SECURITY_DOMAIN_RE.search(text)):
         return True
-    return (bool(getattr(settings, "input_classifier_ias_marker_override", True))
-            and bool(_IAS_PRODUCT_DOMAIN_RE.search(text)))
+    if (bool(getattr(settings, "input_classifier_ias_marker_override", True))
+            and _IAS_PRODUCT_DOMAIN_RE.search(text)):
+        return True
+    return (bool(getattr(settings, "input_classifier_conversation_meta_override", True))
+            and bool(_CONVERSATION_META_RE.search(text)))
 
 
 def decide(verdict: InputVerdict, settings: Any, text: str | None = None) -> Decision:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import random
 import base64
 import ipaddress
 import json
@@ -67,6 +68,10 @@ def _parse_response(payload: object) -> OcrResult:
     return OcrResult(blocks=tuple(blocks), raw_text="\n".join(b.text for b in blocks))
 
 
+class _OcrBusy(Exception):
+    """The single-slot OCR server is serving another request (503 "OCR busy"): wait and retry."""
+
+
 async def recognize_image(image: PreparedImage, *, settings: TranslationSettings) -> OcrResult:
     if not settings.ocr_enabled or not settings.ocr_api_key or not settings.ocr_model:
         raise TranslationError("OCR_UNAVAILABLE", "OCR is not configured")
@@ -76,12 +81,16 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
     timeout = httpx.Timeout(settings.ocr_timeout_seconds)
     async def request_with_retries() -> OcrResult:
         retries = min(max(0, settings.ocr_max_retries), 1)
-        for attempt in range(retries + 1):
+        attempt = -1
+        while attempt < retries:
+            attempt += 1
             try:
                 async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                     async with client.stream("POST", url, json=body, headers={
                         "Authorization": f"Bearer {settings.ocr_api_key}",
                         "Accept-Encoding": "gzip, identity"}) as response:
+                        if response.status_code == 503 and b"OCR busy" in (await response.aread()):
+                            raise _OcrBusy
                         if response.status_code in {502, 503, 504}:
                             raise httpx.HTTPStatusError("OCR temporarily unavailable",
                                                         request=response.request, response=response)
@@ -122,6 +131,11 @@ async def recognize_image(image: PreparedImage, *, settings: TranslationSettings
                 return result
             except TranslationError:
                 raise
+            except _OcrBusy:
+                # Waiting for the slot is not a failure and does not use a retry; the overall
+                # ocr_timeout_seconds bound below still applies.
+                attempt -= 1
+                await asyncio.sleep(random.uniform(0.5, 2.0))
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code not in {502, 503, 504} or attempt == retries:
                     raise TranslationError("OCR_UNAVAILABLE", "OCR service unavailable",

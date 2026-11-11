@@ -8,8 +8,9 @@ export default defineConfig({
   server: {
     host: "127.0.0.1",
     port: 5173,
-    // Cloudflare quick tunnel + LAN access
+    // Cloudflare tunnel (named + quick) + LAN access
     allowedHosts: [
+      "secai.coremind.io.vn",
       "graphics-accent-collective-instantly.trycloudflare.com",
       ".trycloudflare.com",
       "localhost",

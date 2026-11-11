@@ -10,7 +10,8 @@ from functools import lru_cache
 from lingua import Language, LanguageDetectorBuilder
 import regex
 
-from .technical_tokens import _VERSION, literal_spans, protect_literals, restore_literals_with_ranges
+from .technical_tokens import (ProtectedText, _CREDENTIAL, _CREDENTIAL_WEAK, _IP, _VERSION, _canonical_markers, literal_spans, protect_literals,
+                               restore_literals_with_ranges)
 from .types import (DocumentBlock, ProcessingContext, SourceLang, TargetLang,
                     TranslatedBlock, TranslationError)
 
@@ -185,7 +186,7 @@ def _technical_cores(text: str, skip_ranges: tuple[tuple[int, int], ...] = ()) -
     correct output; the number itself is the token that must not change.
     """
     cores: list[str] = []
-    for start, end in literal_spans(text, weak_labels=False):
+    for start, end in literal_spans(text, weak_labels=False, prose_secrets_only=True):
         # Text restored from a placeholder is already verified by count/order in
         # restore_literals; a span that merely overlaps it (a translated label such
         # as "password:" glued to the restored value) is not a new literal.
@@ -241,6 +242,164 @@ def _chunks(text: str, maximum: int = 3000) -> tuple[str, ...]:
     return tuple(out)
 
 
+_MIN_RECOVERY_CHARS = 40
+
+
+def _split_in_half(text: str) -> tuple[str, str] | None:
+    """Split ``text`` near its midpoint at a word boundary, never inside a placeholder."""
+    pieces = re.findall(r"\s+|[^\s]+", text)
+    if len(pieces) < 2:
+        return None
+    target = len(text) / 2
+    running = 0
+    best_index = 0
+    best_diff = float("inf")
+    for index, piece in enumerate(pieces[:-1]):
+        running += len(piece)
+        diff = abs(running - target)
+        if diff < best_diff:
+            best_diff = diff
+            best_index = index
+    left = "".join(pieces[:best_index + 1])
+    right = "".join(pieces[best_index + 1:])
+    if not left or not right:
+        return None
+    return left, right
+
+
+def _is_truncated_prefix(expected: list[str], found: list[str]) -> bool:
+    """True only for the early-stop signature: a non-empty, in-order, unbroken
+    prefix of the expected markers and nothing else. Any other shape (zero
+    markers, a duplicate, a reorder, an invented marker) is a different kind of
+    corruption that recovery-by-splitting must not paper over; it still has to
+    reach the strict check in ``translate_blocks`` and fail loudly.
+    """
+    return 0 < len(found) < len(expected) and found == expected[:len(found)]
+
+
+_PUBLIC_IDENTIFIER = re.compile(r"(?:CVE-\d{4}-\d{4,7}|CWE-\d{1,5})", re.I)
+
+
+_SAFE_VERSION_CORE = re.compile(r"v?\d+\.\d+(?:\.\d+)?(?:[-+][A-Za-z0-9_.]+)?")
+
+
+def _is_public_identifier(literal: str) -> bool:
+    """Non-sensitive literals the model may see verbatim: product versions and CVE/CWE ids.
+
+    ``_VERSION`` also matches "host 10.0.0.5", so a version only counts when its number is a
+    plain X.Y[.Z] and the literal holds no IP or credential. Credentials, IPs, URLs, paths and
+    commands are never exposed to the model.
+    """
+    if _PUBLIC_IDENTIFIER.fullmatch(literal):
+        return True
+    match = _VERSION.fullmatch(literal)
+    if not match:
+        return False
+    core = literal[match.end("product") + 1:]
+    return bool(_SAFE_VERSION_CORE.fullmatch(core) and not _IP.search(literal)
+                and not _CREDENTIAL.search(literal) and not _CREDENTIAL_WEAK.search(literal))
+
+
+def _is_dropped_subsequence(expected: list[str], found: list[str]) -> bool:
+    """Strictly fewer markers than expected, all in expected order: the model *dropped*
+    some (observed: "a <CVSS v3.1> base score" is silently absorbed into the prose).
+    Duplicated, reordered or invented markers are not a drop and still fail strictly."""
+    if len(found) >= len(expected):
+        return False
+    remaining = iter(expected)
+    return all(marker in remaining for marker in found)
+
+
+def _remask_public(response: str, expected: list[str],
+                   exposed: dict[str, str], prefix: str) -> str | None:
+    """Put the markers back for literals shown verbatim; None if any is not found intact,
+    in order, as a whole token (the literal must survive untouched)."""
+    response = _canonical_markers(response, prefix)
+    cursor = 0
+    out: list[str] = []
+    for marker in expected:
+        literal = exposed.get(marker)
+        if literal is None:
+            position = response.find(marker, cursor)
+            if position < 0:
+                return None
+            out.extend((response[cursor:position], marker))
+            cursor = position + len(marker)
+            continue
+        boundary = (r"(?<![A-Za-z0-9_.:/\\-])", r"(?![A-Za-z0-9_:/\\-]|\.[A-Za-z0-9])")
+        match = re.compile(boundary[0] + re.escape(literal) + boundary[1]).search(response, cursor)
+        if match is None:
+            # _VERSION absorbs the preceding word ("Version 2.0.13") into the literal and the model
+            # may translate or move it; the number itself must still come back intact.
+            version = _VERSION.fullmatch(literal)
+            if version:
+                core = literal[version.end("product") + 1:]
+                match = re.compile(boundary[0] + re.escape(core) + boundary[1]).search(response, cursor)
+        if match is None:
+            return None
+        out.extend((response[cursor:match.start()], marker))
+        cursor = match.end()
+    out.append(response[cursor:])
+    result = "".join(out)
+    return result if _PLACEHOLDER.findall(result) == expected else None
+
+
+async def _translate_chunk_safe(chunk: str, source_lang: SourceLang, target_lang: TargetLang,
+                                 context: ProcessingContext, prefix: str,
+                                 literals: tuple[str, ...] = ()) -> str:
+    """Translate one chunk, recovering from a small quantized model's tendency to
+    stop generating early on input that is almost entirely masked technical
+    literals (shell commands, JSON) with little actual prose to translate, and from
+    silently dropping a placeholder it cannot fit into the sentence.
+
+    A response that trails off mid-way through the expected markers is a
+    truncation signature specific to *this* chunk, not a model-noise fluke that
+    a same-input retry reliably fixes (see the TOKEN_INTEGRITY_FAILED note in
+    ``translate_blocks``). Splitting the chunk at a word boundary and
+    translating each half independently shrinks the window the model has to
+    run out of steam in, and bottoms out at a size where a technical-only
+    fragment is simply kept as-is rather than failing the whole document.
+
+    A dropped marker for a *public identifier* (product version, CVE/CWE id) is
+    additionally recovered by one retry that shows only those identifiers verbatim
+    and re-masks them after verifying they came back intact and in order.
+    """
+    response = await context.translate(chunk, source_lang, target_lang)
+    expected = _PLACEHOLDER.findall(chunk)
+    if not expected:
+        return response
+    found = _PLACEHOLDER.findall(_canonical_markers(response, prefix))
+    if found == expected:
+        return response
+    truncated = _is_truncated_prefix(expected, found)
+    if literals and (truncated or _is_dropped_subsequence(expected, found)):
+        indexes = {marker: int(marker.rsplit(":", 1)[1][:-1]) for marker in expected}
+        exposed = {marker: literals[index] for marker, index in indexes.items()
+                   if index < len(literals) and _is_public_identifier(literals[index])}
+        if exposed:
+            visible = chunk
+            for marker, literal in exposed.items():
+                visible = visible.replace(marker, literal)
+            retry = await context.translate(visible, source_lang, target_lang)
+            restored = _remask_public(retry, expected, exposed, prefix)
+            if restored is not None:
+                return restored
+    # The model moved markers (clause re-ordering, or a swapped role such as "from A to B"). Order
+    # is never trusted blindly: translate each half on its own so markers cannot change places.
+    reordered = len(found) == len(expected) and found != expected and sorted(found) == sorted(expected)
+    if not (truncated or reordered):
+        return response  # any other shape must still reach the strict check and fail loudly
+    if len(chunk) <= _MIN_RECOVERY_CHARS:
+        return chunk
+    halves = _split_in_half(chunk)
+    if halves is None:
+        return chunk
+    left, right = halves
+    left_out = await _translate_chunk_safe(left, source_lang, target_lang, context, prefix, literals)
+    right_out = await _translate_chunk_safe(right, source_lang, target_lang, context, prefix, literals)
+    return left_out + right_out
+
+
 async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: SourceLang,
                            target_lang: TargetLang, *, context: ProcessingContext
                            ) -> tuple[TranslatedBlock, ...]:
@@ -260,24 +419,36 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
     maximum = min(3000, 6000, (context_tokens - 1024) // 8)
     if maximum < 1:
         raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation model context is too small.")
+    # Plan every block first (cheap, CPU only): the chunk budget is enforced before any model call.
+    plans: list[tuple[DocumentBlock, ProtectedText | None, tuple[str, ...]]] = []
     for block in blocks:
-        await context.checkpoint("translating", completed=len(translated), total=len(blocks))
         if not block.text.strip() or source_lang == target_lang:
-            translated.append(TranslatedBlock(source=block, translated_text=block.text))
+            plans.append((block, None, ()))
             continue
         protected = protect_literals(block.text, salt)
         if _PLACEHOLDER.fullmatch(protected.text.strip()):
-            translated.append(TranslatedBlock(source=block, translated_text=block.text))
+            plans.append((block, None, ()))
             continue
         chunks = _chunks(protected.text, maximum=maximum)
         chunk_count += len(chunks)
-        if chunk_count > 300:
+        if chunk_count > getattr(context, "max_chunks", 300):
             raise TranslationError("TEXT_TOO_LONG", "Document needs too many model chunks.")
+        plans.append((block, protected, chunks))
+
+    async def translate_one(block: DocumentBlock, protected: ProtectedText, chunks: tuple[str, ...]
+                            ) -> TranslatedBlock:
         # A resend can recover when a model sample garbles or drops a placeholder
         # marker. Note: the repeatable 2/18 TOKEN_INTEGRITY_FAILED on the fixtures
         # (FILE-ja-vi/FILE-vi-en/FILE-ko-vi/FILE-vi-fr/FILE-zh-Hans-vi) was not
         # model noise but the context-dependent span comparison fixed in
-        # _technical_cores; retries cannot fix a deterministic check.
+        # _technical_cores; resending the *same whole chunk* unchanged cannot
+        # fix a deterministic check. A chunk whose content is almost entirely
+        # masked technical literals (shell/JSON with little prose) is a
+        # different, observed-in-production failure: the specialist model
+        # stops generating a few tokens in and silently drops the trailing
+        # placeholders. _translate_chunk_safe recovers from that signature by
+        # splitting the offending chunk and retrying each half before this
+        # outer attempt loop ever sees a mismatch for it.
         integrity_max_attempt = getattr(context, "literal_integrity_max_retries", 1)
         for attempt in range(integrity_max_attempt + 1):
             pieces: list[tuple[str, str, str]] = []
@@ -289,7 +460,8 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                     pieces.append((chunk, "", ""))
                     continue
                 try:
-                    response = await context.translate(chunk, source_lang, target_lang)
+                    response = await _translate_chunk_safe(chunk, source_lang, target_lang, context,
+                                                            protected._prefix, protected._literals)
                 except TranslationError as exc:
                     if exc.retryable and attempt == 0:
                         break
@@ -331,7 +503,34 @@ async def translate_blocks(blocks: tuple[DocumentBlock, ...], source_lang: Sourc
                     if exc.code != "TOKEN_INTEGRITY_FAILED" or attempt >= integrity_max_attempt:
                         raise
                     continue
-                translated.append(TranslatedBlock(source=block, translated_text=output))
-                break
+                return TranslatedBlock(source=block, translated_text=output)
+        raise TranslationError("TRANSLATION_UNAVAILABLE", "Translation service is unavailable.")
+
+    # Blocks are independent, so they may run concurrently (bounded; the worker's llm_gate still
+    # caps real model calls). block_concurrency=1 keeps the historical strictly sequential flow.
+    limit = max(1, int(getattr(context, "block_concurrency", 1)))
+    gate = asyncio.Semaphore(limit)
+    done = 0
+
+    async def run(index: int) -> TranslatedBlock:
+        nonlocal done
+        block, protected, chunks = plans[index]
+        if protected is None:
+            result = TranslatedBlock(source=block, translated_text=block.text)
+        else:
+            async with gate:
+                await context.checkpoint("translating", completed=done, total=len(blocks))
+                result = await translate_one(block, protected, chunks)
+        done += 1
+        return result
+
+    tasks = [asyncio.create_task(run(i)) for i in range(len(plans))]
+    try:
+        translated = list(await asyncio.gather(*tasks))
+    except BaseException:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
     await context.checkpoint("translating", completed=len(blocks), total=len(blocks))
     return tuple(translated)

@@ -11,12 +11,12 @@ from typing import Any
 
 from linch.errors import ProviderError
 
-from .documents import extract_docx, extract_txt
+from .documents import extract_docx, extract_pdf, extract_txt, render_pdf_page
 from .jobs import JobStore
 from .service import translate_blocks
 from .settings import TranslationSettings
 from .specialist import TranslationAgent
-from .types import ProcessingContext, TranslationError
+from .types import DocumentBlock, ProcessingContext, TranslationError, WarningItem
 
 
 class _JobStopped(asyncio.CancelledError):
@@ -33,6 +33,9 @@ class WorkerContext(ProcessingContext):
         self.llm_gate = llm_gate
         self.model_context_tokens = settings.specialist_context_tokens
         self.literal_integrity_max_retries = settings.literal_integrity_max_retries
+        # Independent blocks translate concurrently; max_llm_calls still caps total model calls.
+        self.block_concurrency = max(1, min(settings.block_concurrency, settings.max_llm_calls))
+        self.max_chunks = settings.max_chunks
 
     async def checkpoint(self, stage: str, completed: int = 0, total: int | None = None) -> None:
         if time.time() >= self.row["deadline"]:
@@ -123,6 +126,66 @@ class Worker:
             if not await asyncio.to_thread(self.store.heartbeat, row["job_id"], row["generation"]):
                 return
 
+    async def _extract_pdf_with_ocr_fallback(
+            self, context: WorkerContext, input_path: Path
+            ) -> tuple[tuple[DocumentBlock, ...], tuple[WarningItem, ...], dict | None]:
+        """Native text per page, falling back to image OCR for any page with no text
+        layer (a scanned page). Scan pages are rendered and recognized with bounded
+        concurrency (pdf_ocr_concurrency) and still serialize on the shared OCR
+        backend gate, the same one the standalone "image" kind uses.
+        """
+        extracted, scan_pages = await asyncio.to_thread(extract_pdf, input_path, self.settings)
+        warnings = list(extracted.warnings)
+        native_items = [(block.metadata.get("page", 0), 0, block.kind, block.text, block.metadata)
+                        for block in extracted.blocks]
+        if not scan_pages:
+            return extracted.blocks, tuple(warnings), None
+        if not self.settings.ocr_enabled:
+            if not extracted.blocks:
+                raise TranslationError("DEPENDENCY_UNAVAILABLE", "OCR service is unavailable.")
+            warnings.append(WarningItem(code="OCR_CORRECTION_REJECTED",
+                                        message="Scanned pages were skipped; OCR is unavailable."))
+            return extracted.blocks, tuple(warnings), None
+        if len(scan_pages) > self.settings.pdf_max_ocr_pages:
+            raise TranslationError("TEXT_TOO_LONG", "PDF has too many scanned pages.")
+
+        from .ocr_client import ImageOcrPipeline
+
+        ocr_items: list[tuple[int, int, str, str, dict]] = []
+        ocr_summary: dict[str, dict] = {}
+        concurrency = asyncio.Semaphore(max(1, self.settings.pdf_ocr_concurrency))
+
+        async def ocr_page(page_number: int) -> None:
+            async with concurrency:
+                with TemporaryDirectory(prefix="secai-pdf-render-") as render_dir:
+                    page_path = await asyncio.to_thread(
+                        render_pdf_page, input_path, page_number, Path(render_dir))
+                    async with self.ocr_gate:
+                        with TemporaryDirectory(prefix="secai-pdf-ocr-") as work_dir:
+                            corrected = await context.run_bounded(
+                                ImageOcrPipeline(settings=self.settings).process(
+                                    page_path, work_dir=Path(work_dir), context=context))
+                for sub_index, block in enumerate(corrected.blocks):
+                    ocr_items.append((page_number, sub_index, "ocr_text", block.text,
+                                      {**block.metadata, "page": page_number}))
+                if corrected.needs_review:
+                    warnings.append(WarningItem(
+                        code="OCR_LOW_CONFIDENCE", message=f"Page {page_number} OCR needs review."))
+                ocr_summary[str(page_number)] = {
+                    "raw_text": corrected.raw_text, "corrected_text": corrected.corrected_text,
+                    "needs_review": corrected.needs_review,
+                }
+
+        await asyncio.gather(*(ocr_page(page) for page in scan_pages))
+        merged = sorted(native_items + ocr_items, key=lambda item: (item[0], item[1]))
+        blocks = tuple(
+            DocumentBlock(id=f"b{i:06d}", kind=kind, order=i - 1, text=text, metadata=metadata)
+            for i, (_, _, kind, text, metadata) in enumerate(merged, 1))
+        if not blocks:
+            raise TranslationError("NO_TEXT_DETECTED", "No text was detected.")
+        ocr = {"pages": ocr_summary} if ocr_summary else None
+        return blocks, tuple(warnings), ocr
+
     async def run_once(self) -> bool:
         row = await asyncio.to_thread(self.store.claim)
         if row is None:
@@ -162,6 +225,8 @@ class Worker:
                     converted = await asyncio.to_thread(convert_doc, input_path, Path(tmp), self.settings)
                     extracted = await asyncio.to_thread(extract_docx, converted, self.settings)
                 blocks, warnings, ocr = extracted.blocks, extracted.warnings, None
+            elif row["extension"] == ".pdf":
+                blocks, warnings, ocr = await self._extract_pdf_with_ocr_fallback(context, input_path)
             else:
                 raise TranslationError("UNSUPPORTED_FILE_TYPE", "File type is unsupported.")
             translated = await translate_blocks(blocks, row["source_lang"], row["target_lang"],

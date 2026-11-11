@@ -44,7 +44,8 @@ from secai_gateway.app import create_app
 from secai_gateway.state import ProjectStore
 
 _FULL_TOOL_REGISTRY = sorted(
-    {"qdrant_search", "neo4j_search", "poc_search", "poc_fetch", "fetch_reference", "web_fetch"}
+    {"qdrant_search", "neo4j_search", "poc_search", "poc_fetch", "fetch_reference", "web_fetch",
+     "howto_search", "cve_count", "cve_latest"}
 )
 
 
