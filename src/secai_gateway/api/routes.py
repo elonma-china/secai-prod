@@ -2432,14 +2432,29 @@ def register_routes(app: FastAPI, state: Any) -> None:
             text = text.replace('_', ' ')
             return text.lower()
 
-        def is_static_template_element(text: str) -> bool:
-            if not text:
-                return True
-            t_clean = clean_text(text).strip()
-            if not t_clean:
-                return True
-            t_noaccent = strip_accents(t_clean).lower()
+        def _para_style_name(p) -> str | None:
+            try:
+                return p.style.name if p.style else None
+            except Exception:
+                return None
 
+        def _syn_variants(word: str) -> set[str]:
+            w = word.strip().lower()
+            variants = {w}
+            if w.endswith("ies"):
+                variants.add(w[:-3] + "y")
+            elif w.endswith("es"):
+                variants.add(w[:-2])
+                variants.add(w[:-1])
+            elif w.endswith("s") and not w.endswith("ss"):
+                variants.add(w[:-1])
+            else:
+                variants.add(w + "s")
+                if w.endswith("y"):
+                    variants.add(w[:-1] + "ies")
+            return variants
+
+        def _is_strong_static_text(t_clean: str, t_noaccent: str) -> bool:
             # 1. Jinja variable tags
             if "{{" in t_clean and "}}" in t_clean:
                 return True
@@ -2501,29 +2516,116 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 if t_noaccent.startswith(sk + ":") or t_noaccent.startswith(sk + " -") or t_noaccent.startswith(sk + " –"):
                     return True
 
+            return False
+
+        _NAME_PREFIXES = ["nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do", "ho", "ngo", "duong", "dinh"]
+
+        def _looks_like_person_name(t_clean: str) -> bool:
+            # Tightened: only a 2-4 word, all-capitalized token sequence starting with a Vietnamese
+            # surname prefix counts as a person's name. A prose heading like "Phân tích chi tiết..."
+            # must NOT collide with the surname "Phan" after accent-stripping.
+            words = [w for w in t_clean.split() if w]
+            if not (2 <= len(words) <= 4):
+                return False
+            first_noaccent = strip_accents(words[0]).lower()
+            if first_noaccent not in _NAME_PREFIXES:
+                return False
+            for w in words:
+                core = re.sub(r'[.,;:!?]+$', '', w)
+                if not core or not core[0].isupper() or not re.match(r"^[A-Za-zÀ-ỹ]+$", core):
+                    return False
+            return True
+
+        _SEC_WORDS = [
+            "tong quan", "chi tiet", "khuyen nghi", "ket luan", "lo hong",
+            "danh gia", "bien phap", "pham vi", "muc tieu", "noi dung",
+            "thoi gian", "phuong phap", "hien trang"
+        ]
+
+        def is_ambiguous_heading_candidate(t_clean: str, t_noaccent: str, style_name: str | None) -> bool:
+            # Gray-zone paragraphs: not strong-static, no section number, no Heading/Title
+            # style, no known section keyword, not a person's name. Sent to the LLM for
+            # a dedicated heading/no-heading classification instead of being discarded.
+            if not t_clean:
+                return False
+            if _is_strong_static_text(t_clean, t_noaccent):
+                return False
+            if extract_section_number(t_clean) is not None:
+                return False
+            if style_name and re.search(r'heading|title', style_name, re.IGNORECASE):
+                return False
+            if any(sw in t_noaccent for sw in _SEC_WORDS):
+                return False
+            if _looks_like_person_name(t_clean):
+                return False
+            return True
+
+        def is_static_template_element(text: str, style_name: str | None = None, idx: int | None = None) -> bool:
+            if not text:
+                return True
+            t_clean = clean_text(text).strip()
+            if not t_clean:
+                return True
+            t_noaccent = strip_accents(t_clean).lower()
+
+            if _is_strong_static_text(t_clean, t_noaccent):
+                return True
+
+            # Word "Heading"/"Title" styles bypass the keyword gate entirely: a paragraph
+            # explicitly styled as a heading is always a content heading.
+            if style_name and re.search(r'heading|title', style_name, re.IGNORECASE):
+                return False
+
             # 10. Tên người ký hoặc dòng văn bản không phải đầu mục nội dung
             sec_num = extract_section_number(t_clean)
             if sec_num is None:
-                sec_words = [
-                    "tong quan", "chi tiet", "khuyen nghi", "ket luan", "lo hong",
-                    "danh gia", "bien phap", "pham vi", "muc tieu", "noi dung",
-                    "thoi gian", "phuong phap", "hien trang"
-                ]
-                has_sec_word = any(sw in t_noaccent for sw in sec_words)
+                has_sec_word = any(sw in t_noaccent for sw in _SEC_WORDS)
                 if not has_sec_word:
+                    # Ambiguous paragraphs get a second chance via the LLM classification
+                    # pass (llm_heading_overrides), populated only when file_bytes is present.
+                    if idx is not None and idx in llm_heading_overrides:
+                        return False
                     return True
-                name_starts = ["nguyen", "tran", "le", "pham", "hoang", "huynh", "phan", "vu", "vo", "dang", "bui", "do", "ho", "ngo", "duong", "dinh"]
-                if any(t_noaccent.startswith(ns + " ") for ns in name_starts):
+                if _looks_like_person_name(t_clean):
                     return True
 
             return False
+
+        llm_heading_overrides: set[int] = set()
+
+        def _prefix_heading_number(line: str, sec_num: int) -> str:
+            return f"{sec_num}. {line.strip()}"
+
+        def _split_bare_topic_list(s: str) -> list[str] | None:
+            # Bare comma/semicolon-separated topic list on a single short line, e.g.
+            # "Tổng quan, chi tiết" — no numbering, no trailing punctuation implying a
+            # full sentence. Returns the split topics, or None if the heuristic doesn't apply.
+            s = s.strip()
+            if not s or len(s) > 80:
+                return None
+            if s[-1] in ".:;":
+                return None
+            parts = [p.strip() for p in re.split(r'[,;]', s) if p.strip()]
+            if len(parts) < 2:
+                return None
+            for p in parts:
+                if len(p.split()) > 5:
+                    return None
+                if extract_section_number(p) is not None:
+                    return None
+            return parts
 
         def split_template_text(text: str) -> list[str]:
             if not text:
                 return []
             text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
             text = text.replace("\r\n", "\n").replace("\r", "\n")
-            
+
+            if "\n" not in text.strip():
+                bare_parts = _split_bare_topic_list(text.strip())
+                if bare_parts:
+                    return [_prefix_heading_number(p, i + 1) for i, p in enumerate(bare_parts)]
+
             initial_chunks = [c.strip() for c in text.split("\n") if c.strip()]
             pattern = r"(?<!^)(?=(?:\b(?<!Mục\s)(?<!Phần\s)(?<!Chương\s)\d+[\.\)\/:]|\b(?:I|II|III|IV|V|VI|VII|VIII|IX|X)[\.\)\/:]|\b(?:Mục|Phần|Chương)\s+\d+[\.\:\/]?|\bKí tên\b|\bKý tên\b|\bChữ ký\b)\s*)"
             
@@ -2673,12 +2775,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         return k, v
 
                 for std_term, synonyms in SEMANTIC_SYNONYMS.items():
-                    if p_norm_noaccent == std_term or any(syn in p_norm_noaccent for syn in synonyms):
+                    syn_variants = set()
+                    for syn in synonyms:
+                        syn_variants |= _syn_variants(syn)
+                    if p_norm_noaccent == std_term or any(syn in p_norm_noaccent for syn in syn_variants):
                         for k, v in data_dict.items():
                             if k in used_keys:
                                 continue
                             k_norm_noaccent = strip_accents(normalize_key(k))
-                            if k_norm_noaccent == std_term or any(syn in k_norm_noaccent for syn in synonyms):
+                            if k_norm_noaccent == std_term or any(syn in k_norm_noaccent for syn in syn_variants):
                                 return k, v
 
                 if p_sec:
@@ -2717,6 +2822,58 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     else:
                         lines.append(f"| {idx} | {str(v).replace('|', '-')} | Thông tin | - | - |")
                 return "\n".join(lines)
+
+            def _strip_first_markdown_table(text: str) -> tuple[str, int]:
+                lines = text.split("\n")
+                start = None
+                for i, line in enumerate(lines):
+                    if line.strip().startswith("|"):
+                        start = i
+                        break
+                if start is None:
+                    return text, 0
+                end = start
+                while end < len(lines) and lines[end].strip().startswith("|"):
+                    end += 1
+                table_lines = lines[start:end]
+                data_rows = max(0, len(table_lines) - 2)  # minus header + separator row
+
+                # Also strip a dangling "X.1. Bảng danh sách...:" label line right before the table
+                label_start = start
+                if start > 0:
+                    prev = lines[start - 1].strip()
+                    if re.match(r'^\d+(?:\.\d+)*\.?\s*B[aả]ng.*:?\s*$', prev, flags=re.IGNORECASE):
+                        label_start = start - 1
+
+                remaining = lines[:label_start] + lines[end:]
+                result = re.sub(r'\n{3,}', '\n\n', "\n".join(remaining)).strip()
+                return result, data_rows
+
+            def ensure_full_vuln_table(content: Any, sec_num: str) -> str:
+                content_str = str(content or "")
+                if not raw_vulns:
+                    return content_str
+                if "|" not in content_str:
+                    full_table = format_vulnerabilities_table(raw_vulns, sec_num=sec_num)
+                    return (full_table + ("\n\n" + content_str if content_str.strip() else "")).strip()
+
+                remaining_text, existing_rows = _strip_first_markdown_table(content_str)
+                if existing_rows >= len(raw_vulns):
+                    return content_str
+
+                full_table = format_vulnerabilities_table(raw_vulns, sec_num=sec_num)
+                if remaining_text.strip():
+                    return full_table + "\n\n" + remaining_text.strip()
+                return full_table
+
+            def _lookup_signer_name(role_keys: list[str]) -> str | None:
+                if not isinstance(scan_data, dict):
+                    return None
+                for rk in role_keys:
+                    val = scan_data.get(rk)
+                    if isinstance(val, str) and val.strip():
+                        return val.strip()
+                return None
 
             def format_summary_table(scan_data_dict: Any, sec_num: str = "1") -> str:
                 if not isinstance(scan_data_dict, dict):
@@ -3177,9 +3334,55 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
             all_paragraphs = list(doc_raw.paragraphs)
 
+            # Ambiguous paragraphs (no number, no Heading/Title style, no known section
+            # keyword, not strong-static, not a person's name) are sent to the LLM to decide
+            # whether they're a heading needing content. Only worth the extra call when a
+            # real file was uploaded (text-only requests go through the freeform branch).
+            if file_bytes:
+                ambiguous_candidates = []
+                for idx_p, p in enumerate(all_paragraphs):
+                    p_text_amb = clean_text(p.text)
+                    if not p_text_amb:
+                        continue
+                    style_name_amb = _para_style_name(p)
+                    t_noaccent_amb = strip_accents(p_text_amb).lower()
+                    if is_ambiguous_heading_candidate(p_text_amb, t_noaccent_amb, style_name_amb):
+                        ambiguous_candidates.append((idx_p, p_text_amb))
+
+                if ambiguous_candidates:
+                    classify_prompt = (
+                        "Bạn là chuyên gia phân tích cấu trúc văn bản báo cáo. Dưới đây là danh sách các đoạn "
+                        "văn bản trích từ một file Word mẫu báo cáo. Với MỖI đoạn, hãy xác định đoạn đó có phải "
+                        "là MỘT ĐẦU MỤC (heading) cần được sinh nội dung chi tiết bên dưới hay không, hay chỉ là "
+                        "văn bản tĩnh/khác (ví dụ: tên người, ghi chú, câu văn thông thường không phải đầu mục).\n\n"
+                        "DANH SÁCH ĐOẠN VĂN BẢN (đánh số theo index, bắt đầu từ 0):\n" +
+                        "\n".join(f"{i}: {txt}" for i, (_, txt) in enumerate(ambiguous_candidates)) +
+                        '\n\nTrả về DUY NHẤT một khối JSON dạng {"headings": [index1, index2, ...]} chứa các '
+                        "index (số nguyên, đúng theo đánh số bên trên) của những đoạn LÀ đầu mục cần sinh nội "
+                        'dung. Nếu không có đoạn nào là đầu mục, trả về {"headings": []}. Không thêm giải thích '
+                        "hay markdown block."
+                    )
+                    try:
+                        classify_text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=classify_prompt)
+                        classify_text = (classify_text or "").strip()
+                        if classify_text.startswith("```json"):
+                            classify_text = classify_text[7:]
+                        if classify_text.startswith("```"):
+                            classify_text = classify_text[3:]
+                        if classify_text.endswith("```"):
+                            classify_text = classify_text[:-3]
+                        classify_text = classify_text.strip()
+                        classify_data = json.loads(classify_text)
+                        chosen = classify_data.get("headings", []) if isinstance(classify_data, dict) else []
+                        for local_i in chosen:
+                            if isinstance(local_i, int) and 0 <= local_i < len(ambiguous_candidates):
+                                llm_heading_overrides.add(ambiguous_candidates[local_i][0])
+                    except Exception as e:
+                        logger.warning(f"Ambiguous heading classification failed: {e}")
+
             template_headings = [
-                clean_text(p.text) for p in all_paragraphs
-                if clean_text(p.text) and not is_static_template_element(p.text)
+                clean_text(p.text) for idx_p, p in enumerate(all_paragraphs)
+                if clean_text(p.text) and not is_static_template_element(p.text, _para_style_name(p), idx_p)
             ]
             template_text = "\n".join(template_headings)
 
@@ -3188,7 +3391,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             scan_time_val = (scan_data.get("scan_time") or scan_data.get("time") or scan_data.get("date") or "2026-10-12 10:00:00") if isinstance(scan_data, dict) else "2026-10-12 10:00:00"
             report_date_val = (scan_data.get("date") or scan_data.get("report_date") or scan_time_val.split()[0]) if isinstance(scan_data, dict) else "2026-10-12"
 
-            is_freeform_idea = len(template_headings) < 2
+            is_freeform_idea = not file_bytes
             user_prompt_desc = effective_template_text if effective_template_text else "Báo cáo đánh giá an toàn thông tin hệ thống"
 
             section_plan = []
@@ -3295,6 +3498,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
             ai_data = {}
             doc_title_ai = "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN"
             parsed_sections = []
+            positional_sections = None
 
             if needed_ai_fields or template_headings or is_freeform_idea:
                 if is_freeform_idea:
@@ -3303,12 +3507,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         f"=== YÊU CẦU / Ý TƯỞNG CỦA NGƯỜI DÙNG ===\n{user_prompt_desc}\n\n"
                         f"=== DỮ LIỆU QUÉT BẢO MẬT (SCAN DATA) ===\n{json.dumps(scan_data, ensure_ascii=False, indent=2)[:10000]}\n\n"
                         "NHIỆM VỤ CỦA BẠN:\n"
-                        "Dựa vào ý tưởng của người dùng và dữ liệu quét, hãy TỰ ĐỘNG THIẾT KẾ CÁC ĐẦU MỤC (CÁC Ý CHÍNH) VÀ SINH NỘI DUNG TOÀN DIỆN cho một bản báo cáo an toàn thông tin chuyên nghiệp (tối thiểu 5 mục logic chuẩn an toàn thông tin):\n"
-                        f"1. Thời gian và Phạm vi kiểm thử: {scan_time_val}, ngày lập {report_date_val} (mục con: 1.1, 1.2)\n"
-                        "2. Tổng quan kết quả kiểm thử: Tóm tắt phạm vi, BẮT BUỘC có Bảng thống kê lỗ hổng 3 cột (| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |), và đánh giá rủi ro tổng thể (mục con: 2.1, 2.2, 2.3)\n"
-                        "3. Chi tiết các lỗ hổng an toàn thông tin: BẮT BUỘC có Bảng chi tiết lỗ hổng 5 cột (| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |), và phân tích tác động kỹ thuật (mục con: 3.1, 3.2)\n"
-                        "4. Khuyến nghị và Biện pháp khắc phục: Khắc phục khẩn cấp và phòng ngừa dài hạn (mục con: 4.1, 4.2 với các ý a), b)...)\n"
-                        "5. Kết luận và Đề xuất hành động tiếp theo: Hiện trạng an toàn và kiến nghị triển khai (mục con: 5.1, 5.2)\n\n"
+                        "1. Đọc kỹ yêu cầu của người dùng ở trên. Nếu người dùng đã NÊU RÕ các phần/đầu mục họ muốn "
+                        "(ví dụ: 'report cho t phần tổng quan và chi tiết' -> CHỈ sinh ĐÚNG 2 mục: Tổng quan và Chi "
+                        "tiết, KHÔNG thêm mục nào khác), thì PHẢI sinh CHÍNH XÁC và ĐẦY ĐỦ các mục đó, không thêm, không bớt.\n"
+                        "2. CHỈ KHI yêu cầu của người dùng KHÔNG gợi ý cấu trúc cụ thể nào (ví dụ chỉ nói chung "
+                        "'làm báo cáo đánh giá an toàn thông tin'), hãy dùng bộ khung gợi ý mặc định gồm 5 mục chuẩn an toàn thông tin sau:\n"
+                        f"   1. Thời gian và Phạm vi kiểm thử: {scan_time_val}, ngày lập {report_date_val} (mục con: 1.1, 1.2)\n"
+                        "   2. Tổng quan kết quả kiểm thử: Tóm tắt phạm vi, BẮT BUỘC có Bảng thống kê lỗ hổng 3 cột (| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |), và đánh giá rủi ro tổng thể (mục con: 2.1, 2.2, 2.3)\n"
+                        "   3. Chi tiết các lỗ hổng an toàn thông tin: BẮT BUỘC có Bảng chi tiết lỗ hổng 5 cột (| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |), và phân tích tác động kỹ thuật (mục con: 3.1, 3.2)\n"
+                        "   4. Khuyến nghị và Biện pháp khắc phục: Khắc phục khẩn cấp và phòng ngừa dài hạn (mục con: 4.1, 4.2 với các ý a), b)...)\n"
+                        "   5. Kết luận và Đề xuất hành động tiếp theo: Hiện trạng an toàn và kiến nghị triển khai (mục con: 5.1, 5.2)\n"
+                        "3. TUYỆT ĐỐI KHÔNG chép lại nguyên văn câu yêu cầu/chỉ dẫn của người dùng (ví dụ câu 'report "
+                        "cho t phần...') vào tiêu đề hay nội dung của báo cáo. Câu đó chỉ là CHỈ DẪN để bạn hiểu cần "
+                        "sinh gì, không phải nội dung báo cáo.\n"
+                        f"4. Nếu có mục 'Chi tiết'/'chi tiết lỗ hổng' (do người dùng yêu cầu hoặc theo khung mặc định), "
+                        f"BẮT BUỘC liệt kê ĐẦY ĐỦ TOÀN BỘ {len(raw_vulns)} lỗ hổng có trong dữ liệu quét (scan_data) "
+                        "dưới dạng bảng markdown 5 cột, KHÔNG bỏ sót, KHÔNG rút gọn.\n\n"
                         "HƯỚNG DẪN ĐỊNH DẠNG (BẮT BUỘC TUÂN THỦ):\n"
                         "1. Trong phần nội dung (value), TUYỆT ĐỐI KHÔNG lặp lại tiêu đề mục lớn ở dòng đầu tiên.\n"
                         "2. Số thứ tự mục con BẮT BUỘC phải khớp với mục lớn (Mục 1 -> 1.1, Mục 2 -> 2.1...).\n"
@@ -3318,6 +3532,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "Trả về DUY NHẤT một khối JSON hợp lệ theo cấu trúc:\n"
                         "{\n"
                         '  "document_title": "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN...",\n'
+                        '  "include_letterhead": true,\n'
+                        '  "include_salutation": true,\n'
+                        '  "include_signature": true,\n'
                         '  "sections": [\n'
                         '    {\n'
                         '      "heading": "1. Thời gian và Phạm vi kiểm thử",\n'
@@ -3341,6 +3558,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         '    }\n'
                         '  ]\n'
                         "}\n"
+                        "Các cờ include_letterhead (quốc hiệu/tiêu ngữ/ngày tháng), include_salutation (Kính gửi + "
+                        "danh sách nơi nhận), include_signature (khối chữ ký) CHỈ đặt true nếu người dùng CÓ nhắc/ngụ "
+                        "ý cần phần đó trong yêu cầu của họ; nếu người dùng không yêu cầu, đặt false.\n"
                         "Tuyệt đối không dùng markdown block (như ```json) hay thêm văn bản giải thích thừa thãi bên ngoài khối JSON."
                     )
                 else:
@@ -3361,6 +3581,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "3. CHỖ NÀO NÊN ĐỂ BẢNG THÌ HÃY ĐỂ BẢNG (Dùng cú pháp bảng Markdown chuẩn: | Cột 1 | Cột 2 | ... |):\n"
                         "   - Bảng chi tiết lỗ hổng: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\n"
                         "   - Bảng thống kê tổng quan: | Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |\n"
+                        f"   - Nếu đầu mục liên quan đến danh sách/chi tiết lỗ hổng: BẮT BUỘC liệt kê ĐẦY ĐỦ TOÀN BỘ {len(raw_vulns)} lỗ hổng có trong scan_data trong bảng, KHÔNG bỏ sót, KHÔNG rút gọn, KHÔNG chỉ liệt kê một phần.\n"
                         "4. ĐỐI VỚI CÁC ĐẦU MỤC TÙY BIẾN CỦA NGƯỜI DÙNG: Phân tích chủ đề và dùng scan_data sinh nội dung kỹ thuật phù hợp.\n"
                         "5. TUYỆT ĐỐI KHÔNG DÙNG DẤU SAO ** HOẶC *** ĐỂ IN ĐẬM VÌ ĐÂY LÀ ĐỊNH DẠNG WORD.\n"
                         "6. Các phần đã có sẵn nội dung cố định trong template (như tiêu đề 'Báo cáo', tên người ký): Giữ nguyên, không cần sinh thêm.\n"
@@ -3368,39 +3589,100 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "   - TUYỆT ĐỐI KHÔNG sinh nội dung cho các phần hành chính như 'Kính gửi', 'Nơi nhận', danh sách người nhận, căn cứ, quốc hiệu, tiêu ngữ hay chữ ký.\n"
                         "   - CHỈ sinh nội dung cho các ĐẦU MỤC NỘI DUNG BÁO CÁO THỰC SỰ (như Thời gian, Tổng quan, Chi tiết, Khuyến nghị, Kết luận...).\n\n"
                         "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
-                        "- Trả về DUY NHẤT một khối JSON hợp lệ.\n"
-                        "- Mỗi key trong JSON phải là NGUYÊN VĂN tiêu đề của từng đầu mục trong template (ví dụ: " + ", ".join([f"'{h}'" for h in template_headings[:10]]) + ").\n"
-                        "- BẮT BUỘC sinh đầy đủ TẤT CẢ các mục có trong template, TUYỆT ĐỐI KHÔNG gộp các mục lại với nhau và không được bỏ sót bất kỳ mục nào.\n"
-                        "- Value là nội dung văn bản (string) tiếng Việt hoàn chỉnh, chứa bảng markdown chuẩn cho mục bảng.\n"
+                        '- Trả về DUY NHẤT một khối JSON hợp lệ theo cấu trúc: {"sections": [{"heading": "...", "content": "..."}, ...]}.\n'
+                        f"- Mảng \"sections\" PHẢI có ĐÚNG {len(template_headings)} phần tử, theo ĐÚNG THỨ TỰ xuất hiện của từng đầu mục trong "
+                        "=== CÁC ĐẦU MỤC TRONG TEMPLATE BÁO CÁO === ở trên (đầu mục thứ 1 -> phần tử thứ 1, đầu mục thứ 2 -> phần tử thứ 2, ...). "
+                        "TUYỆT ĐỐI KHÔNG bỏ sót, không gộp, không đổi thứ tự các đầu mục.\n"
+                        "- Trường \"heading\" ghi lại NGUYÊN VĂN tiêu đề đầu mục tương ứng (ví dụ: " + ", ".join([f"'{h}'" for h in template_headings[:10]]) + ") để tiện đối chiếu.\n"
+                        "- Trường \"content\" là nội dung văn bản (string) tiếng Việt hoàn chỉnh cho đầu mục đó, chứa bảng markdown chuẩn cho mục bảng.\n"
                         "- Tuyệt đối không dùng markdown block (như ```json) hay thêm văn bản giải thích thừa thãi bên ngoài khối JSON."
                     )
 
-                try:
-                    text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=prompt_content)
-                    text = text.strip()
-                    if text.startswith("```json"):
-                        text = text[7:]
-                    if text.startswith("```"):
-                        text = text[3:]
-                    if text.endswith("```"):
-                        text = text[:-3]
-                    text = text.strip()
+                def _sanitize_llm_json(raw: str) -> str:
+                    out = []
+                    in_string = False
+                    escape = False
+                    for ch in raw:
+                        if in_string:
+                            if escape:
+                                out.append(ch)
+                                escape = False
+                                continue
+                            if ch == '\\':
+                                out.append(ch)
+                                escape = True
+                                continue
+                            if ch == '"':
+                                in_string = False
+                                out.append(ch)
+                                continue
+                            if ch == '\n':
+                                out.append('\\n')
+                                continue
+                            if ch == '\r':
+                                out.append('\\r')
+                                continue
+                            if ch == '\t':
+                                out.append('\\t')
+                                continue
+                            out.append(ch)
+                        else:
+                            if ch == '"':
+                                in_string = True
+                            out.append(ch)
+                    return "".join(out)
 
-                    ai_data = json.loads(text)
-                except Exception as e:
-                    logger.error(f"AI gen for template failed: {e}")
+                for attempt in range(2):
+                    try:
+                        text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=prompt_content)
+                        text = (text or "").strip()
+                        if text.startswith("```json"):
+                            text = text[7:]
+                        if text.startswith("```"):
+                            text = text[3:]
+                        if text.endswith("```"):
+                            text = text[:-3]
+                        text = text.strip()
+                        if not text:
+                            raise ValueError("empty LLM response")
+
+                        try:
+                            ai_data = json.loads(text)
+                        except json.JSONDecodeError:
+                            ai_data = json.loads(_sanitize_llm_json(text))
+                        break
+                    except Exception as e:
+                        logger.error(f"AI gen for template failed (attempt {attempt + 1}): {e}")
+                        ai_data = {}
+                        continue
+
+                # Type-safety: a bare JSON array of {heading, content} dicts is wrapped as
+                # {"sections": [...]}; anything else non-dict resets to {} so ai_data.items()
+                # below never crashes.
+                if isinstance(ai_data, list):
+                    if all(isinstance(it, dict) and "heading" in it and "content" in it for it in ai_data):
+                        ai_data = {"sections": ai_data}
+                    else:
+                        ai_data = {}
+                elif not isinstance(ai_data, dict):
+                    ai_data = {}
 
                 if isinstance(ai_data, dict):
                     if ai_data.get("document_title"):
                         doc_title_ai = str(ai_data["document_title"]).strip()
                     if "sections" in ai_data and isinstance(ai_data["sections"], list):
-                        for sec in ai_data["sections"]:
+                        sections_list = ai_data["sections"]
+                        for sec in sections_list:
                             if isinstance(sec, dict) and "heading" in sec and "content" in sec:
                                 parsed_sections.append(sec)
                                 ai_data[sec["heading"]] = sec["content"]
+                        if (not is_freeform_idea and template_headings
+                                and len(sections_list) == len(template_headings)
+                                and all(isinstance(s, dict) and "content" in s for s in sections_list)):
+                            positional_sections = [s.get("content", "") for s in sections_list]
                     else:
                         for k, v in ai_data.items():
-                            if k not in ["document_title", "meta"]:
+                            if k not in ["document_title", "meta", "include_letterhead", "include_salutation", "include_signature"]:
                                 parsed_sections.append({"heading": k, "content": str(v)})
 
             # Sanitizer to prevent duplicate headings and correct sub-heading numbers
@@ -3473,6 +3755,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     else:
                         doc_title_ai = f"BÁO CÁO {clean_desc.upper()}"
 
+                # Default True (old unconditional behavior) unless the LLM explicitly said False.
+                include_letterhead = bool(ai_data.get("include_letterhead", True)) if isinstance(ai_data, dict) else True
+                include_salutation = bool(ai_data.get("include_salutation", True)) if isinstance(ai_data, dict) else True
+                include_signature = bool(ai_data.get("include_signature", True)) if isinstance(ai_data, dict) else True
+
                 # Dynamic full-report construction from AI planner
                 doc_raw = docx.Document()
                 for section in doc_raw.sections:
@@ -3482,26 +3769,27 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     section.right_margin = docx.shared.Inches(1.0)
 
                 # 1. Quốc hiệu, Tiêu ngữ
-                p_qh = doc_raw.add_paragraph()
-                p_qh.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
-                p_qh.paragraph_format.space_before = docx.shared.Pt(0)
-                p_qh.paragraph_format.space_after = docx.shared.Pt(2)
-                r_qh = p_qh.add_run("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc")
-                r_qh.bold = True
-                r_qh.font.name = base_font
-                r_qh.font.size = docx.shared.Pt(12)
+                if include_letterhead:
+                    p_qh = doc_raw.add_paragraph()
+                    p_qh.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
+                    p_qh.paragraph_format.space_before = docx.shared.Pt(0)
+                    p_qh.paragraph_format.space_after = docx.shared.Pt(2)
+                    r_qh = p_qh.add_run("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc")
+                    r_qh.bold = True
+                    r_qh.font.name = base_font
+                    r_qh.font.size = docx.shared.Pt(12)
 
-                # 2. Ngày tháng
-                p_dt = doc_raw.add_paragraph()
-                p_dt.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
-                p_dt.paragraph_format.space_before = docx.shared.Pt(2)
-                p_dt.paragraph_format.space_after = docx.shared.Pt(6)
-                r_dt = p_dt.add_run(f"Hà Nội, ngày {report_date_val.split('-')[-1] if '-' in report_date_val else '12'} tháng {report_date_val.split('-')[1] if len(report_date_val.split('-')) > 1 else '10'} năm {report_date_val.split('-')[0] if '-' in report_date_val else '2026'}")
-                r_dt.italic = True
-                r_dt.font.name = base_font
-                r_dt.font.size = docx.shared.Pt(11)
+                    # 2. Ngày tháng
+                    p_dt = doc_raw.add_paragraph()
+                    p_dt.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                    p_dt.paragraph_format.space_before = docx.shared.Pt(2)
+                    p_dt.paragraph_format.space_after = docx.shared.Pt(6)
+                    r_dt = p_dt.add_run(f"Hà Nội, ngày {report_date_val.split('-')[-1] if '-' in report_date_val else '12'} tháng {report_date_val.split('-')[1] if len(report_date_val.split('-')) > 1 else '10'} năm {report_date_val.split('-')[0] if '-' in report_date_val else '2026'}")
+                    r_dt.italic = True
+                    r_dt.font.name = base_font
+                    r_dt.font.size = docx.shared.Pt(11)
 
-                # 3. Tiêu đề
+                # 3. Tiêu đề (luôn hiển thị)
                 p_tit = doc_raw.add_paragraph()
                 p_tit.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
                 p_tit.paragraph_format.space_before = docx.shared.Pt(14)
@@ -3511,36 +3799,46 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 r_tit.font.name = base_font
                 r_tit.font.size = docx.shared.Pt(16)
 
+                curr_anchor = p_tit
+
                 # 4. Kính gửi
-                p_kg = doc_raw.add_paragraph()
-                p_kg.paragraph_format.left_indent = docx.shared.Pt(14)
-                p_kg.paragraph_format.space_before = docx.shared.Pt(6)
-                p_kg.paragraph_format.space_after = docx.shared.Pt(2)
-                r_kg = p_kg.add_run("Kính gửi:")
-                r_kg.bold = True
-                r_kg.font.name = base_font
-                r_kg.font.size = docx.shared.Pt(12)
+                if include_salutation:
+                    p_kg = doc_raw.add_paragraph()
+                    p_kg.paragraph_format.left_indent = docx.shared.Pt(14)
+                    p_kg.paragraph_format.space_before = docx.shared.Pt(6)
+                    p_kg.paragraph_format.space_after = docx.shared.Pt(2)
+                    r_kg = p_kg.add_run("Kính gửi:")
+                    r_kg.bold = True
+                    r_kg.font.name = base_font
+                    r_kg.font.size = docx.shared.Pt(12)
 
-                recip_list = ["- Thủ trưởng cơ quan, đơn vị;", "- Các đồng chí trong đơn vị"]
-                if "ban giám đốc" in user_prompt_desc.lower():
-                    recip_list = ["- Ban Giám đốc;", "- Các đồng chí phụ trách công nghệ và an toàn thông tin"]
-                elif "lãnh đạo" in user_prompt_desc.lower():
-                    recip_list = ["- Lãnh đạo đơn vị;", "- Bộ phận chuyên môn an toàn thông tin"]
+                    recip_list = ["- Thủ trưởng cơ quan, đơn vị;", "- Các đồng chí trong đơn vị"]
+                    if "ban giám đốc" in user_prompt_desc.lower():
+                        recip_list = ["- Ban Giám đốc;", "- Các đồng chí phụ trách công nghệ và an toàn thông tin"]
+                    elif "lãnh đạo" in user_prompt_desc.lower():
+                        recip_list = ["- Lãnh đạo đơn vị;", "- Bộ phận chuyên môn an toàn thông tin"]
 
-                for idx_r, r_item in enumerate(recip_list):
-                    p_rx = doc_raw.add_paragraph()
-                    p_rx.paragraph_format.left_indent = docx.shared.Pt(28)
-                    p_rx.paragraph_format.space_before = docx.shared.Pt(1)
-                    p_rx.paragraph_format.space_after = docx.shared.Pt(6 if idx_r == len(recip_list) - 1 else 2)
-                    r_run = p_rx.add_run(r_item)
-                    r_run.font.name = base_font
-                    r_run.font.size = docx.shared.Pt(12)
+                    for idx_r, r_item in enumerate(recip_list):
+                        p_rx = doc_raw.add_paragraph()
+                        p_rx.paragraph_format.left_indent = docx.shared.Pt(28)
+                        p_rx.paragraph_format.space_before = docx.shared.Pt(1)
+                        p_rx.paragraph_format.space_after = docx.shared.Pt(6 if idx_r == len(recip_list) - 1 else 2)
+                        r_run = p_rx.add_run(r_item)
+                        r_run.font.name = base_font
+                        r_run.font.size = docx.shared.Pt(12)
+                        curr_anchor = p_rx
 
                 # 5. Các sections
-                curr_anchor = p_rx
                 for sec in parsed_sections:
                     h_text = sec["heading"]
                     c_text = sec["content"]
+
+                    h_norm_noaccent = strip_accents(normalize_key(h_text))
+                    is_detail_sec = h_norm_noaccent == "chi tiet" or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                    sec_num = extract_section_number(h_text) or "1"
+                    if is_detail_sec and raw_vulns:
+                        c_text = ensure_full_vuln_table(c_text, sec_num)
+
                     p_h = doc_raw.add_paragraph()
                     p_h.paragraph_format.space_before = docx.shared.Pt(10)
                     p_h.paragraph_format.space_after = docx.shared.Pt(4)
@@ -3549,57 +3847,65 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     r_h.font.name = base_font
                     r_h.font.size = docx.shared.Pt(13)
 
-                    sec_num = extract_section_number(h_text) or "1"
                     c_clean = sanitize_section_content(sec_num, h_text, c_text)
                     curr_anchor = render_content_with_tables(doc_raw, p_h, c_clean, base_font=base_font)
 
                 # 6. Chữ ký
-                p_sig1 = doc_raw.add_paragraph()
-                p_sig1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
-                p_sig1.paragraph_format.space_before = docx.shared.Pt(18)
-                p_sig1.paragraph_format.space_after = docx.shared.Pt(2)
-                r_s1 = p_sig1.add_run("CHỈ HUY")
-                r_s1.bold = True
-                r_s1.font.name = base_font
-                r_s1.font.size = docx.shared.Pt(12)
+                if include_signature:
+                    p_sig1 = doc_raw.add_paragraph()
+                    p_sig1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                    p_sig1.paragraph_format.space_before = docx.shared.Pt(18)
+                    p_sig1.paragraph_format.space_after = docx.shared.Pt(2)
+                    r_s1 = p_sig1.add_run("CHỈ HUY")
+                    r_s1.bold = True
+                    r_s1.font.name = base_font
+                    r_s1.font.size = docx.shared.Pt(12)
 
-                p_name1 = doc_raw.add_paragraph()
-                p_name1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
-                p_name1.paragraph_format.space_before = docx.shared.Pt(2)
-                p_name1.paragraph_format.space_after = docx.shared.Pt(10)
-                r_n1 = p_name1.add_run("Nguyễn Văn Tốt")
-                r_n1.bold = True
-                r_n1.font.name = base_font
-                r_n1.font.size = docx.shared.Pt(12)
+                    signer1 = _lookup_signer_name(["chi_huy", "nguoi_chi_huy", "commander"])
+                    p_name1 = doc_raw.add_paragraph()
+                    p_name1.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                    p_name1.paragraph_format.space_before = docx.shared.Pt(2)
+                    p_name1.paragraph_format.space_after = docx.shared.Pt(10)
+                    r_n1 = p_name1.add_run(signer1 if signer1 else "(Ký và ghi rõ họ tên)")
+                    r_n1.bold = bool(signer1)
+                    r_n1.italic = not signer1
+                    r_n1.font.name = base_font
+                    r_n1.font.size = docx.shared.Pt(12)
 
-                p_sig2 = doc_raw.add_paragraph()
-                p_sig2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
-                p_sig2.paragraph_format.space_before = docx.shared.Pt(4)
-                p_sig2.paragraph_format.space_after = docx.shared.Pt(2)
-                r_s2 = p_sig2.add_run("NGƯỜI SOẠN BÁO CÁO")
-                r_s2.bold = True
-                r_s2.font.name = base_font
-                r_s2.font.size = docx.shared.Pt(12)
+                    p_sig2 = doc_raw.add_paragraph()
+                    p_sig2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                    p_sig2.paragraph_format.space_before = docx.shared.Pt(4)
+                    p_sig2.paragraph_format.space_after = docx.shared.Pt(2)
+                    r_s2 = p_sig2.add_run("NGƯỜI SOẠN BÁO CÁO")
+                    r_s2.bold = True
+                    r_s2.font.name = base_font
+                    r_s2.font.size = docx.shared.Pt(12)
 
-                p_name2 = doc_raw.add_paragraph()
-                p_name2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
-                p_name2.paragraph_format.space_before = docx.shared.Pt(2)
-                p_name2.paragraph_format.space_after = docx.shared.Pt(4)
-                r_n2 = p_name2.add_run("Bùi Thị Xuân")
-                r_n2.bold = True
-                r_n2.font.name = base_font
-                r_n2.font.size = docx.shared.Pt(12)
+                    signer2 = _lookup_signer_name(["nguoi_soan", "nguoi_soan_bao_cao", "nguoi_lap", "nguoi_lap_bao_cao", "author", "signer"])
+                    p_name2 = doc_raw.add_paragraph()
+                    p_name2.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
+                    p_name2.paragraph_format.space_before = docx.shared.Pt(2)
+                    p_name2.paragraph_format.space_after = docx.shared.Pt(4)
+                    r_n2 = p_name2.add_run(signer2 if signer2 else "(Ký và ghi rõ họ tên)")
+                    r_n2.bold = bool(signer2)
+                    r_n2.italic = not signer2
+                    r_n2.font.name = base_font
+                    r_n2.font.size = docx.shared.Pt(12)
 
             else:
                 # In-place insertion for structured template or uploaded docx with headings
                 matched_section_counter = 0
+                heading_idx = 0
 
                 for idx_p, p in enumerate(all_paragraphs):
                     p_text = clean_text(p.text)
                     if not p_text:
                         continue
-                    if is_static_template_element(p_text):
+                    if is_static_template_element(p_text, _para_style_name(p), idx_p):
                         continue
+
+                    current_heading_idx = heading_idx
+                    heading_idx += 1
 
                     extracted_num = extract_section_number(p_text)
                     if extracted_num:
@@ -3617,7 +3923,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     is_rec_section = p_norm_noaccent == "khuyen nghi" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["khuyen nghi"])
                     is_conclusion_section = p_norm_noaccent == "ket luan" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["ket luan"])
 
-                    matched_k, content = find_matching_content(p_text, ai_data, used_ai_keys)
+                    content = None
+                    matched_k = None
+                    if positional_sections is not None and current_heading_idx < len(positional_sections):
+                        content = positional_sections[current_heading_idx]
+                        matched_k = p_text
+                    if not content:
+                        matched_k, content = find_matching_content(p_text, ai_data, used_ai_keys)
 
                     if not content:
                         if is_time_section:
@@ -3661,10 +3973,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             )
                             matched_k = matched_k or p_text
 
-                    if is_detail_section and raw_vulns and "|" not in str(content):
+                    if is_detail_section and raw_vulns:
                         target_sec_num = sec_num if sec_num else "3"
-                        cur_details_str = format_vulnerabilities_table(raw_vulns, sec_num=target_sec_num)
-                        content = cur_details_str + ("\n\n" + str(content) if content else "")
+                        content = ensure_full_vuln_table(content, target_sec_num)
 
                     if is_overview_section and "|" not in str(content):
                         target_sec_num = sec_num if sec_num else "2"
@@ -3691,6 +4002,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     for sec in parsed_sections:
                         h_text = sec["heading"]
                         c_text = sec["content"]
+                        h_norm_noaccent = strip_accents(normalize_key(h_text))
+                        is_detail_sec = h_norm_noaccent == "chi tiet" or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                        sec_num = extract_section_number(h_text) or "1"
+                        if is_detail_sec and raw_vulns:
+                            c_text = ensure_full_vuln_table(c_text, sec_num)
+
                         p_h = doc_raw.add_paragraph()
                         p_h.paragraph_format.space_before = docx.shared.Pt(12)
                         p_h.paragraph_format.space_after = docx.shared.Pt(4)
@@ -3700,7 +4017,6 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         r_h.font.name = base_font
                         r_h.font.size = docx.shared.Pt(13)
 
-                        sec_num = extract_section_number(h_text) or "1"
                         c_clean = sanitize_section_content(sec_num, h_text, c_text)
                         render_content_with_tables(doc_raw, p_h, c_clean, base_font=base_font)
 
