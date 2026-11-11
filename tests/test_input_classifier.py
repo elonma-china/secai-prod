@@ -278,6 +278,27 @@ def test_gate_offtopic_no_text_keeps_legacy_behavior() -> None:
     assert decide(v, _Settings()).action is Action.REFUSE_OFFTOPIC
 
 
+def test_gate_offtopic_conversation_meta_marker_overrides_confident_offtopic() -> None:
+    # Acceptance-test repro (2026-11-11): "Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ
+    # cho tôi" carries no CWE/CVE/IAS token (its topic is the prior, already in-scope, turns —
+    # not the literal words of this one message), so it scored confidently off-topic and got
+    # wrongly refused mid-session. The conversation-meta marker rescues it the same way the
+    # security/IAS markers rescue a taxonomy or howto question.
+    v = InputVerdict(True, "offtopic", False, False, {"security": 0.01, "offtopic": 0.97}, 1.0)
+    assert decide(
+        v, _Settings(), text="Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ cho tôi",
+    ).action is Action.PASS
+
+
+def test_gate_offtopic_conversation_meta_marker_override_disableable() -> None:
+    s = _Settings()
+    s.input_classifier_conversation_meta_override = False
+    v = InputVerdict(True, "offtopic", False, False, {"security": 0.01, "offtopic": 0.97}, 1.0)
+    assert decide(
+        v, s, text="Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ cho tôi",
+    ).action is Action.REFUSE_OFFTOPIC
+
+
 def test_gate_security_clear_passes() -> None:
     v = InputVerdict(True, "security", False, False,
                       {"security": 0.95, "offtopic": 0.03, "chitchat": 0.02}, 1.0)
