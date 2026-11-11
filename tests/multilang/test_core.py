@@ -146,7 +146,9 @@ async def test_retry_counts_and_restore():
     fake = EchoLiteralLlm(bad_first=True)
     result = await translate(TranslationRequest("Kiểm tra CVE-2024-1234.", "vi", "zh"),
                              llm=fake, settings=settings(), token_count=count)
-    assert result.attempts == 2 and result.chunks == 1
+    # bad first reply drops the CVE marker: one visible-identifier recovery call (which this
+    # token-only fake cannot satisfy), then the ordinary retry succeeds.
+    assert result.attempts == 3 and result.chunks == 1
     assert "CVE-2024-1234" in result.translated_text
     assert result.warnings == ("SOURCE_LANGUAGE_UNCERTAIN", "TARGET_LANGUAGE_UNCERTAIN")
 

@@ -41,14 +41,11 @@ class IasClient:
             self._client = None
 
     async def create_session(self, *, title: str | None = None,
-                             agent: str = "webapp") -> str:
+                             agent: str = "poc_runner") -> str:
         """Tạo session mới, trả `sessionID`.
-        agent="webapp" (mặc định) để tránh anti-solo-grind rail chỉ áp dụng cho "pentest" agent.
-        ĐÃ THỬ đổi sang "pentest"+delegate cho poc_runner ngày 2026-11-02 (benchmark CLI cho thấy
-        nhanh hơn 1.6-2.5x) rồi REVERT cùng ngày: dispatch qua `task` bị TREO Ở ĐÚNG BƯỚC GỌI
-        TOOL khi đi qua HTTP server API (tái diễn 2/2 lần thử, không phải lỗi hiếm) — xem comment
-        trong `exploit_v2_prompt.py::_OUTPUT_CONTRACT` để biết chi tiết + hướng điều tra nếu muốn
-        thử lại tối ưu tốc độ sau này.
+        agent="poc_runner" (2026-11-10): gọi thẳng subagent có workflow ExploitDB→nuclei.
+        Không đi qua agent "pentest" + tool `task` — đường đó treo trên HTTP (2026-11-02).
+        "webapp" solo không nạp poc-runner.txt nên không gọi EDB.
         """
         http = await self._http()
         payload: dict[str, Any] = {"agent": agent}
@@ -66,7 +63,7 @@ class IasClient:
             raise IasClientError(f"create_session: response thiếu id: {data!r}")
         return str(session_id)
 
-    async def prompt_async(self, session_id: str, text: str, *, agent: str = "webapp") -> None:
+    async def prompt_async(self, session_id: str, text: str, *, agent: str = "poc_runner") -> None:
         """Gửi prompt, KHÔNG chờ model trả lời — theo dõi tiến độ qua `events()`.
 
         `agent` phải truyền ở ĐÂY, không phải chỉ lúc `create_session` — pentestcode resolve

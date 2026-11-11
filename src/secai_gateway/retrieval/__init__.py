@@ -3,9 +3,9 @@
 from .howto import howto_search
 from .http_fetch import web_fetch
 from .neo4j import neo4j_search
-from .qdrant import qdrant_search
+from .qdrant import cve_count, cve_latest, qdrant_search
 from .reference_fetch import build_reference_tools
 from .websearch import gather_web_hints, web_search
 
-__all__ = ["qdrant_search", "neo4j_search", "web_fetch", "build_reference_tools",
-           "web_search", "gather_web_hints", "howto_search"]
+__all__ = ["qdrant_search", "cve_count", "cve_latest", "neo4j_search", "web_fetch",
+           "build_reference_tools", "web_search", "gather_web_hints", "howto_search"]

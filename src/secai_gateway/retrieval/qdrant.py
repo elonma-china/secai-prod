@@ -401,8 +401,15 @@ async def _qdrant_search(
         bm25_fanout = BM25_FANOUT * 3 if user_filtered else BM25_FANOUT
         dense_res, bm25_res = await asyncio.gather(_dense_path(), _bm25_path(), return_exceptions=True)
         if isinstance(dense_res, Exception):
-            return ToolResult(content=f"KB dense search failed: {dense_res}",
-                              summary=f"qdrant_search({query}) error", is_error=True)
+            # Embedding endpoint down/unreachable must not kill retrieval: degrade to BM25-only.
+            # Only hard-fail when BM25 is also unavailable.
+            if isinstance(bm25_res, Exception):
+                return ToolResult(
+                    content=f"KB search failed: dense={dense_res!r}; bm25={bm25_res!r}",
+                    summary=f"qdrant_search({query}) error", is_error=True)
+            logger.warning("qdrant_search dense path failed (%s: %s); falling back to BM25-only",
+                           type(dense_res).__name__, dense_res)
+            dense_res = []
         dense_hits: list[dict[str, Any]] = dense_res
         bm25_raw = [] if isinstance(bm25_res, Exception) else bm25_res
         bm25_used = bool(bm25_raw)
@@ -636,3 +643,96 @@ qdrant_search = tool(
     parallel=True,
     summary=lambda input: f"qdrant_search({input.get('query', '?')[:50]})",
 )(_qdrant_search_tool)
+
+
+async def _qdrant_count(client: httpx.AsyncClient, qfilter: dict[str, Any] | None,
+                        collection: str | None = None) -> int:
+    """Qdrant's native, exact point count — not a semantic search, so it cannot return
+    'no results' for an aggregate question the way qdrant_search can."""
+    body: dict[str, Any] = {"exact": True}
+    if qfilter:
+        body["filter"] = qfilter
+    resp = await client.post(f"{QDRANT_URL}/collections/{collection or COLLECTION}/points/count",
+                             json=body, timeout=20)
+    resp.raise_for_status()
+    return int(resp.json()["result"]["count"])
+
+
+async def _cve_count_tool(ctx: ToolContext) -> ToolResult:
+    qfilter = {"must": [{"key": "kind", "match": {"value": "core"}}]}
+    async with httpx.AsyncClient() as client:
+        count = await _qdrant_count(client, qfilter)
+    return ToolResult(
+        content=f"Tổng số bản ghi CVE hiện có trong knowledge base nội bộ (đếm chính xác, không phải ước lượng): {count}.",
+        summary=f"cve_count() = {count}")
+
+
+cve_count = tool(
+    name="cve_count",
+    description=(
+        "Exact total number of CVE records currently indexed in the internal knowledge base. "
+        "Use this for 'how many CVEs' / 'tổng số CVE' questions. Do not try to answer a count "
+        "question via qdrant_search — that tool ranks relevant content, it does not count rows, "
+        "and treating its hit list as a total is wrong."
+    ),
+    input_schema={"type": "object", "properties": {}},
+    scope="read",
+    parallel=True,
+    summary=lambda input: "cve_count()",
+)(_cve_count_tool)
+
+
+# Lookback window for cve_latest: try the current year, then step back one year at a
+# time until a year with indexed data is found, or the window is exhausted.
+_CVE_LATEST_LOOKBACK_YEARS = 6
+
+
+async def _cve_latest_tool(ctx: ToolContext, limit: int = 10) -> ToolResult:
+    """The knowledge base only indexes a coarse `year` keyword field (see the `year is a
+    keyword field (no Qdrant range)` note on qdrant_search) — there is no day-level publish
+    date to sort by. Rather than let the model guess a recency claim it cannot support (observed
+    in production: it fabricated a 'both lookup tools are down' excuse for an unanswerable
+    question), this returns real CVEs from the most recent year that has any, explicitly
+    caveated at that granularity.
+    """
+    limit = max(1, min(int(limit or 10), 25))
+    current_year = time.localtime().tm_year
+    async with httpx.AsyncClient() as client:
+        for year in range(current_year + 1, current_year + 1 - _CVE_LATEST_LOOKBACK_YEARS, -1):
+            qfilter = {"must": [{"key": "kind", "match": {"value": "core"}},
+                                {"key": "year", "match": {"value": str(year)}}]}
+            rows = await _scroll_by_filter(client, qfilter, limit)
+            if not rows:
+                continue
+            lines = [
+                f"Knowledge base không lưu ngày công bố chi tiết, chỉ có năm — đây là {len(rows)} "
+                f"CVE thuộc năm {year} (năm gần nhất hiện có dữ liệu trong hệ thống), KHÔNG đảm bảo "
+                "đúng thứ tự công bố trong năm đó. Để biết CVE mới nhất chính xác theo ngày, tra "
+                "trực tiếp tại NVD (nvd.nist.gov)."]
+            for _pid, payload in rows:
+                cve_id = payload.get("cve_id", "?")
+                title = payload.get("title") or payload.get("name") or ""
+                severity = payload.get("severity", "")
+                lines.append(f"- {cve_id}" + (f" — {title}" if title else "")
+                            + (f" [{severity}]" if severity else ""))
+            return ToolResult(content="\n".join(lines), summary=f"cve_latest() year={year} n={len(rows)}")
+    return ToolResult(
+        content=f"Không tìm thấy CVE nào trong {_CVE_LATEST_LOOKBACK_YEARS} năm gần đây trong knowledge base nội bộ.",
+        summary="cve_latest() 0 hits")
+
+
+cve_latest = tool(
+    name="cve_latest",
+    description=(
+        "CVEs from the most recent year present in the internal knowledge base (year-level "
+        "granularity only, not exact publish-date order — the tool's own output says so). Use "
+        "this for 'CVE nào mới nhất' / 'latest CVE' questions instead of qdrant_search, which "
+        "ranks by relevance to a query, not by recency, and returns nothing useful for a bare "
+        "'what's newest' question."
+    ),
+    input_schema={"type": "object", "properties": {
+        "limit": {"type": "integer", "description": "How many CVEs to return (default 10, max 25)."}}},
+    scope="read",
+    parallel=True,
+    summary=lambda input: f"cve_latest(limit={input.get('limit', 10)})",
+)(_cve_latest_tool)

@@ -518,3 +518,68 @@ async def test_cancelled_image_preprocess_cannot_resurrect_temp_files(tmp_path, 
         release.set()
         await asyncio.wait_for(asyncio.to_thread(finished.wait, 3), 4)
     assert not list(tmp_path.glob("secai-image-*")), "preprocessing must not recreate its deleted workdir"
+
+
+@pytest.mark.asyncio
+async def test_pdf_scan_page_falls_back_to_ocr(tmp_path, monkeypatch):
+    from reportlab.pdfgen import canvas
+    from secai_gateway.translation import worker as worker_module
+    from secai_gateway.translation.ocr_client import ImageOcrPipeline
+    from secai_gateway.translation.types import CorrectedOcr, DocumentBlock
+
+    monkeypatch.setattr(worker_module, "TranslationAgent", EchoAgent)
+    EchoAgent.calls = []
+
+    async def fake_ocr(self, input_path, *, work_dir, context):
+        return CorrectedOcr(
+            blocks=(DocumentBlock(id="b000001", kind="ocr_text", order=0,
+                                  text="Hello from scan", metadata={}),),
+            raw_text="Hello from scan", corrected_text="Hello from scan", needs_review=False)
+
+    monkeypatch.setattr(ImageOcrPipeline, "process", fake_ocr)
+
+    pdf_path = tmp_path / "mixed.pdf"
+    c = canvas.Canvas(str(pdf_path))
+    c.showPage()  # page 1: blank -> no text layer, a scan candidate
+    c.drawString(100, 750, "Page two text")  # page 2: native text layer
+    c.save()
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"),
+                                   ocr_enabled=True, ocr_base_url="http://127.0.0.1:18083",
+                                   ocr_api_key="secret", ocr_model="test", _env_file=None)
+    store = JobStore(settings)
+    admitted = store.admit("file", pdf_path.read_bytes(), ".pdf", "en", "vi", "127.0.0.1", None)
+    assert await worker_module.Worker(store, settings, None).run_once()
+    row = store.get(admitted["job_id"])
+    assert row["status"] == "succeeded"
+    translated = row["result_json"]
+    assert "Xin chào from scan" in translated
+    assert "Page two text" in translated
+    # Page order is preserved: the OCR'd page 1 text precedes the native page 2 text.
+    assert translated.index("Xin chào from scan") < translated.index("Page two text")
+
+
+@pytest.mark.asyncio
+async def test_pdf_scan_without_ocr_enabled_keeps_native_pages_and_warns(tmp_path, monkeypatch):
+    from reportlab.pdfgen import canvas
+    from secai_gateway.translation import worker as worker_module
+
+    monkeypatch.setattr(worker_module, "TranslationAgent", EchoAgent)
+    EchoAgent.calls = []
+
+    pdf_path = tmp_path / "mixed.pdf"
+    c = canvas.Canvas(str(pdf_path))
+    c.showPage()  # page 1: blank, scan candidate, cannot be recovered without OCR
+    c.drawString(100, 750, "Hello native page")
+    c.save()
+
+    settings = TranslationSettings(db_path=str(tmp_path / "jobs.db"),
+                                   artifact_dir=str(tmp_path / "artifacts"), _env_file=None)
+    store = JobStore(settings)
+    admitted = store.admit("file", pdf_path.read_bytes(), ".pdf", "en", "vi", "127.0.0.1", None)
+    assert await worker_module.Worker(store, settings, None).run_once()
+    row = store.get(admitted["job_id"])
+    assert row["status"] == "succeeded"
+    assert "Xin chào native page" in row["result_json"]
+    assert '"OCR_CORRECTION_REJECTED"' in row["result_json"]

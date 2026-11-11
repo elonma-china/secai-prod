@@ -107,6 +107,7 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
                 raise TranslationError("REQUEST_TOO_LARGE", "Request is too large.")
             chunks.append(chunk)
         body = b"".join(chunks)
+        chunks.clear()  # one buffered copy, not two, while a large upload is parsed
         delivered = False
 
         async def receive():
@@ -122,6 +123,7 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
                                      max_part_size=settings.max_text_field_bytes)
         except Exception as exc:
             raise TranslationError("INVALID_REQUEST", "Multipart form is invalid.") from exc
+        body = b""  # the parsed (spooled) form owns the data now; release the raw request buffer
         items = form.multi_items()
         if len(items) > settings.max_multipart_parts or len({key for key, _ in items}) != len(items):
             raise TranslationError("INVALID_REQUEST", "Multipart fields are invalid.")
@@ -155,7 +157,7 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
         if not filename or len(filename) > 255 or any(c in filename for c in "/\\\x00"):
             raise TranslationError("INVALID_REQUEST", "Filename is invalid.")
         extension = PurePath(filename).suffix.lower()
-        allowed = {".txt", ".docx", ".doc"} if kind == "file" else {".png", ".jpg", ".jpeg"}
+        allowed = {".txt", ".docx", ".doc", ".pdf"} if kind == "file" else {".png", ".jpg", ".jpeg"}
         if extension not in allowed:
             raise TranslationError("UNSUPPORTED_FILE_TYPE", "File type is unsupported.")
         payload = await upload.read(settings.max_upload_bytes + 1)
@@ -166,6 +168,8 @@ async def _admit(request: Request, kind: str) -> JSONResponse:
         if extension == ".docx" and not payload.startswith(b"PK\x03\x04"):
             raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
         if extension == ".doc" and not payload.startswith(_OLE):
+            raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
+        if extension == ".pdf" and not payload.startswith(b"%PDF-"):
             raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
         if extension == ".txt" and payload.startswith((b"PK\x03\x04", _OLE, b"%PDF", b"\x89PNG", b"\xff\xd8")):
             raise TranslationError("FILE_TYPE_MISMATCH", "File type does not match extension.")
