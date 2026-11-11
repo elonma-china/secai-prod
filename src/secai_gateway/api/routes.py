@@ -3138,7 +3138,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         clean_markdown_and_add_runs(p, raw, base_font=base_font, font_size=docx.shared.Pt(11))
 
             # Build fallback text/table for vulnerabilities and overview summary if present in request data
-            raw_vulns = (scan_data.get("vulnerabilities") or scan_data.get("chi_tiet") or scan_data.get("details") or scan_data.get("lo_hong")) if isinstance(scan_data, dict) else []
+            raw_vulns = (scan_data.get("vulnerabilities") or scan_data.get("chi_tiet") or scan_data.get("details") or scan_data.get("lo_hong") or []) if isinstance(scan_data, dict) else []
             fallback_details_str = format_vulnerabilities_table(raw_vulns, sec_num="2") if raw_vulns else ""
             fallback_summary_str = format_summary_table(scan_data)
 
@@ -3313,7 +3313,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "1. Trong phần nội dung (value), TUYỆT ĐỐI KHÔNG lặp lại tiêu đề mục lớn ở dòng đầu tiên.\n"
                         "2. Số thứ tự mục con BẮT BUỘC phải khớp với mục lớn (Mục 1 -> 1.1, Mục 2 -> 2.1...).\n"
                         "3. Bảng markdown chuẩn cho mục tổng quan (3 cột) và mục chi tiết (5 cột).\n"
-                        "4. Tuyệt đối không dùng dấu sao ** hoặc *** để in đậm vì đây là định dạng Word.\n\n"
+                        "4. Tuyệt đối không dùng dấu sao ** hoặc *** để in đậm vì đây là định dạng Word.\n"
+                        "5. TUYỆT ĐỐI KHÔNG tự thêm dòng hành chính/chữ ký (như 'Người lập', 'Người lập báo cáo', "
+                        "'(Ký tên)', 'Ký và ghi rõ họ tên', 'Chữ ký', 'Kính gửi', 'Nơi nhận'...) vào CUỐI bất kỳ mục "
+                        "nào (đặc biệt là mục Kết luận) — các phần này do include_letterhead/include_salutation/"
+                        "include_signature kiểm soát riêng, KHÔNG được viết trong nội dung (content) của section.\n\n"
                         "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
                         "Trả về DUY NHẤT một khối JSON hợp lệ theo cấu trúc:\n"
                         "{\n"
@@ -3366,6 +3370,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "6. Các phần đã có sẵn nội dung cố định trong template (như tiêu đề 'Báo cáo', tên người ký): Giữ nguyên, không cần sinh thêm.\n"
                         "7. QUY TẮC TUYỆT ĐỐI VỀ CÁC MỤC HÀNH CHÍNH / KÍNH GỬI / NƠI NHẬN:\n"
                         "   - TUYỆT ĐỐI KHÔNG sinh nội dung cho các phần hành chính như 'Kính gửi', 'Nơi nhận', danh sách người nhận, căn cứ, quốc hiệu, tiêu ngữ hay chữ ký.\n"
+                        "   - TUYỆT ĐỐI KHÔNG tự thêm dòng chữ ký/hành chính ở CUỐI bất kỳ mục nào (ví dụ: 'Người lập', 'Người lập báo cáo', '(Ký tên)', 'Ký và ghi rõ họ tên', 'Chữ ký'...) dù template có mục đó hay không — phần chữ ký chỉ do template gốc quyết định, không phải do nội dung bạn sinh ra.\n"
                         "   - CHỈ sinh nội dung cho các ĐẦU MỤC NỘI DUNG BÁO CÁO THỰC SỰ (như Thời gian, Tổng quan, Chi tiết, Khuyến nghị, Kết luận...).\n\n"
                         "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
                         "- Trả về DUY NHẤT một khối JSON hợp lệ.\n"
@@ -3450,6 +3455,37 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         if sec_num and old_parent != sec_num:
                             line = f"{lead}{sec_num}.{sub_part}{rest}"
                     new_lines.append(line)
+
+                # Hard guard: strip any trailing signature/admin line the LLM added on its
+                # own (e.g. "Người lập", "(Ký tên)") despite the prompt instruction against
+                # it — this content is controlled only by include_signature, never by what
+                # the model writes inside a section's body.
+                while new_lines:
+                    last_s = new_lines[-1].strip()
+                    if not last_s:
+                        new_lines.pop()
+                        continue
+                    last_noaccent = strip_accents(last_s).lower().strip(" ().,:-")
+                    word_count = len(last_noaccent.split())
+                    is_sig_line = (
+                        last_noaccent in (
+                            "ky ten", "ki ten", "chu ky", "chi huy",
+                            "ky va ghi ro ho ten", "nguoi lap", "nguoi soan",
+                            "nguoi lap bao cao", "nguoi soan bao cao",
+                            "nguoi lap ho so", "nguoi ky", "nguoi ky bao cao",
+                        )
+                        or (word_count <= 5 and (
+                            last_noaccent.startswith("nguoi lap")
+                            or last_noaccent.startswith("nguoi soan")
+                            or last_noaccent.startswith("ky ten")
+                            or last_noaccent.startswith("chu ky")
+                            or "ghi ro ho ten" in last_noaccent
+                        ))
+                    )
+                    if is_sig_line:
+                        new_lines.pop()
+                        continue
+                    break
 
                 return '\n'.join(new_lines).strip()
 

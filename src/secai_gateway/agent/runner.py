@@ -19,7 +19,8 @@ from linch.types import SystemBlock
 
 from ..config import get_settings
 from ..poc import LocalPocBackend, build_poc_tools
-from ..retrieval import build_reference_tools, howto_search, neo4j_search, qdrant_search, web_fetch, web_search
+from ..retrieval import (build_reference_tools, cve_count, cve_latest, howto_search, neo4j_search,
+                         qdrant_search, web_fetch, web_search)
 from ..state import ConversationStore, ProjectStore, RedisSessionStore, SqliteLedger
 from ..bughunt import stream_bughunt_workflow
 from ..bughunt.tools import build_bughunt_tools
@@ -184,6 +185,8 @@ class LinchRunner:
         self.poc = LocalPocBackend()
         self.tools: dict[str, Any] = {
             qdrant_search.name: qdrant_search,
+            cve_count.name: cve_count,
+            cve_latest.name: cve_latest,
             neo4j_search.name: neo4j_search,
             howto_search.name: howto_search,
             # Allowlisted HTTPS→markdown for current OWASP/CWE taxonomy pages (chat).

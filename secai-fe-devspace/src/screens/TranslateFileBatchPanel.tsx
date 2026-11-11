@@ -12,7 +12,7 @@ const MAX_FILES = 5;
 const PAGE_SIZE = 4;
 // Keep older sessions readable so lowering the upload limit does not lose their job IDs.
 const MAX_RESTORED_FILES = 20;
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 100 * 1024 * 1024;
 const UPLOAD_INTERVAL_MS = 12_500;
 const POLL_INTERVAL_MS = 4_000;
 const LANGS: Array<{ code: V2Lang; label: string }> = [
@@ -267,7 +267,7 @@ export default function TranslateFileBatchPanel({ imagesEnabled }: { imagesEnabl
       for (const file of selected) {
         const kind = supported(file, imagesEnabled);
         if (!kind || file.size === 0 || file.size > MAX_BYTES) {
-          setNotice(`${file.name}: chỉ nhận TXT/DOCX/DOC${imagesEnabled ? "/PNG/JPG" : ""}, mỗi tệp tối đa 10 MiB và không rỗng.`);
+          setNotice(`${file.name}: chỉ nhận TXT/DOCX/DOC${imagesEnabled ? "/PNG/JPG" : ""}, mỗi tệp tối đa ${MAX_BYTES / 1024 / 1024} MiB và không rỗng.`);
           continue;
         }
         const hash = await sha256File(file);

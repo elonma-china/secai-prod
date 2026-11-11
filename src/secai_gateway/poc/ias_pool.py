@@ -15,8 +15,10 @@ toàn giữa các slot, không cần đụng 1 dòng code pentestcode nào.
 Cấu hình qua env `IAS_SERVER_POOL` (Settings.ias_server_pool): danh sách
 `url|home` cách nhau bằng dấu phẩy, ví dụ
     IAS_SERVER_POOL=http://127.0.0.1:4096|/home/ict,http://127.0.0.1:4097|/tmp/ias-pool/slot1
-Rỗng -> pool 1 slot duy nhất dùng `ias_server_url` (back-compat với setup cũ,
-không có pool) + `home` suy từ env `HOME` hiện tại của gateway.
+Rỗng + có cấu hình pool ĐỘNG (IAS_POOL_GPU_COUNT > 0) -> tự sinh N slot trỏ
+service compose `pentestcode-1`..`pentestcode-N` (xem `_dynamic_pool`). Rỗng +
+KHÔNG có pool động -> pool 1 slot duy nhất dùng `ias_server_url` (back-compat
+với setup cũ, không có pool) + `home` suy từ env `HOME` hiện tại của gateway.
 """
 from __future__ import annotations
 
@@ -26,9 +28,34 @@ import os
 Slot = dict[str, str]
 
 
+def _dynamic_pool() -> list[Slot]:
+    """Sinh pool slot từ `IAS_POOL_GPU_COUNT`/`IAS_POOL_SLOTS_PER_GPU`/
+    `IAS_POOL_CHATBOT_RESERVE` (Settings) — N = GPU_COUNT × SLOTS_PER_GPU − CHATBOT_RESERVE,
+    kẹp tối thiểu 1 nếu GPU_COUNT > 0. Mỗi slot trỏ service compose
+    `pentestcode-{i}:4096`, home riêng dưới `/ias-pool-home` (bind-mount chung host
+    dir vào gateway + mọi replica pentestcode, xem docker-compose.yml) — tách biệt
+    EngagementStore giữa các slot, cùng lý do nêu ở đầu file.
+    """
+    from ..config import get_settings
+    s = get_settings()
+    gpu_count = getattr(s, "ias_pool_gpu_count", 0)
+    if gpu_count <= 0:
+        return []
+    slots_per_gpu = getattr(s, "ias_pool_slots_per_gpu", 4)
+    chatbot_reserve = getattr(s, "ias_pool_chatbot_reserve", 0)
+    n = max(1, gpu_count * slots_per_gpu - chatbot_reserve)
+    return [
+        {"url": f"http://pentestcode-{i}:4096", "home": f"/ias-pool-home/pentestcode-{i}"}
+        for i in range(1, n + 1)
+    ]
+
+
 def _parse_pool(raw: str, fallback_url: str) -> list[Slot]:
     raw = (raw or "").strip()
     if not raw:
+        dynamic = _dynamic_pool()
+        if dynamic:
+            return dynamic
         if not fallback_url:
             return []
         return [{"url": fallback_url, "home": os.environ.get("HOME", "")}]

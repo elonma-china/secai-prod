@@ -131,3 +131,52 @@ async def test_ocr_retry_count_cannot_exceed_contract_when_configured_higher(tmp
         await ocr_client.recognize_image(image, settings=settings)
     assert error.value.code == "OCR_UNAVAILABLE"
     assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_ocr_busy_503_waits_for_the_slot_instead_of_failing(tmp_path, monkeypatch):
+    from secai_gateway.translation import ocr_client
+    from secai_gateway.translation.ocr_client import recognize_image
+    from secai_gateway.translation.types import PreparedImage
+
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] <= 3:
+            return httpx.Response(503, json={"detail": "OCR busy"})
+        class Body(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield json.dumps({"model": "test", "blocks": [{"text": "Xin chào", "bbox": None,
+                                                              "confidence": None}]}).encode()
+
+        return httpx.Response(200, stream=Body())
+
+    transport = httpx.MockTransport(handler)
+    real_client, real_sleep = httpx.AsyncClient, asyncio.sleep
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
+    monkeypatch.setattr(ocr_client.asyncio, "sleep", lambda seconds: real_sleep(0))
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(b"test")
+    image = PreparedImage(path=image_path, media_type="image/png", width=1, height=1)
+    settings = TranslationSettings(ocr_enabled=True, ocr_api_key="secret", ocr_model="test",
+                                   ocr_base_url="http://127.0.0.1:18083", ocr_max_retries=0, _env_file=None)
+    result = await recognize_image(image, settings=settings)
+    assert result.raw_text == "Xin chào" and calls["n"] == 4
+
+
+@pytest.mark.asyncio
+async def test_other_503_is_still_a_failure_with_zero_retries(tmp_path, monkeypatch):
+    from secai_gateway.translation.ocr_client import recognize_image
+    from secai_gateway.translation.types import PreparedImage
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(503, json={"detail": "OCR cleanup pending"}))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kw: real_client(transport=transport, **kw))
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(b"test")
+    image = PreparedImage(path=image_path, media_type="image/png", width=1, height=1)
+    settings = TranslationSettings(ocr_enabled=True, ocr_api_key="secret", ocr_model="test",
+                                   ocr_base_url="http://127.0.0.1:18083", ocr_max_retries=0, _env_file=None)
+    with pytest.raises(TranslationError, match="unavailable"):
+        await recognize_image(image, settings=settings)

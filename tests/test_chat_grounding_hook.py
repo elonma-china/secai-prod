@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from linch.hooks.contexts import BeforeFinalAnswerContext, PostToolUseContext, PreToolUseContext
 from linch.hooks.types import ToolResult
 
-from secai_gateway.agent.hooks import _CHAT_EMPTY_FALLBACK, RequireChatGroundingHook, classify_chat_grounding
+from secai_gateway.agent.hooks import (_CHAT_EMPTY_FALLBACK, _CHAT_FALSE_INFRA_ERROR_ANSWER,
+                                       RequireChatGroundingHook, classify_chat_grounding)
 
 
 @dataclass
@@ -37,12 +38,12 @@ def _post(tool: str, run_id: str, *, is_error: bool = False) -> PostToolUseConte
     )
 
 
-def _final(run_id: str, profile: str, prompt: str) -> BeforeFinalAnswerContext:
+def _final(run_id: str, profile: str, prompt: str, text: str = "answer") -> BeforeFinalAnswerContext:
     return BeforeFinalAnswerContext(
         session=_FakeSession(meta={"profile": profile, "last_user_prompt": prompt}),
         run_id=run_id,
         turn_index=1,
-        final_text="answer",
+        final_text=text,
     )
 
 
@@ -215,3 +216,45 @@ def test_gives_up_after_retries() -> None:
     assert exhausted is not None and exhausted.action == "mutate"
     assert exhausted.reason == "chat_kb_required_exhausted"
     assert exhausted.final_text == _CHAT_EMPTY_FALLBACK
+
+
+# ── False infra-error claim (production incident 2026-11-10): the model invented "lỗi kết
+# nối" for a turn where qdrant_search/howto_search actually returned 200 OK (real hits or an
+# honest 0-hits message) — never a connection problem. Grounded against ctx.result.is_error,
+# not the model's self-report. ────────────────────────────────────────────────────────────
+
+def test_false_connection_claim_after_successful_tool_call_is_corrected() -> None:
+    hook = RequireChatGroundingHook()
+    asyncio.run(hook.on_post_tool_use(_post("qdrant_search", "r1")))  # succeeds, 0 hits or not
+    draft = "Hiện tại tôi chưa lấy được thông tin (kết nối tới cơ sở tri thức đang bị lỗi tạm thời)."
+    result = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", "CVE nào mới nhất?", draft)))
+    assert result is not None and result.action == "mutate"
+    assert result.reason == "chat_false_infra_error_claim"
+    assert result.final_text == _CHAT_FALSE_INFRA_ERROR_ANSWER
+
+
+def test_real_connection_error_claim_is_left_alone() -> None:
+    """The same wording is TRUE this time (the tool actually failed) — must not be rewritten."""
+    hook = RequireChatGroundingHook()
+    asyncio.run(hook.on_post_tool_use(_post("qdrant_search", "r1", is_error=True)))
+    draft = "Hiện tại kết nối tới cơ sở tri thức đang bị lỗi tạm thời, tôi chưa tra cứu được."
+    result = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", "CVE nào mới nhất?", draft)))
+    # Falls through to the KB-grounding requirement instead (a failed call doesn't satisfy it).
+    assert result is None or result.reason != "chat_false_infra_error_claim"
+
+
+def test_connection_claim_with_no_tool_call_at_all_is_left_to_grounding_enforcement() -> None:
+    """No tool ran this turn — can't disprove the claim from in here; the KB-grounding
+    force_continue below is the right mechanism to make the model actually try a lookup."""
+    hook = RequireChatGroundingHook()
+    draft = "Hiện tại kết nối đang bị lỗi, tôi chưa tra cứu được CVE nào."
+    result = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", "CVE nào mới nhất?", draft)))
+    assert result is None or result.reason != "chat_false_infra_error_claim"
+
+
+def test_answer_without_a_connection_claim_is_unaffected() -> None:
+    hook = RequireChatGroundingHook()
+    asyncio.run(hook.on_post_tool_use(_post("howto_search", "r1")))
+    draft = "Không tìm thấy kết quả trong KB hướng dẫn sử dụng cho câu hỏi này."
+    result = asyncio.run(hook.on_before_final_answer(_final("r1", "chat", "Làm sao để X?", draft)))
+    assert result is None or result.reason != "chat_false_infra_error_claim"

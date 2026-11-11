@@ -35,6 +35,20 @@ EXPLOIT_KW = ["bộ nhớ", "memory", "stack", "heap", "overflow", "payload", "l
               "inject", "execute", "trigger", "gây ra", "cho phép", "tấn công", "attacker", "kẻ tấn công"]
 REMED_SECTIONS = ["Đánh giá", "Before", "After", "Diff", "Giải thích"]
 
+# Substring duy nhất của agent/hooks.py:_CHAT_EMPTY_FALLBACK (reason=chat_kb_required_exhausted) —
+# agent ship khi retrieval/KB bắt buộc mà hết lượt retry (vd embedding/qdrant lỗi kết nối lúc đo),
+# KHÔNG phải model không biết trả lời. Nếu accuracy task thấp chủ yếu vì câu này lặp lại thì đó là
+# tín hiệu lỗi hạ tầng retrieval tại thời điểm đo, không phải model suy giảm — không được dùng để
+# kết luận cần finetune mà không soát qua refusal_rate dưới đây.
+KB_REFUSAL_MARKER = "chưa tổng hợp được câu trả lời từ dữ liệu nội bộ"
+# Tỉ lệ refusal trong 1 capability từ đó trở lên -> accuracy_pct của capability đó không đáng tin
+# cho quyết định finetune (xem check_finetune_thresholds.py qua adapt_task_report.py).
+REFUSAL_RATE_UNRELIABLE = 0.5
+
+
+def is_kb_refusal(a):
+    return KB_REFUSAL_MARKER in (a.get("answer") or "")
+
 
 def vi_ratio(t):
     L = [c for c in t.lower() if c.isalpha()]
@@ -285,10 +299,19 @@ def main():
             ntot = len(items); note = ""
         acc = 100 * npass / ntot if ntot else 0.0
         ok = "✓" if acc >= thr else "✗"
+        n_refusal = sum(1 for a in items if is_kb_refusal(a))
+        refusal_rate = round(n_refusal / ntot, 3) if ntot else 0.0
         summary[code] = {"capability": cap, "n": ntot, "pass": npass,
                          "accuracy_pct": round(acc, 2), "threshold": thr, "passed": acc >= thr,
-                         "grader": "keyword/substring (legacy, base_grade)"}
+                         "grader": "keyword/substring (legacy, base_grade)",
+                         "refusal_count": n_refusal, "refusal_rate": refusal_rate}
         print(f"  {cap:12} {npass}/{ntot} = {acc:.1f}%  (ngưỡng ≥{thr}%) {ok}{note}  → {fname}")
+        if ntot and refusal_rate >= REFUSAL_RATE_UNRELIABLE:
+            print(f"    CẢNH BÁO [{cap}]: {n_refusal}/{ntot} câu ({refusal_rate*100:.0f}%) là fallback "
+                  f"'KB retrieval exhausted' (agent/hooks.py reason=chat_kb_required_exhausted) — "
+                  f"nghi do lỗi hạ tầng retrieval (embedding/qdrant không reachable) lúc đo, KHÔNG "
+                  f"phải model yếu. accuracy_pct={acc:.1f}% ở trên KHÔNG đáng tin cho quyết định "
+                  f"finetune — adapt_task_report.py sẽ defer capability này.")
 
     # [MỚI — chuẩn ngành, ADDITIVE] pass thứ 2: LLM-judge rubric ĐỘC LẬP — field *_llmjudge RIÊNG,
     # KHÔNG thay/xoá số cũ ở trên. Chạy trên cùng `by_cap` (không chạy lại majority-2/3, chỉ single-pass

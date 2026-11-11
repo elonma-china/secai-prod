@@ -168,6 +168,10 @@ class Settings(BaseSettings):
     # Same override shape, for IAS product/feature names (see sanitize/gate.py
     # _IAS_PRODUCT_DOMAIN_RE) — a howto question about this product's own modules.
     input_classifier_ias_marker_override: bool = True
+    # Same override shape, for a "summarize/recap this conversation" meta-request (see
+    # sanitize/gate.py _CONVERSATION_META_RE, acceptance-test repro 2026-11-11): the request's
+    # real topic is the prior (in-scope) turns, which the per-message classifier cannot see.
+    input_classifier_conversation_meta_override: bool = True
     # Ceiling on the embedding call the classifier adds to the chat path (fail-open on timeout).
     input_classifier_embed_timeout_s: float = 5.0
     # Ư2 uncertain-band cascade (sanitize/cascade.py): escalate an ambiguous injection score to
