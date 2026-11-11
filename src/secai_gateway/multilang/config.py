@@ -94,9 +94,9 @@ class MultilangSettings(BaseSettings):
     max_output_tokens: int = Field(4096, ge=1, le=4096)
     max_retries: int = Field(1, ge=0, le=1)
     request_timeout_seconds: int = Field(120, ge=1, le=120)
-    max_concurrent_model_calls: int = Field(2, ge=1, le=2)
-    max_active_requests: int = Field(8, ge=1, le=8)
-    rate_limit_per_minute: int = Field(10, ge=1, le=10)
+    max_concurrent_model_calls: int = Field(2, ge=1, le=16)  # ceiling = MT --parallel slots
+    max_active_requests: int = Field(8, ge=1, le=128)
+    rate_limit_per_minute: int = Field(10, ge=1, le=600)  # per peer IP; users behind one proxy share it
     # Both are deployment evidence, not model discovery. Never fetch at startup.
     tokenizer_json: str = ""
     tokenizer_sha256: str = ""

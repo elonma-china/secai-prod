@@ -53,9 +53,9 @@ async def test_unknown_field_and_unsupported_type_are_safe(tmp_path, monkeypatch
                                 data={"target_lang": "vi", "user_id": "intruder"})
         assert (bad.status_code, bad.json()["error"]["code"]) == (400, "INVALID_REQUEST")
         assert bad.headers["cache-control"] == "no-store"
-        pdf = await client.post("/ai/v2/translate/files", files={"file": ("x.pdf", b"%PDF-1.7")},
-                                data={"target_lang": "vi"})
-        assert (pdf.status_code, pdf.json()["error"]["code"]) == (415, "UNSUPPORTED_FILE_TYPE")
+        xlsx = await client.post("/ai/v2/translate/files", files={"file": ("x.xlsx", b"PK\x03\x04")},
+                                 data={"target_lang": "vi"})
+        assert (xlsx.status_code, xlsx.json()["error"]["code"]) == (415, "UNSUPPORTED_FILE_TYPE")
 
 
 @pytest.mark.asyncio
@@ -238,7 +238,7 @@ async def test_unicode_filename_admission(tmp_path, monkeypatch, filename_header
 @pytest.mark.asyncio
 @pytest.mark.parametrize("encoded_filename, expected_status, expected_code", [
     ("=?utf-8?Q?folder=2Fxin_ch=C3=A0o.txt?=", 400, "INVALID_REQUEST"),
-    ("=?utf-8?Q?xin_ch=C3=A0o.pdf?=", 415, "UNSUPPORTED_FILE_TYPE"),
+    ("=?utf-8?Q?xin_ch=C3=A0o.xlsx?=", 415, "UNSUPPORTED_FILE_TYPE"),
     ("=?unknown-charset?B?YWJjLnR4dA==?=", 400, "INVALID_REQUEST"),
     ("=?utf-8?B?a?=", 400, "INVALID_REQUEST"),
     ("=?utf-8?B?/w==?=", 400, "INVALID_REQUEST"),
@@ -256,3 +256,23 @@ async def test_encoded_filename_validation(tmp_path, monkeypatch, encoded_filena
                                      data={"target_lang": "vi"})
     assert response.status_code == expected_status, response.text
     assert response.json()["error"]["code"] == expected_code
+
+
+@pytest.mark.asyncio
+async def test_pdf_admission_and_signature_mismatch(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRANSLATE_V2_ENABLED", "true")
+    monkeypatch.setenv("TRANSLATE_V2_DB_PATH", str(tmp_path / "jobs.db"))
+    monkeypatch.setenv("TRANSLATE_V2_ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    app = create_app(FakeRunner())
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client:
+        ok = await client.post("/ai/v2/translate/files",
+                               files={"file": ("x.pdf", b"%PDF-1.7\nminimal")},
+                               data={"target_lang": "vi"})
+        assert ok.status_code == 202, ok.text
+        row = app.state.translation_v2_store.get(ok.json()["job_id"])
+        assert row["extension"] == ".pdf"
+
+        mismatch = await client.post("/ai/v2/translate/files",
+                                     files={"file": ("x.pdf", b"not a pdf")},
+                                     data={"target_lang": "vi"})
+        assert (mismatch.status_code, mismatch.json()["error"]["code"]) == (415, "FILE_TYPE_MISMATCH")
