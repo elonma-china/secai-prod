@@ -1,0 +1,366 @@
+{
+  "config": {
+    "argv": [
+      "/home/ict/.nvm/versions/node/v24.15.0/bin/node",
+      "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests/node_modules/.bin/playwright",
+      "test"
+    ],
+    "configFile": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests/playwright.config.ts",
+    "rootDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests",
+        "testIgnore": [],
+        "testMatch": [
+          "*.spec.ts"
+        ],
+        "timeout": 180000
+      }
+    ],
+    "filteredProjects": [
+      {
+        "grep": {},
+        "grepInvert": null,
+        "outputDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "name": "",
+        "testDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests",
+        "snapshotDir": "/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests",
+        "testIgnore": [],
+        "testMatch": "*.spec.ts",
+        "timeout": 180000,
+        "use": {
+          "baseURL": "https://secai.coremind.io.vn/",
+          "headless": true,
+          "screenshot": "only-on-failure",
+          "trace": "retain-on-failure",
+          "actionTimeout": 15000
+        },
+        "dependencies": [],
+        "ignoreSnapshots": false,
+        "__projectId": ""
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "results/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "default",
+    "updateSourceMethod": "patch",
+    "version": "1.64.1",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "ai-features.spec.ts",
+      "file": "ai-features.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "1. Chatbot — Trợ lý ảo ATTT",
+          "file": "ai-features.spec.ts",
+          "line": 57,
+          "column": 6,
+          "specs": [
+            {
+              "title": "chat 1 câu và nhận phản hồi",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 34666,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:04:37.142Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-a4d1d0eb1a20186cd461",
+              "file": "ai-features.spec.ts",
+              "line": 58,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "2. Dịch văn bản",
+          "file": "ai-features.spec.ts",
+          "line": 118,
+          "column": 6,
+          "specs": [
+            {
+              "title": "dịch 1 đoạn Việt → Anh",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 23984,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:05:11.953Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-df873b969b39f9f0cdfb",
+              "file": "ai-features.spec.ts",
+              "line": 119,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "3. Sinh mã khai thác (v1)",
+          "file": "ai-features.spec.ts",
+          "line": 167,
+          "column": 6,
+          "specs": [
+            {
+              "title": "tra CVE-2021-44228 và nhận kết quả",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 2000,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:05:35.963Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-601c45667091b44cb1a6",
+              "file": "ai-features.spec.ts",
+              "line": 168,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "4. Sinh PoC (v2)",
+          "file": "ai-features.spec.ts",
+          "line": 202,
+          "column": 6,
+          "specs": [
+            {
+              "title": "nhập CVE+target, log stream bắt đầu (AC-2.1)",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 300000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 1977,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:05:37.987Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-e9bf55a8c8b9faada562",
+              "file": "ai-features.spec.ts",
+              "line": 205,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "5. Báo cáo thông minh",
+          "file": "ai-features.spec.ts",
+          "line": 241,
+          "column": 6,
+          "specs": [
+            {
+              "title": "tạo báo cáo từ log scan",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 17132,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:05:39.991Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-307e5b66ddd50454d7ab",
+              "file": "ai-features.spec.ts",
+              "line": 242,
+              "column": 7
+            }
+          ]
+        },
+        {
+          "title": "6. Đánh giá A/B (Review)",
+          "file": "ai-features.spec.ts",
+          "line": 305,
+          "column": 6,
+          "specs": [
+            {
+              "title": "mở tab review (admin), giao diện hiện",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 180000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "",
+                  "projectName": "",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 4386,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-11-09T17:05:57.147Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "28a6903c16d2a979b1d9-3de89fce394ff6a77fd8",
+              "file": "ai-features.spec.ts",
+              "line": 306,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-11-09T17:04:36.646Z",
+    "duration": 84986.748,
+    "expected": 6,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
