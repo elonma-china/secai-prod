@@ -48,11 +48,25 @@ _IAS_PRODUCT_DOMAIN_RE = re.compile(
 # above: naming an explicit "summarize/recap our conversation" intent is itself evidence the
 # request is in-scope (it is asking to re-surface prior in-scope turns), independent of what
 # that prior content was.
+#
+# Widened 2026-11-11 (10x-rephrasing sweep against the live gateway): the first cut only
+# matched an explicit noun ("cuộc trò chuyện"/"hội thoại"/"những gì đã nói") or "từ đầu đến
+# giờ" verbatim. A live repro slipped through it and still got REFUSE_OFFTOPIC: "Tóm tắt hộ
+# tôi những nội dung chính đã trao đổi nãy giờ" — same recap intent, but phrased with "đã
+# trao đổi" (no "những gì" prefix) and "nãy giờ" (no "từ đầu"). The second alternation below
+# drops the noun requirement and instead pairs a recap verb with ANY loose time/session
+# reference ("nãy giờ", "vừa rồi", "phiên này/làm việc", "buổi chat/tư vấn/trao đổi", "so
+# far", …) — still anchored on an explicit recap verb, so it cannot fire on an unrelated
+# "tóm tắt CVE-2021-44228" with no session reference at all.
 _CONVERSATION_META_RE = re.compile(
-    r"(?:tóm\s*tắt|nhắc\s*lại|xem\s*lại|liệt\s*kê\s*lại).{0,40}"
-    r"(?:cuộc\s*trò\s*chuyện|hội\s*thoại|đoạn\s*chat|những\s*gì\s*(?:đã|vừa)\s*(?:nói|hỏi|trao\s*đổi)|"
-    r"từ\s*đầu\s*(?:đến|tới)\s*(?:giờ|nay))|"
-    r"(?:summarize|recap).{0,40}(?:conversation|chat|discussion|everything\s+(?:we|I)\s+(?:said|asked))",
+    r"(?:tóm\s*tắt|nhắc\s*lại|xem\s*lại|liệt\s*kê\s*lại).{0,60}"
+    r"(?:cuộc\s*trò\s*chuyện|hội\s*thoại|đoạn\s*chat|chat\s*n[àa]y|"
+    r"những\s*gì\s*(?:đã|vừa)\s*(?:nói|hỏi|trao\s*đổi)|"
+    r"(?:đã|vừa)\s*(?:nói|hỏi|trao\s*đổi)|"
+    r"từ\s*đầu(?:\s*(?:đến|tới)\s*(?:giờ|nay))?|nãy\s*giờ|vừa\s*rồi|"
+    r"phiên\s*(?:này|làm\s*việc)|buổi\s*(?:chat|tư\s*vấn|trao\s*đổi|làm\s*việc))|"
+    r"(?:summarize|recap).{0,60}(?:conversation|chat|discussion|session|so\s*far|"
+    r"everything\s+(?:we|I)\s+(?:said|asked|discussed))",
     re.I,
 )
 
