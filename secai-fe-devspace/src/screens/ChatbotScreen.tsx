@@ -19,8 +19,10 @@ import ChatSidebar from "./chat/ChatSidebar";
 import ChatThread from "./chat/ChatThread";
 import { foldPhase, rowsToItems, upsertTool, type ThreadItem } from "./chat/threadItems";
 
+import { createReviewApi } from "../reviewApi";
 import { getReviewIdentity, setLiveReviewEnabled, useReviewIdentity } from "../reviewIdentity";
-import LiveReviewWidget, { type LiveReviewTurn } from "./review/LiveReviewWidget";
+import type { PromptMessage } from "../reviewTypes";
+import LiveReviewWidget, { type LiveReviewState } from "./review/LiveReviewWidget";
 
 type Editing = { kind: "project" | "session"; id: string; value: string } | null;
 
@@ -69,7 +71,70 @@ function writeSavedView(userId: string, view: ChatView) {
 
 export default function ChatbotScreen({ userId, health }: { userId: string; health: HealthStatus | null }) {
   const reviewIdentity = useReviewIdentity();
-  const [liveReviewTurns, setLiveReviewTurns] = useState<Record<string, LiveReviewTurn>>({});
+  const [liveReviewByAid, setLiveReviewByAid] = useState<Record<string, LiveReviewState>>({});
+  // IDs whose live A/B pair was actually offered (assignment created) — once true, the
+  // original assistant bubble collapses so the same answer isn't shown twice (once as the
+  // normal reply, once as "Câu trả lời A" in the comparison widget below).
+  const [reviewOfferedIds, setReviewOfferedIds] = useState<Record<string, true>>({});
+  // A turn whose identity wasn't known/enabled yet when its chat answer finished, so the
+  // parallel decide+alternative path never got to start for it. Kept so the effect below
+  // can retroactively start it once identity does arrive — same guarantee the old
+  // self-fetching widget gave via its own useReviewIdentity() subscription.
+  const pendingLiveReviewRef = useRef<{ aid: string; reviewContext: PromptMessage[]; finalAnswer: string; sid: string } | null>(null);
+
+  function runLiveAlternative(reviewContext: PromptMessage[]): Promise<string> {
+    const auth = getReviewIdentity();
+    if (!auth?.liveEnabled) return Promise.reject(new Error("live review disabled"));
+    return createReviewApi(auth.token)
+      .liveDecide()
+      .then((d) => {
+        if (!d.sampled) throw new Error("not sampled");
+        return createReviewApi(auth.token).liveAlternative(reviewContext).then((r) => r.text);
+      });
+  }
+
+  // Once a turn starts (pending is shown), it always ends in "ready" or "error" with a
+  // retry — never silently vanishes, same guarantee the old widget gave. `altPromise`, when
+  // given, is a generation already in flight (the parallel fast path); otherwise one is
+  // started now (the late-identity and retry paths, necessarily sequential since A is done).
+  function startLiveReview(aid: string, reviewContext: PromptMessage[], finalAnswer: string, sid: string, altPromise?: Promise<string>) {
+    const finish = (promise: Promise<string>) => {
+      promise
+        .then((alternative) => {
+          const auth = getReviewIdentity();
+          if (!auth?.liveEnabled) throw new Error("live review disabled");
+          return createReviewApi(auth.token).liveCreatePair(reviewContext, finalAnswer, alternative, sid);
+        })
+        .then((result) => {
+          if (result.offered) {
+            setReviewOfferedIds((prev) => (prev[aid] ? prev : { ...prev, [aid]: true }));
+            setLiveReviewByAid((prev) => ({ ...prev, [aid]: { status: "ready", assignment: result.assignment } }));
+          } else {
+            setLiveReviewByAid((prev) => ({
+              ...prev,
+              [aid]: { status: "error", retry: () => { setLiveReviewByAid((p) => ({ ...p, [aid]: { status: "pending" } })); finish(runLiveAlternative(reviewContext)); } },
+            }));
+          }
+        })
+        .catch(() =>
+          setLiveReviewByAid((prev) => ({
+            ...prev,
+            [aid]: { status: "error", retry: () => { setLiveReviewByAid((p) => ({ ...p, [aid]: { status: "pending" } })); finish(runLiveAlternative(reviewContext)); } },
+          })),
+        );
+    };
+    setLiveReviewByAid((prev) => ({ ...prev, [aid]: { status: "pending" } }));
+    finish(altPromise ?? runLiveAlternative(reviewContext));
+  }
+
+  useEffect(() => {
+    const pending = pendingLiveReviewRef.current;
+    if (reviewIdentity?.liveEnabled && pending) {
+      pendingLiveReviewRef.current = null;
+      startLiveReview(pending.aid, pending.reviewContext, pending.finalAnswer, pending.sid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewIdentity]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -98,7 +163,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
   // restoreSession's own fallback and readSavedView's userId-scoped key.
   useEffect(() => {
     let alive = true;
-    setLiveReviewTurns({});
+    setLiveReviewByAid({}); setReviewOfferedIds({});
     setProjects([]);
     setSessions([]);
     setExpanded(new Set());
@@ -145,7 +210,7 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
    * and get stuck on. Writing at the point of intent instead ties the localStorage write to the
    * same synchronous call as the state update, so no render/effect ordering can race it. */
   function openView(v: ChatView) {
-    setLiveReviewTurns({});
+    setLiveReviewByAid({}); setReviewOfferedIds({});
     setView(v);
     writeSavedView(userId, v);
   }
@@ -456,6 +521,19 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
       // Leave room for the current question and keep the public context user-led.
       while (reviewContext[0]?.role === "assistant") reviewContext.shift();
       reviewContext.push({role: "user", content: text});
+      // Fire the A/B sampling decision + B's generation NOW, in parallel with the chat
+      // request below for A, instead of waiting for A to finish first — B only needs the
+      // prompt history (already known), not A's text. Skipped (no promise at all, so
+      // nothing can become an unhandled rejection) when identity is an explicit opt-out;
+      // left undecided when identity simply isn't known yet — see the effect above, which
+      // picks that case up once it arrives.
+      const liveIdentity = getReviewIdentity();
+      const liveEligible = liveIdentity?.liveEnabled !== false;
+      let alternativePromise: Promise<string> | null = null;
+      if (liveIdentity?.liveEnabled) {
+        setLiveReviewByAid(prev => ({...prev, [aid]: {status: "pending"}}));
+        alternativePromise = runLiveAlternative(reviewContext);
+      }
       try {
         await chatStream(
           sid,
@@ -488,7 +566,21 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           },
           ac.signal,
         );
-        if (!ac.signal.aborted && !streamFailed && completedAnswer && getReviewIdentity()?.liveEnabled !== false) setLiveReviewTurns(prev => ({...prev, [aid]: {id: aid, prompt_messages: reviewContext, answer: completedAnswer!, source_group: sid}}));
+        if (!ac.signal.aborted && !streamFailed && completedAnswer) {
+          const finalAnswer = completedAnswer;
+          if (alternativePromise) {
+            // Fast path: decide+alternative were already running in parallel with A above.
+            startLiveReview(aid, reviewContext, finalAnswer, sid, alternativePromise);
+          } else if (liveEligible) {
+            // Identity wasn't known/enabled yet when A finished (not an explicit opt-out) —
+            // stash this turn; the effect above starts it (sequentially) once identity shows up.
+            pendingLiveReviewRef.current = { aid, reviewContext, finalAnswer, sid };
+          }
+        } else if (liveIdentity?.liveEnabled) {
+          // The main chat answer itself failed/was aborted — nothing to review, drop the
+          // "pending" placeholder we showed earlier instead of leaving it stuck.
+          setLiveReviewByAid(prev => { if (!(aid in prev)) return prev; const {[aid]: _drop, ...rest} = prev; return rest; });
+        }
       } catch (e) {
         if (e instanceof DOMException && e.name === "AbortError") {
           aborted = true;
@@ -634,7 +726,8 @@ export default function ChatbotScreen({ userId, health }: { userId: string; heal
           onCopy={copyText}
           onRegenerate={regenerateFrom}
           onSuggestion={setInput}
-          reviewWidget={id => liveReviewTurns[id] ? <LiveReviewWidget turn={liveReviewTurns[id]}/> : null}
+          reviewWidget={id => liveReviewByAid[id] ? <LiveReviewWidget state={liveReviewByAid[id]}/> : null}
+          reviewOffered={id => !!reviewOfferedIds[id]}
         />
       </div>
     </div>

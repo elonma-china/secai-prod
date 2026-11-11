@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import {act,cleanup,fireEvent,render,screen,waitFor,within} from '@testing-library/react';
-import {StrictMode} from 'react';
 import {afterEach,expect,test,vi} from 'vitest';
 
-const mocks=vi.hoisted(()=>({livePair:vi.fn()}));
+const mocks=vi.hoisted(()=>({submit:vi.fn()}));
 vi.mock('../../reviewApi',()=>({createReviewApi:()=>mocks,reviewError:()=>"Request failed"}));
 import LiveReviewWidget from './LiveReviewWidget';
 import ReviewOverview from './ReviewOverview';
 import {clearReviewIdentity,setReviewIdentity} from '../../reviewIdentity';
 
-const turn={id:'turn-1',prompt_messages:[{role:'user' as const,content:'Question'}],answer:'Original',source_group:'chat'};
-const assignment={id:'assignment-1',external_id:'turn-1',prompt_messages:turn.prompt_messages,evidence:'',
+const promptMessages=[{role:'user' as const,content:'Question'}];
+const assignment={id:'assignment-1',campaign_id:'campaign-1',campaign_title:'Live chat',status:'pending' as const,
+  external_id:'turn-1',prompt_messages:promptMessages,evidence:'',
   left:{text:'Answer A'},right:{text:'Answer B'},rubric:'',rubric_version:'v1',judgment:null};
 const row={id:'item-1',question:'Old question',user_choice:'A',submitted_at:'2026-10-06',complete:true,campaign_state:'open',source:'live'};
 const detail={id:'item-1',question:'Old question',source:'live',vote_count:1,complete:true,campaign_state:'open',
@@ -35,66 +35,45 @@ function api(overrides:Record<string,unknown>={}) {
 
 afterEach(()=>{cleanup();clearReviewIdentity();vi.restoreAllMocks();vi.clearAllMocks();});
 
-test('a failed opted-in pair shows an error instead of silently disappearing',async()=>{
+// LiveReviewWidget no longer fetches /live-pairs itself — ChatbotScreen now runs
+// /live-pairs/decide + /live-pairs/alternative in parallel with its own chat request (so B
+// doesn't wait for A to finish) and hands this widget the resulting state. These tests cover
+// only what the widget itself still owns: rendering that state, and submitting a judgment.
+
+test('no state renders nothing',()=>{
+  const {container}=render(<LiveReviewWidget state={undefined}/>);
+  expect(container.firstChild).toBeNull();
+});
+
+test('pending state shows a waiting message, not the pair yet',()=>{
+  render(<LiveReviewWidget state={{status:'pending'}}/>);
+  expect(screen.getByRole('status').textContent).toMatch(/Đang tạo hai phương án/);
+  expect(screen.queryByText('Answer A')).toBeNull();
+});
+
+test('error state shows an alert with a retry button that calls back into the caller',()=>{
+  const retry=vi.fn();
+  render(<LiveReviewWidget state={{status:'error',retry}}/>);
+  expect(screen.getByRole('alert')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button',{name:'Thử lại A/B'}));
+  expect(retry).toHaveBeenCalledTimes(1);
+});
+
+test('ready state renders both candidates for voting',()=>{
   setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});
-  mocks.livePair.mockResolvedValue({offered:false});
-  render(<LiveReviewWidget turn={turn}/>);
-  expect(await screen.findByRole('alert')).toBeTruthy();
+  render(<LiveReviewWidget state={{status:'ready',assignment}}/>);
+  expect((screen.getAllByText('Answer A')).length).toBeGreaterThan(0);
+  expect((screen.getAllByText('Answer B')).length).toBeGreaterThan(0);
 });
 
-test('a failed pair can be retried without sending the chat again',async()=>{
+test('submitting a judgment from the ready state uses the current identity token',async()=>{
   setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});
-  mocks.livePair.mockResolvedValueOnce({offered:false}).mockResolvedValueOnce({offered:true,assignment});
-  render(<LiveReviewWidget turn={turn}/>);
-  fireEvent.click(await screen.findByRole('button',{name:'Thử lại A/B'}));
-  expect((await screen.findAllByText('Answer A')).length).toBeGreaterThan(0);
-  expect((await screen.findAllByText('Answer B')).length).toBeGreaterThan(0);
-});
-
-test('a turn received before reviewer identity is checked once identity arrives',async()=>{
-  clearReviewIdentity();
-  mocks.livePair.mockResolvedValue({offered:true,assignment});
-  render(<LiveReviewWidget turn={turn}/>);
-  expect(mocks.livePair).not.toHaveBeenCalled();
-
-  await act(async()=>{setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});});
-
-  await waitFor(()=>expect(mocks.livePair).toHaveBeenCalledTimes(1));
-  expect((await screen.findAllByText('Answer A')).length).toBeGreaterThan(0);
-});
-
-test('StrictMode preserves one offered pair request through effect replay',async()=>{
-  setReviewIdentity('devspace:reviewer',{actor_id:'reviewer-1',role:'reviewer'});
-  const pending=deferred<{offered:boolean;assignment:typeof assignment}>();
-  mocks.livePair.mockReturnValue(pending.promise);
-  render(<StrictMode><LiveReviewWidget turn={turn}/></StrictMode>);
-
-  await waitFor(()=>expect(mocks.livePair).toHaveBeenCalledTimes(1));
-  await act(async()=>{pending.resolve({offered:true,assignment});});
-
-  expect((await screen.findAllByText('Answer A')).length).toBeGreaterThan(0);
-  expect(mocks.livePair).toHaveBeenCalledTimes(1);
-});
-
-test('an old identity response cannot install a pair after identity changes',async()=>{
-  setReviewIdentity('devspace:old-reviewer',{actor_id:'old-reviewer',role:'reviewer'});
-  const oldResponse=deferred<{offered:boolean;assignment:typeof assignment}>();
-  const newResponse=deferred<{offered:boolean;assignment:typeof assignment}>();
-  mocks.livePair.mockReturnValueOnce(oldResponse.promise).mockReturnValueOnce(newResponse.promise);
-  render(<LiveReviewWidget turn={turn}/>);
-  await waitFor(()=>expect(mocks.livePair).toHaveBeenCalledTimes(1));
-
-  await act(async()=>{setReviewIdentity('devspace:new-reviewer',{actor_id:'new-reviewer',role:'reviewer'});});
-  await waitFor(()=>expect(mocks.livePair).toHaveBeenCalledTimes(2));
-  const oldAssignment={...assignment,id:'old-assignment',left:{text:'Old identity answer'}};
-  const newAssignment={...assignment,id:'new-assignment',left:{text:'New identity answer'}};
-  await act(async()=>{oldResponse.resolve({offered:true,assignment:oldAssignment});});
-
-  expect(screen.queryByText('Old identity answer')).toBeNull();
-  expect(screen.queryByText('New identity answer')).toBeNull();
-
-  await act(async()=>{newResponse.resolve({offered:true,assignment:newAssignment});});
-  expect((await screen.findAllByText('New identity answer')).length).toBeGreaterThan(0);
+  mocks.submit.mockResolvedValue({decision:'left',error_tags:{left:[],right:[]},comment:''});
+  render(<LiveReviewWidget state={{status:'ready',assignment}}/>);
+  fireEvent.click(screen.getByLabelText('A tốt hơn'));
+  fireEvent.click(screen.getByRole('button',{name:'Nộp phiếu đánh giá'}));
+  await waitFor(()=>expect(mocks.submit).toHaveBeenCalledWith('assignment-1',expect.objectContaining({decision:'left'})));
+  expect((await screen.findByRole('status')).textContent).toMatch(/Đã nộp phiếu/);
 });
 
 test('a detail response opened under an old source filter is ignored',async()=>{

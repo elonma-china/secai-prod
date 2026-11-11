@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     reward_training_enabled: bool = False
     reward_training_url: str = ""
     reward_training_token: str = Field(default="", repr=False)
+    # Background best-of-N: on a sampled chat turn, generate N-1 extra candidates, score
+    # all N with the reward model, and submit the best/worst pair as a pre-labeled item
+    # under a dedicated "reward-model-auto" reviewer — admin still approves it like any
+    # other pending item before it counts toward training (see reward/autolabel.py).
+    # Default 0 keeps this fully opt-in; independent of `reward_enabled` being on for the
+    # manual /reward/score admin tool, both must be considered together at call sites.
+    reward_autolabel_sample_rate: float = Field(default=0.0,ge=0,le=1)
+    reward_autolabel_n: int = Field(default=3,ge=2,le=4)  # capped by ScoreInput.answers max_length=4
 
     # ── Air-gap master switch (default ON) ─────────────────────────────────────
     # When true, the gateway must make NO outbound request to the public internet. This

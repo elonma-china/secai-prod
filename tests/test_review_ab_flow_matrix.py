@@ -30,6 +30,8 @@ ANY_IDENTITY = {
     ('GET', '/review-api/assignments/{aid}'),
     ('PUT', '/review-api/assignments/{aid}/judgment'),
     ('POST', '/review-api/live-pairs'),
+    ('POST', '/review-api/live-pairs/decide'),
+    ('POST', '/review-api/live-pairs/alternative'),
     ('POST', '/review-api/report-templates/revise'),
     ('POST', '/review-api/report-templates/render'),
 }
