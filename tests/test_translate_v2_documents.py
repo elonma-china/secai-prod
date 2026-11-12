@@ -87,6 +87,34 @@ def test_docx_rejects_external_relationship(tmp_path):
     assert e.value.code == "UNSAFE_DOCUMENT"
 
 
+def test_docx_allows_ordinary_external_hyperlink(tmp_path):
+    """A citation/reference link (e.g. a threat-intel report linking to an advisory) is an
+    External-TargetMode relationship of Type .../hyperlink. It is never dereferenced by the
+    extractor -- only its rId text appears in the XML -- so it must not trip UNSAFE_DOCUMENT
+    the way a real external OLE/package link does."""
+    from docx import Document
+    from secai_gateway.translation.documents import extract_docx
+
+    document = Document()
+    document.add_paragraph("See the advisory for details.")
+    path = tmp_path / "x.docx"
+    document.save(path)
+    out = tmp_path / "linked.docx"
+    with ZipFile(path) as source, ZipFile(out, "w") as dest:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "word/_rels/document.xml.rels":
+                data = data.replace(
+                    b"</Relationships>",
+                    b'<Relationship Id="rLink" '
+                    b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
+                    b'Target="https://example.com/advisory" TargetMode="External"/></Relationships>',
+                )
+            dest.writestr(item, data)
+    doc = extract_docx(out, _settings())
+    assert [b.text for b in doc.blocks] == ["See the advisory for details."]
+
+
 @pytest.mark.asyncio
 async def test_encrypted_docx_fails_with_unsafe_document_in_extractor_and_worker(tmp_path, monkeypatch):
     from docx import Document
@@ -237,3 +265,119 @@ def test_docx_paragraph_linebreak_and_tab_are_preserved(tmp_path):
     document.save(path)
     result = extract_docx(path, _settings())
     assert result.blocks[0].text == "First\nSecond\tThird"
+
+
+def _write_pdf(path, lines):
+    from reportlab.pdfgen import canvas
+
+    c = canvas.Canvas(str(path))
+    y = 750
+    for line in lines:
+        c.drawString(100, y, line)
+        y -= 20
+    c.save()
+
+
+def test_pdf_text_extraction_with_page_metadata(tmp_path):
+    from secai_gateway.translation.documents import extract_pdf
+
+    path = tmp_path / "x.pdf"
+    _write_pdf(path, ["Hello translation test CVE-2024-1234"])
+    doc, scan_pages = extract_pdf(path, _settings())
+    assert [(b.kind, b.text, b.metadata["page"]) for b in doc.blocks] == [
+        ("paragraph", "Hello translation test CVE-2024-1234", 1),
+    ]
+    assert scan_pages == ()
+
+
+def test_pdf_blank_page_is_reported_as_scan_candidate(tmp_path):
+    from reportlab.pdfgen import canvas
+    from secai_gateway.translation.documents import extract_pdf
+
+    path = tmp_path / "mixed.pdf"
+    c = canvas.Canvas(str(path))
+    c.showPage()  # page 1: blank, no text layer
+    c.drawString(100, 750, "Page two has text")
+    c.save()
+    doc, scan_pages = extract_pdf(path, _settings())
+    assert [(b.text, b.metadata["page"]) for b in doc.blocks] == [("Page two has text", 2)]
+    assert scan_pages == (1,)
+
+
+def test_pdf_fully_blank_is_all_scan_candidates(tmp_path):
+    from reportlab.pdfgen import canvas
+    from secai_gateway.translation.documents import extract_pdf
+
+    path = tmp_path / "blank.pdf"
+    c = canvas.Canvas(str(path))
+    c.showPage()
+    c.showPage()
+    c.save()
+    doc, scan_pages = extract_pdf(path, _settings())
+    assert doc.blocks == ()
+    assert scan_pages == (1, 2)
+
+
+def test_pdf_corrupt_is_rejected(tmp_path):
+    from secai_gateway.translation.documents import extract_pdf
+
+    path = tmp_path / "bad.pdf"
+    path.write_bytes(b"%PDF-1.7 not really a pdf" + b"\x00" * 50)
+    with pytest.raises(TranslationError) as e:
+        extract_pdf(path, _settings())
+    assert e.value.code == "CORRUPT_DOCUMENT"
+
+
+def test_pdf_encrypted_is_rejected(tmp_path):
+    import io
+
+    import pypdf
+
+    from secai_gateway.translation.documents import extract_pdf
+
+    source = tmp_path / "plain.pdf"
+    _write_pdf(source, ["Secret"])
+    writer = pypdf.PdfWriter()
+    writer.append(str(source))
+    writer.encrypt(user_password="secret123", owner_password=None)
+    out = io.BytesIO()
+    writer.write(out)
+    path = tmp_path / "enc.pdf"
+    path.write_bytes(out.getvalue())
+    with pytest.raises(TranslationError) as e:
+        extract_pdf(path, _settings())
+    assert e.value.code == "UNSAFE_DOCUMENT"
+
+
+def test_pdf_too_many_pages_is_rejected(tmp_path):
+    from secai_gateway.translation.documents import extract_pdf
+
+    path = tmp_path / "many.pdf"
+    _write_pdf(path, [f"Page {i}" for i in range(3)])
+    settings = TranslationSettings(_env_file=None, pdf_max_pages=0)
+    with pytest.raises(TranslationError) as e:
+        extract_pdf(path, settings)
+    assert e.value.code == "TEXT_TOO_LONG"
+
+
+def test_render_pdf_page_rasterizes_at_expected_dpi(tmp_path):
+    from secai_gateway.translation.documents import render_pdf_page
+
+    path = tmp_path / "x.pdf"
+    _write_pdf(path, ["Text for rasterization"])
+    out = render_pdf_page(path, 1, tmp_path, dpi=200)
+    from PIL import Image
+
+    with Image.open(out) as image:
+        # reportlab's default page is A4 (595x842 pt) at 200 DPI.
+        assert image.size == (1654, 2339)
+
+
+def test_render_pdf_page_out_of_range_is_rejected(tmp_path):
+    from secai_gateway.translation.documents import render_pdf_page
+
+    path = tmp_path / "x.pdf"
+    _write_pdf(path, ["One page"])
+    with pytest.raises(TranslationError) as e:
+        render_pdf_page(path, 2, tmp_path)
+    assert e.value.code == "CORRUPT_DOCUMENT"

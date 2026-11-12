@@ -7,12 +7,16 @@ import posixpath
 import shutil
 import secrets
 import subprocess
+import threading
 import unicodedata
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import olefile
+import pypdf
+import pypdfium2
+from pypdf.errors import PyPdfError
 
 from .settings import TranslationSettings
 from .types import DocumentBlock, ExtractedDocument, TranslationError, WarningItem
@@ -96,7 +100,10 @@ def _safe_zip(path: Path, settings: TranslationSettings) -> dict[str, bytes]:
             raise TranslationError("ARCHIVE_LIMIT_EXCEEDED", "Document archive limit exceeded.")
         packed = sum(max(1, x.compress_size) for x in entries)
         inflated = sum(x.file_size for x in entries)
-        if inflated > settings.max_docx_inflated_bytes or inflated > settings.max_docx_ratio * packed:
+        # Only XML/rels parts are inflated; media is accounted for but never read into memory.
+        xml_inflated = sum(x.file_size for x in entries if x.filename.lower().endswith((".xml", ".rels")))
+        if (inflated > settings.max_docx_inflated_bytes or xml_inflated > settings.max_docx_xml_bytes
+                or inflated > settings.max_docx_ratio * packed):
             raise TranslationError("ARCHIVE_LIMIT_EXCEEDED", "Document archive limit exceeded.")
         result: dict[str, bytes] = {}
         for item in entries:
@@ -111,12 +118,15 @@ def _safe_zip(path: Path, settings: TranslationSettings) -> dict[str, bytes]:
                 raise TranslationError("UNSAFE_DOCUMENT", "Document contains duplicate archive entries.")
             if name.endswith("/"):
                 continue
+            if not name.lower().endswith((".xml", ".rels")):
+                result[name] = b""  # name is enough for the active-content checks; skip media bytes
+                continue
             with archive.open(item) as stream:
                 chunks: list[bytes] = []
                 total = 0
                 while chunk := stream.read(64 * 1024):
                     total += len(chunk)
-                    if total > item.file_size or total > settings.max_docx_inflated_bytes:
+                    if total > item.file_size or total > settings.max_docx_xml_bytes:
                         raise TranslationError("ARCHIVE_LIMIT_EXCEEDED", "Document archive limit exceeded.")
                     chunks.append(chunk)
                 result[name] = b"".join(chunks)
@@ -162,7 +172,8 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
             root = _xml(data)
             if low.endswith(".rels"):
                 for rel in root:
-                    if rel.attrib.get("TargetMode", "").lower() == "external":
+                    if (rel.attrib.get("TargetMode", "").lower() == "external"
+                            and not rel.attrib.get("Type", "").lower().endswith("/hyperlink")):
                         raise TranslationError("UNSAFE_DOCUMENT", "External document links are unsupported.")
     root = _xml(parts["word/document.xml"])
     content_types = parts["[Content_Types].xml"]
@@ -298,6 +309,94 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
         warnings.append(WarningItem(code="UNSUPPORTED_PART",
                                     message="Floating or field content needs review."))
     return _make_blocks(items, settings, warnings)
+
+
+def extract_pdf(path: Path, settings: TranslationSettings
+                ) -> tuple[ExtractedDocument, tuple[int, ...]]:
+    """Extract the native text layer. A page with no text layer (a scanned page)
+    is reported as a 1-indexed page number in the second return value instead of
+    raising, so a caller with OCR available can render and recognize just those
+    pages; one with no fallback can treat a non-empty result as the whole story.
+    """
+    try:
+        reader = pypdf.PdfReader(str(path))
+    except (PyPdfError, OSError, ValueError) as exc:
+        raise TranslationError("CORRUPT_DOCUMENT", "PDF structure is invalid.") from exc
+    if reader.is_encrypted:
+        try:
+            decrypted = reader.decrypt("")
+        except (PyPdfError, NotImplementedError) as exc:
+            raise TranslationError("UNSAFE_DOCUMENT", "Encrypted PDF is unsupported.") from exc
+        if decrypted == pypdf.PasswordType.NOT_DECRYPTED:
+            raise TranslationError("UNSAFE_DOCUMENT", "Encrypted PDF is unsupported.")
+    try:
+        pages = reader.pages
+        page_count = len(pages)
+    except (PyPdfError, OSError, ValueError) as exc:
+        raise TranslationError("CORRUPT_DOCUMENT", "PDF structure is invalid.") from exc
+    if page_count > settings.pdf_max_pages:
+        raise TranslationError("TEXT_TOO_LONG", "PDF has too many pages.")
+    items: list[tuple[str, str, dict]] = []
+    warnings: list[WarningItem] = []
+    has_annotations = False
+    scan_pages: list[int] = []
+    for index, page in enumerate(pages):
+        try:
+            text = page.extract_text() or ""
+        except (PyPdfError, OSError, ValueError, TypeError) as exc:
+            raise TranslationError("CORRUPT_DOCUMENT", "PDF page could not be read.") from exc
+        if _bad_controls(text) or "\x00" in text:
+            raise TranslationError("UNSUPPORTED_ENCODING", "PDF text contains invalid controls.")
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        if not text.strip():
+            scan_pages.append(index + 1)
+            continue
+        for line in text.split("\n"):
+            if line.strip():
+                items.append(("paragraph", line, {"page": index + 1}))
+        if page.annotations:
+            has_annotations = True
+    if has_annotations:
+        warnings.append(WarningItem(code="UNSUPPORTED_PART",
+                                    message="PDF annotations were not extracted and need review."))
+    if not items and not scan_pages:
+        raise TranslationError("NO_TEXT_DETECTED", "No text was detected.")
+    if not items:
+        return ExtractedDocument(blocks=(), warnings=tuple(warnings)), tuple(scan_pages)
+    return _make_blocks(items, settings, warnings), tuple(scan_pages)
+
+
+_PDFIUM_LOCK = threading.Lock()
+
+
+def render_pdf_page(path: Path, page_number: int, work_dir: Path, *, dpi: int = 200) -> Path:
+    """Rasterize one 1-indexed PDF page to a PNG for the image-OCR fallback.
+
+    200 DPI was picked from a prior production evaluation: it reads small text
+    (phone numbers, form codes) noticeably more reliably than 110-150 DPI, where
+    OCR silently swapped digits.
+    """
+    # PDFium is not thread-safe: concurrent PdfDocument use from the worker's to_thread pool
+    # corrupts the native heap ("corrupted double-linked list") and kills the whole worker.
+    with _PDFIUM_LOCK:
+        try:
+            pdf = pypdfium2.PdfDocument(str(path))
+        except pypdfium2.PdfiumError as exc:
+            raise TranslationError("CORRUPT_DOCUMENT", "PDF structure is invalid.") from exc
+        try:
+            if not 1 <= page_number <= len(pdf):
+                raise TranslationError("CORRUPT_DOCUMENT", "PDF page is out of range.")
+            try:
+                page = pdf[page_number - 1]
+                bitmap = page.render(scale=dpi / 72)
+                image = bitmap.to_pil()
+            except pypdfium2.PdfiumError as exc:
+                raise TranslationError("CORRUPT_DOCUMENT", "PDF page could not be rendered.") from exc
+        finally:
+            pdf.close()
+    out_path = work_dir / f"pdf-page-{page_number:04d}.png"
+    image.save(out_path, format="PNG")
+    return out_path
 
 
 def validate_doc(path: Path) -> None:

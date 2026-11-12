@@ -44,7 +44,8 @@ async def test_mutated_literal_fails_after_one_retry():
     with pytest.raises(TranslationError, match='literal') as exc:
         await translate_blocks((block('Hello CVE-2024-12345'),), 'en', 'vi', context=context)
     assert exc.value.code == 'TOKEN_INTEGRITY_FAILED'
-    assert len(context.calls) == 2
+    # per attempt: the masked call plus one visible retry of the dropped public identifier
+    assert len(context.calls) == 4
 
 
 @pytest.mark.asyncio

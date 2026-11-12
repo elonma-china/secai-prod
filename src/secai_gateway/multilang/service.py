@@ -23,7 +23,7 @@ SYSTEM = ("Translate the user's data exactly into {target}. The source is {sourc
           "Integrity marker {canary}; never output this marker.")
 LEAK = re.compile(r"(?:system prompt|developer message|ignore previous instructions|<\|im_start\|>)", re.I)
 ASCII_WORDS = re.compile(r"[a-z]+")
-GLOBAL_CALLS = asyncio.Semaphore(2)
+GLOBAL_CALLS = asyncio.Semaphore(16)  # process-wide ceiling = MT --parallel slots; per-app MULTILANG_MAX_CONCURRENT_MODEL_CALLS still applies
 
 
 @dataclass(frozen=True)
@@ -153,6 +153,39 @@ def _output_check(source: str, masked_source: str, output: str, masked_output: s
     return ("TARGET_LANGUAGE_UNCERTAIN",) if evidence == "unknown" else ()
 
 
+_PUBLIC_LITERAL = re.compile(
+    r"v?\d+(?:\.\d+){1,2}|\d{4}-\d{2}-\d{2}|\d+(?:[.,]\d+)?|(?:CVE|CWE)-\d{1,7}(?:-\d{4,7})?", re.I)
+
+
+def _is_public_literal(literal: str) -> bool:
+    """Numbers, versions, dates and CVE/CWE ids: safe to show the model verbatim.
+    IPs, URLs, paths, credentials and code never match."""
+    return bool(_PUBLIC_LITERAL.fullmatch(literal))
+
+
+def _remask_visible(output: str, wanted: tuple[str, ...], visible: dict[str, str]) -> str | None:
+    """Re-mask the literals shown verbatim; None unless each is intact, in order, as a whole token."""
+    cursor, parts = 0, []
+    for token in wanted:
+        literal = visible.get(token)
+        if literal is None:
+            at = output.find(token, cursor)
+            if at < 0:
+                return None
+            parts.extend((output[cursor:at], token))
+            cursor = at + len(token)
+            continue
+        found = re.compile(r"(?<![A-Za-z0-9_.-])" + re.escape(literal) +
+                           r"(?![A-Za-z0-9_-]|\.\d)").search(output, cursor)
+        if found is None:
+            return None
+        parts.extend((output[cursor:found.start()], token))
+        cursor = found.end()
+    parts.append(output[cursor:])
+    remasked = "".join(parts)
+    return remasked if tuple(TOKEN_SHAPE.findall(remasked)) == wanted else None
+
+
 async def translate(request: TranslationRequest, *, llm: LlmPort, settings: MultilangSettings,
                     token_count: Callable[[str], int] | None = None,
                     model_semaphore: asyncio.Semaphore | None = None,
@@ -233,11 +266,56 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                 except TranslationError:
                     raise TranslationError("OUTPUT_VALIDATION_FAILED") from None
                 masked_output = result.text.strip()
+                # The chunker can cut mid-sentence; the model then closes the unfinished
+                # fragment with an ellipsis the source never had. Drop only that artefact
+                # (a source chunk that ends with terminal punctuation keeps the strict check).
+                if (re.search(r"(?:\.{3,}|…)$", masked_output)
+                        and not re.search(r"(?:\.{3,}|…)$", chunk.strip())
+                        and not re.search(r"[.!?。！？:;：；]$", chunk.strip())):
+                    trimmed = re.sub(r"\s*(?:\.{3,}|…)$", "", masked_output)
+                    if trimmed.strip():
+                        masked_output = trimmed
                 # Keep the source chunk's own leading/trailing whitespace exactly
                 # (indentation, blank lines); the model's edge whitespace is dropped.
                 lead = chunk[:len(chunk) - len(chunk.lstrip())]
                 trail = chunk[len(chunk.rstrip()):]
-                restored = lead + protected.restore(masked_output, tokens) + trail
+                try:
+                    inner = protected.restore(masked_output, tokens)
+                except TranslationError:
+                    # The model silently dropped a marker (temperature 0, so a plain resend
+                    # repeats it). Recover only when every dropped marker stands for a public
+                    # literal: retry once showing just those, then verify and re-mask them.
+                    seen = TOKEN_SHAPE.findall(masked_output)
+                    remaining = iter(tokens)
+                    dropped = (len(seen) < len(tokens) and all(t in remaining for t in seen)
+                               and "⟦ML-" not in TOKEN_SHAPE.sub("", masked_output))
+                    lookup = dict(zip(protected.tokens, protected.literals))
+                    missing = [t for t in tokens if t not in seen]
+                    if not dropped or not all(_is_public_literal(lookup[t]) for t in missing):
+                        raise
+                    visible = {t: lookup[t] for t in missing}
+                    shown = chunk
+                    for token, literal in visible.items():
+                        shown = shown.replace(token, literal)
+                    attempts += 1
+                    async with GLOBAL_CALLS:
+                        if model_semaphore is None:
+                            retry = await llm.generate(GenerationRequest(
+                                system, shown, output_budget, source_lang=source, target_lang=target))
+                        else:
+                            async with model_semaphore:
+                                retry = await llm.generate(GenerationRequest(
+                                    system, shown, output_budget, source_lang=source, target_lang=target))
+                    if (retry.model != expected_model or retry.stop_reason != "stop"
+                            or not isinstance(retry.text, str) or not retry.text.strip()):
+                        raise
+                    validate_unicode(retry.text)
+                    remasked = _remask_visible(retry.text.strip(), tuple(tokens), visible)
+                    if remasked is None:
+                        raise
+                    masked_output = remasked
+                    inner = protected.restore(masked_output, tokens)
+                restored = lead + inner + trail
                 source_chunk = protected.restore(chunk, tokens)
                 chunk_warnings = _output_check(source_chunk, chunk, restored, masked_output,
                                                target, system, canary)

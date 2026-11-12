@@ -25,8 +25,8 @@ def test_settings_defaults_and_secret_repr(monkeypatch):
     settings = TranslationSettings(_env_file=None)
     assert settings.enabled is False
     assert settings.ocr_enabled is False
-    assert settings.max_upload_bytes == 10 * 1024 * 1024
-    assert settings.max_request_bytes == 11 * 1024 * 1024
+    assert settings.max_upload_bytes == 100 * 1024 * 1024
+    assert settings.max_request_bytes == 101 * 1024 * 1024
     assert settings.ocr_api_key == "canary-secret"
     assert "canary-secret" not in repr(settings)
 
