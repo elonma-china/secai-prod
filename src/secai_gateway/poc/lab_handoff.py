@@ -58,16 +58,16 @@ def write_lab_handoff(
 ) -> Path | None:
     """Persist a compact lab handoff after exploit-v2 final. Fail-open."""
     cve_id = _norm_cve(cve)
-    work = _session_dir(session_id)
-    if not cve_id or work is None:
+    if not cve_id:
         return None
+    work = _session_dir(session_id)
     try:
-        work.mkdir(parents=True, exist_ok=True)
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
     except OSError:
-        logger.exception("lab_handoff: cannot create dirs for %s", work)
+        logger.exception("lab_handoff: cannot create index dir %s", INDEX_DIR)
         return None
 
+    sess_name = work.name if work is not None else ((session_id or "").strip() or "?")
     code_preview = ""
     if code and code.strip():
         body = code.strip()
@@ -77,7 +77,7 @@ def write_lab_handoff(
 
     text = (
         f"# Lab handoff — {cve_id}\n"
-        f"- session: `{work.name}`\n"
+        f"- session: `{sess_name}`\n"
         f"- result: {'SUCCESS' if ok else 'FAILED'}\n"
         f"- stage: {stage or '?'}\n"
         f"- written_at: {int(time.time())}\n\n"
@@ -88,21 +88,39 @@ def write_lab_handoff(
         f"{code_preview}"
     )
     # Nếu agent đã ghi findings.md giàu hơn — nối tóm tắt (không đè file agent).
-    findings = work / "findings.md"
-    if findings.is_file():
-        try:
-            extra = findings.read_text(encoding="utf-8", errors="replace").strip()
-            if extra:
-                text += f"\n## findings.md (poc-runner)\n{extra[:2500]}\n"
-        except OSError:
-            pass
+    if work is not None:
+        findings = work / "findings.md"
+        if findings.is_file():
+            try:
+                extra = findings.read_text(encoding="utf-8", errors="replace").strip()
+                if extra:
+                    text += f"\n## findings.md (poc-runner)\n{extra[:2500]}\n"
+            except OSError:
+                pass
 
-    out = work / HANDOFF_FILE
+    # Session dir thường do poc_runner (root) tạo → gateway (app) không ghi được.
+    # Thử session trước; fallback INDEX_DIR/<CVE>.md (gateway tạo/own được).
+    out: Path | None = None
+    if work is not None:
+        try:
+            work.mkdir(parents=True, exist_ok=True)
+            cand = work / HANDOFF_FILE
+            cand.write_text(text, encoding="utf-8")
+            out = cand
+        except OSError as exc:
+            logger.warning("lab_handoff: session dir not writable (%s) — fallback index dir",
+                           exc)
+    if out is None:
+        try:
+            out = INDEX_DIR / f"{cve_id}.md"
+            out.write_text(text, encoding="utf-8")
+        except OSError:
+            logger.exception("lab_handoff: write failed cve=%s", cve_id)
+            return None
     try:
-        out.write_text(text, encoding="utf-8")
         index = {
             "cve": cve_id,
-            "session": work.name,
+            "session": sess_name,
             "path": str(out),
             "ok": bool(ok),
             "stage": stage,
@@ -112,13 +130,12 @@ def write_lab_handoff(
             json.dumps(index, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-        logger.info("lab_handoff written cve=%s session=%s ok=%s stage=%s",
-                    cve_id, work.name, ok, stage)
-        return out
     except OSError:
-        logger.exception("lab_handoff: write failed cve=%s", cve_id)
-        return None
-
+        logger.exception("lab_handoff: index write failed cve=%s", cve_id)
+        # File handoff đã có — vẫn dùng được cho lookup theo path scan.
+    logger.info("lab_handoff written cve=%s session=%s path=%s ok=%s stage=%s",
+                cve_id, sess_name, out, ok, stage)
+    return out
 
 def _read_capped(path: Path, max_chars: int) -> str | None:
     try:

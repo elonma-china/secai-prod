@@ -62,3 +62,31 @@ def test_lab_handoff_blocks_dedupes(tmp_path, monkeypatch) -> None:
     text = lh.lab_handoff_blocks(["CVE-2026-53435", "CVE-2026-53435"])
     assert text is not None
     assert text.count("Lab exploit-v2 handoff") == 1
+
+
+def test_write_falls_back_when_session_dir_not_writable(tmp_path, monkeypatch) -> None:
+    """poc_runner often creates ev2_* as root — gateway must still index handoff."""
+    root = tmp_path / "ias"
+    index = root / "cve-handoff"
+    root.mkdir()
+    sess = root / "ev2_ses_roonly"
+    sess.mkdir()
+    sess.chmod(0o555)
+    monkeypatch.setattr(lh, "IAS_ROOT", root)
+    monkeypatch.setattr(lh, "INDEX_DIR", index)
+
+    out = lh.write_lab_handoff(
+        cve="CVE-2026-93485",
+        session_id="ses_roonly",
+        ok=False,
+        stage="2",
+        reason="watchdog cut while waiting",
+    )
+    try:
+        assert out is not None
+        assert out.parent == index
+        assert out.name == "CVE-2026-93485.md"
+        assert (index / "CVE-2026-93485.json").is_file()
+        assert "watchdog cut" in out.read_text(encoding="utf-8")
+    finally:
+        sess.chmod(0o755)
