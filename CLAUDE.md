@@ -43,7 +43,19 @@ Script thuê probe authenticated inference LLM/embedding/rerank từng replica v
 
 Chi tiết artifact, flags, installer và matrix: `secai-serving-vast/vast/gpu_specialists/README.md` trong repo serving riêng.
 
-## Docker và Devspace
+## Nhiều agent Claude Code cùng làm việc (git + deploy)
+
+Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dưới đây là quy tắc bắt buộc, rút từ sự cố thật (main bị `reset --hard` mất 5 commit chưa push; worktree khác bị lệch index khi ai đó đổi `main` dùng chung; container dịch bị `docker run` tay đè tên không qua compose, `release.json` hỏng giữa đường không ai biết):
+
+- **Mỗi agent 1 worktree riêng, 1 nhánh feature riêng.** `git worktree add ../wt-<task> -b fix/<task> main`. Không bao giờ `git checkout`/sửa trực tiếp trên checkout chính nếu không chắc có agent khác đang dùng — kiểm `git worktree list` trước.
+- **Không bao giờ code trực tiếp trên `main`.** Merge vào `main` chỉ qua `git merge-tree main <nhánh>` (kiểm xung đột, không cần checkout `main`, không đụng worktree ai khác). Nếu phải cập nhật `main` mà nó đang được checkout ở worktree khác, dùng plumbing (`git commit-tree` + `git update-ref`) rồi `git -C <worktree-đó> reset --mixed && git -C <worktree-đó> checkout HEAD -- .` để đồng bộ lại index của họ, không để lệch.
+- **Push nhánh lên origin ngay khi xong việc.** Commit chỉ nằm local là thứ dễ mất nhất khi nhiều agent cùng đụng nhánh chung.
+- **Tuyệt đối không `git reset`/`reset --hard` một nhánh chung** (main, hay bất kỳ nhánh ai khác có thể đang checkout) khi chưa chắc ai đang dùng. Muốn "dọn" lịch sử, tạo nhánh backup trước.
+- **Có 1 worktree "main" cố định, lâu dài** (không nằm trong thư mục scratchpad của session nào — dễ bị dọn mất) để mount cho production và để merge vào. Không ai code trực tiếp trong worktree này.
+- **Container production không bao giờ mount sống từ checkout đang có agent code nhánh feature.** Nguồn mount luôn là worktree "main" cố định ở trên. Agent đổi nhánh ở checkout chính không được phép làm đổi code đang chạy production.
+- **Không `docker run`/`docker stop`/`docker rm` tay vào container production**, dù chỉ để test nhanh. Dùng đúng script release có sẵn (`deploy/translation-release/release.py` — có lock, kiểm ownership, rollback, readiness-check; dùng làm khuôn mẫu cho mọi service khác). Container test tạm phải đặt tên khác hẳn (`*-smoke-<ngày>`), không bao giờ trùng/đè tên production.
+- **Rollback bằng đổi tên, không xoá.** Trước khi thay container/image mới, `docker rename` container cũ thành `*-rollback-<ngày>` rồi `stop` (đúng quy ước đã có trong repo), giữ nguyên image cũ — không `rm`/`rmi` cho tới khi chắc bản mới ổn.
+- **Tag image theo commit SHA** (`secai-agent-gateway:<service>-<sha-ngắn>-<ngày>`) thay vì tên mô tả mơ hồ, để nhìn tag biết ngay build từ commit nào, đỡ phải điều tra bằng `docker history`/`grep` trong container.
 
 Đọc [deploy/all-features/README.md](deploy/all-features/README.md) trước cập nhật full-feature image. Gateway/worker/report chạy CPU; giữ entrypoint, private env và volume theo từng service. Nhiều agent có thể triển khai chung: dùng lock hiện có, kiểm ownership và immutable image ngay trước switch/rollback; chỉ cập nhật service thuộc phạm vi.
 
