@@ -70,6 +70,31 @@ def test_dedupe_ma_poc_outline_repeated() -> None:
     assert out.strip() == block.strip()
 
 
+def test_dedupe_keeps_nested_numbered_steps_in_overview() -> None:
+    """Mục 4 'Cách khai thác' thường có list 1./2. — không được cắt như báo cáo trùng."""
+    text = (
+        "# CVE-2026-72765 — n8n\n"
+        "1. Mô tả lỗ hổng\n"
+        "RCE qua workflow.\n"
+        "3. Điểm CVSS và mức độ nghiêm trọng\n"
+        "| Thuộc tính | Giá trị |\n"
+        "|---|---|\n"
+        "| Điểm CVSS | 9.8 |\n"
+        "**Giải thích vector:** tấn công qua mạng (AV:N).\n"
+        "4. Cách khai thác (tóm tắt)\n"
+        "Chuỗi khai thác gồm 2 giai đoạn:\n"
+        "1. Request tạo workflow độc hại.\n"
+        "2. Request kích hoạt execution.\n"
+        "5. Khắc phục và vá lỗi\n"
+        "Nâng cấp n8n.\n"
+    )
+    out = dedupe_repeated_markdown_report(text)
+    assert out == text.strip()
+    assert "Request tạo workflow độc hại" in out
+    assert "Nâng cấp n8n" in out
+    assert "**Giải thích vector:**" in out
+
+
 def test_cve_kb_context_note_requires_handoff_facts() -> None:
     assert "nguồn CHÍNH" in CVE_KB_CONTEXT_NOTE
     assert "ĐÚNG MỘT báo cáo" in CVE_KB_CONTEXT_NOTE

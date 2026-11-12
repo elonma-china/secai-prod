@@ -24,14 +24,30 @@ data/
 
 # Not needed at runtime.
 logs/
+output/
 .playwright-mcp/
+.cocoindex_code/
+.opencode/
 tests/
+test/
 docs/
 deploy/
+demo/
+evals/
+evidence/
+scripts/
+pentestcode/
+secai-fe-devspace/
 secai-serving-vast/
+kpi_eval_v2/
+jev-ultrafast/
 .git/
 .git.bak-nested/
 .gitignore
+*.png
+*.docx
+*.zip
+Untitled
 
 # kpi_bench IS copied into the image (see Dockerfile `COPY kpi_bench`), but its
 # run-churn/output dirs are not — they don't exist in a fresh checkout, but keep

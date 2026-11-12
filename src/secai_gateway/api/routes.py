@@ -357,10 +357,12 @@ CVE_KB_CONTEXT_NOTE = (
 # Chat CVE report: regenerate (RequireChatGroundingHook) có thể nối draft cũ + bản mới trên
 # FE không clear buffer → 1,2,3,4,5 rồi lại 1,2… Cắt bản trùng ở final (và khi hold tokens).
 _CVE_H1_RE = re.compile(r"(?m)^#\s+(CVE-\d{4}-\d+\b.*)$")
-# Mục 1 top-level — cả "1. Mô tả lỗ hổng" (CVE overview) lẫn "## 1. Mã PoC" (exploit report).
-# Bug 2026-11-12: regex cũ chỉ match "Mô tả lỗ hổng" → bản ## 1. Mã PoC…## 5. lặp×2 vẫn lọt.
+# Mục 1 top-level ONLY — CVE overview ("1. Mô tả…") hoặc exploit report ("## 1. Mã PoC/Khai thác…").
+# Bug 2026-11-12a: regex cũ chỉ match "Mô tả lỗ hổng" → bản ## 1. Mã PoC…## 5. lặp×2 vẫn lọt.
+# Bug 2026-11-12b: nới thành mọi dòng `1. …` → cắt nhầm list con trong mục 4 (Cách khai thác
+# gồm "1. request…") → overview CVE lúc đủ lúc cụt ("lúc được lúc mất").
 _SECTION1_TOP_RE = re.compile(
-    r"(?m)^(?:#{1,3}\s*)?1\.\s+(?!\d)\S",
+    r"(?mi)^(?:#{1,3}\s*)?1\.\s+(?:Mô\s+tả\b|Mo\s+ta\b|Mã\s+(?:PoC|Khai\s+thác)\b|Ma\s+(?:PoC|Khai\s+thac)\b)",
 )
 
 
