@@ -66,6 +66,39 @@ def test_pinned_local_tokenizer_required(tmp_path):
                                      chat_template_overhead_tokens=0)) is None
 
 
+def test_pinned_tokenizer_cache_reuses_unchanged_file_but_rechecks_a_swapped_one(tmp_path, monkeypatch):
+    """verified_counter() runs on every request; it must not re-read/hash/parse an unchanged
+    tokenizer each time (measured ~1 s/call, capped the gateway near 1.2 req/s), yet a file
+    swapped under the same path must still fail the pinned SHA-256 check."""
+    import os
+    from tokenizers import Tokenizer, models, pre_tokenizers
+    from secai_gateway.multilang import config as mlconfig
+
+    def make(words):
+        t = Tokenizer(models.WordLevel(words, unk_token="[UNK]"))
+        t.pre_tokenizer = pre_tokenizers.Whitespace()
+        return t
+
+    path = tmp_path / "tokenizer.json"
+    make({"[UNK]": 0, "dịch": 1}).save(str(path))
+    digest = sha256(path.read_bytes()).hexdigest()
+    cfg = settings(tokenizer_json=str(path), tokenizer_sha256=digest)
+
+    loads = []
+    real = mlconfig._load_pinned_counter
+    monkeypatch.setattr(mlconfig, "_load_pinned_counter",
+                        lambda *a: (loads.append(a), real(*a))[1])
+    first = verified_counter(cfg)
+    second = verified_counter(cfg)
+    assert first is second and len(loads) == 1            # unchanged file: loaded once
+
+    make({"[UNK]": 0, "khác": 1, "hẳn": 2}).save(str(path))  # same path, different content
+    st = path.stat()
+    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+    assert verified_counter(cfg) is None                  # fingerprint changed -> SHA re-checked -> rejected
+    assert len(loads) == 2
+
+
 @pytest.mark.asyncio
 async def test_invalid_and_disabled_do_not_generate():
     fake = FakeLlm([])

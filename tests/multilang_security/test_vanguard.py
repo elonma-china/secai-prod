@@ -330,8 +330,11 @@ async def test_sv08_isolation_and_flag_snapshot():
             if len(observed) == 1:
                 entered.set()
                 await release.wait()
+            # TEST-ONLY (branch test/llm-translate-vs-mt): SYSTEM now spells out the full
+            # language name ("Simplified Chinese"), not the raw code ("zh-Hans") -- see
+            # _language_name() in multilang/service.py.
             return GenerationResult("检查完成。" if request.system.startswith(
-                "Translate the user's data exactly into zh-Hans.") else "تم الفحص.",
+                "Translate the user's data exactly into Simplified Chinese.") else "تم الفحص.",
                                     "stop", EXPECTED_MODEL)
     flags = config()
     fake = Blocking()

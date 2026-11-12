@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -12,7 +13,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from secai_gateway.config import Settings as LegacySettings
 
 
-EXPECTED_MODEL = "DuyTa/Cyber-F1-AWQ"
+EXPECTED_MODEL = "orcarouter/Qwen3.8-Flash-Next-Uncensored-NVFP4"
+# TEST-ONLY (branch test/llm-translate-vs-mt): the live incumbent LLM at
+# QWEN_BASE_URL now serves this model, not "DuyTa/Cyber-F1-AWQ" -- that name is
+# stale (the model behind the main chat LLM endpoint was swapped since this
+# constant was written). incumbent_ok() below compares legacy.qwen_model to
+# this constant byte-for-byte, so translate-via-incumbent-LLM is currently
+# broken on main too, not just in this experiment. Do not merge this change
+# without confirming with whoever owns the LLM swap that this is the intended
+# fix (vs. e.g. pinning a specific older replica for multilang specifically).
 HYMT_MODEL = "tencent/Hy-MT2-7B"
 HYMT_TOKENIZER_SHA256 = "4185389a69284fdd3ebf737c6120bbeee36cbed9763151fa5bac5986a39e05d4"
 HYMT_TOKENIZER_CONFIG_SHA256 = "1fffdb809549222938f4a732645dd984c7c0b2973d592c2d01e05425274317da"
@@ -155,6 +164,20 @@ def verified_specialist_counter(settings: MultilangSettings) -> Callable[[str], 
 
 
 def _verified_hymt_counter(settings: MultilangSettings) -> HyMtCounter | None:
+    fps = (_fingerprint(settings.specialist_tokenizer_json),
+           _fingerprint(settings.specialist_tokenizer_config_json))
+    if None in fps:
+        return None
+    key = ("hymt", settings.specialist_profile, settings.specialist_model,
+           settings.specialist_context_tokens, settings.specialist_max_output_tokens,
+           settings.specialist_chunk_input_tokens, settings.specialist_tokenizer_json,
+           settings.specialist_tokenizer_config_json, settings.specialist_tokenizer_sha256,
+           settings.specialist_tokenizer_config_sha256, settings.specialist_tokenizer_revision,
+           settings.specialist_chat_template_sha256, fps)
+    return _cached(key, lambda: _load_hymt_counter(settings))
+
+
+def _load_hymt_counter(settings: MultilangSettings) -> HyMtCounter | None:
     required_context = 2048 if settings.specialist_profile == "hymt2_7b_gguf_gpu" else 4096
     if (settings.specialist_model != HYMT_MODEL or
             settings.specialist_context_tokens != required_context or
@@ -193,7 +216,48 @@ def _verified_hymt_counter(settings: MultilangSettings) -> HyMtCounter | None:
         return None
 
 
+# TEST-ONLY (branch test/llm-translate-vs-mt): measured ~0.9-1.1 s per call (read 11 MB
+# tokenizer.json + SHA-256 + Rust parse), and verified_counter()/verified_specialist_counter()
+# run on EVERY translate request, so the gateway topped out near 1.2 req/s no matter how many
+# concurrent callers or how fast the LLM was (raw LLM: >15 blocks/s). Cache the verified counter
+# keyed by (path, pinned digest, file fingerprint): any change to the file (inode/size/mtime_ns)
+# misses the cache and re-runs the full SHA-256 pin check, so a swapped tokenizer is still
+# rejected -- we just stop re-proving an unchanged file on every request.
+_COUNTER_CACHE: dict[tuple, Any] = {}
+_COUNTER_LOCK = threading.Lock()
+
+
+def _fingerprint(path_name: str) -> tuple[int, int, int] | None:
+    try:
+        st = Path(path_name).stat()
+    except OSError:
+        return None
+    return (st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+def _cached(key: tuple, build: Callable[[], Any]) -> Any:
+    with _COUNTER_LOCK:
+        if key in _COUNTER_CACHE:
+            return _COUNTER_CACHE[key]
+    value = build()  # heavy work outside the lock; a duplicate build on a race is harmless
+    with _COUNTER_LOCK:
+        if len(_COUNTER_CACHE) > 16:
+            _COUNTER_CACHE.clear()
+        _COUNTER_CACHE[key] = value
+    return value
+
+
 def _pinned_counter(path_name: str, digest: str) -> Callable[[str], int] | None:
+    if not path_name or not digest:
+        return None
+    fp = _fingerprint(path_name)
+    if fp is None:
+        return None
+    return _cached(("pinned", path_name, digest.lower(), fp),
+                   lambda: _load_pinned_counter(path_name, digest))
+
+
+def _load_pinned_counter(path_name: str, digest: str) -> Callable[[str], int] | None:
     if not path_name or not digest:
         return None
     path = Path(path_name)
