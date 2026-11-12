@@ -885,8 +885,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
         authoritative text regardless — only the raw `token` stream is affected.
 
         ``hold_tokens_until_final`` — chat uses this: suppress live ``token`` deltas and
-        emit one authoritative token (+ deduped final) after the run. Survives FE that
-        ignore ``regenerate`` and would otherwise concat draft+rewrite (CVE report 1–5×2)."""
+        emit only the deduped ``final`` after the run (no catch-up ``token`` with the same
+        body). Emitting both caused FE that append ``token`` then ``final.content`` to
+        show CVE outline 1–5 twice; ``final`` alone is the authoritative payload
+        (``content`` / ``answer`` / ``message``)."""
 
         async def gen() -> AsyncIterator[bytes]:
             for frame in pre_frames or []:
@@ -931,9 +933,10 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 yield sse_frame("final", await build_final(STREAM_ERROR_MESSAGE, run_id))
             if not failed:
                 if hold_tokens_until_final:
+                    # Deduped final ONLY — do not also emit a full catch-up token.
+                    # Prior behavior (token=final body + final event) made any FE that
+                    # accumulates tokens AND applies final.content render 1–5 twice.
                     final = dedupe_repeated_markdown_report(final)
-                    if final:
-                        yield sse_frame("token", {"delta": final})
                 yield sse_frame("final", await build_final(final, run_id))
             yield b"data: [DONE]\n\n"
 
