@@ -172,7 +172,8 @@ def extract_docx(path: Path, settings: TranslationSettings) -> ExtractedDocument
             root = _xml(data)
             if low.endswith(".rels"):
                 for rel in root:
-                    if rel.attrib.get("TargetMode", "").lower() == "external":
+                    if (rel.attrib.get("TargetMode", "").lower() == "external"
+                            and not rel.attrib.get("Type", "").lower().endswith("/hyperlink")):
                         raise TranslationError("UNSAFE_DOCUMENT", "External document links are unsupported.")
     root = _xml(parts["word/document.xml"])
     content_types = parts["[Content_Types].xml"]
