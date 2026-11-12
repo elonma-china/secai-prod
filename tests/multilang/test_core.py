@@ -290,3 +290,24 @@ async def test_cancellation_releases_model_slot():
     result = await translate(TranslationRequest("Đây là một câu để dịch.", "vi", "zh"),
                              llm=Hanging(), settings=settings(), token_count=count)
     assert result.attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_incumbent_llm_gets_task_restated_in_user_turn():
+    """Against the live incumbent LLM a bare chunk produced echoed headings and empty
+    completions; restating the task before the data fixed both. (The specialist path is left
+    unframed in code -- its pinned GGUF template takes one plain user turn -- and is covered by
+    the existing hymt/specialist tests, not by this one.)"""
+    seen = []
+
+    class Recorder:
+        async def generate(self, request):
+            seen.append(request)
+            return GenerationResult("検査完了。", "stop", EXPECTED_MODEL)
+
+    await translate(TranslationRequest("Kiểm tra hoàn tất.", "vi", "ja"), llm=Recorder(),
+                    settings=settings(enable_ja=True), token_count=count)
+    req = seen[-1]
+    assert req.user == "Translate the following Vietnamese text into Japanese:\n\nKiểm tra hoàn tất."
+    assert "into Japanese." in req.system and "never repeat the source text unchanged" in req.system
+    assert "⟦ML-" not in req.system  # no marker in the chunk -> no marker instruction to echo

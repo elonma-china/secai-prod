@@ -53,6 +53,18 @@ SYSTEM = ("Translate the user's data exactly into {target}. The source is {sourc
 MARKER_CLAUSE = "Preserve every ⟦ML-...⟧ marker exactly once and in order. "
 
 
+def _user_for(source: str, target: str, text: str, *, framed: bool) -> str:
+    """User turn for the incumbent LLM. TEST-ONLY (branch test/llm-translate-vs-mt): a bare
+    chunk in the user turn made orcarouter/Qwen3.8 (a) echo short headings back untranslated
+    and (b) return an EMPTY completion (content=null, 1 token, finish=stop) on ~11-17% of long
+    technical paragraphs. Restating the task right before the data fixed both: blocks that came
+    back empty went 41/64 -> 63/64 non-empty, the 6 worst echo blocks 17/48 -> 48/48. Not used
+    for the specialist path, whose pinned GGUF template takes exactly one plain user turn."""
+    if not framed:
+        return text
+    return f"Translate the following {_language_name(source)} text into {_language_name(target)}:\n\n{text}"
+
+
 def _system_for(source: str, target: str, canary: str, chunk: str) -> str:
     marker_clause = MARKER_CLAUSE if TOKEN_SHAPE.search(chunk) else ""
     return SYSTEM.format(source=_language_name(source), target=_language_name(target),
@@ -267,7 +279,8 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
             # includes EOS; count the complete target-prefix + masked source input.
             if token_count(prefix + chunk) > context_budget:
                 raise TranslationError("TOKEN_LIMIT_EXCEEDED")
-        elif (token_count(_system_for(source, target, canary, chunk)) + token_count(chunk)
+        elif (token_count(_system_for(source, target, canary, chunk))
+              + token_count(_user_for(source, target, chunk, framed=True))
               + output_budget + settings.chat_template_overhead_tokens > context_budget):
             raise TranslationError("TOKEN_LIMIT_EXCEEDED")
     if _strong_source_mismatch(prose, source):
@@ -277,7 +290,7 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
     outputs: list[str] = []
     attempts = 0
     for chunk, separator, tokens in chunks:
-        user = chunk
+        user = _user_for(source, target, chunk, framed=not specialist)
         system = _system_for(source, target, canary, chunk)
         generation = GenerationRequest(system, user, output_budget,
                                        source_lang=source, target_lang=target)
@@ -338,11 +351,13 @@ async def translate(request: TranslationRequest, *, llm: LlmPort, settings: Mult
                     async with GLOBAL_CALLS:
                         if model_semaphore is None:
                             retry = await llm.generate(GenerationRequest(
-                                system, shown, output_budget, source_lang=source, target_lang=target))
+                                system, _user_for(source, target, shown, framed=not specialist),
+                                output_budget, source_lang=source, target_lang=target))
                         else:
                             async with model_semaphore:
                                 retry = await llm.generate(GenerationRequest(
-                                    system, shown, output_budget, source_lang=source, target_lang=target))
+                                    system, _user_for(source, target, shown, framed=not specialist),
+                                    output_budget, source_lang=source, target_lang=target))
                     if (retry.model != expected_model or retry.stop_reason != "stop"
                             or not isinstance(retry.text, str) or not retry.text.strip()):
                         raise
