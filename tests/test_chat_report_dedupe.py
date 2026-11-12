@@ -49,6 +49,27 @@ def test_dedupe_noop_when_single_report() -> None:
     assert dedupe_repeated_markdown_report(text) == text.strip()
 
 
+def test_dedupe_ma_poc_outline_repeated() -> None:
+    """Exploit-style 1–5 (Mã PoC…) lặp×2 — regex cũ chỉ bắt 'Mô tả lỗ hổng' nên miss."""
+    block = (
+        "## 1. Mã PoC/Payload\n"
+        "```\nprint('a')\n```\n"
+        "## 2. Cách chạy PoC\n"
+        "python3 exploit.py\n"
+        "## 3. Tổng quan Lỗ hổng\n"
+        "RCE via X.\n"
+        "## 4. Ảnh hưởng\n"
+        "Critical.\n"
+        "## 5. Khắc phục\n"
+        "Upgrade.\n"
+    )
+    text = block + "\n" + block
+    out = dedupe_repeated_markdown_report(text)
+    assert out.count("## 1. Mã PoC") == 1
+    assert out.count("## 5. Khắc phục") == 1
+    assert out.strip() == block.strip()
+
+
 def test_cve_kb_context_note_requires_handoff_facts() -> None:
     assert "nguồn CHÍNH" in CVE_KB_CONTEXT_NOTE
     assert "ĐÚNG MỘT báo cáo" in CVE_KB_CONTEXT_NOTE

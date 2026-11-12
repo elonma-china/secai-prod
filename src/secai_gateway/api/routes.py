@@ -357,8 +357,10 @@ CVE_KB_CONTEXT_NOTE = (
 # Chat CVE report: regenerate (RequireChatGroundingHook) có thể nối draft cũ + bản mới trên
 # FE không clear buffer → 1,2,3,4,5 rồi lại 1,2… Cắt bản trùng ở final (và khi hold tokens).
 _CVE_H1_RE = re.compile(r"(?m)^#\s+(CVE-\d{4}-\d+\b.*)$")
-_SECTION1_MO_TA_RE = re.compile(
-    r"(?mi)^(?:#+\s*)?1\.\s*Mô tả lỗ hổng\b|^(?:#+\s*)?1\.\s*Vulnerability\s+description\b",
+# Mục 1 top-level — cả "1. Mô tả lỗ hổng" (CVE overview) lẫn "## 1. Mã PoC" (exploit report).
+# Bug 2026-11-12: regex cũ chỉ match "Mô tả lỗ hổng" → bản ## 1. Mã PoC…## 5. lặp×2 vẫn lọt.
+_SECTION1_TOP_RE = re.compile(
+    r"(?m)^(?:#{1,3}\s*)?1\.\s+(?!\d)\S",
 )
 
 
@@ -376,7 +378,7 @@ def dedupe_repeated_markdown_report(text: str) -> str:
             second = body[h1s[1].start() :].rstrip()
             # Giữ bản dài hơn nếu lệch rõ; mặc định bản đầu (thường đủ trước câu chốt).
             return first if len(first) >= int(len(second) * 0.55) else second
-    marks = list(_SECTION1_MO_TA_RE.finditer(body))
+    marks = list(_SECTION1_TOP_RE.finditer(body))
     if len(marks) >= 2:
         return body[: marks[1].start()].rstrip()
     return body
