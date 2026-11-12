@@ -5757,7 +5757,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                 "session_id": ev.get("run_id")})
                         yield sse_frame("final", {k: ev.get(k) for k in
                                                   ("ok", "reason", "code", "run_instructions",
-                                                   "attempted_steps", "run_id")})
+                                                   "attempted_steps", "stage", "recommend",
+                                                   "run_id")})
                     elif et == "step":
                         yield sse_frame("step", {k: ev.get(k) for k in
                                                  ("index", "name", "status", "detail", "verdict")})
