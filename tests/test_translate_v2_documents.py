@@ -87,6 +87,34 @@ def test_docx_rejects_external_relationship(tmp_path):
     assert e.value.code == "UNSAFE_DOCUMENT"
 
 
+def test_docx_allows_ordinary_external_hyperlink(tmp_path):
+    """A citation/reference link (e.g. a threat-intel report linking to an advisory) is an
+    External-TargetMode relationship of Type .../hyperlink. It is never dereferenced by the
+    extractor -- only its rId text appears in the XML -- so it must not trip UNSAFE_DOCUMENT
+    the way a real external OLE/package link does."""
+    from docx import Document
+    from secai_gateway.translation.documents import extract_docx
+
+    document = Document()
+    document.add_paragraph("See the advisory for details.")
+    path = tmp_path / "x.docx"
+    document.save(path)
+    out = tmp_path / "linked.docx"
+    with ZipFile(path) as source, ZipFile(out, "w") as dest:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename == "word/_rels/document.xml.rels":
+                data = data.replace(
+                    b"</Relationships>",
+                    b'<Relationship Id="rLink" '
+                    b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
+                    b'Target="https://example.com/advisory" TargetMode="External"/></Relationships>',
+                )
+            dest.writestr(item, data)
+    doc = extract_docx(out, _settings())
+    assert [b.text for b in doc.blocks] == ["See the advisory for details."]
+
+
 @pytest.mark.asyncio
 async def test_encrypted_docx_fails_with_unsafe_document_in_extractor_and_worker(tmp_path, monkeypatch):
     from docx import Document
