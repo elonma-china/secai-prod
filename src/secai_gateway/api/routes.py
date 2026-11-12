@@ -2352,7 +2352,21 @@ def register_routes(app: FastAPI, state: Any) -> None:
         data: str = Form(...),
         output_format: str = Form("docx"),
         file_format: str | None = Form(None),
-        raw_binary: bool = Form(False)
+        raw_binary: bool = Form(False),
+        # Some clients send the report period as SEPARATE multipart fields instead of nesting
+        # them inside `data` — FastAPI silently drops any field not declared as a parameter, so
+        # without these, a real request's from_date/to_date never reach scan_data at all
+        # (_compute_real_date_range() below already checks scan_data for them, but scan_data
+        # only ever holds whatever is nested inside the `data` JSON string).
+        from_date: str | None = Form(None),
+        to_date: str | None = Form(None),
+        # Same reasoning as from_date/to_date above: some clients send summary/detail as
+        # SEPARATE multipart fields instead of nesting them inside `data` — without these
+        # declared, FastAPI silently drops them before scan_data ever sees them, so the
+        # Tổng quan verbatim-insertion (ensure_full_summary_table) would see nothing even
+        # though the client believes it already sent summary/detail (2026-11-12).
+        summary: str | None = Form(None),
+        detail: str | None = Form(None)
     ):
         import os, tempfile, uuid, json, base64
         from fastapi import HTTPException
@@ -2377,6 +2391,47 @@ def register_routes(app: FastAPI, state: Any) -> None:
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON in data field")
 
+        # Fold in from_date/to_date sent as separate multipart fields (see param comment above)
+        # — only when `data` doesn't already carry them, so nesting inside `data` still wins.
+        if from_date and not scan_data.get("from_date"):
+            scan_data["from_date"] = from_date
+        if to_date and not scan_data.get("to_date"):
+            scan_data["to_date"] = to_date
+        if summary and not scan_data.get("summary"):
+            scan_data["summary"] = summary
+        if detail and not scan_data.get("detail"):
+            scan_data["detail"] = detail
+
+        def _parse_summary_facts(summary_raw: Any) -> dict[str, int]:
+            """Parse the free-text Vietnamese `summary` field's pre-computed totals
+            (confirmed live shape: "Tổng số mục tiêu thiết bị được đánh giá: 55 ... Số loại
+            lỗ hổng cao: 45 ..."). These are the TRUE totals for the full scan — can exceed
+            the sample rows actually attached in listData (confirmed live: 578 total vs 18
+            sample rows). Single source of truth, reused by format_summary_table below AND
+            injected into the prompt so the model's own prose stays consistent with the
+            code-rendered table instead of inventing a different (smaller) number.
+            Computed early (right after scan_data is parsed) because format_summary_table
+            below closes over `summary_facts` and is first actually called well before the
+            point where this used to live further down the function."""
+            facts: dict[str, int] = {}
+            if not isinstance(summary_raw, str) or not summary_raw.strip():
+                return facts
+            for key, pat in {
+                "n_targets": r"[Tt]ổng số mục tiêu thiết bị được đánh giá:?\s*(\d+)",
+                "n_total": r"[Tt]ổng số lỗ hổng phát hiện:?\s*(\d+)",
+                "n_types": r"[Ss]ố loại lỗ hổng phát hiện:?\s*(\d+)",
+                "low": r"[Ss]ố loại lỗ hổng thấp:?\s*(\d+)",
+                "medium": r"[Ss]ố loại lỗ hổng trung bình:?\s*(\d+)",
+                "high": r"[Ss]ố loại lỗ hổng cao:?\s*(\d+)",
+                "critical": r"[Ss]ố loại lỗ hổng nghiêm trọng:?\s*(\d+)",
+            }.items():
+                m = re.search(pat, summary_raw)
+                if m:
+                    facts[key] = int(m.group(1))
+            return facts
+
+        summary_facts = _parse_summary_facts(scan_data.get("summary")) if isinstance(scan_data, dict) else {}
+
         def clean_text(text: str) -> str:
             if not text:
                 return ""
@@ -2393,6 +2448,15 @@ def register_routes(app: FastAPI, state: Any) -> None:
             "XI": 11, "XII": 12, "XIII": 13, "XIV": 14, "XV": 15
         }
         ROMAN_NUMS_PATTERN = r"(?:I|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV)"
+        # Any date-looking substring in a free-text document_title — dd/mm/yyyy, yyyy-mm-dd,
+        # or "ngày D [tháng M] [năm Y]" — stripped deterministically before the title renders
+        # (see call site), since the prompt rule against it alone wasn't reliably followed.
+        _TITLE_DATE_PATTERN = re.compile(
+            r"(?:,?\s*ngày\s*\d{1,2}(?:[/\-]\d{1,2}[/\-]\d{2,4})?(?:\s*tháng\s*\d{1,2})?(?:\s*năm\s*\d{4})?"
+            r"|\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}"
+            r"|\d{4}[/\-]\d{1,2}[/\-]\d{1,2})",
+            re.IGNORECASE,
+        )
 
         def extract_section_number(text: str) -> str | None:
             t = clean_text(text).strip()
@@ -2803,24 +2867,35 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
                 return None, None
 
+            # Real scan clients (e.g. the 100-item bare-list `data` shape confirmed live) label
+            # severity with a NUMERIC risk scale (0-4), not a string — same scale already used
+            # for the sister endpoint's _SEVERITY_MAP in messages.py. Calling .replace() on that
+            # raw int crashed format_vulnerabilities_table entirely (confirmed: AttributeError
+            # 'int' object has no attribute 'replace'), so every table/stats call downstream of
+            # ensure_full_vuln_table/ensure_full_summary_table would fail for this real traffic.
+            _RISK_NUM_TO_VI = {"4": "Nghiêm trọng", "3": "Cao", "2": "Trung bình", "1": "Thấp", "0": "Thông tin"}
+
+            def _normalize_severity_label(val: Any) -> str:
+                s = str(val).strip()
+                return _RISK_NUM_TO_VI.get(s, s)
+
             def format_vulnerabilities_table(vulns: Any, sec_num: str = "2") -> str:
                 if not isinstance(vulns, list) or not vulns:
                     return ""
                 sub_heading = f"{sec_num}.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:" if sec_num else "Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:"
                 lines = [
                     sub_heading,
-                    "| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |",
-                    "|---|---|---|---|---|"
+                    "| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |",
+                    "|---|---|---|---|"
                 ]
                 for idx, v in enumerate(vulns, 1):
                     if isinstance(v, dict):
                         name = (v.get("name") or v.get("title") or v.get("vuln_name") or v.get("cve") or f"Lỗ hổng #{idx}").replace("|", "-")
-                        sev = (v.get("severity") or v.get("level") or v.get("risk") or "Trung bình").replace("|", "-")
+                        sev = _normalize_severity_label(v.get("severity") or v.get("level") or v.get("risk") or "Trung bình").replace("|", "-")
                         desc = (v.get("description") or v.get("desc") or v.get("detail") or v.get("details") or "").replace("|", "-").replace("\n", " ")
-                        rec = (v.get("recommendation") or v.get("solution") or v.get("fix") or v.get("remediation") or v.get("mitigation") or "").replace("|", "-").replace("\n", " ")
-                        lines.append(f"| {idx} | {name} | {sev} | {desc} | {rec} |")
+                        lines.append(f"| {idx} | {name} | {sev} | {desc} |")
                     else:
-                        lines.append(f"| {idx} | {str(v).replace('|', '-')} | Thông tin | - | - |")
+                        lines.append(f"| {idx} | {str(v).replace('|', '-')} | Thông tin | - |")
                 return "\n".join(lines)
 
             def _strip_first_markdown_table(text: str) -> tuple[str, int]:
@@ -2850,20 +2925,28 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 return result, data_rows
 
             def ensure_full_vuln_table(content: Any, sec_num: str) -> str:
+                """Force the vulnerability detail table to the real CVE/severity/description
+                values from raw_vulns — ALWAYS replaces any table the LLM drew, not just when
+                the row count is incomplete (previous behaviour). Confirmed live: when the LLM
+                happened to write the right NUMBER of rows, its own per-row severity labels
+                were kept verbatim even though they disagreed with the real risk/risk_number
+                field (summary table said 15 Cao/2 Nghiêm trọng while the LLM's own detail
+                table showed only 2 Cao rows and 16 Trung bình for the SAME data) — CVE/
+                severity/description are factual data one deterministic call away, same
+                reasoning as ensure_full_summary_table. Remediation column is left blank when
+                raw_vulns has no recommendation/solution/fix/remediation/mitigation field
+                (per user decision) rather than keeping the LLM's own invented suggestion."""
                 content_str = str(content or "")
                 if not raw_vulns:
                     return content_str
-                if "|" not in content_str:
-                    full_table = format_vulnerabilities_table(raw_vulns, sec_num=sec_num)
-                    return (full_table + ("\n\n" + content_str if content_str.strip() else "")).strip()
-
-                remaining_text, existing_rows = _strip_first_markdown_table(content_str)
-                if existing_rows >= len(raw_vulns):
-                    return content_str
-
                 full_table = format_vulnerabilities_table(raw_vulns, sec_num=sec_num)
+                if not full_table:
+                    return content_str
+                if "|" not in content_str:
+                    return (full_table + ("\n\n" + content_str if content_str.strip() else "")).strip()
+                remaining_text, _ = _strip_first_markdown_table(content_str)
                 if remaining_text.strip():
-                    return full_table + "\n\n" + remaining_text.strip()
+                    return (full_table + "\n\n" + remaining_text.strip()).strip()
                 return full_table
 
             def _lookup_signer_name(role_keys: list[str]) -> str | None:
@@ -2875,14 +2958,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         return val.strip()
                 return None
 
-            def format_summary_table(scan_data_dict: Any, sec_num: str = "1") -> str:
+            def format_summary_table(scan_data_dict: Any, sec_num: str = "1", include_context_line: bool = True) -> str:
                 if not isinstance(scan_data_dict, dict):
                     return ""
-                vulns = scan_data_dict.get("vulnerabilities") or scan_data_dict.get("chi_tiet") or scan_data_dict.get("details") or scan_data_dict.get("lo_hong") or []
-                summary = scan_data_dict.get("summary") or scan_data_dict.get("statistics")
-                if not isinstance(summary, dict):
-                    summary = {}
-                
+                # Same bare-list `data` shape (wrapped as {"raw_data": [...]}) already handled
+                # for raw_vulns above — this function re-derives its own `vulns` independently
+                # instead of reusing raw_vulns, so it needs the identical fallback or it silently
+                # sees an empty list for that shape (confirmed live: 100-item request, detail
+                # table correct via raw_vulns, but this stats table undercounted because it
+                # never saw any of the 100 items at all).
+                _raw_data_for_stats = scan_data_dict.get("raw_data")
+                _list_data_for_stats = scan_data_dict.get("listData") or scan_data_dict.get("list_data")
+                vulns = (
+                    scan_data_dict.get("vulnerabilities") or scan_data_dict.get("chi_tiet")
+                    or scan_data_dict.get("details") or scan_data_dict.get("lo_hong")
+                    or (_raw_data_for_stats if isinstance(_raw_data_for_stats, list) else None)
+                    or (_list_data_for_stats if isinstance(_list_data_for_stats, list) else None)
+                    or []
+                )
+                summary_raw = scan_data_dict.get("summary") or scan_data_dict.get("statistics")
+                # Parsed once, shared with the prompt-building code above (summary_facts) so the
+                # model's own prose and this code-rendered table never disagree on the totals —
+                # see _parse_summary_facts()'s docstring for why this can't just re-derive from
+                # `vulns` (summary's totals cover the FULL scan, vulns may be a smaller sample).
+                _summary_parsed = summary_facts
+                summary = summary_raw if isinstance(summary_raw, dict) else {}
+
                 def _to_cnt(val):
                     if isinstance(val, int):
                         return val
@@ -2891,15 +2992,22 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     return 0
 
                 sum_lower = {str(k).lower(): v for k, v in summary.items()} if isinstance(summary, dict) else {}
-                crit_count = _to_cnt(sum_lower.get("critical") or sum_lower.get("nghiem_trong") or sum_lower.get("nghiêm trọng"))
-                high_count = _to_cnt(sum_lower.get("high") or sum_lower.get("cao"))
-                med_count = _to_cnt(sum_lower.get("medium") or sum_lower.get("trung_binh") or sum_lower.get("trung bình"))
-                low_count = _to_cnt(sum_lower.get("low") or sum_lower.get("thap") or sum_lower.get("thấp"))
+                crit_count = _to_cnt(sum_lower.get("critical") or sum_lower.get("nghiem_trong") or sum_lower.get("nghiêm trọng") or _summary_parsed.get("critical"))
+                high_count = _to_cnt(sum_lower.get("high") or sum_lower.get("cao") or _summary_parsed.get("high"))
+                med_count = _to_cnt(sum_lower.get("medium") or sum_lower.get("trung_binh") or sum_lower.get("trung bình") or _summary_parsed.get("medium"))
+                low_count = _to_cnt(sum_lower.get("low") or sum_lower.get("thap") or sum_lower.get("thấp") or _summary_parsed.get("low"))
+                # Real scan data commonly carries a numeric risk=0 "Thông tin/Info" tier (confirmed
+                # live: 100-item request where the table's grand total came out far below 100) —
+                # without its own bucket those items matched none of the 4 branches below and were
+                # silently dropped from the count entirely, same class of bug as the numeric-risk
+                # crash fixed earlier in format_vulnerabilities_table.
+                info_count = _to_cnt(sum_lower.get("info") or sum_lower.get("thong_tin") or sum_lower.get("thông tin"))
 
-                if not (crit_count or high_count or med_count or low_count) and isinstance(vulns, list):
+                if not (crit_count or high_count or med_count or low_count or info_count) and isinstance(vulns, list):
                     for v in vulns:
                         if isinstance(v, dict):
-                            sev = str(v.get("severity") or v.get("level") or v.get("risk") or "").lower()
+                            sev_raw = v.get("severity") or v.get("level") or v.get("risk")
+                            sev = _normalize_severity_label(sev_raw).lower() if sev_raw is not None else ""
                             if "crit" in sev or "nghiêm trọng" in sev or "nghiem trong" in sev:
                                 crit_count += 1
                             elif "high" in sev or "cao" in sev:
@@ -2908,22 +3016,75 @@ def register_routes(app: FastAPI, state: Any) -> None:
                                 med_count += 1
                             elif "low" in sev or "thấp" in sev or "thap" in sev:
                                 low_count += 1
-                                
-                total = crit_count + high_count + med_count + low_count
-                if total == 0 and not vulns:
+                            elif "thông tin" in sev or "thong tin" in sev or "info" in sev:
+                                info_count += 1
+
+                total = crit_count + high_count + med_count + low_count + info_count
+                if total == 0 and not vulns and not _summary_parsed:
                     return ""
-                    
+
                 sub_heading = f"{sec_num}.2. Bảng thống kê lỗ hổng phát hiện:" if sec_num else "Bảng thống kê lỗ hổng phát hiện:"
-                lines = [
+                lines = []
+                # Skippable when the caller already shows this same info some other way
+                # (e.g. ensure_full_summary_table, once it's inserting the raw `summary`
+                # text verbatim right above — the two would otherwise say the same numbers
+                # twice back-to-back, confirmed live/2026-11-12 decision).
+                if include_context_line:
+                    _ctx_bits = []
+                    if "n_targets" in _summary_parsed:
+                        _ctx_bits.append(f"Tổng số mục tiêu/thiết bị đã quét: {_summary_parsed['n_targets']}")
+                    if "n_total" in _summary_parsed:
+                        _ctx_bits.append(f"Tổng số lượt phát hiện: {_summary_parsed['n_total']}")
+                    if _ctx_bits:
+                        lines.append(" · ".join(_ctx_bits))
+                lines += [
                     sub_heading,
                     "| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |",
                     "|---|---|---|",
                     f"| Nghiêm trọng (Critical) | {crit_count} | Khẩn cấp (trong vòng 24h) |",
                     f"| Cao (High) | {high_count} | Ưu tiên cao |",
                     f"| Trung bình (Medium) | {med_count} | Kế hoạch bảo trì tiếp theo |",
-                    f"| Thấp (Low) | {low_count} | Theo dõi thường xuyên |"
+                    f"| Thấp (Low) | {low_count} | Theo dõi thường xuyên |",
                 ]
+                if info_count:
+                    lines.append(f"| Thông tin (Info) | {info_count} | Theo dõi khi có thời gian |")
                 return "\n".join(lines)
+
+            def ensure_full_summary_table(content: Any, sec_num: str) -> str:
+                """Force the ENTIRE Tổng quan section content from the real request data —
+                2026-11-12 decision: this section is built directly from the `summary`/
+                `detail` fields VERBATIM, with NO LLM-generated narrative at all. Previously
+                only the severity-count table was forced deterministic; the surrounding prose
+                was still whatever the LLM wrote, which just re-stated the same numbers in
+                different words (wasted LLM effort, and a source of drift from the real
+                numbers) when the request already carries ready-made overview text. Whatever
+                `content` the LLM/fallback produced for this section is now ignored entirely —
+                same "always override, no good-enough-case" reasoning as the table itself."""
+                date_line = (
+                    f"Khoảng thời gian thực hiện: từ {_to_vn_date(real_date_range[0])} đến {_to_vn_date(real_date_range[1])}.\n\n"
+                ) if real_date_range else ""
+
+                _summary_raw = scan_data.get("summary") if isinstance(scan_data, dict) else None
+                _detail_raw = scan_data.get("detail") if isinstance(scan_data, dict) else None
+                _verbatim_parts = [
+                    clean_text(v) for v in (_summary_raw, _detail_raw)
+                    if isinstance(v, str) and v.strip()
+                ]
+                verbatim_block = (
+                    f"{sec_num}.1. Thông tin tổng hợp từ dữ liệu quét:\n"
+                    + "\n\n".join(_verbatim_parts) + "\n\n"
+                ) if _verbatim_parts else ""
+
+                # Suppress the table's own "Tổng số mục tiêu/thiết bị đã quét..." context
+                # line when the verbatim `summary` text above already states those exact
+                # numbers — otherwise the same facts show twice back-to-back (2026-11-12
+                # decision). Keep it when there's no verbatim text (no `summary`/`detail`
+                # in this request), since it's then the only place those numbers appear.
+                real_table = format_summary_table(
+                    scan_data, sec_num=sec_num, include_context_line=not bool(_verbatim_parts)
+                )
+                merged = (date_line + verbatim_block + real_table).strip()
+                return merged if merged else str(content or "")
 
             def create_styled_table(doc, anchor, headers, rows_data, col_widths=None, insert_before: bool = False):
                 num_rows = len(rows_data) + 1
@@ -3295,9 +3456,131 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         clean_markdown_and_add_runs(p, raw, base_font=base_font, font_size=docx.shared.Pt(11))
 
             # Build fallback text/table for vulnerabilities and overview summary if present in request data
-            raw_vulns = (scan_data.get("vulnerabilities") or scan_data.get("chi_tiet") or scan_data.get("details") or scan_data.get("lo_hong") or []) if isinstance(scan_data, dict) else []
+            # Some clients send the `data` form field as a BARE LIST of vulnerability dicts
+            # (no wrapping {"vulnerabilities": [...]}) — generate_template_report wraps any
+            # non-dict `data` as {"raw_data": <the list>} above so the rest of this route can
+            # keep assuming a dict; recognize that exact shape here too, or raw_vulns silently
+            # ends up empty (confirmed live: real request logged as scan_data_shape=list/100
+            # items, each {cve, date, description, risk, ...} — exactly this shape).
+            # Real FE payload (confirmed live) also uses `listData` — the exact field name the
+            # sister /ai/generate-statistical-report endpoint already reads via LegacyRequest —
+            # not `vulnerabilities`/`raw_data`. Recognize it here too.
+            _raw_data_list = scan_data.get("raw_data") if isinstance(scan_data, dict) else None
+            _list_data = (scan_data.get("listData") or scan_data.get("list_data")) if isinstance(scan_data, dict) else None
+            raw_vulns = (
+                scan_data.get("vulnerabilities") or scan_data.get("chi_tiet")
+                or scan_data.get("details") or scan_data.get("lo_hong")
+                or (_raw_data_list if isinstance(_raw_data_list, list) else None)
+                or (_list_data if isinstance(_list_data, list) else None)
+                or []
+            ) if isinstance(scan_data, dict) else []
             fallback_details_str = format_vulnerabilities_table(raw_vulns, sec_num="2") if raw_vulns else ""
             fallback_summary_str = format_summary_table(scan_data)
+
+            def _to_vn_date(iso_date: str) -> str:
+                """"YYYY-MM-DD" -> "DD/MM/YYYY" (Vietnamese convention) for DISPLAY only —
+                _compute_real_date_range's internal min/max sort still relies on the ISO
+                string sorting lexicographically, so that representation isn't touched.
+                Confirmed live (2026-11-12): some clients build this string as
+                "YYYY-DAY-MONTH" instead of proper ISO "YYYY-MONTH-DAY" (e.g. "2026-13-09"
+                for 13/09) — when the month slot is >12 (impossible as a real month), swap
+                it with the day slot so the DISPLAY still comes out correct despite the
+                malformed input; this is the one case unambiguous enough to safely auto-fix
+                (both slots ≤12 — e.g. 12 vs 11 — can't be told apart, left as-is)."""
+                m = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", str(iso_date).strip())
+                if not m:
+                    return str(iso_date)
+                year, mon, day = m.group(1), m.group(2), m.group(3)
+                if int(mon) > 12 and int(day) <= 12:
+                    mon, day = day, mon
+                return f"{day}/{mon}/{year}"
+
+            def _compute_real_date_range() -> tuple[str, str] | None:
+                """Real (start, end) date range — never computed/guessed by the LLM. Priority:
+                1) explicit start/end range fields on the request's scan_data (the actual
+                   period the caller asked for — the authoritative source when present);
+                2) otherwise, scan raw_vulns + scan_data for any per-record date field (common
+                   naming variants seen in real payloads) and take the real min/max found.
+                Returns None when neither exists, so the prompt rule below stays silent instead
+                of injecting a fake range (this is the gap behind the 'Tổng quan nêu sai khoảng
+                ngày' report)."""
+                def _date_only(d: str) -> str:
+                    # Strip any time-of-day/timezone component (e.g. "2026-09-17T00:00:00",
+                    # "2026-09-17 00:00:00+07:00") — only the DATE digits are ever authoritative
+                    # here; leaving the full timestamp in would let the LLM "helpfully"
+                    # reparse/reformat it and risk a timezone-driven off-by-one-day shift,
+                    # which is exactly what a real report showed after this rule shipped.
+                    date_part = d.strip().split("T")[0].split(" ")[0]
+                    # Confirmed live (2026-11-12, raw-traced): from_date/to_date sometimes
+                    # arrive as US-style "MM/DD/YYYY" (e.g. "09/13/2026" for 13 September,
+                    # from a FE build using toLocaleDateString()-style formatting instead of
+                    # ISO) — normalize to ISO "YYYY-MM-DD" here so BOTH the min/max sort
+                    # above and _to_vn_date's dd/mm/yyyy display stay correct regardless of
+                    # which format a given request happens to use.
+                    m_us = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", date_part)
+                    if m_us:
+                        mon, day, year = m_us.group(1), m_us.group(2), m_us.group(3)
+                        return f"{year}-{mon}-{day}"
+                    return date_part
+
+                if isinstance(scan_data, dict):
+                    for start_k, end_k in (
+                        ("start_date", "end_date"), ("startDate", "endDate"),
+                        ("from_date", "to_date"), ("ngay_bat_dau", "ngay_ket_thuc"),
+                    ):
+                        s, e = scan_data.get(start_k), scan_data.get(end_k)
+                        if isinstance(s, str) and s.strip() and isinstance(e, str) and e.strip():
+                            return _date_only(s), _date_only(e)
+
+                date_keys = {"date", "scan_date", "scaned", "modified", "detected_at",
+                             "ngay_phat_hien", "ngay_quet", "ngay", "time", "scan_time"}
+                found: list[str] = []
+
+                def _collect(obj: Any) -> None:
+                    if isinstance(obj, dict):
+                        for k, v in obj.items():
+                            if isinstance(v, str) and str(k).lower() in date_keys and v.strip():
+                                found.append(v.strip())
+                            elif isinstance(v, (dict, list)):
+                                _collect(v)
+                    elif isinstance(obj, list):
+                        for item in obj:
+                            _collect(item)
+
+                _collect(raw_vulns)
+                if not found and isinstance(scan_data, dict):
+                    _collect(scan_data)
+                if not found:
+                    return None
+                uniq = sorted({_date_only(d) for d in found})
+                return uniq[0], uniq[-1]
+
+            real_date_range = _compute_real_date_range()
+            date_range_rule = (
+                f"BẮT BUỘC dùng ĐÚNG khoảng thời gian thật tính từ scan_data mỗi khi nêu 'khoảng "
+                f"thời gian'/'từ ngày...đến ngày...' (đặc biệt ở mục Tổng quan): từ {_to_vn_date(real_date_range[0])} "
+                f"đến {_to_vn_date(real_date_range[1])}. TUYỆT ĐỐI KHÔNG tự tính/suy luận ra khoảng ngày khác.\n"
+            ) if real_date_range else ""
+
+            # summary_facts itself is computed earlier (right after scan_data is parsed,
+            # near the top of this function) because format_summary_table above closes over
+            # it and is first actually called before this point in the function.
+            summary_facts_rule = ""
+            if summary_facts:
+                _parts = []
+                if "n_targets" in summary_facts:
+                    _parts.append(f"{summary_facts['n_targets']} mục tiêu/thiết bị đã quét")
+                if "n_total" in summary_facts:
+                    _parts.append(f"{summary_facts['n_total']} lượt phát hiện lỗ hổng")
+                _sev_parts = [f"{label}={summary_facts[k]}" for k, label in
+                             (("critical", "Nghiêm trọng"), ("high", "Cao"), ("medium", "Trung bình"), ("low", "Thấp"))
+                             if k in summary_facts]
+                summary_facts_rule = (
+                    "BẮT BUỘC dùng ĐÚNG số liệu tổng thật đã có sẵn (KHÔNG tự đếm lại từ danh sách "
+                    "lỗ hổng hay suy luận số khác, đặc biệt ở mục Tổng quan): " +
+                    (", ".join(_parts) if _parts else "") +
+                    (f" (phân loại mức độ: {', '.join(_sev_parts)})" if _sev_parts else "") + ".\n"
+                )
 
             undeclared = set()
             try:
@@ -3363,7 +3646,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "hay markdown block."
                     )
                     try:
-                        classify_text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=classify_prompt)
+                        classify_text, _ = await complete("template_report", LegacyRequest(), prompt_override=classify_prompt)
                         classify_text = (classify_text or "").strip()
                         if classify_text.startswith("```json"):
                             classify_text = classify_text[7:]
@@ -3388,8 +3671,32 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
             needed_ai_fields = [f for f in undeclared if f not in scan_data]
 
-            scan_time_val = (scan_data.get("scan_time") or scan_data.get("time") or scan_data.get("date") or "2026-10-12 10:00:00") if isinstance(scan_data, dict) else "2026-10-12 10:00:00"
-            report_date_val = (scan_data.get("date") or scan_data.get("report_date") or scan_time_val.split()[0]) if isinstance(scan_data, dict) else "2026-10-12"
+            # No hardcoded fallback date (was "2026-10-12 10:00:00") — a plausible-looking fake
+            # date silently stood in for real data whenever the request used different field
+            # names, indistinguishable from the truth to the reader. Leave it honestly blank
+            # ("chưa xác định") instead when no real scan_time/date field is found.
+            def _vn_date_display(raw: str) -> str:
+                """Real request values here are commonly ISO with a time-of-day component
+                (e.g. "2026-11-11T00:00:00") — strip that first, then render dd/mm/yyyy
+                (Vietnamese convention), same as _to_vn_date above but tolerant of the time
+                suffix. Anything that isn't a plain date (e.g. "chưa xác định") passes through
+                unchanged — this must never invent/guess a different value."""
+                date_part = raw.strip().split("T")[0].split(" ")[0]
+                # Same US-style "MM/DD/YYYY" normalization as _date_only inside
+                # _compute_real_date_range below — see its comment for the confirmed-live
+                # case this handles.
+                m_us = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", date_part)
+                if m_us:
+                    date_part = f"{m_us.group(3)}-{m_us.group(1)}-{m_us.group(2)}"
+                return _to_vn_date(date_part)
+
+            scan_time_val = (scan_data.get("scan_time") or scan_data.get("time") or scan_data.get("date")) if isinstance(scan_data, dict) else None
+            scan_time_val = _vn_date_display(scan_time_val) if isinstance(scan_time_val, str) and scan_time_val.strip() else "chưa xác định"
+            report_date_val = (scan_data.get("date") or scan_data.get("report_date")) if isinstance(scan_data, dict) else None
+            if isinstance(report_date_val, str) and report_date_val.strip():
+                report_date_val = _vn_date_display(report_date_val)
+            else:
+                report_date_val = scan_time_val if scan_time_val != "chưa xác định" else "chưa xác định"
 
             is_freeform_idea = not file_bytes
             user_prompt_desc = effective_template_text if effective_template_text else "Báo cáo đánh giá an toàn thông tin hệ thống"
@@ -3443,7 +3750,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 elif s_type == "chi_tiet":
                     dynamic_section_rules.append(
                         f"     * Với đầu mục '{h}' (Mục {s_num}): Các mục con BẮT BUỘC đánh số {s_num}.1, {s_num}.2...\n"
-                        f"       {s_num}.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được: [Bắt buộc bảng Markdown 5 cột: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |]\n"
+                        f"       {s_num}.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được: [Bắt buộc bảng Markdown 4 cột: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |]\n"
                         f"       {s_num}.2. Phân tích chi tiết và tác động kỹ thuật: [Nội dung phân tích kỹ thuật các điểm yếu]"
                     )
                 elif s_type == "khuyen_nghi":
@@ -3477,7 +3784,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 ),
                 "chi_tiet": (
                     format_vulnerabilities_table(raw_vulns, sec_num="3") if raw_vulns else
-                    "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\n|---|---|---|---|---|\n| 1 | Chưa ghi nhận lỗ hổng nghiêm trọng | Thấp | Không phát hiện rủi ro cao | Tiếp tục giám sát định kỳ |\n\n3.2. Phân tích chi tiết và tác động kỹ thuật: Các thành phần hệ thống cơ bản đáp ứng tiêu chuẩn an toàn."
+                    "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |\n|---|---|---|---|\n| 1 | Chưa ghi nhận lỗ hổng nghiêm trọng | Thấp | Không phát hiện rủi ro cao |\n\n3.2. Phân tích chi tiết và tác động kỹ thuật: Các thành phần hệ thống cơ bản đáp ứng tiêu chuẩn an toàn."
                 ),
                 "khuyen_nghi": (
                     f"4.1. Các biện pháp khắc phục khẩn cấp:\n"
@@ -3514,7 +3821,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "'làm báo cáo đánh giá an toàn thông tin'), hãy dùng bộ khung gợi ý mặc định gồm 5 mục chuẩn an toàn thông tin sau:\n"
                         f"   1. Thời gian và Phạm vi kiểm thử: {scan_time_val}, ngày lập {report_date_val} (mục con: 1.1, 1.2)\n"
                         "   2. Tổng quan kết quả kiểm thử: Tóm tắt phạm vi, BẮT BUỘC có Bảng thống kê lỗ hổng 3 cột (| Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |), và đánh giá rủi ro tổng thể (mục con: 2.1, 2.2, 2.3)\n"
-                        "   3. Chi tiết các lỗ hổng an toàn thông tin: BẮT BUỘC có Bảng chi tiết lỗ hổng 5 cột (| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |), và phân tích tác động kỹ thuật (mục con: 3.1, 3.2)\n"
+                        "   3. Chi tiết các lỗ hổng an toàn thông tin: BẮT BUỘC có Bảng chi tiết lỗ hổng 4 cột (| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |), và phân tích tác động kỹ thuật (mục con: 3.1, 3.2)\n"
                         "   4. Khuyến nghị và Biện pháp khắc phục: Khắc phục khẩn cấp và phòng ngừa dài hạn (mục con: 4.1, 4.2 với các ý a), b)...)\n"
                         "   5. Kết luận và Đề xuất hành động tiếp theo: Hiện trạng an toàn và kiến nghị triển khai (mục con: 5.1, 5.2)\n"
                         "3. TUYỆT ĐỐI KHÔNG chép lại nguyên văn câu yêu cầu/chỉ dẫn của người dùng (ví dụ câu 'report "
@@ -3522,16 +3829,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         "sinh gì, không phải nội dung báo cáo.\n"
                         f"4. Nếu có mục 'Chi tiết'/'chi tiết lỗ hổng' (do người dùng yêu cầu hoặc theo khung mặc định), "
                         f"BẮT BUỘC liệt kê ĐẦY ĐỦ TOÀN BỘ {len(raw_vulns)} lỗ hổng có trong dữ liệu quét (scan_data) "
-                        "dưới dạng bảng markdown 5 cột, KHÔNG bỏ sót, KHÔNG rút gọn.\n\n"
-                        "HƯỚNG DẪN ĐỊNH DẠNG (BẮT BUỘC TUÂN THỦ):\n"
+                        "dưới dạng bảng markdown 4 cột, KHÔNG bỏ sót, KHÔNG rút gọn.\n"
+                        + (f"5. {date_range_rule}" if date_range_rule else "")
+                        + (f"6. {summary_facts_rule}" if summary_facts_rule else "")
+                        + "\nHƯỚNG DẪN ĐỊNH DẠNG (BẮT BUỘC TUÂN THỦ):\n"
                         "1. Trong phần nội dung (value), TUYỆT ĐỐI KHÔNG lặp lại tiêu đề mục lớn ở dòng đầu tiên.\n"
                         "2. Số thứ tự mục con BẮT BUỘC phải khớp với mục lớn (Mục 1 -> 1.1, Mục 2 -> 2.1...).\n"
-                        "3. Bảng markdown chuẩn cho mục tổng quan (3 cột) và mục chi tiết (5 cột).\n"
+                        "3. Bảng markdown chuẩn cho mục tổng quan (3 cột) và mục chi tiết (4 cột).\n"
                         "4. Tuyệt đối không dùng dấu sao ** hoặc *** để in đậm vì đây là định dạng Word.\n"
                         "5. TUYỆT ĐỐI KHÔNG tự thêm dòng hành chính/chữ ký (như 'Người lập', 'Người lập báo cáo', "
                         "'(Ký tên)', 'Ký và ghi rõ họ tên', 'Chữ ký', 'Kính gửi', 'Nơi nhận'...) vào CUỐI bất kỳ mục "
                         "nào (đặc biệt là mục Kết luận) — các phần này do include_letterhead/include_salutation/"
-                        "include_signature kiểm soát riêng, KHÔNG được viết trong nội dung (content) của section.\n\n"
+                        "include_signature kiểm soát riêng, KHÔNG được viết trong nội dung (content) của section.\n"
+                        "6. 'document_title' TUYỆT ĐỐI KHÔNG chứa ngày/tháng/năm hay khoảng thời gian nào — đó là "
+                        "tiêu đề chung của báo cáo, không phải chỗ nêu thời gian (thời gian đã có ở mục riêng).\n\n"
                         "QUY ĐỊNH ĐỊNH DẠNG ĐẦU RA:\n"
                         "Trả về DUY NHẤT một khối JSON hợp lệ theo cấu trúc:\n"
                         "{\n"
@@ -3550,7 +3861,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         '    },\n'
                         '    {\n'
                         '      "heading": "3. Chi tiết các lỗ hổng an toàn thông tin",\n'
-                        '      "content": "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\\n|---|---|---|---|---|\\n...\\n3.2. Phân tích chi tiết và tác động kỹ thuật: ..."\n'
+                        '      "content": "3.1. Bảng danh sách chi tiết các lỗ hổng an toàn thông tin phát hiện được:\\n| STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |\\n|---|---|---|---|\\n...\\n3.2. Phân tích chi tiết và tác động kỹ thuật: ..."\n'
                         '    },\n'
                         '    {\n'
                         '      "heading": "4. Khuyến nghị và Biện pháp khắc phục",\n'
@@ -3583,10 +3894,12 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         f"{prompt_rules_text}\n"
                         "   - TUYỆT ĐỐI CẤM đánh số mục con bị lệch (ví dụ nếu đầu mục là Mục 2 thì mục con PHẢI là 2.1, 2.2, CẤM dùng 1.1 hay 3.1).\n"
                         "3. CHỖ NÀO NÊN ĐỂ BẢNG THÌ HÃY ĐỂ BẢNG (Dùng cú pháp bảng Markdown chuẩn: | Cột 1 | Cột 2 | ... |):\n"
-                        "   - Bảng chi tiết lỗ hổng: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết | Biện pháp khắc phục |\n"
+                        "   - Bảng chi tiết lỗ hổng: | STT | Tên lỗ hổng | Mức độ | Mô tả chi tiết |\n"
                         "   - Bảng thống kê tổng quan: | Mức độ rủi ro | Số lượng phát hiện | Đánh giá / Mức độ ưu tiên |\n"
                         f"   - Nếu đầu mục liên quan đến danh sách/chi tiết lỗ hổng: BẮT BUỘC liệt kê ĐẦY ĐỦ TOÀN BỘ {len(raw_vulns)} lỗ hổng có trong scan_data trong bảng, KHÔNG bỏ sót, KHÔNG rút gọn, KHÔNG chỉ liệt kê một phần.\n"
-                        "4. ĐỐI VỚI CÁC ĐẦU MỤC TÙY BIẾN CỦA NGƯỜI DÙNG: Phân tích chủ đề và dùng scan_data sinh nội dung kỹ thuật phù hợp.\n"
+                        + (f"   - {date_range_rule}" if date_range_rule else "")
+                        + (f"   - {summary_facts_rule}" if summary_facts_rule else "")
+                        + "4. ĐỐI VỚI CÁC ĐẦU MỤC TÙY BIẾN CỦA NGƯỜI DÙNG: Phân tích chủ đề và dùng scan_data sinh nội dung kỹ thuật phù hợp.\n"
                         "5. TUYỆT ĐỐI KHÔNG DÙNG DẤU SAO ** HOẶC *** ĐỂ IN ĐẬM VÌ ĐÂY LÀ ĐỊNH DẠNG WORD.\n"
                         "6. Các phần đã có sẵn nội dung cố định trong template (như tiêu đề 'Báo cáo', tên người ký): Giữ nguyên, không cần sinh thêm.\n"
                         "7. QUY TẮC TUYỆT ĐỐI VỀ CÁC MỤC HÀNH CHÍNH / KÍNH GỬI / NƠI NHẬN:\n"
@@ -3639,7 +3952,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
 
                 for attempt in range(2):
                     try:
-                        text, _ = await complete("statistical_report", LegacyRequest(), prompt_override=prompt_content)
+                        text, _ = await complete("template_report", LegacyRequest(), prompt_override=prompt_content)
                         text = (text or "").strip()
                         if text.startswith("```json"):
                             text = text[7:]
@@ -3690,34 +4003,76 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             if k not in ["document_title", "meta", "include_letterhead", "include_salutation", "include_signature"]:
                                 parsed_sections.append({"heading": k, "content": str(v)})
 
-            # Sanitizer to prevent duplicate headings and correct sub-heading numbers
+            # Sanitizer to prevent duplicate headings and correct sub-heading numbers.
+            # Assembler already writes `heading_text` as the section title; model often
+            # echoes "1. …"–"5. …" again inside `content` (exact OR longer/shorter title —
+            # e.g. template "1. Thời gian" vs body "1. Thời gian và Phạm vi kiểm thử").
+            # Exact-match-only used to miss those → every section appeared twice.
             def sanitize_section_content(sec_num: str, heading_text: str, content_str: str) -> str:
                 lines = [l for l in str(content_str).strip().split('\n')]
                 if not lines:
                     return ""
 
-                norm_head = normalize_key(heading_text)
-                norm_head_noaccent = strip_accents(norm_head)
+                def _title_core(text: str) -> str:
+                    t = clean_text(text)
+                    t = re.sub(r'^[#*_\s]+|[#*_\s:]+$', '', t)
+                    t = re.sub(r'^(?:mục|phần|chương|bài|điều)\s+', '', t, flags=re.IGNORECASE)
+                    t = re.sub(r'^\d+(?:\.\d+)*[\.\)\:\s-]+', '', t)
+                    return strip_accents(normalize_key(t))
+
+                head_core = _title_core(heading_text)
+
+                def _is_parent_heading_echo(line: str) -> bool:
+                    """True when `line` is a top-level echo of this section's heading
+                    (same number + title equal/prefix), not a subheading like 1.1."""
+                    cleaned = clean_text(line)
+                    if not cleaned or not head_core:
+                        return False
+                    if re.match(r'^\d+\.\d+', cleaned):
+                        return False
+                    line_num = extract_section_number(cleaned)
+                    if sec_num and line_num and line_num != sec_num:
+                        return False
+                    if not sec_num and line_num:
+                        # No section number from template — only strip exact/prefix title match
+                        pass
+                    elif sec_num and not line_num:
+                        # Bare title without number can still be an echo of the parent heading
+                        pass
+                    core = _title_core(cleaned)
+                    if not core:
+                        return False
+                    return core == head_core or core.startswith(head_core) or head_core.startswith(core)
+
+                def _strip_same_line_heading_prefix(line: str) -> str | None:
+                    """If line is 'Heading: real body', return the body; else None."""
+                    cleaned = clean_text(line)
+                    for sep in (':', ' -', ' –', ' —'):
+                        # Try full heading_text and number-stripped head_core as prefixes
+                        for prefix in (heading_text, re.sub(r'^\d+(?:\.\d+)*[\.\)\:\s-]+', '', heading_text).strip()):
+                            if not prefix:
+                                continue
+                            low = cleaned.lower()
+                            pref = prefix.lower() + sep
+                            if low.startswith(pref):
+                                rem = cleaned[len(pref):].strip(' :-–—')
+                                return rem or None
+                    return None
 
                 while lines:
                     first_clean = clean_text(lines[0])
                     if not first_clean:
                         lines = lines[1:]
                         continue
-                    first_norm = normalize_key(first_clean)
-                    first_noaccent = strip_accents(first_norm)
 
-                    if (first_norm == norm_head or 
-                        (first_noaccent and first_noaccent == norm_head_noaccent) or
-                        first_clean.lower().rstrip(':.-') == heading_text.lower().rstrip(':.-') or
-                        first_clean.lower().startswith(heading_text.lower() + ':') or
-                        first_clean.lower().startswith(heading_text.lower() + ' -') or
-                        first_clean.lower().startswith(heading_text.lower() + ' –')):
-                        lines = lines[1:]
+                    # "Heading: real body" on one line → keep body only.
+                    rem = _strip_same_line_heading_prefix(first_clean)
+                    if rem is not None:
+                        lines = [rem] + lines[1:]
                         continue
 
-                    clean_first_header = re.sub(r'^[#*_\s]+|[#*_\s:]+$', '', first_clean)
-                    if clean_first_header.lower() == heading_text.lower() or (first_noaccent and strip_accents(clean_first_header.lower()) == norm_head_noaccent):
+                    # Whole-line parent heading echo (exact OR longer/shorter title) → drop.
+                    if _is_parent_heading_echo(first_clean):
                         lines = lines[1:]
                         continue
                     break
@@ -3728,6 +4083,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
                 new_lines = []
                 for line in lines:
                     l_s = line.strip()
+                    # Drop bare mid-body re-echoes of "1."…"5." parent headings (outline dump).
+                    if l_s and _is_parent_heading_echo(l_s):
+                        rem = _strip_same_line_heading_prefix(l_s)
+                        if rem and _title_core(rem) != head_core:
+                            line = rem
+                            l_s = rem
+                        else:
+                            continue
                     match_sub = re.match(r'^([#*_\s]*)(\d+)\.(\d+(?:\.\d+)*)([\.\:\s-].*)$', l_s)
                     if match_sub:
                         lead = match_sub.group(1)
@@ -3820,12 +4183,36 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     p_dt.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.RIGHT
                     p_dt.paragraph_format.space_before = docx.shared.Pt(2)
                     p_dt.paragraph_format.space_after = docx.shared.Pt(6)
-                    r_dt = p_dt.add_run(f"Hà Nội, ngày {report_date_val.split('-')[-1] if '-' in report_date_val else '12'} tháng {report_date_val.split('-')[1] if len(report_date_val.split('-')) > 1 else '10'} năm {report_date_val.split('-')[0] if '-' in report_date_val else '2026'}")
+                    # Same class of bug as scan_time_val/report_date_val's old hardcoded fallback
+                    # ("12"/"10"/"2026") — removed; honest dotted blanks (common Vietnamese
+                    # formal-document convention for a date left to fill by hand) when
+                    # report_date_val couldn't be parsed as YYYY-MM-DD, instead of a fake date.
+                    # report_date_val is now dd/mm/yyyy (see _vn_date_display above), not the
+                    # old yyyy-mm-dd — parts[0]=day, parts[1]=month, parts[2]=year.
+                    _d_parts = report_date_val.split('/') if '/' in report_date_val else []
+                    if len(_d_parts) >= 3:
+                        r_dt = p_dt.add_run(f"Hà Nội, ngày {_d_parts[0]} tháng {_d_parts[1]} năm {_d_parts[2]}")
+                    else:
+                        r_dt = p_dt.add_run("Hà Nội, ngày ..... tháng ..... năm .....")
                     r_dt.italic = True
                     r_dt.font.name = base_font
                     r_dt.font.size = docx.shared.Pt(11)
 
                 # 3. Tiêu đề (luôn hiển thị)
+                # Hard guard: the prompt instruction alone ("document_title TUYỆT ĐỐI KHÔNG
+                # chứa ngày...") wasn't reliably followed in practice (live report showed a
+                # wrong date in the title) — strip any date-looking text deterministically so
+                # a hallucinated/mismatched date never reaches the rendered title either way.
+                doc_title_ai = _TITLE_DATE_PATTERN.sub("", doc_title_ai)
+                doc_title_ai = re.sub(r"\s{2,}", " ", doc_title_ai)
+                doc_title_ai = re.sub(r"[\s,.\-–—]+$", "", doc_title_ai).strip() or "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN"
+                # Same prompt-rule-not-reliably-followed class of bug as the date leak above:
+                # rule 3 ("TUYỆT ĐỐI KHÔNG chép lại nguyên văn... vào tiêu đề") still let the
+                # model echo the template structure verbatim (confirmed live: "BÁO CÁO 1. TỔNG
+                # QUAN, 2. CHI TIẾT"). Detect that numbered-list-echo shape deterministically and
+                # fall back to the clean default title instead of trusting the model's title.
+                if len(re.findall(r"\d+\.\s*[^\d,]{2,}", doc_title_ai)) >= 2:
+                    doc_title_ai = "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN"
                 p_tit = doc_raw.add_paragraph()
                 p_tit.alignment = docx.enum.text.WD_ALIGN_PARAGRAPH.CENTER
                 p_tit.paragraph_format.space_before = docx.shared.Pt(14)
@@ -3870,10 +4257,20 @@ def register_routes(app: FastAPI, state: Any) -> None:
                     c_text = sec["content"]
 
                     h_norm_noaccent = strip_accents(normalize_key(h_text))
-                    is_detail_sec = h_norm_noaccent == "chi tiet" or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                    # "in" (substring), not "==": a heading like "2. Tổng quan kết quả kiểm thử"
+                    # (the system's OWN suggested default heading, see prompt_content above)
+                    # contains "tong quan" but isn't an exact match and isn't covered by any
+                    # single SEMANTIC_SYNONYMS phrase either — confirmed live this silently
+                    # skipped the whole deterministic-override path (table/verbatim summary)
+                    # for the standard 5-section template, only working for a bare "Tổng quan"
+                    # heading. "in" subsumes the exact-match case too.
+                    is_detail_sec = "chi tiet" in h_norm_noaccent or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                    is_overview_sec = "tong quan" in h_norm_noaccent or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["tong quan"])
                     sec_num = extract_section_number(h_text) or "1"
                     if is_detail_sec and raw_vulns:
                         c_text = ensure_full_vuln_table(c_text, sec_num)
+                    elif is_overview_sec:
+                        c_text = ensure_full_summary_table(c_text, sec_num)
 
                     p_h = doc_raw.add_paragraph()
                     p_h.paragraph_format.space_before = docx.shared.Pt(10)
@@ -3953,11 +4350,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         sec_num = str(matched_section_counter)
 
                     p_norm_noaccent = strip_accents(normalize_key(p_text))
-                    is_time_section = p_norm_noaccent == "thoi gian" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["thoi gian"])
-                    is_detail_section = p_norm_noaccent == "chi tiet" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
-                    is_overview_section = p_norm_noaccent == "tong quan" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["tong quan"])
-                    is_rec_section = p_norm_noaccent == "khuyen nghi" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["khuyen nghi"])
-                    is_conclusion_section = p_norm_noaccent == "ket luan" or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["ket luan"])
+                    # "in" (substring), not "==" — see comment at the sister h_norm_noaccent
+                    # block above; same bug, same fix (a descriptive default heading like
+                    # "Tổng quan kết quả kiểm thử" wasn't recognized by exact-match alone).
+                    is_time_section = "thoi gian" in p_norm_noaccent or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["thoi gian"])
+                    is_detail_section = "chi tiet" in p_norm_noaccent or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                    is_overview_section = "tong quan" in p_norm_noaccent or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["tong quan"])
+                    is_rec_section = "khuyen nghi" in p_norm_noaccent or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["khuyen nghi"])
+                    is_conclusion_section = "ket luan" in p_norm_noaccent or any(syn in p_norm_noaccent for syn in SEMANTIC_SYNONYMS["ket luan"])
 
                     content = None
                     matched_k = None
@@ -4013,11 +4413,9 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         target_sec_num = sec_num if sec_num else "3"
                         content = ensure_full_vuln_table(content, target_sec_num)
 
-                    if is_overview_section and "|" not in str(content):
+                    if is_overview_section:
                         target_sec_num = sec_num if sec_num else "2"
-                        cur_summary_str = format_summary_table(scan_data, sec_num=target_sec_num)
-                        if cur_summary_str:
-                            content = str(content) + "\n\n" + cur_summary_str
+                        content = ensure_full_summary_table(content, target_sec_num)
 
                     if content:
                         content_clean = sanitize_section_content(sec_num, p_text, str(content))
@@ -4039,10 +4437,13 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         h_text = sec["heading"]
                         c_text = sec["content"]
                         h_norm_noaccent = strip_accents(normalize_key(h_text))
-                        is_detail_sec = h_norm_noaccent == "chi tiet" or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                        is_detail_sec = "chi tiet" in h_norm_noaccent or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["chi tiet"])
+                        is_overview_sec = "tong quan" in h_norm_noaccent or any(syn in h_norm_noaccent for syn in SEMANTIC_SYNONYMS["tong quan"])
                         sec_num = extract_section_number(h_text) or "1"
                         if is_detail_sec and raw_vulns:
                             c_text = ensure_full_vuln_table(c_text, sec_num)
+                        elif is_overview_sec:
+                            c_text = ensure_full_summary_table(c_text, sec_num)
 
                         p_h = doc_raw.add_paragraph()
                         p_h.paragraph_format.space_before = docx.shared.Pt(12)
