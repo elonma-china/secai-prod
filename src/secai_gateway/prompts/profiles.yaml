@@ -11,7 +11,12 @@ chat:
   # poc_drilldown_policy.
   # howto_search thêm 2026-11-04: route product_howto (classify_chat_grounding) tra KB
   # hướng dẫn sử dụng IAS (collection ias_howto_kb, riêng khỏi cve_kb_hybrid/Neo4j).
-  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, web_fetch, fetch_reference, howto_search]
+  # cve_count/cve_latest thêm 2026-11-10: qdrant_search là xếp hạng liên quan, không đếm/sắp
+  # xếp theo thời gian — khi không có hit phù hợp cho câu hỏi tổng hợp ("CVE mới nhất",
+  # "tổng số CVE"), model tự bịa lý do ("lỗi kết nối") thay vì nói đúng là thiếu công cụ.
+  # 2 tool này trả dữ liệu Qdrant count/scroll thật, loại bỏ nhu cầu model phải suy diễn.
+  tools: [qdrant_search, neo4j_search, poc_search, poc_fetch, web_fetch, fetch_reference,
+         howto_search, cve_count, cve_latest]
   base: true
   max_turns: 10
 
@@ -131,6 +136,18 @@ statistical_report:
   tools: [qdrant_search, neo4j_search]
   base: false
   max_turns: 6
+
+# /ai/generate-template-report's own profile — it used to reuse statistical_report (wrong: that
+# profile's statistical.md base prompt hard-demands a report_title/report_summary/report_detail
+# JSON contract, which fought with this route's own prompt_override asking for a different
+# document_title/sections JSON shape; confirmed live — the literal words "report_title"/
+# "report_summary" leaked into a rendered report). No tool access needed: content is synthesized
+# purely from the scan_data already embedded in prompt_override, nothing to look up.
+template_report:
+  prompt: template_report.md
+  tools: []
+  base: false
+  max_turns: 2
 
 # Additive review-authenticated Markdown template tools; existing report profiles unchanged.
 report_template_edit:
