@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -145,6 +146,50 @@ def verified_counter(settings: MultilangSettings) -> Callable[[str], int] | None
     return _pinned_counter(settings.tokenizer_json, settings.tokenizer_sha256)
 
 
+# Verified counters are memoized: re-reading, re-hashing and re-parsing the 16 MB Hy-MT
+# tokenizer on every request cost ~0.6 s of CPU and capped the v3 route near 1.4 req/s.
+# The cache key is the stat identity (path, device, inode, mtime_ns, size) of every pinned
+# file, so replacing or editing a file forces the full sha256 + parse verification again.
+# Only *successful* verifications are stored: a failure is re-evaluated on every call and
+# heals as soon as the files are correct, exactly as before. The counters are immutable
+# wrappers over a read-only Rust tokenizer, so sharing one across threads is safe.
+_COUNTER_CACHE_MAX = 8
+_COUNTER_CACHE: dict[tuple, Any] = {}
+_COUNTER_LOCK = threading.Lock()
+
+
+def _file_identity(*paths: Path) -> tuple | None:
+    try:
+        identity = []
+        for path in paths:
+            stat = path.stat()
+            identity.append((str(path), stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_size))
+        return tuple(identity)
+    except OSError:
+        return None
+
+
+def _memoized_counter(key: tuple, build: Callable[[], Any]) -> Any:
+    cached = _COUNTER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    with _COUNTER_LOCK:  # one build per key even when many requests arrive together
+        cached = _COUNTER_CACHE.get(key)
+        if cached is not None:
+            return cached
+        counter = build()
+        if counter is not None:
+            if len(_COUNTER_CACHE) >= _COUNTER_CACHE_MAX:
+                _COUNTER_CACHE.clear()
+            _COUNTER_CACHE[key] = counter
+        return counter
+
+
+def clear_counter_cache() -> None:
+    with _COUNTER_LOCK:
+        _COUNTER_CACHE.clear()
+
+
 def verified_specialist_counter(settings: MultilangSettings) -> Callable[[str], int] | None:
     """Load only the selected specialist's locally pinned tokenization recipe."""
     if settings.specialist_profile in {"hymt2_7b_gguf", "hymt2_7b_gguf_gpu"}:
@@ -166,9 +211,18 @@ def _verified_hymt_counter(settings: MultilangSettings) -> HyMtCounter | None:
             settings.specialist_chat_template_sha256.lower() != HYMT_GGUF_TEMPLATE_SHA256 or
             sha256(HYMT_GGUF_TEMPLATE.encode()).hexdigest() != HYMT_GGUF_TEMPLATE_SHA256):
         return None
+    # The cheap settings guard above always runs; only the file verification is memoized.
+    tokenizer_path = Path(settings.specialist_tokenizer_json)
+    config_path = Path(settings.specialist_tokenizer_config_json)
+    identity = _file_identity(tokenizer_path, config_path)
+    if identity is None:
+        return None
+    return _memoized_counter(("hymt",) + identity,
+                             lambda: _build_hymt_counter(tokenizer_path, config_path))
+
+
+def _build_hymt_counter(tokenizer_path: Path, config_path: Path) -> HyMtCounter | None:
     try:
-        tokenizer_path = Path(settings.specialist_tokenizer_json)
-        config_path = Path(settings.specialist_tokenizer_config_json)
         tokenizer_raw = tokenizer_path.read_bytes()
         config_raw = config_path.read_bytes()
         if (sha256(tokenizer_raw).hexdigest() != HYMT_TOKENIZER_SHA256 or
@@ -197,6 +251,14 @@ def _pinned_counter(path_name: str, digest: str) -> Callable[[str], int] | None:
     if not path_name or not digest:
         return None
     path = Path(path_name)
+    identity = _file_identity(path)
+    if identity is None:
+        return None
+    return _memoized_counter(("pinned", digest.lower()) + identity,
+                             lambda: _build_pinned_counter(path, digest))
+
+
+def _build_pinned_counter(path: Path, digest: str) -> Callable[[str], int] | None:
     try:
         raw = path.read_bytes()
         if sha256(raw).hexdigest() != digest.lower():

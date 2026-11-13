@@ -168,6 +168,29 @@ async def _read_json(request: Request, max_bytes: int) -> Input:
     return parsed
 
 
+# The specialist sidecar (uvicorn) closes idle connections after 5 s; expiring pooled
+# connections sooner means a socket the server is about to drop is never reused.
+_SPECIALIST_KEEPALIVE_SECONDS = 4.0
+
+
+def shared_specialist_client(app: FastAPI) -> httpx.AsyncClient:
+    """One keep-alive client for the private specialist, created on first use.
+
+    A client per call opened a fresh TCP connection (through the SSH transport to the GPU
+    host) for every chunk: ~290 ms vs ~100 ms when the connection is reused. It keeps the
+    no-proxy, no-redirect posture of the per-call client, so environment proxy variables can
+    still never redirect private translation data. An injected client is respected as-is.
+    """
+    client = app.state.specialist_client
+    if client is None:  # no await between check and set: safe on the single event loop
+        client = httpx.AsyncClient(
+            trust_env=False, follow_redirects=False,
+            limits=httpx.Limits(max_connections=64, max_keepalive_connections=32,
+                                keepalive_expiry=_SPECIALIST_KEEPALIVE_SECONDS))
+        app.state.specialist_client = client
+    return client
+
+
 def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: LegacySettings,
                   llm: LlmPort | None = None) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url="/ai/v3/translate/openapi.json")
@@ -186,6 +209,13 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
     app.state.llm = llm
     app.state.http_client = None
     app.state.specialist_client = None
+
+    async def close_specialist_client() -> None:
+        client = app.state.specialist_client
+        if client is not None:
+            await client.aclose()
+
+    app.router.add_event_handler("shutdown", close_specialist_client)
     model_semaphore = asyncio.Semaphore(settings_factory().max_concurrent_model_calls)
 
     @app.get("/ai/v3/translate/languages")
@@ -223,7 +253,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
                     if active_llm is None:
                         # Specialist owns a no-proxy client so environment proxy variables
                         # cannot redirect private translation data outside the host.
-                        active_llm = SpecialistLlm(app.state.specialist_client, settings)
+                        active_llm = SpecialistLlm(shared_specialist_client(app), settings)
                 else:
                     if not incumbent_ok(legacy):
                         raise TranslationError("MODEL_UNAVAILABLE")
