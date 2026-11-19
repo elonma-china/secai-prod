@@ -31,3 +31,8 @@ output/
 pentestcode/node_modules/
 **/__pycache__/
 output/*.png
+
+# ── Test/probe artifacts (không commit) ──
+**/node_modules
+**/test-results/
+pentestcode/packages/opencode/js/
