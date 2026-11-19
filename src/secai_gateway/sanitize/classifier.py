@@ -98,6 +98,14 @@ class _Head:
     # and always when the asset is absent) → decode() uses the raw sigmoid and never sets
     # injection_uncertain, i.e. today's exact pre-cascade behavior.
     calibration: dict[str, float] | None = None
+    # Other names of the SAME embedding weights (byte-identical mirrors, e.g. an org-owned HF copy). The head
+    # was trained in this embedding space, so a runtime model listed here is as valid as ``embed_model``.
+    embed_model_aliases: tuple[str, ...] = ()
+
+    def accepts_embed_model(self, runtime_model: str) -> bool:
+        """True when no model is pinned/configured, or the runtime model is the pinned one or an alias of it."""
+        return (not self.embed_model or not runtime_model
+                or runtime_model == self.embed_model or runtime_model in self.embed_model_aliases)
 
 
 _lock = threading.Lock()
@@ -161,6 +169,8 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
         return None
 
     embed_model = str(meta.get("embed_model") or "")
+    raw_aliases = meta.get("embed_model_aliases") or []
+    aliases = tuple(str(a) for a in raw_aliases if isinstance(a, str) and a) if isinstance(raw_aliases, list) else ()
     trained = bool(meta.get("trained", True))
     keys = set(getattr(data, "files", []) or list(data.keys()))
 
@@ -182,7 +192,7 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
             kind = str(meta.get("kind") or "mixed")
             return _Head(dim=dim, embed_model=embed_model, trained=trained,
                          thresholds=thresholds, kind=kind, subheads=subheads,
-                         calibration=calibration)
+                         calibration=calibration, embed_model_aliases=aliases)
         # Legacy 5-row linear.
         W = np.asarray(data["W"], dtype=np.float32)
         b = np.asarray(data["b"], dtype=np.float32)
@@ -198,7 +208,7 @@ def _load_head_uncached(weights_path: str = "") -> _Head | None:
     if W.shape[1] != dim:
         dim = int(W.shape[1])
     return _Head(dim=dim, embed_model=embed_model, trained=trained, thresholds=thresholds,
-                 kind="linear", W=W, b=b, calibration=calibration)
+                 kind="linear", W=W, b=b, calibration=calibration, embed_model_aliases=aliases)
 
 
 def load_head(settings: Any | None = None, *, force_reload: bool = False) -> _Head | None:
@@ -265,7 +275,7 @@ def startup_head_check(head: "_Head | None", embedding_model: str) -> str | None
     if not head.trained:
         return "input-classifier: head present but trained=false → guard is OFF (fail-open)"
     rt = str(embedding_model or "")
-    if head.embed_model and rt and head.embed_model != rt:
+    if not head.accepts_embed_model(rt):
         return (f"input-classifier: EMBED-MODEL MISMATCH head={head.embed_model!r} != "
                 f"EMBEDDING_MODEL={rt!r} → guard fails open on EVERY request (see CLAUDE.md)")
     return None
@@ -381,7 +391,7 @@ async def classify_input(
     # points at a different embedding model, refuse to classify (fail-open) rather than
     # applying the head to out-of-distribution vectors.
     runtime_model = str(getattr(settings, "embedding_model", "") or "")
-    if head.embed_model and runtime_model and head.embed_model != runtime_model:
+    if not head.accepts_embed_model(runtime_model):
         return InputVerdict.unknown(f"embed-model-mismatch:{head.embed_model}!={runtime_model}")
 
     timeout = float(getattr(settings, "input_classifier_embed_timeout_s", 5.0) or 5.0)
