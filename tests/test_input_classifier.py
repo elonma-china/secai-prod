@@ -278,6 +278,51 @@ def test_gate_offtopic_no_text_keeps_legacy_behavior() -> None:
     assert decide(v, _Settings()).action is Action.REFUSE_OFFTOPIC
 
 
+def test_gate_offtopic_conversation_meta_marker_overrides_confident_offtopic() -> None:
+    # Acceptance-test repro (2026-11-11): "Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ
+    # cho tôi" carries no CWE/CVE/IAS token (its topic is the prior, already in-scope, turns —
+    # not the literal words of this one message), so it scored confidently off-topic and got
+    # wrongly refused mid-session. The conversation-meta marker rescues it the same way the
+    # security/IAS markers rescue a taxonomy or howto question.
+    v = InputVerdict(True, "offtopic", False, False, {"security": 0.01, "offtopic": 0.97}, 1.0)
+    assert decide(
+        v, _Settings(), text="Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ cho tôi",
+    ).action is Action.PASS
+
+
+def test_gate_offtopic_conversation_meta_marker_rephrasing_sweep() -> None:
+    # 10x-rephrasing sweep against the live gateway (2026-11-11) caught one live regression
+    # the first-cut regex missed: "Tóm tắt hộ tôi những nội dung chính đã trao đổi nãy giờ"
+    # has the same recap intent but no "những gì"/"cuộc trò chuyện"-style noun and no "từ đầu"
+    # — it still got REFUSE_OFFTOPIC live. Widened to pair a recap verb with ANY loose
+    # time/session reference. Covers the other 9 live-verified phrasings too so a future
+    # narrowing of the regex is caught here before it reaches the live gateway again.
+    v = InputVerdict(True, "offtopic", False, False, {"security": 0.01, "offtopic": 0.97}, 1.0)
+    phrasings = [
+        "Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ cho tôi.",
+        "Nhắc lại những gì chúng ta đã trao đổi từ đầu buổi chat.",
+        "Xem lại giúp tôi các câu hỏi tôi đã hỏi trước đó trong phiên này.",
+        "Liệt kê lại các câu hỏi và câu trả lời trong phiên làm việc này.",
+        "Recap our conversation so far, please.",
+        "Can you summarize everything we have discussed in this chat?",
+        "Tóm tắt hộ tôi những nội dung chính đã trao đổi nãy giờ.",
+        "Bạn có thể nhắc lại giúp tôi những gì tôi vừa hỏi không?",
+        "Tóm tắt lại cuộc hội thoại này bằng tiếng Anh cho tôi.",
+        "Trước khi kết thúc, tóm tắt nhanh buổi tư vấn hôm nay giúp tôi.",
+    ]
+    for text in phrasings:
+        assert decide(v, _Settings(), text=text).action is Action.PASS, text
+
+
+def test_gate_offtopic_conversation_meta_marker_override_disableable() -> None:
+    s = _Settings()
+    s.input_classifier_conversation_meta_override = False
+    v = InputVerdict(True, "offtopic", False, False, {"security": 0.01, "offtopic": 0.97}, 1.0)
+    assert decide(
+        v, s, text="Tóm tắt lại toàn bộ cuộc trò chuyện từ đầu đến giờ cho tôi",
+    ).action is Action.REFUSE_OFFTOPIC
+
+
 def test_gate_security_clear_passes() -> None:
     v = InputVerdict(True, "security", False, False,
                       {"security": 0.95, "offtopic": 0.03, "chitchat": 0.02}, 1.0)
