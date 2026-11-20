@@ -12,5 +12,8 @@
     "injection",
     "pii"
   ],
-  "notes": "head=mixed; intent softmax(3) + injection/pii sigmoid; L2-normalised input."
+  "notes": "head=mixed; intent softmax(3) + injection/pii sigmoid; L2-normalised input.",
+  "embed_model_aliases": [
+    "secai1999/Embedding-Autoscan-v1"
+  ]
 }

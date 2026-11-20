@@ -5,6 +5,7 @@ the route-level short-circuit — all without any network or downloaded model.
 """
 from __future__ import annotations
 
+import dataclasses
 import httpx
 import numpy as np
 import pytest
@@ -457,6 +458,33 @@ def test_startup_head_check_detects_embed_model_mismatch() -> None:
     head = _head()  # embed_model="test-embed"
     msg = C.startup_head_check(head, "OTHER/embedding")
     assert msg is not None and "MISMATCH" in msg
+
+
+def test_startup_head_check_accepts_embed_model_alias() -> None:
+    head = dataclasses.replace(_head(), embed_model_aliases=("mirror/test-embed",))
+    assert C.startup_head_check(head, "mirror/test-embed") is None
+    assert C.startup_head_check(head, "OTHER/embedding") is not None
+
+
+@pytest.mark.asyncio
+async def test_classify_alias_is_not_a_mismatch_but_unlisted_model_still_is(monkeypatch) -> None:
+    head = dataclasses.replace(_head(), embed_model_aliases=("mirror/test-embed",))
+    monkeypatch.setattr(C, "load_head", lambda *a, **k: head)
+    s = _Settings()
+    s.embedding_model = "unlisted/model"
+    v = await classify_input("hello", settings=s)
+    assert not v.ok and "embed-model-mismatch" in v.reason
+    s.embedding_model = "mirror/test-embed"
+    v = await classify_input("hello", settings=s)
+    assert "embed-model-mismatch" not in (v.reason or "")
+
+
+def test_shipped_head_accepts_secai1999_embedding_mirror() -> None:
+    head = C.load_head(force_reload=True)
+    assert head is not None
+    assert head.accepts_embed_model("DuyTa/sec-embedding")
+    assert head.accepts_embed_model("secai1999/Embedding-Autoscan-v1")
+    assert not head.accepts_embed_model("BAAI/bge-m3")
 
 
 def test_startup_head_check_ok_when_models_match() -> None:
