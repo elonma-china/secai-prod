@@ -28,6 +28,9 @@ evals/results/exploit_lab_1792085602_summary.json
 output/
 .playwright-cli/
 .opencode/
+
+# ── Bộ test tải tối đa exploit-v2 (2026-11-20+) — script + kết quả, KHÔNG commit ──
+docs/exp-pentestcode-session/results/loadtest-scratch/
 pentestcode/node_modules/
 **/__pycache__/
 output/*.png
