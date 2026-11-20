@@ -1,8 +1,8 @@
-"""Event dict helpers dùng chung cho các lane của exploit-advance (`advance.py` + `lane1.py`).
+"""Event dict helpers shared by the streaming PoC flows (exploit-v2, review, document agent).
 
-Các lane là async generator phát ra event dict; endpoint (`routes.py`) bọc thành SSE
-(`step`/`log`/`final`). Tách ra đây để `lane1.py` và `advance.py` cùng dùng, tránh vòng import
-và giữ MỘT định dạng frame duy nhất cho FE.
+Flows are async generators that emit event dicts; the endpoint wraps them as SSE
+(`step`/`log`/`final`). Kept in one place so every flow shares a single frame format for the FE.
+(The exploit-advance / lane1 flows that originally shared it were removed on 2026-11-20.)
 """
 from __future__ import annotations
 

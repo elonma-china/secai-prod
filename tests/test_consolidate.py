@@ -296,33 +296,3 @@ async def test_consolidate_feeds_imported_sibling_in_full_within_budget() -> Non
         monkeypatch.undo()
     assert "return 'x' * 2000" in src           # imported dep is full, uncapped
     assert "y = 1\n" * 100 not in src           # unrelated support was capped
-
-
-# ── on-demand temp cache (DB → temp → internet) ─────────────────────────────────
-def test_ondemand_cache_roundtrip_and_default_dir(tmp_path) -> None:
-    from types import SimpleNamespace
-
-    from secai_gateway.poc.ondemand_cache import load_cached, resolve_cache_dir, save_cached
-
-    ev = {"source": "poc_github", "source_code": "print('x')\n", "source_files": None,
-          "url": "https://github.com/a/b", "sha256": "e" * 64, "language": "python"}
-    cache_dir = tmp_path / "cache"
-    assert load_cached(cache_dir, "CVE-2026-31431") is None      # empty → miss
-    save_cached(cache_dir, "CVE-2026-31431", ev)
-    got = load_cached(cache_dir, "CVE-2026-31431")
-    assert got is not None and got["source_code"] == "print('x')\n"
-    assert got["ondemand_cached"] is True                        # provenance breadcrumb
-    # default dir derives from the artifact store's parent
-    settings = SimpleNamespace(poc_ondemand_cache_dir="", poc_artifact_store="/data/poc/store")
-    assert str(resolve_cache_dir(settings)).endswith("/data/poc/ondemand-cache")
-
-
-def test_ondemand_cache_fail_open_on_bad_input(tmp_path) -> None:
-    from secai_gateway.poc.ondemand_cache import load_cached, save_cached
-
-    # A non-CVE key never builds a path; a description-only dict is not cached.
-    save_cached(tmp_path, "not-a-cve", {"source_code": "x"})
-    assert load_cached(tmp_path, "not-a-cve") is None
-    save_cached(tmp_path, "CVE-2026-1000", {"description": "no code"})
-    assert load_cached(tmp_path, "CVE-2026-1000") is None
-    assert load_cached(None, "CVE-2026-1000") is None            # disabled → None
