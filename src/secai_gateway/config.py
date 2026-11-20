@@ -388,18 +388,6 @@ class Settings(BaseSettings):
     # (engagement/log/session-db tách biệt) — xem poc/ias_pool.py.
     ias_server_pool: str = ""
 
-    # ── lane1 (ReAct kiểu hacker) cho exploit-advance ────────────────────────────
-    # TẮT mặc định. Khi CVE KHÔNG có primitive tất định VÀ engine pocsuite không có module
-    # (404) → thay vì fail, chạy vòng ReAct: LLM (Cyber-F1, JSON có cấu trúc) suy nghĩ → chọn
-    # tool → chạy trong sandbox Docker → đọc observation → lặp → oracle nonce/uid=. Không nới
-    # authz (vẫn dùng verify_allow_all/verify_allowed_targets); tool sandbox vẫn theo
-    # verify_enabled, run_cmd vẫn theo exec_enabled.
-    lane1_enabled: bool = False
-    lane1_max_steps: int = 12            # trần vòng lặp (req.max_steps lớn hơn thì lấy req)
-    lane1_net: str = "host"             # docker net cho tool sandbox (lab publish 127.0.0.1:180xx)
-    lane1_use_raw_cmd: bool = True       # cho phép run_cmd (payload/msf tùy ý) khi exec_enabled
-    lane1_http_inprocess: bool = True    # http_request qua stdlib in-process (vs curl sandbox)
-
     # ── Bughunt / BugHunter recon engine ───────────────────────────────────────
     # Path to claude-bug-bounty clone (empty = auto sibling of gateway / BUGBOUNTY_ROOT).
     bugbounty_root: str = ""
@@ -480,31 +468,6 @@ class Settings(BaseSettings):
     # failures retry; a timeout/transport error does not (not a fidelity issue, don't burn
     # more of the request's time budget). 1 disables retries (old single-shot behaviour).
     poc_consolidate_max_attempts: int = 3
-    # Persistent cache for PoC code fetched on-demand from the internet (web raw script),
-    # keyed by CVE — a repeat request reuses the saved copy instead of re-fetching.
-    # Lookup order becomes DB → this cache → internet. Empty → "<poc_artifact_store>/../ondemand-cache".
-    poc_ondemand_cache_dir: str = ""
-
-    # Verified-good PoC override store, keyed by CVE. A PoC that was fetched then manually FIXED
-    # + verified against a lab is saved here; on the exploit path it wins over the LLM
-    # consolidation (and the on-demand cache) so the CVE always returns the known-good runnable
-    # file — copy-paste runnable, no re-fix. Empty → "<poc_artifact_store>/../pocs-fixed".
-    poc_fixed_dir: str = ""
-    # Simulated processing delay (seconds) applied when a CVE is served from the verified-good
-    # store above, so its response latency stays comparable to a normal CVE that goes through the
-    # LLM consolidation pass. The deterministic slicer (poc/slicer.py) now makes that pass ~1s,
-    # so a large delay would make fixed PoCs SLOWER than freshly-generated ones — keep it ~0 so
-    # cached and generated PoCs are comparable. 0 disables the delay.
-    poc_fixed_simulate_delay_s: float = 0.0
-    # Uniform total-latency FLOOR (seconds) for /ai/exploit — anti timing-side-channel: a
-    # cached/fixed PoC (instant) and a freshly-generated one must be indistinguishable by
-    # response time. Applied as `sleep(max(0, floor - elapsed))` AFTER the work, so total ≈
-    # floor for anything faster than it, and worst case is bounded at max(floor, real) instead
-    # of the old fixed-24s-up-front behaviour (which added on TOP of the real pipeline —
-    # total 24+real≈38s, non-uniform — and, worse, blocked the stream's first byte for 24s,
-    # defeating the early Section-1 preview). Measured real pipeline ≈14s, so 30 gives a
-    # uniform ~30s while dropping the old ~38s average. 0 disables the floor.
-    poc_exploit_simulate_delay_s: float = 30.0
 
     # PoC Section-1 strategy for a genuinely MULTI-FILE fetched PoC (single-file PoCs always take
     # the deterministic verbatim slice regardless):

@@ -118,7 +118,7 @@ SCOPED_TOOLS: dict[str, tuple[Callable[..., Any], bool]] = {
 async def run_tool(settings: Any, tool: str, params: dict[str, Any], *, run_id: str,
                    net: str | None = None) -> dict[str, Any]:
     """Scoped tool: gated `verify_enabled`, authz target (tool cần target), argv do gateway dựng.
-    `net` override docker network (vd 'host' cho lane1 chạm lab publish 127.0.0.1:180xx)."""
+    `net` override docker network (vd 'host' để chạm lab publish 127.0.0.1:180xx)."""
     from dataclasses import replace
 
     from ..backend import PocBadRequest, PocForbidden          # lazy: tránh vòng import
