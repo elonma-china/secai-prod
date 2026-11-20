@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -302,48 +301,3 @@ def test_hunt_validate_helpers():
     val = validate_hypotheses(surface, hunt)
     assert val["ok"] is True
     assert val["leads"]
-
-
-def test_bughunt_http_stream(tmp_path, monkeypatch, offline_workflow_services):
-    monkeypatch.setenv("GATEWAY_DB_PATH", str(tmp_path / "gw.db"))
-    monkeypatch.setenv("VERIFY_ALLOW_ALL", "true")
-
-    from fastapi.testclient import TestClient
-    from secai_gateway.app import create_app
-
-    class _Stub:
-        def __init__(self):
-            self.agent = _agent()
-
-        def stream_bughunt(self, *, target, scope_note="", run_id=None,
-                          enable_exploit=False, run_cve_sweep=True):
-            return stream_bughunt_workflow(
-                self.agent, target=target, scope_note=scope_note, run_id=run_id,
-                use_llm=False, use_recon_engine=False,
-                enable_exploit=enable_exploit, run_cve_sweep=run_cve_sweep,
-            )
-
-    app = create_app(runner=_Stub())  # type: ignore[arg-type]
-    client = TestClient(app)
-    with patch(
-        "secai_gateway.bughunt.workflow.probe_http_surface",
-        new=AsyncMock(return_value=_FAKE_SURFACE),
-    ):
-        with client.stream(
-            "POST", "/ai/bughunt/stream",
-            json={"target": "example.com", "run_id": "bh-http-1"},
-        ) as resp:
-            assert resp.status_code == 200
-            body = "".join(resp.iter_text())
-    assert "event: phase" in body
-    assert '"title": "AgentHunt"' in body
-    assert '"title": "Validate"' in body
-    assert "event: final" in body
-    chunks = [c for c in body.split("\n\n") if c.startswith("event: final")]
-    assert chunks
-    data_line = [ln for ln in chunks[-1].splitlines() if ln.startswith("data: ")][0]
-    payload = json.loads(data_line[len("data: "):])
-    assert payload["ok"] is True
-    assert payload["result"]["phases"] == list(BUGHUNT_PHASES)
-    assert payload["result"]["status"] == "recon_ok"
-    assert payload["result"]["surface"]["findings"]

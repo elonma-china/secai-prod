@@ -6,61 +6,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class VerifyRequest(BaseModel):
-    """POST /ai/verify — verify a catalog PoC against an authorized target."""
-
-    model_config = ConfigDict(extra="allow")
-
-    target: str
-    cve: str | None = None
-    ref: str | None = None
-    source: str | None = None
-    rport: int | None = None
-    user_id: str | int | None = None
-
-
-class ToolRequest(BaseModel):
-    """POST /ai/tool — a scoped, validated pentest tool invocation."""
-
-    model_config = ConfigDict(extra="allow")
-
-    tool: str
-    target: str | None = None
-    ports: str | None = None
-    query: str | None = None
-    wordlist: str | None = None
-    threads: int | None = None
-    service: str | None = None
-    username: str | None = None
-    password: str | None = None
-    user_id: str | int | None = None
-
-
-class ExecRequest(BaseModel):
-    """POST /ai/exec — deliberately privileged raw executor API."""
-
-    model_config = ConfigDict(extra="allow")
-
-    cmd: list[str] | None = None
-    shell: str | None = None
-    timeout_s: int | None = None
-    privileged: bool | None = None
-    user_id: str | int | None = None
-
-
-class ExploitRunRequest(BaseModel):
-    """POST /ai/exploit/run — deterministic 5568 exploit runner."""
-
-    model_config = ConfigDict(extra="allow")
-
-    target: str
-    cve: str
-    port: str | int | None = None
-    command: str | None = "id"
-    use_proxy: bool = True
-    user_id: str | int | None = None
-
-
 class ExploitAdvanceRequest(BaseModel):
     """POST /ai/exploit-advance[/stream] — khai thác ĐA-BƯỚC một CVE vào TARGET thật, có vòng
     verify→sửa và stream tiến trình. Chỉ hoạt động khi ops bật POC_EXPLOIT_ENABLED + target thuộc
@@ -84,16 +29,6 @@ class ExploitAdvanceRequest(BaseModel):
     extra: dict[str, Any] | None = Field(default=None, description="Tham số phụ (rport/path/payload override) cho engine.")
     user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
     run_id: str | None = Field(default=None, description="Gán run_id cố định để truy vết; bỏ trống sẽ tự sinh.")
-
-
-class ExploitAdvanceReplyRequest(BaseModel):
-    """POST /ai/exploit-advance/reply — cung cấp thông tin bổ sung cho lane1 đang paused."""
-
-    model_config = ConfigDict(extra="allow")
-
-    run_id: str = Field(description="run_id từ event `question` (adv:xxx).")
-    answer: str = Field(description="Câu trả lời/thông tin bổ sung từ user (endpoint, protocol, credential...).")
-    user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
 
 
 class ExploitV2Request(BaseModel):
@@ -125,21 +60,6 @@ class ExploitV2ReplyRequest(BaseModel):
     question_id: str = Field(description="question_id từ event `question`.")
     answer: str = Field(description="Câu trả lời tự do từ user.")
     user_id: str | int | None = Field(default=None, description="Định danh người gọi (audit).")
-
-
-class BughuntRequest(BaseModel):
-    """POST /ai/bughunt/stream — a target-only BugHunter run."""
-
-    model_config = ConfigDict(extra="allow")
-
-    target: str
-    scope_note: str | None = None
-    user_id: str | int | None = None
-    run_id: str | None = None
-    # Opt-in Exploit phase (also requires POC_EXPLOIT_ENABLED + API URL).
-    enable_exploit: bool = False
-    # Run BB cve_scan.sh during MapCVE (disable for faster lab smoke).
-    run_cve_sweep: bool = True
 
 
 class LegacyRequest(BaseModel):
@@ -251,32 +171,3 @@ class UpdateSessionRequest(BaseModel):
     user_id: str | None = None
     title: str | None = None
     project_id: str | None = None
-
-
-class ConversationChatRequest(LegacyRequest):
-    """POST /ai/conversations/chat(/stream) — a chat turn scoped to a named conversation.
-
-    Subclasses ``LegacyRequest`` so the permissive drift-tolerance, ``user_id`` resolution
-    and ``supplied_text()`` are reused verbatim; adds only the conversation selector. Omit
-    ``conversation_id`` to start a new conversation (the server mints one)."""
-
-    conversation_id: str | None = None
-    title: str | None = None
-
-
-class CreateConversationRequest(BaseModel):
-    """POST /ai/conversations — create an empty conversation (for a "new chat" button)."""
-
-    model_config = ConfigDict(extra="allow")
-
-    user_id: str | int | None = None
-    title: str | None = None
-
-
-class RenameConversationRequest(BaseModel):
-    """PATCH /ai/conversations/{id} — set a user-chosen title, overriding the auto-title."""
-
-    model_config = ConfigDict(extra="allow")
-
-    user_id: str | int | None = None
-    title: str | None = None

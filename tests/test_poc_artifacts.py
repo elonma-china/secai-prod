@@ -1,4 +1,4 @@
-"""Full PoC in the existing /ai/exploit Section 1 (no new endpoint, no FE change).
+"""PoC artifact store reads (the /ai/exploit Section-1 display path was removed 2026-11-20).
 
 The FE renders Section 1 from `description`/`exploit_guide`, which the injector builds from
 the run's evidence — whose code was capped at fetch time for the LLM context. At injection
@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 
-from secai_gateway.api.routes import _fullen_evidence_for_display
 from secai_gateway.poc.backend import (
     LocalPocBackend,
     PocBadRequest,
@@ -105,72 +104,6 @@ def test_read_artifact_path_escape_guarded(tmp_path) -> None:
         assert False, "expected PocNotFound (escape guarded)"
     except PocNotFound:
         pass
-
-
-# ── fullen evidence for display (the Section-1 path) ─────────────────────────
-def _repo_backend(tmp_path, cve: str, ref: str, files: dict[str, str]):
-    """A multi-file PoC whose complete set is `files` {rel_path: content}; returns
-    (backend, {rel_path: sha256}). First file is the entry."""
-    be, cat, store = _backend(tmp_path)
-    cat.upsert(NormalizedPoc(source="poc_github", source_ref=ref, kind="exploit",
-                             title=ref, cve_ids=[cve], verified=True, rank=1))
-    pid = _poc_id(cat, ref)
-    shas, rows = {}, []
-    for i, (rel, content) in enumerate(files.items()):
-        sha, sp = _store_blob(store, content)
-        shas[rel] = sha
-        rows.append({"rel_path": rel, "sha256": sha, "storage_path": sp, "language": "py",
-                     "role": "entry" if i == 0 else "support", "size": len(content)})
-    cat.set_artifact(pid, rows[0]["sha256"], rows[0]["storage_path"])   # entry → makes _allow_code pass
-    cat.set_files(pid, rows)
-    cat.commit()
-    return be, shas
-
-
-def test_fullen_expands_to_complete_fileset_full(tmp_path) -> None:
-    # The repo has 3 files but the model only fetched the entry (truncated). Fullening must
-    # render ALL 3, each full — not just the fetched subset.
-    entry = "Z" * (_MAX_SET_FILE_CHARS * 2)   # entry > per-file cap
-    files = {"pkg/cli.py": entry, "pkg/sqli.py": "def sqli(): ...\n", "pkg/shell.py": "def sh(): ...\n"}
-    be, shas = _repo_backend(tmp_path, "CVE-2099-0006", "emb/repo", files)
-    # evidence as the ledger holds it: ONLY the entry, truncated
-    evidence = [{"source_files": [{"path": "pkg/cli.py", "sha256": shas["pkg/cli.py"],
-                                   "role": "entry", "code": entry[:_MAX_SET_FILE_CHARS], "truncated": True}]}]
-    out = asyncio.run(_fullen_evidence_for_display(evidence, be))
-    sf = out[0]["source_files"]
-    got = {f["path"]: f["code"] for f in sf}
-    assert set(got) == set(files)                     # all 3 files present
-    assert got["pkg/cli.py"] == entry                 # entry now FULL
-    assert got["pkg/sqli.py"] == "def sqli(): ...\n"  # sibling the model never fetched
-    assert all(f["truncated"] is False for f in sf)
-
-
-def test_fullen_swaps_singlefile_source_code_for_full(tmp_path) -> None:
-    big = "S" * (_MAX_SET_FILE_CHARS + 100)
-    be, cat, store = _backend(tmp_path)
-    cat.upsert(NormalizedPoc(source="poc_github", source_ref="solo/x", kind="exploit",
-                             title="solo/x", cve_ids=["CVE-2099-0008"], verified=True, rank=1))
-    pid = _poc_id(cat, "solo/x")
-    sha, sp = _store_blob(store, big)
-    cat.set_artifact(pid, sha, sp)
-    cat.commit()
-    evidence = [{"sha256": sha, "source_code": big[:_MAX_SET_FILE_CHARS], "code_truncated": True}]
-    out = asyncio.run(_fullen_evidence_for_display(evidence, be))
-    assert out[0]["source_code"] == big and out[0]["code_truncated"] is False
-
-
-def test_fullen_respects_budget_keeps_truncated(tmp_path) -> None:
-    big = "Y" * 5000
-    be, shas = _repo_backend(tmp_path, "CVE-2099-0007", "bud/repo", {"e.py": big})
-    trunc = big[:100]
-    evidence = [{"source_files": [{"path": "e.py", "sha256": shas["e.py"], "code": trunc, "truncated": True}]}]
-    out = asyncio.run(_fullen_evidence_for_display(evidence, be, budget=100))  # too small
-    assert out[0]["source_files"][0]["code"] == trunc        # unchanged (kept truncated)
-
-
-def test_fullen_none_backend_is_noop() -> None:
-    evidence = [{"source_files": [{"path": "x", "sha256": "a" * 64, "code": "t", "truncated": True}]}]
-    assert asyncio.run(_fullen_evidence_for_display(evidence, None)) == evidence
 
 
 def test_locate_falls_back_to_poc_github_store_on_source_root_mismatch(tmp_path) -> None:

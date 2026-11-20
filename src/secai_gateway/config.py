@@ -533,10 +533,9 @@ class Settings(BaseSettings):
     # gốc 98.48%/PASS, bản tự kiểm toán 96.71%/FAIL); khách chỉ nên thấy số khớp hồ sơ gốc.
     showcase_kpi_results_dir: str = "/home/ict/AIEngines/secai/HO-SO-GOC-NGHIEM-THU-AI/03. Kpi_results"
     showcase_evidence_dir: str = "./evidence"
-    # TensorBoard đang chạy thật, đọc trực tiếp các run trong
-    # TensorBoard đi ké qua gateway: link tương đối same-origin (/showcase-tb) → cùng tiền tố
-    # /showcase với trang + API, không cần mở cổng/CF. Gateway reverse-proxy /showcase-tb/* tới TB
-    # tại _upstream (TB chạy --path_prefix=/showcase-tb). Đặt URL tuyệt đối nếu muốn trỏ TB ra ngoài.
+    # Link TensorBoard mà /showcase-api/finetune trả về. Reverse-proxy /showcase-tb/* trong
+    # gateway đã bị gỡ (2026-11-20, không dùng, TB :6006 không chạy) — đặt URL tuyệt đối tới một
+    # TensorBoard chạy riêng nếu cần. _upstream giữ lại chỉ để env cũ không làm hỏng cấu hình.
     showcase_tensorboard_base_url: str = "/showcase-tb"
     showcase_tensorboard_upstream: str = "http://127.0.0.1:6006"
     # Service kích hoạt MLOps (trigger_api) chạy trên HOST — gateway reverse-proxy
