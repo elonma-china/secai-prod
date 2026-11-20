@@ -132,7 +132,11 @@ def create_app(runner: CompletionRunner | None = None) -> FastAPI:
         )
     except (OSError, sqlite3.Error):
         app.state.translation_v2_store = None
-    app.include_router(translation_v2_router)
+    # File/image translation (v2) is served only where it is enabled — the dedicated
+    # translation gateway (:18185, TRANSLATE_V2_ENABLED=true). The main gateway (:8131) runs
+    # with it disabled and no longer exposes these routes at all.
+    if app.state.translation_v2_settings.enabled:
+        app.include_router(translation_v2_router)
     if state.settings.review_enabled:
         from .api.reviews import router as review_router
         app.include_router(review_router)

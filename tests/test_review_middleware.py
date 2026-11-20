@@ -19,7 +19,6 @@ def test_review_crud_limit_keeps_model_routes_bounded(client):
     assert route_limit('/review-api/live-pairs') == 15
     assert route_limit('/review-api/report-templates/revise') == 15
     assert route_limit('/review-api/report-templates/render') == 15
-    assert route_limit('/ai/exploit') == 20
 
 
 def test_bearer_and_put_cors_preserve_origin_and_auth_checks(client):

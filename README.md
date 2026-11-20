@@ -46,7 +46,7 @@ Every `POST` AI task has a plain JSON form and (mostly) an SSE `…/stream` form
 Interactive API docs are at `/docs` (Swagger) and `/redoc`.
 
 ### Chat / assistant
-- `POST /ai/chat` · `POST /chat_no_stream` · `POST /ai/chat/stream` — security assistant
+- `POST /ai/chat` · `POST /ai/chat/stream` — security assistant
   (CVE/CWE Q&A, remediation guidance), stateful per `user_id`.
 - `POST /sessions/{sid}/chat` · `POST /sessions/{sid}/chat/stream` — same, scoped to a
   Project/Session instead of a bare `user_id`.
@@ -67,26 +67,21 @@ ChatGPT-style sidebar backing store; ownership must match the caller's `user_id`
 - `POST /ai/generate-statistical-report` · `…/stream` — period report as
   `report_title` / `summary` / `detail`.
 
-### Exploit / PoC research
-Exploit-DB-grounded and read-only unless an engine is explicitly enabled.
-- `POST /ai/exploit` · `POST /ai/exploit/stream` — agentic PoC research grounded in the
-  Exploit-DB corpus; returns an unexecuted `draft_not_executed` candidate.
-- `POST /ai/exploit/run` — deterministic (non-LLM) PoC execution via the pocsuite3 engine.
-  Disabled unless `POC_EXPLOIT_ENABLED` + `POC_EXPLOIT_API_URL` are set (404 otherwise).
-- `GET /ai/exploit-advance/fields` — form spec for the multi-step live-exploit request.
-- `POST /ai/exploit-advance/stream` · `POST /ai/exploit-advance` · `POST /ai/exploit-advance/reply`
-  — multi-step exploitation of one CVE against a real target, streaming
-  `step` / `log` / `final` / `question` events (`question` is a human-in-the-loop pause,
-  resumed via `/reply`). Requires the pocsuite engine or `LANE1_ENABLED` and the target on the
-  allowlist (`VERIFY_ALLOWED_TARGETS` / `VERIFY_ALLOW_ALL`).
-- `POST /ai/verify` — verify-only PoC-against-target check via secai-kali-executor. Disabled
-  unless `VERIFY_ENABLED` (404 otherwise).
-- `POST /ai/bughunt/stream` — target-driven ReAct recon/vuln-scan with a deterministic
-  validation gate.
-- `POST /ai/tool` — scoped pentest tool (nmap/searchsploit/gobuster/sqlmap/hydra) in the Kali
-  executor. Disabled unless `VERIFY_ENABLED`.
-- `POST /ai/exec` — raw command execution in a privileged Kali container. Disabled unless
-  `EXEC_ENABLED`, and always requires `X-API-Key == ADMIN_API_KEY`.
+- `POST /ai/generate-template-report` — report rendered from a stored template.
+
+### Exploit / PoC (v2)
+- `POST /ai/exploit-v2/stream` · `POST /ai/exploit-v2/reply` — PoC generation via the
+  pentestcode (IAS.AI) sidecar pool against an allowlisted lab target (`IAS_SERVER_URL` /
+  `IAS_SERVER_POOL`, `VERIFY_ALLOWED_TARGETS` / `VERIFY_ALLOW_ALL`); streams
+  `step` / `log` / `question` / `final`, and `/reply` answers a mid-run `question`.
+
+### Removed endpoints (2026-11-20)
+These had no client and no recent traffic and were removed from the gateway:
+`/ai/exploit`, `/ai/exploit/stream`, `/ai/exploit/run`, `/ai/exploit-advance*`, `/ai/verify`,
+`/ai/tool`, `/ai/exec`, `/ai/bughunt/stream`, `/ai/conversations*`, `/chat_no_stream`,
+`/admin/refresh-models`, `/showcase-tb*`. `/ai/v2/translate/*` is now mounted only when
+`TRANSLATE_V2_ENABLED=true` (the translation gateway on :18185), not on the main gateway.
+The last code that served them is on branch `backup/pre-api-prune-20261120`.
 
 ### Report v2, file/OCR translation, expert review
 
@@ -94,7 +89,7 @@ Exploit-DB-grounded and read-only unless an engine is explicitly enabled.
 | --- | --- | --- |
 | Report templates | `GET/POST /ai/v2/reports/templates`, `PATCH /templates/{id}`, `POST /templates/import` | `REPORT_FEATURE_ENABLED`, `REPORT_API_KEY`, SQLite `REPORT_DB_PATH` |
 | Persisted reports | `POST /ai/v2/reports/generate`, `GET /ai/v2/reports/{id}`, `POST /{id}/edit`, `GET /{id}/revisions` | content + revisions persisted; edit checks expected revision |
-| File/image translation | `POST /ai/v2/translate/files`, `POST /ai/v2/translate/images`, job status/result routes | dedicated worker + durable job/output storage; see [contract](docs/api/translate-v2-contract.md) |
+| File/image translation | `POST /ai/v2/translate/files`, `POST /ai/v2/translate/images`, job status/result routes | only when `TRANSLATE_V2_ENABLED=true` (translation gateway :18185); dedicated worker + durable job/output storage; see [contract](docs/api/translate-v2-contract.md) |
 | Multilingual text | `POST /ai/v3/translate`, `GET /ai/v3/translate/languages` | `secai_gateway.multilang_app:app`, `MULTILANG_ENABLED` + per-pair flags |
 | Expert review | `/review-api/me`, campaigns, assignments, judgments, export | `REVIEW_ENABLED`, SQLite `REVIEW_DB_PATH`, Bearer credentials from `REVIEW_CREDENTIALS_FILE` |
 
@@ -105,7 +100,6 @@ listed in the legacy `/openapi.json`). Legacy report routes remain available.
 ### Ops
 - `GET /health` — LLM reachability, session backend (Redis/SQLite) status, searchsploit /
   Exploit-DB commit, and the input-classifier fail-open rate.
-- `POST /admin/refresh-models` — requires `X-API-Key`.
 - `/showcase-api/*` plus static SPAs at `/showcase-demo/` and `/kpi-studio/` (see
   [Showcase + KPI Studio](#showcase--kpi-studio)).
 
@@ -180,12 +174,11 @@ keep-recent-10) behind a prompt-cacheable prefix.
 
 ## PoC / Exploit-DB
 
-The Exploit-DB research path (`/ai/exploit*`) runs in-process as a plain tool — no separate
-service. The Exploit-DB clone is read-only; on its own it never executes artifacts, hits
-targets, or runs Nmap, so `/ai/exploit` can only return an unexecuted `draft_not_executed`
-candidate. Running something against a real target requires one of the gated engines
-(`/ai/exploit/run`, `/ai/exploit-advance*`, `/ai/verify`, `/ai/tool`, `/ai/exec`), each
-fail-closed behind its own enable flag and, for anything target-facing, an allowlist.
+The Exploit-DB library (`src/secai_gateway/poc/`) runs in-process as a plain tool — no separate
+service — and backs the chat PoC pre-fetch. The Exploit-DB clone is read-only; on its own it
+never executes artifacts, hits targets, or runs Nmap. Its former HTTP surface (`/ai/exploit*`,
+`/ai/verify`, `/ai/tool`, `/ai/exec`) was removed on 2026-11-20; the sections below describe the
+library behaviour that remains.
 
 Section 1 of the response (the fetched PoC) is placed deterministically. During the agentic
 turn the model sees each artifact capped to a context budget (`_MAX_CODE_CHARS` /

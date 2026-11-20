@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import tempfile
 
-import httpx
 import pytest
 
-from linch.events import PartialAssistantEvent
 
-from secai_gateway.app import create_app
 from secai_gateway.poc.consolidate import (
     build_consolidation_prompt,
     consolidate_poc,
@@ -330,82 +326,3 @@ def test_ondemand_cache_fail_open_on_bad_input(tmp_path) -> None:
     save_cached(tmp_path, "CVE-2026-1000", {"description": "no code"})
     assert load_cached(tmp_path, "CVE-2026-1000") is None
     assert load_cached(None, "CVE-2026-1000") is None            # disabled → None
-
-
-# ── /ai/exploit consolidated tier end-to-end ────────────────────────────────────
-class _ExploitConsolidateRunner:
-    """Serves poc_consolidate (merged file) and exploit_research (Mục 2/3) from an in-memory
-    catalog holding one real-code GitHub PoC row for the requested CVE."""
-
-    MERGED = "```python\nimport requests\nrequests.get('http://TARGET/x')\n```"
-
-    def __init__(self, poc, ledger) -> None:
-        self.poc = poc
-        self.ledger = ledger
-
-    async def complete(self, profile_name: str, prompt: str, session_id=None, **kwargs):
-        if profile_name == "poc_consolidate":
-            return self.MERGED, {"run_id": "cc", "profile": profile_name}
-        return ("## 2. Cách chạy PoC\n\n- python3 cve-2026-31431.py\n\n"
-                "## 3. Tổng quan Lỗ hổng\n\n- SSRF\n"), {"run_id": "rr", "profile": profile_name}
-
-    async def stream(self, profile_name: str, prompt: str, session_id=None, **kwargs):
-        text, _ = await self.complete(profile_name, prompt, session_id)
-        yield PartialAssistantEvent(delta={"kind": "text", "text": text})
-
-
-def _catalog_with_github_code(tmp_db: str):
-    from secai_gateway.poc.backend import LocalPocBackend
-    from secai_gateway.poc.catalog import PocCatalog
-    from secai_gateway.poc.models import NormalizedPoc
-
-    cat = PocCatalog(tmp_db)
-    store = tempfile.mkdtemp()
-    import hashlib
-    import pathlib
-    code = b"import requests, sys\n# noisy banner\nrequests.get(sys.argv[1])\n"
-    sha = hashlib.sha256(code).hexdigest()
-    p = pathlib.Path(store) / sha[:2] / sha
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_bytes(code)
-    cat.upsert(NormalizedPoc(
-        source="poc_github", source_ref="foo/bar/exploit.py", kind="exploit",
-        title="PoC CVE-2026-31431", cve_ids=["CVE-2026-31431"], language="python",
-        verified=True, rank=50, url="https://github.com/foo/bar/blob/main/exploit.py",
-        artifact_sha256=sha, artifact_path=f"{sha[:2]}/{sha}",
-        provenance={"stars": 10}))
-    cat.commit()
-    poc = LocalPocBackend(catalog=cat, source_roots={"poc_github": pathlib.Path(store)})
-    return poc
-
-
-@pytest.mark.asyncio
-async def test_exploit_endpoint_consolidated_tier(monkeypatch, tmp_path) -> None:
-    from secai_gateway.state import SqliteLedger
-    from unittest.mock import AsyncMock
-
-    monkeypatch.setattr("secai_gateway.retrieval.kb_context.get_cve_context", AsyncMock(
-        return_value={"status": "not_found", "content": "", "cwe_refs": []}))
-    monkeypatch.setenv("WEB_SEARCH_ENABLED", "false")
-    monkeypatch.setenv("POC_EXPLOIT_ENABLED", "false")
-    monkeypatch.setenv("POC_GITHUB_ONDEMAND_ENABLED", "false")
-    monkeypatch.setenv("POC_ONDEMAND_CACHE_DIR", str(tmp_path / "ondemand-cache"))
-    monkeypatch.setenv("POC_FIXED_DIR", str(tmp_path / "fixed-pocs"))
-
-    poc = _catalog_with_github_code(tempfile.mktemp(suffix=".db"))
-    ledger = SqliteLedger(tempfile.mktemp(suffix=".db"))
-    runner = _ExploitConsolidateRunner(poc, ledger)
-    async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=create_app(runner)), base_url="http://test") as client:
-        resp = await client.post("/ai/exploit", json={"question": "CVE-2026-31431"})
-    assert resp.status_code == 200
-    data = resp.json()
-    meta = data["metadata"]
-    assert meta.get("consolidated") is True
-    assert meta.get("section1_tier") == "real_consolidated"
-    body = data["description"]
-    assert "cve-2026-31431.py" in body                          # air-gap local name
-    assert "requests.get('http://TARGET/x')" in body            # MERGED code is Section 1
-    assert "hợp nhất" in body                                    # light consolidated banner
-    assert "SYNTHESIZED" not in body                            # not the strong banner
-    assert "## 2. Cách chạy PoC" in body                        # model's Mục 2 kept
