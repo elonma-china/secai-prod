@@ -387,6 +387,32 @@ class Settings(BaseSettings):
     # "url|home" cách nhau bằng dấu phẩy, mỗi slot là 1 process bun riêng với HOME riêng
     # (engagement/log/session-db tách biệt) — xem poc/ias_pool.py.
     ias_server_pool: str = ""
+    # Pool động (khi ias_server_pool rỗng): N = gpu_count × slots_per_gpu − chatbot_reserve slot
+    # trỏ service compose `pentestcode-1..N` (xem poc/ias_pool.py::_dynamic_pool). 0 = tắt.
+    # Trước 2026-11-20 các field này thiếu ở đây nên env IAS_POOL_* bị bỏ qua và pool luôn 1 slot.
+    ias_pool_gpu_count: int = Field(default=0, ge=0)
+    ias_pool_slots_per_gpu: int = Field(default=4, ge=1)
+    ias_pool_chatbot_reserve: int = Field(default=0, ge=0)
+
+    # ── exploit-v2: điều tiết số run đồng thời theo tải LLM (poc/llm_admission.py) ──
+    # Pool là trần cứng (số container pentestcode); bộ điều tiết chỉ cho thêm run mới khi
+    # LLM còn sức: hàng chờ vLLM/SGLang không quá llm_max_waiting và KV cache dưới
+    # llm_kv_high_water. LLM không phản hồi quá llm_down_grace_s → run báo lỗi ngay thay vì
+    # treo. False = chỉ giới hạn theo pool (hành vi cũ).
+    exploit_v2_llm_admission: bool = True
+    # URL /metrics Prometheus, cách nhau dấu phẩy. Rỗng = suy từ QWEN_BASE_URL (bỏ /v1).
+    # "off" = không đọc metrics, khi đó chỉ chạy tối đa exploit_v2_unknown_max_active run.
+    exploit_v2_llm_metrics_urls: str = ""
+    exploit_v2_llm_max_waiting: int = Field(default=2, ge=0)
+    exploit_v2_llm_kv_high_water: float = Field(default=0.85, gt=0, le=1)
+    exploit_v2_unknown_max_active: int = Field(default=2, ge=1)
+    # Luôn cho tối thiểu số run này chạy khi LLM còn sống, kể cả lúc LLM bận vì tải khác.
+    exploit_v2_min_active: int = Field(default=1, ge=0)
+    # Sau mỗi lần nhận run mới, chờ chừng này giây để metrics phản ánh tải mới rồi mới nhận tiếp.
+    exploit_v2_admit_spacing_s: float = Field(default=15, ge=0)
+    exploit_v2_llm_probe_ttl_s: float = Field(default=5, gt=0)
+    exploit_v2_llm_down_grace_s: float = Field(default=30, ge=0)
+    exploit_v2_queue_timeout_s: float = Field(default=900, gt=0)
 
     # ── Bughunt / BugHunter recon engine ───────────────────────────────────────
     # Path to claude-bug-bounty clone (empty = auto sibling of gateway / BUGBOUNTY_ROOT).

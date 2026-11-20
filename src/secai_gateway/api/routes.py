@@ -3968,6 +3968,35 @@ def register_routes(app: FastAPI, state: Any) -> None:
         await reply_exploit_v2_question(url, body.question_id, body.answer)
         return {"ok": True}
 
+    @app.get("/ai/exploit-v2/capacity")
+    async def exploit_v2_capacity() -> dict[str, Any]:
+        """Sức chứa exploit-v2 hiện tại: pool pentestcode, số run đang chạy/đang chờ và tải LLM
+        mà bộ điều tiết (`poc/llm_admission.py`) dùng để quyết định nhận run mới."""
+        from ..poc import ias_pool, llm_admission
+        s = state.settings
+        if not (s.ias_server_url or "").strip() and not (s.ias_server_pool or "").strip():
+            raise HTTPException(404, "exploit-v2 disabled (IAS_SERVER_URL/IAS_SERVER_POOL chưa cấu hình)")
+        pool = ias_pool.pool_size(s.ias_server_pool, s.ias_server_url)
+        limits = llm_admission.limits_from_settings(s, pool)
+        admission = llm_admission.get_admission()
+        llm = await admission.state(limits.probe_ttl_s) if limits.enabled else None
+        if admission.active >= limits.max_active or admission.queued:
+            can_start, reason = False, "đã đủ run hoặc còn run đang chờ"
+        elif llm is None:
+            can_start, reason = True, "ok"
+        else:
+            can_start, reason = llm_admission.decide(llm, admission.active, limits,
+                                                     admission.since_last_admit())
+        return {"pool_size": pool, "active": admission.active, "queued": admission.queued,
+                "can_start_now": can_start, "reason": reason,
+                "admission_enabled": limits.enabled,
+                "llm": llm.as_dict() if llm else None,
+                "limits": {"max_waiting": limits.max_waiting,
+                           "kv_high_water": limits.kv_high_water,
+                           "unknown_max_active": limits.unknown_max_active,
+                           "min_active": limits.min_active,
+                           "queue_timeout_s": limits.queue_timeout_s}}
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         s = state.settings
