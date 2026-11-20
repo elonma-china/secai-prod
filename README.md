@@ -79,9 +79,12 @@ ChatGPT-style sidebar backing store; ownership must match the caller's `user_id`
 These had no client and no recent traffic and were removed from the gateway:
 `/ai/exploit`, `/ai/exploit/stream`, `/ai/exploit/run`, `/ai/exploit-advance*`, `/ai/verify`,
 `/ai/tool`, `/ai/exec`, `/ai/bughunt/stream`, `/ai/conversations*`, `/chat_no_stream`,
-`/admin/refresh-models`, `/showcase-tb*`. `/ai/v2/translate/*` is now mounted only when
-`TRANSLATE_V2_ENABLED=true` (the translation gateway on :18185), not on the main gateway.
-The last code that served them is on branch `backup/pre-api-prune-20261120`.
+`/admin/refresh-models`, `/showcase-tb*`. `/ai/v2/translate/*` is now mounted in the app itself
+only when `TRANSLATE_V2_ENABLED=true` (the translation gateway on :18185). Production :8131 runs
+`secai_gateway.unified_app:app`, which proxies `/ai/v2/translate`, `/ai/v3/translate` and
+`/ai/v2/reports` to `TRANSLATION_UPSTREAM_URL` / `REPORT_UPSTREAM_URL` before the legacy app is
+consulted, so those paths stay reachable on :8131 but no longer appear in its `/openapi.json`.
+The last code that served the removed endpoints is on branch `backup/pre-api-prune-20261120`.
 
 ### Report v2, file/OCR translation, expert review
 
