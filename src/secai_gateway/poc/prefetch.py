@@ -448,8 +448,8 @@ def _lang_rank(hit: dict[str, Any]) -> int:
 def _rank(hit: dict[str, Any]) -> tuple[int, int, bool, bool, bool, int, bool, str]:
     """Lower sorts first. A VERIFIED-CANONICAL row always wins (the operator already executed it
     against a lab/target), then the existing order: real exploit over detection, a row WITH a
-    stored artifact over a link-only row, then a vetted exploit source (exploitdb/metasploit)
-    over poc_github when both carry an artifact, verified, a runnable-script language,
+    stored artifact over a link-only row, then (both carrying an artifact) exploitdb/vulhub over
+    poc_github over a metasploit module, verified, a runnable-script language,
     license-friendly sources."""
     if hit.get("canonical"):
         return (0, 0, False, False, False, 0, False, str(hit.get("ref") or ""))
@@ -476,8 +476,9 @@ def _rank(hit: dict[str, Any]) -> tuple[int, int, bool, bool, bool, int, bool, s
         # Prefer RUNNABLE standalone sources (exploitdb/poc_github/vulhub-lab) over a metasploit
         # module: MSF modules import the Msf framework and never run standalone — any LLM
         # "port" of one is fragile (observed: several rewritten .rb PoCs broke). MSF still ranks
-        # (just after these) when it is the only artifact.
-        source_pref = 0 if source in {"exploitdb", "poc_github", "vulhub"} else 1
+        # (just after these) when it is the only artifact. Among the runnable ones the vetted
+        # exploitdb/vulhub-lab still beat a community poc_github repo (CVE-2026-24061/2025-24813).
+        source_pref = 0 if source in {"exploitdb", "vulhub"} else 1 if source == "poc_github" else 2
     else:
         source_pref = source != "poc_github"
     return (1, tier, not has_artifact, source_pref, not hit.get("verified"), _lang_rank(hit),

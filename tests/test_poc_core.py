@@ -191,7 +191,7 @@ def test_prefetch_rank_prefers_artifact_over_link_only_github() -> None:
 
 
 def test_prefetch_rank_prefers_vetted_source_when_both_have_artifact() -> None:
-    """When both rows carry an artifact, the vetted exploit source (exploitdb/metasploit)
+    """When both rows carry an artifact, the vetted exploit source (exploitdb)
     wins over a community poc_github repo (the CVE-2026-24061/2025-24813 regression)."""
     from secai_gateway.poc.prefetch import _rank
 
@@ -201,6 +201,18 @@ def test_prefetch_rank_prefers_vetted_source_when_both_have_artifact() -> None:
                     "has_artifact": True, "language": "py"}
     ranked = sorted([github_artifact, edb_artifact], key=_rank)
     assert ranked[0]["source"] == "exploitdb"
+
+
+def test_prefetch_rank_puts_metasploit_module_after_runnable_artifacts() -> None:
+    """MSF modules never run standalone: with artifacts on every row, exploitdb and a
+    poc_github repo both outrank a metasploit module; MSF still ranks when it is alone."""
+    from secai_gateway.poc.prefetch import _rank
+
+    msf = {"kind": "exploit", "source": "metasploit", "verified": True, "has_artifact": True}
+    github = {"kind": "exploit", "source": "poc_github", "verified": False, "has_artifact": True}
+    edb = {"kind": "exploit", "source": "exploitdb", "verified": False, "has_artifact": True}
+    ranked = sorted([msf, github, edb], key=_rank)
+    assert [r["source"] for r in ranked] == ["exploitdb", "poc_github", "metasploit"]
 
 
 def test_search_prefers_artifact_row_over_link_only_github(tmp_path: Path) -> None:
