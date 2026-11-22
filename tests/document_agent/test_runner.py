@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -62,15 +63,33 @@ def test_failed_ocr_admission_cannot_be_reported_as_success():
     assert "private job-id" not in str(response)
 
 
-def test_verified_tokenizer_rejects_over_budget_before_scripted_provider_call():
-    root = Path('/home/ict/secai-multilang-benchmark-corpus/runtime-prep')
+def _write_pinned_budget_files(root: Path) -> tuple[Path, str, Path, str]:
+    """A tiny one-token-per-character tokenizer + chat template, pinned by sha256.
+
+    Hermetic stand-in for the DuyTa runtime-prep files: the behaviour under test is the
+    budget gate (verified counter + pinned template checked before every provider call),
+    not the exact DuyTa token counts, so the test must not read an out-of-repo host path."""
+    from tokenizers import Regex, Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Split
+
+    tokenizer = Tokenizer(WordLevel(vocab={"[UNK]": 0}, unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = Split(Regex(r"\S"), behavior="isolated")
+    tokenizer_path = root / 'tokenizer.json'
+    tokenizer.save(str(tokenizer_path))
+    template_path = root / 'chat_template.jinja'
+    template_path.write_text("{% for m in messages %}{{ m.role }}: {{ m.content }}\n{% endfor %}", encoding='utf-8')
+    return (tokenizer_path, hashlib.sha256(tokenizer_path.read_bytes()).hexdigest(),
+            template_path, hashlib.sha256(template_path.read_bytes()).hexdigest())
+
+
+def test_verified_tokenizer_rejects_over_budget_before_scripted_provider_call(tmp_path):
+    tokenizer_path, tokenizer_sha256, template_path, template_sha256 = _write_pinned_budget_files(tmp_path)
     budget = DocumentTokenBudget.from_files(
-        model='scripted', tokenizer_path=root / 'tokenizer.json',
-        tokenizer_sha256='87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4',
-        template_path=root / 'chat_template.jinja',
-        template_sha256='a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715',
-        context_tokens=4096,
+        model='scripted', tokenizer_path=tokenizer_path, tokenizer_sha256=tokenizer_sha256,
+        template_path=template_path, template_sha256=template_sha256, context_tokens=4096,
     )
+    assert budget.count('漏洞ab') == 4  # really verified and per-character, not a no-op counter
     provider = ScriptedProvider([TextTurn('must not be consumed')])
     runner = DocumentRunner(provider=provider, model='scripted', budget=budget)
     deps = DocumentRunDeps(object(), {}, Backend(), '127.0.0.1', 'c' * 64)
