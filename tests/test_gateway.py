@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from linch.events import PartialAssistantEvent
+from linch.events import PartialAssistantEvent, ResultEvent
+from linch.types import Usage
 
 from secai_gateway.app import create_app
 from secai_gateway.agent import registry_for
@@ -58,7 +59,11 @@ class FakeRunner:
 
     async def stream(self, profile_name: str, prompt: str, session_id: str | None = None, **kwargs):
         self.calls.append((profile_name, prompt, session_id))
-        yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
+        text = f"{profile_name}: {prompt}"
+        yield PartialAssistantEvent(delta={"kind": "text", "text": text})
+        # A real linch run always ends with a ResultEvent carrying the final text.
+        yield ResultEvent(subtype="success", stop_reason="end_turn", total_usage=Usage(),
+                          duration_ms=0, final_text=text)
 
 
 @pytest.mark.asyncio
@@ -143,7 +148,9 @@ async def test_streaming_endpoints(known_cve_context) -> None:
             body = {"user_id": "u1", "message": "hello", "text": "hello"}
             response = await client.post(path, json=body)
             assert response.status_code == 200, path
-            assert "event: token" in response.text
+            # Chat holds live tokens and emits only the deduped final (975871d1: token + final
+            # made FE render CVE reports twice); every other stream still streams tokens.
+            assert ("event: token" in response.text) is (profile != "chat"), path
             assert fake.calls[-1][0] == profile
             assert f"{profile}:" in response.text
             assert "event: final" in response.text
