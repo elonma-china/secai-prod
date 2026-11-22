@@ -58,20 +58,16 @@ Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dư�
 - **Rollback bằng đổi tên, không xoá.** Trước khi thay container/image mới, `docker rename` container cũ thành `*-rollback-<ngày>` rồi `stop` (đúng quy ước đã có trong repo), giữ nguyên image cũ — không `rm`/`rmi` cho tới khi chắc bản mới ổn.
 - **Tag image theo commit SHA** (`secai-agent-gateway:<service>-<sha-ngắn>-<ngày>`) thay vì tên mô tả mơ hồ, để nhìn tag biết ngay build từ commit nào, đỡ phải điều tra bằng `docker history`/`grep` trong container.
 
-### Dọn nhánh/worktree sau merge — KẾ HOẠCH, CHƯA TRIỂN KHAI
+### Dọn nhánh/worktree sau merge
 
-`scripts/wt-prune.sh` và timer **chưa tồn tại**; đừng gọi. Tới khi có, dọn tay bằng `scripts/wt-rm.sh <task>` rồi `git branch -d <nhánh>`, và chỉ dọn khi đủ 5 điều kiện dưới.
+`scripts/wt-prune.sh` dọn worktree, nhánh local và stack dev của các PR **đã merge**. Chạy trong repo (worktree nào cũng được): mặc định chỉ liệt kê (dry-run); `--yes` mới xoá (ghi log `~/.local/state/secai/wt-prune.log`); `--remote` thêm xoá nhánh trên origin.
 
-- **Script `scripts/wt-prune.sh`**: mặc định dry-run (chỉ liệt kê); `--yes` mới xoá; `--remote` mới xoá nhánh trên origin. Log vào `~/.local/state/secai/wt-prune.log` (đã dọn gì, bỏ qua gì, vì sao).
-- **Chỉ dọn worktree/nhánh khi đủ cả 5:**
-  1. PR có head là nhánh đó ở trạng thái `MERGED` (hỏi `gh pr list --state merged --head <nhánh>`), hoặc nhánh là tổ tiên của `origin/main`. Không dựa riêng vào `git branch --merged`: repo cho phép squash/rebase merge.
-  2. Không còn thay đổi chưa commit, kể cả file untracked.
-  3. Không có commit local chưa nằm trên origin (việc làm thêm sau merge).
-  4. Không có tiến trình nào đang đứng trong thư mục worktree (`/proc/*/cwd`) — không phá phiên T3/agent đang mở.
-  5. Không phải `main`, `*-deploy-main`, checkout chính, hay nhánh đang checkout ở worktree khác.
-- **Thứ tự dọn mỗi worktree**: `wt-rm.sh` (container/volume/tag dev) → `git worktree remove` → `git branch -d`; chỉ dùng `-D` khi `gh` xác nhận PR đã merge (squash). Kèm dọn stack dev mồ côi: project `secai-gw-dev-*` không còn worktree tương ứng.
-- **Kích hoạt**: (a) skill `agent-worktree` gọi `scripts/wt-prune.sh --yes` ngay sau `gh pr merge` (worktree của chính phiên đó được bỏ qua nhờ điều kiện 4); (b) `systemd --user` timer mỗi giờ chạy `--yes` từ checkout chính, bắt PR merge trên web hoặc phiên đã đóng (máy đã bật linger); (c) nhánh remote: bật `delete_branch_on_merge` của repo GitHub thay vì tự xoá.
-- Khi triển khai xong: bỏ nhãn "KẾ HOẠCH", thay mục này bằng cách dùng thực tế; agent không cần tự dọn sau merge.
+- **Chỉ dọn khi đủ cả 4:** (1) PR có head là nhánh đó ở trạng thái `MERGED` (hỏi `gh`, vì repo cho squash/rebase merge) **và** đỉnh nhánh local đúng bằng head của PR đó — commit làm thêm sau merge không bao giờ bị mất, nhánh mới tạo chưa có PR cũng không bị dọn; (2) không có thay đổi chưa commit/untracked; (3) không tiến trình nào đang đứng (cwd) trong worktree — phiên T3/agent đang mở được bỏ qua; (4) không phải `main`, `*-deploy-main`, checkout chính, worktree detached.
+- **Thứ tự mỗi worktree:** `wt-rm.sh` (stack dev + worktree) → `git branch -D` (an toàn vì đã khớp head PR đã merge) → nhánh origin nếu có `--remote` và đỉnh remote trùng. Kèm dọn stack dev mồ côi: compose project `secai-gw-dev-*` có worktree đã mất; không bao giờ đụng `secai-docker`.
+- **Sau `gh pr merge`**: chạy `scripts/wt-prune.sh --yes` (worktree của chính phiên đang mở tự được bỏ qua; lần timer kế tiếp sẽ dọn nốt).
+- **Định kỳ:** `scripts/install-wt-prune-timer.sh` cài `systemd --user` timer mỗi giờ (gỡ bằng `--remove`). Runner luôn lấy `scripts/` từ `origin/main` mới nhất nên không phụ thuộc checkout chính đang ở commit nào. Chỉ cài được sau khi script nằm trên `origin/main`.
+- Nhánh remote tự xoá sau merge: bật `delete_branch_on_merge` trong cài đặt repo GitHub (chưa bật).
+- Test: `scripts/dev.sh test tests/test_wt_prune.py` (repo tạm + `gh`/`docker` giả).
 
 Đọc [deploy/all-features/README.md](deploy/all-features/README.md) trước cập nhật full-feature image. Gateway/worker/report chạy CPU; giữ entrypoint, private env và volume theo từng service. Nhiều agent có thể triển khai chung: dùng lock hiện có, kiểm ownership và immutable image ngay trước switch/rollback; chỉ cập nhật service thuộc phạm vi.
 
