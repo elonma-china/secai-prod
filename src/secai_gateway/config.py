@@ -387,6 +387,13 @@ class Settings(BaseSettings):
     # "url|home" cách nhau bằng dấu phẩy, mỗi slot là 1 process bun riêng với HOME riêng
     # (engagement/log/session-db tách biệt) — xem poc/ias_pool.py.
     ias_server_pool: str = ""
+    # Pool động (khi ias_server_pool rỗng): N = gpu_count × slots_per_gpu − chatbot_reserve slot
+    # trỏ service compose `pentestcode-1..N` (xem poc/ias_pool.py::_dynamic_pool). 0 = tắt.
+    # Trước 2026-11-20 các field này thiếu ở đây nên env IAS_POOL_* bị bỏ qua (Settings
+    # extra="ignore") và pool luôn 1 slot dù compose có nhiều container pentestcode.
+    ias_pool_gpu_count: int = Field(default=0, ge=0)
+    ias_pool_slots_per_gpu: int = Field(default=4, ge=1)
+    ias_pool_chatbot_reserve: int = Field(default=0, ge=0)
 
     # ── Bughunt / BugHunter recon engine ───────────────────────────────────────
     # Path to claude-bug-bounty clone (empty = auto sibling of gateway / BUGBOUNTY_ROOT).
