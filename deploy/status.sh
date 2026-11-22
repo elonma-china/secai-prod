@@ -16,8 +16,10 @@ C='\033[1;36m'; G='\033[1;32m'; Y='\033[1;33m'; D='\033[0;90m'; N='\033[0m'
 hr(){ printf "${D}%s${N}\n" "────────────────────────────────────────────────────────────────────────"; }
 
 # đọc endpoint model từ .env (fallback nếu thiếu)
-API_KEY="$(grep -E '^QWEN_API_KEY=' .env 2>/dev/null | cut -d= -f2)"; API_KEY="${API_KEY:-sk-secai2026}"
-LLM_URL="$(grep -E '^QWEN_BASE_URL=' .env 2>/dev/null | cut -d= -f2 | sed 's#/v1$##')"
+# LLM_* là tên chuẩn; QWEN_* (tên cũ) vẫn được đọc khi .env chưa đổi.
+envv(){ grep -E "^$1=" .env 2>/dev/null | tail -n1 | cut -d= -f2-; }
+API_KEY="$(envv LLM_API_KEY)"; API_KEY="${API_KEY:-$(envv QWEN_API_KEY)}"; API_KEY="${API_KEY:-sk-secai2026}"
+LLM_URL="$(envv LLM_BASE_URL)"; LLM_URL="${LLM_URL:-$(envv QWEN_BASE_URL)}"; LLM_URL="${LLM_URL%/v1}"
 EMB_URL="$(grep -E '^EMBEDDING_API_URL=' .env 2>/dev/null | cut -d= -f2)"
 RRK_URL="$(grep -E '^RERANKER_API_URL=' .env 2>/dev/null | cut -d= -f2)"
 

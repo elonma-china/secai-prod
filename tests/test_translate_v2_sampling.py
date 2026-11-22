@@ -13,8 +13,8 @@ async def test_translate_provider_sends_scoped_temperature_on_wire(monkeypatch):
     from secai_gateway.agent import providers
 
     monkeypatch.setattr(providers, "get_settings", lambda: SimpleNamespace(
-        llm_provider="vllm", qwen_api_key="test", qwen_base_url="http://test/v1",
-        qwen_context_window=32768, qwen_model="DuyTa/Cyber-F1-AWQ",
+        llm_provider="vllm", llm_api_key="test", llm_base_url="http://test/v1",
+        llm_context_window=32768, llm_model="DuyTa/Cyber-F1-AWQ",
         llm_temperature=0.85, llm_top_p=0.95, llm_top_k=20,
         llm_min_p=0.0, llm_presence_penalty=1.1, llm_repetition_penalty=1.0,
     ))

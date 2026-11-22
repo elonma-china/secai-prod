@@ -39,7 +39,7 @@ def main() -> None:
     args = parser.parse_args()
     keys = _keys(args.env_file)
     tasks = (
-        ("llm", 18401, "/v1/chat/completions", keys.get("QWEN_API_KEY", ""),
+        ("llm", 18401, "/v1/chat/completions", keys.get("LLM_API_KEY") or keys.get("QWEN_API_KEY", ""),
          {"model": "DuyTa/Cyber-F1-AWQ", "messages": [{"role": "user", "content": "Reply with OK."}],
           "max_tokens": 8, "temperature": 0}),
         ("embedding", 18400, "/v1/embeddings", keys.get("EMBEDDING_API_KEY", ""),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -229,10 +229,18 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com/v1"
     deepseek_context_window: int = 131072
-    qwen_model: str = "Qwen/Qwen3-32B"
-    qwen_api_key: str = "not-needed"
-    qwen_base_url: str = "http://127.0.0.1:8000/v1"
-    qwen_context_window: int = 32768
+    # Self-hosted OpenAI-compatible LLM (vLLM/SGLang; serves DuyTa/Cyber-F1-AWQ today).
+    # Canonical env names are LLM_BASE_URL / LLM_API_KEY / LLM_MODEL / LLM_CONTEXT_WINDOW.
+    # The legacy QWEN_* names are still accepted so existing private .env files and the
+    # pentestcode compose interpolation keep working; LLM_* wins when both are set.
+    llm_model: str = Field(default="Qwen/Qwen3-32B",
+                           validation_alias=AliasChoices("llm_model", "qwen_model"))
+    llm_api_key: str = Field(default="not-needed", repr=False,
+                             validation_alias=AliasChoices("llm_api_key", "qwen_api_key"))
+    llm_base_url: str = Field(default="http://127.0.0.1:8000/v1",
+                              validation_alias=AliasChoices("llm_base_url", "qwen_base_url"))
+    llm_context_window: int = Field(default=32768,
+                                    validation_alias=AliasChoices("llm_context_window", "qwen_context_window"))
 
     # ── LLM sampling (vLLM/Qwen path) ──────────────────────────────────────────
     # Defaults = Cyber-F1 (Qwen3-30B-A3B-Instruct-2507 MoE) model-card recommendation. Override per-deploy via
@@ -278,7 +286,7 @@ class Settings(BaseSettings):
     # generation cap via RunOptions (agent/runner.py).
     #
     # Compaction reserve (agent-level). Small → compaction fires rarely + as one big fact-
-    # preserving pass at ANY context window (fixes the qwen_context_window=32768 default which,
+    # preserving pass at ANY context window (fixes the llm_context_window=32768 default which,
     # with the old ~32768 reserve, made compaction re-fire every turn and erode early facts —
     # measured 2026-09-02). Never used as a generation cap (every run overrides that below).
     llm_compaction_reserve_tokens: int = 4096

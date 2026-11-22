@@ -3976,8 +3976,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
             llm_base = s.deepseek_base_url.rstrip("/")
             llm_key = s.deepseek_api_key
         else:
-            llm_base = s.qwen_base_url.rstrip("/")
-            llm_key = s.qwen_api_key
+            llm_base = s.llm_base_url.rstrip("/")
+            llm_key = s.llm_api_key
         llm_headers = {"Authorization": f"Bearer {llm_key}"} if llm_key else {}
         qwen_ok = False
         try:

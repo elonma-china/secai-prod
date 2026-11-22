@@ -28,9 +28,9 @@ def build_llm_provider(*, temperature_override: float | None = None) -> tuple[An
         ))
         return provider, s.deepseek_model
     provider = VLLMProvider(VLLMProviderOptions(
-        api_key=s.qwen_api_key,
-        base_url=s.qwen_base_url.rstrip("/"),
-        context_window=s.qwen_context_window,
+        api_key=s.llm_api_key,
+        base_url=s.llm_base_url.rstrip("/"),
+        context_window=s.llm_context_window,
         parallel_tool_calls=True,
         # Cyber-F1 (Qwen3-30B-A3B-Instruct-2507 MoE) model-card recommended sampling, now env-tunable via
         # Settings (LLM_TEMPERATURE, LLM_TOP_P, …). Only `temperature` is a first-class
@@ -45,4 +45,4 @@ def build_llm_provider(*, temperature_override: float | None = None) -> tuple[An
             "repetition_penalty": s.llm_repetition_penalty,
         },
     ))
-    return provider, s.qwen_model
+    return provider, s.llm_model

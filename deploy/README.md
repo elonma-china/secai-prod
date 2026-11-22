@@ -75,7 +75,7 @@ present, untouched).
 
 ## Notes carried over from `secai-docker/`
 
-- **Model stays on vast**: `QWEN_BASE_URL` / `EMBEDDING_API_URL` /
+- **Model stays on vast**: `LLM_BASE_URL` (tên cũ `QWEN_BASE_URL`) / `EMBEDDING_API_URL` /
   `RERANKER_API_URL` in `.env` point at the vast.ai serving instance. This stack
   does not serve models locally.
 - **KPI Studio group A** (11 quality KPIs, `chay_eval_gateway_moi.sh`) still only

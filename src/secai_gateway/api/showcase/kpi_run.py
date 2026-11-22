@@ -183,8 +183,8 @@ def _merged_env(settings: Any) -> dict[str, str]:
         llm_base, llm_model, llm_key = (settings.deepseek_base_url, settings.deepseek_model,
                                          settings.deepseek_api_key)
     else:
-        llm_base, llm_model, llm_key = (settings.qwen_base_url, settings.qwen_model,
-                                         settings.qwen_api_key)
+        llm_base, llm_model, llm_key = (settings.llm_base_url, settings.llm_model,
+                                         settings.llm_api_key)
 
     overlay = {
         # Ép Python (bench_kpi.py + các script con của bench.sh) xả stdout theo dòng ngay,

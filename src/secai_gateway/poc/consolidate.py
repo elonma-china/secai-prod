@@ -52,7 +52,7 @@ def _active_context_window(settings: Any) -> int:
     provider = str(getattr(settings, "llm_provider", "") or "").lower()
     if provider == "deepseek":
         return int(getattr(settings, "deepseek_context_window", 131072) or 131072)
-    return int(getattr(settings, "qwen_context_window", 32768) or 32768)
+    return int(getattr(settings, "llm_context_window", 32768) or 32768)
 
 
 def _source_budget(settings: Any) -> int:

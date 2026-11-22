@@ -80,7 +80,7 @@ async def test_route_uses_structured_pair_concurrently_and_preserves_literals(mo
                                          "model": MODEL})
 
     monkeypatch.setattr(routes, "verified_specialist_counter", lambda settings: len)
-    wrong_incumbent = Settings(_env_file=None).model_copy(update={"qwen_model": "wrong"})
+    wrong_incumbent = Settings(_env_file=None).model_copy(update={"llm_model": "wrong"})
     app = routes.create_v3_app(settings_factory=configured, legacy=wrong_incumbent)
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), trust_env=False) as provider:
         app.state.specialist_client = provider

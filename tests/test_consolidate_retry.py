@@ -98,7 +98,7 @@ class _Settings:
         self.poc_consolidate_timeout_s = 180
         # _source_budget reads these:
         self.llm_provider = "vllm"
-        self.qwen_context_window = 32768
+        self.llm_context_window = 32768
         self.deepseek_context_window = 131072
 
 

@@ -87,7 +87,7 @@ async def generate_text(system: str, user: str, settings: Settings) -> str:
             raise HTTPException(503, 'External LLM is unavailable in air-gap mode')
         base_url, api_key, model = settings.deepseek_base_url, settings.deepseek_api_key, settings.deepseek_model
     else:
-        base_url, api_key, model = settings.qwen_base_url, settings.qwen_api_key, settings.qwen_model
+        base_url, api_key, model = settings.llm_base_url, settings.llm_api_key, settings.llm_model
     body = {
         'model': model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
         'temperature': 0.2, 'max_tokens': 3000,

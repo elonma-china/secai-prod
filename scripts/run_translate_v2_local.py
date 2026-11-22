@@ -20,13 +20,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--env-file", type=Path, help="Private existing provider/OCR settings file")
     parser.add_argument("--store-dir", type=Path, required=True, help="Private local job and artifact directory")
-    parser.add_argument("--qwen-base-url", help="Existing DuyTa vLLM endpoint override")
+    parser.add_argument("--llm-base-url", "--qwen-base-url", dest="llm_base_url",
+                        help="Existing DuyTa vLLM endpoint override")
     parser.add_argument("--ocr-base-url", help="Private OCR tunnel endpoint override")
     parser.add_argument("--port", type=int, default=18089)
     args = parser.parse_args()
 
     settings = dict(os.environ)
     allowed = {
+        "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_CONTEXT_WINDOW",
+        # Legacy names, still accepted by Settings.
         "QWEN_BASE_URL", "QWEN_API_KEY", "QWEN_MODEL", "QWEN_CONTEXT_WINDOW",
         "LLM_TEMPERATURE", "LLM_TOP_P", "LLM_TOP_K", "LLM_MIN_P",
         "LLM_PRESENCE_PENALTY", "LLM_REPETITION_PENALTY",
@@ -37,12 +40,15 @@ def main() -> int:
             parser.error("--env-file must name an existing file")
         settings.update({key: value for key, value in dotenv_values(args.env_file).items()
                          if key in allowed and value is not None})
-    if args.qwen_base_url:
-        settings["QWEN_BASE_URL"] = args.qwen_base_url
+    if args.llm_base_url:
+        settings["LLM_BASE_URL"] = args.llm_base_url
     if args.ocr_base_url:
         settings["TRANSLATE_V2_OCR_BASE_URL"] = args.ocr_base_url
-    if not settings.get("QWEN_BASE_URL") or not settings.get("QWEN_MODEL"):
-        parser.error("QWEN_BASE_URL and QWEN_MODEL must identify the existing DuyTa model")
+    def _llm(name: str) -> str | None:
+        return settings.get(f"LLM_{name}") or settings.get(f"QWEN_{name}")
+
+    if not _llm("BASE_URL") or not _llm("MODEL"):
+        parser.error("LLM_BASE_URL and LLM_MODEL must identify the existing DuyTa model")
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
 

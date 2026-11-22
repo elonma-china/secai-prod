@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 #  show-reasoning.sh — STREAM chain-of-thought (reasoning trace) của Cyber-F1 LLM
 #
-#  Gọi thẳng model THẬT trên vast (QWEN_BASE_URL trong .env), BẬT chế độ suy luận
+#  Gọi thẳng model THẬT trên vast (LLM_BASE_URL — hoặc tên cũ QWEN_BASE_URL — trong .env), BẬT chế độ suy luận
 #  (chat_template_kwargs.enable_thinking=true) rồi in real-time, tách 2 luồng:
 #     🧠 SUY LUẬN  — reasoning trace (delta.reasoning), in mờ, token-by-token
 #     💬 TRẢ LỜI    — câu trả lời cuối (delta.content), in sáng
@@ -62,8 +62,9 @@ env = {}
 for ln in open(os.path.join(root, ".env"), encoding="utf-8"):
     m = re.match(r'\s*([A-Z0-9_]+)\s*=\s*(.*?)\s*$', ln)
     if m and not ln.lstrip().startswith("#"): env[m.group(1)] = m.group(2)
-base = env.get("QWEN_BASE_URL"); key = env.get("QWEN_API_KEY"); model = model or env.get("QWEN_MODEL")
-if not (base and key and model): sys.exit("[reasoning] thiếu QWEN_BASE_URL/QWEN_API_KEY/QWEN_MODEL trong .env")
+pick = lambda k: env.get("LLM_" + k) or env.get("QWEN_" + k)   # LLM_* chuẩn, QWEN_* tên cũ
+base = pick("BASE_URL"); key = pick("API_KEY"); model = model or pick("MODEL")
+if not (base and key and model): sys.exit("[reasoning] thiếu LLM_BASE_URL/LLM_API_KEY/LLM_MODEL trong .env")
 
 # ── màu ──────────────────────────────────────────────────────────────────────────
 DIM="\033[2;37m"; GRY="\033[90m"; GRN="\033[0;32m"; CYN="\033[0;36m"; BLD="\033[1m"; RST="\033[0m"
