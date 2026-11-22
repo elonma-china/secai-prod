@@ -69,6 +69,18 @@ Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dư�
 - Nhánh remote tự xoá sau merge: bật `delete_branch_on_merge` trong cài đặt repo GitHub (chưa bật).
 - Test: `scripts/dev.sh test tests/test_wt_prune.py` (repo tạm + `gh`/`docker` giả).
 
+### Sau khi merge PR → review & release prod
+
+Prod (`secai-docker-gateway` :8131 + `secai-translation-gateway` + `secai-translation-worker`) chạy **1 image bất biến** `secai-agent-gateway:main-<sha8>-<ngày>` build từ `git archive origin/main`; **không hot reload, không mount `src/` sống** (đổi code prod = release image mới). Hook `.claude/hooks/post-merge-release.sh` nhắc ngay sau mỗi `gh pr merge`. Quy trình (user đã cho phép release sau khi review đạt; chỉ dừng hỏi khi review thấy rủi ro hoặc gate fail):
+
+1. `scripts/wt-prune.sh --yes`, rồi cập nhật checkout chính: `git -C <main> merge --ff-only origin/main`.
+2. **Review**: `scripts/release-prod.sh plan` in diff so với prod. Đọc và dừng hỏi user nếu: `pyproject.toml`/`uv.lock`/`Dockerfile` đổi (build FULL, deps không ghim nên có thể trôi version — xem `pip-freeze.diff`), có file config/env/compose đổi, có thay đổi hành vi sản phẩm mà PR chưa nói rõ, hoặc prod đang lệch main (không phải tổ tiên) / 3 container không cùng image.
+3. **Release**: `scripts/release-prod.sh run --yes` — tự chạy 3 gate rồi mới chuyển prod: (a) pytest **toàn bộ** trên cây `origin/main` phải xanh; (b) build image + import app + `/app/src` == git archive; (c) smoke container riêng (`*-smoke-<ngày>`, bind 127.0.0.1, không mount dữ liệu ghi của prod) — `/health` đúng `git_sha`, không dep nào OK ở prod mà hỏng ở smoke, `/ai/v3/translate/languages` 200. Sau đó đổi `image:` compose + profile translation, up `--no-deps --no-build`, chờ health; health sai thì **tự rollback**. Dùng lock `gateway-deploy.lock`/`translation-deploy.lock`; ghi `~/secai-releases/main-<sha8>-<ngày>/` (compose bak, inspect-before, health before/after, RELEASE-NOTES.md).
+4. Báo user: sha cũ→mới, số test, health trước/sau, nơi ghi chú rollback. `plan`/`gates` không đổi prod, dùng để xem trước.
+- **Rollback**: `scripts/release-prod.sh rollback --yes` (đổi lại tag image + compose/profile đã sao lưu, ~15 s). Không `docker run/rm` tay.
+- **Lưu giữ 3 ngày**: image cũ (`main-*`, `smoke-*`) và container `*-rollback-*`/`*-smoke-*` đã dừng chỉ giữ tối đa 3 ngày rồi xoá (`release-prod.sh gc [--yes]`, timer `wt-prune` chạy hằng giờ); image của lần release liền trước luôn được giữ để rollback. Lưu ý: `docker compose up` **nhận nuôi và xoá** container cũ đã đổi tên (đã thử), nên "rollback" ở đây là image + compose sao lưu, không phải container đổi tên.
+- Merge PR bằng web GitHub không kích hoạt hook; làm tay bước 1–4.
+
 Đọc [deploy/all-features/README.md](deploy/all-features/README.md) trước cập nhật full-feature image. Gateway/worker/report chạy CPU; giữ entrypoint, private env và volume theo từng service. Nhiều agent có thể triển khai chung: dùng lock hiện có, kiểm ownership và immutable image ngay trước switch/rollback; chỉ cập nhật service thuộc phạm vi.
 
 Devspace staticserver tách report `/ai/v2/reports` sang 18183, file/image và text v3 sang 18185, còn legacychat/report và `/review-api` sang 8131. Dùng `REPORT_GATEWAY_PROXY`/`TRANSLATION_GATEWAY_PROXY` hoặc `.report-upstream`/`.translation-upstream`; không chứa key trong URL. Build bật ba cờ report/file/image đã ghi trong README. Report phải persist nội dung và revision trong `REPORT_DB_PATH`; giữ DB khi rollback.

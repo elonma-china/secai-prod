@@ -34,7 +34,9 @@ cd "$MAIN"
 git fetch -q origin
 tmp=\$(mktemp -d); trap 'rm -rf "\$tmp"' EXIT
 git archive origin/main scripts | tar -x -C "\$tmp"
-exec "\$tmp/scripts/wt-prune.sh" --yes
+"\$tmp/scripts/wt-prune.sh" --yes
+# image/container rollback+smoke prod quá 3 ngày
+"\$tmp/scripts/release-prod.sh" gc --yes || true
 EOF
 chmod 755 "$RUNNER"
 
