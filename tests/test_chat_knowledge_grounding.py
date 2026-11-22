@@ -506,17 +506,24 @@ async def test_english_concept_question_without_grounding_still_gets_the_languag
     assert runner.calls[-1][3] in (None, "")
 
 
-HEAD_CHAT_MD_SHA256 = "0cb903fea2fcdeb5460fee34f5d5b3a017a1abd52fd582e14cfd8cbe6243c054"  # prompts/chat.md as on main; this change must not edit it
+# The flagged rules that must live ONLY in their own files (chat_prefetch.md /
+# chat_knowledge.md), never in the always-on chat.md.
+FLAGGED_ONLY_RULE_MARKERS = ("Không tự viết mã rồi gắn nhãn", "KHÔNG tự đặt tên", "knowledge_reference_policy")
 
 
-def test_chat_md_is_byte_identical_to_main_and_new_rules_live_in_their_own_flagged_file():
-    import hashlib
+def test_flag_gated_chat_rules_live_in_their_own_files_not_in_chat_md():
+    # This test used to pin sha256(chat.md) to its 2026-09-27 bytes — a guard for the single
+    # PR that introduced the flagged files ("this change must not edit chat.md"). chat.md has
+    # since been edited on purpose (0f380aa0, dead7d1a: cve_count/cve_latest, mixed-scope
+    # rule), so a frozen hash only fails on legitimate work. The durable invariant is that
+    # the flag-gated rules are not in chat.md and are appended only when their flag is on.
     from importlib.resources import files
 
     from secai_gateway.agent.profiles import compose_system_prompt, PROFILES
 
-    chat_md = files("secai_gateway.prompts").joinpath("chat.md").read_bytes()
-    assert hashlib.sha256(chat_md).hexdigest() == HEAD_CHAT_MD_SHA256
+    chat_md = files("secai_gateway.prompts").joinpath("chat.md").read_text(encoding="utf-8")
+    for marker in FLAGGED_ONLY_RULE_MARKERS:
+        assert marker not in chat_md, marker
 
     class S:
         def __init__(self, cve, kn): self.chat_cve_search_prefetch_enabled, self.chat_knowledge_grounding_enabled = cve, kn
@@ -526,6 +533,8 @@ def test_chat_md_is_byte_identical_to_main_and_new_rules_live_in_their_own_flagg
     cve_on = compose_system_prompt(PROFILES["chat"], settings=S(True, False))
     assert "Không tự viết mã rồi gắn nhãn" in cve_on and "KHÔNG tự đặt tên" in cve_on and "knowledge_reference_policy" not in cve_on
     assert "Không tự viết mã rồi gắn nhãn" not in both_off
+    kn_on = compose_system_prompt(PROFILES["chat"], settings=S(False, True))
+    assert "knowledge_reference_policy" in kn_on and "knowledge_reference_policy" not in both_off
 
 
 @pytest.mark.parametrize("prompt", ["OWASP Top 10 for LLM applications gồm những gì?", "OWASP API Security Top 10 là gì", "OWASP Top 10 Mobile 2024", "Top 10 OWASP cho Kubernetes"])

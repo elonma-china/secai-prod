@@ -66,6 +66,16 @@ def test_strip_tool_call_echo_multiline_and_inline() -> None:
     assert "## 2. Cách chạy PoC" in out and "Dùng nuclei." in out
 
 
+def test_strip_reasoning_leak_cuts_same_line_english_planning_before_vietnamese_answer() -> None:
+    # English planning leak running straight into the Vietnamese answer (no pivot line):
+    # the leaked prefix carries the marker, so it is cut at the first Vietnamese word.
+    text = ("The user asks in Vietnamese about SSRF. I should use howto_search first. "
+            "SSRF là lỗ hổng cho phép kẻ tấn công ép máy chủ gửi request.")
+    out = strip_reasoning_leak(text)
+    assert "The user asks" not in out and "howto_search" not in out
+    assert out.endswith("là lỗ hổng cho phép kẻ tấn công ép máy chủ gửi request.")
+
+
 def test_strip_tool_call_echo_leaves_legit_content() -> None:
     # A tool name mentioned in prose WITHOUT a call-paren, real commands, and C calls stay.
     for legit in (

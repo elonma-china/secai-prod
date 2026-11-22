@@ -23,8 +23,9 @@ from contextlib import asynccontextmanager
 
 import httpx
 
-from linch.events import PartialAssistantEvent
+from linch.events import PartialAssistantEvent, ResultEvent
 from linch.sessions.memory import InMemorySessionStore
+from linch.types import Usage
 
 from secai_gateway.app import create_app
 from secai_gateway.state import ProjectStore
@@ -56,7 +57,11 @@ class ProjectFakeRunner:
             rec = await self.session_store.load(session_id)
             title = (rec.meta or {}).get("title") if rec is not None else None
         self.stream_start_titles.append(title)
-        yield PartialAssistantEvent(delta={"kind": "text", "text": f"{profile_name}: {prompt}"})
+        text = f"{profile_name}: {prompt}"
+        yield PartialAssistantEvent(delta={"kind": "text", "text": text})
+        # A real linch run always ends with a ResultEvent carrying the final text.
+        yield ResultEvent(subtype="success", stop_reason="end_turn", total_usage=Usage(),
+                          duration_ms=0, final_text=text)
 
 
 @asynccontextmanager
@@ -391,7 +396,8 @@ async def test_uc13_session_scoped_chat_happy_path(tmp_path) -> None:
 
         stream = await client.post(f"/sessions/{sid}/chat/stream", json={"user_id": "alice", "message": "hello"})
         assert stream.status_code == 200
-        assert "event: token" in stream.text
+        # Chat streams hold live tokens and emit only the deduped final (975871d1).
+        assert "event: token" not in stream.text
         assert "chat:" in stream.text
         assert "event: final" in stream.text
         assert "data: [DONE]" in stream.text

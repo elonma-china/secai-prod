@@ -337,7 +337,11 @@ def strip_reasoning_leak(text: str) -> str:
                                cleaned.rfind("\n", 0, first_vi.start()))
                 cut = boundary + 1 if boundary != -1 else 0
                 tail = cleaned[cut:].strip()
-                if tail:
+                # Only drop the prefix when the prefix itself IS the leak (carries a marker).
+                # A marker that only appears later (e.g. a `poc_search(...)` echo, which
+                # strip_tool_call_echoes removes on its own) must not chop the answer's own
+                # leading text such as a "## 2. " heading before the first diacritic word.
+                if tail and _REASONING_LEAK_MARKERS.search(cleaned[:cut]):
                     cleaned = tail
     return cleaned.strip() or text.strip()
 
