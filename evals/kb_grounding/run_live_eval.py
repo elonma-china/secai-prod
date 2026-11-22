@@ -144,7 +144,7 @@ async def evaluate(args, report_dir: Path) -> dict:
         runner.agent.provider = provider
         settings = state.settings
         report["model"] = (settings.deepseek_model if settings.llm_provider.lower() == "deepseek"
-                           else settings.qwen_model)
+                           else settings.llm_model)
         report["provider"] = settings.llm_provider
         report["sampling"] = {"temperature": settings.llm_temperature, "top_p": settings.llm_top_p,
                               "top_k": settings.llm_top_k}

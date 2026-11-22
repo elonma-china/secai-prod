@@ -263,7 +263,7 @@ def create_v3_app(*, settings_factory: Callable[[], MultilangSettings], legacy: 
                         client: httpx.AsyncClient | None = app.state.http_client
                         if client is None:
                             raise TranslationError("MODEL_UNAVAILABLE")
-                        active_llm = HttpLlm(client, legacy.qwen_base_url, legacy.qwen_api_key)
+                        active_llm = HttpLlm(client, legacy.llm_base_url, legacy.llm_api_key)
                 if request.url.path.endswith('/stream'):
                     async def run(on_chunk):
                         return await translate(TranslationRequest(parsed.text, parsed.source_lang, parsed.target_lang),

@@ -14,9 +14,9 @@ requests have drained. No database migration is involved.
 
 All settings are server-side environment variables. No request field or header may
 select a model, adapter, URL, flag, or user identity. Do not copy production `.env`
-or credentials into a checkout. The existing `LLM_PROVIDER=vllm`, `QWEN_BASE_URL`,
-`QWEN_API_KEY`, and `QWEN_MODEL` configure the incumbent model endpoint. The wrapper
-requires `QWEN_MODEL=DuyTa/Cyber-F1-AWQ` and rejects a returned model ID mismatch.
+or credentials into a checkout. The existing `LLM_PROVIDER=vllm`, `LLM_BASE_URL`,
+`LLM_API_KEY`, and `LLM_MODEL` (legacy `QWEN_*` still accepted) configure the incumbent model endpoint. The wrapper
+requires `LLM_MODEL=DuyTa/Cyber-F1-AWQ` and rejects a returned model ID mismatch.
 The ID alone does not attest the served checkpoint revision.
 
 Before any flag is enabled, operators must independently verify the serving

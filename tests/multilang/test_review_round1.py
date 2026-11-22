@@ -67,8 +67,8 @@ async def test_t7_02_generated_unicode_retries_then_safe_502(invalid, monkeypatc
 
     monkeypatch.setattr(routes, "verified_counter", lambda config: count)
     legacy = Settings(_env_file=None).model_copy(update={
-        "llm_provider": "vllm", "qwen_model": EXPECTED_MODEL,
-        "qwen_base_url": "http://127.0.0.1:9/v1"})
+        "llm_provider": "vllm", "llm_model": EXPECTED_MODEL,
+        "llm_base_url": "http://127.0.0.1:9/v1"})
     app = routes.create_v3_app(settings_factory=settings, legacy=legacy, llm=Llm())
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:

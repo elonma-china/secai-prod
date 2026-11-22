@@ -337,7 +337,7 @@ async def _check_llm(s) -> dict:
     if provider_kind == "deepseek":
         base, key = s.deepseek_base_url.rstrip("/"), s.deepseek_api_key
     else:
-        base, key = s.qwen_base_url.rstrip("/"), s.qwen_api_key
+        base, key = s.llm_base_url.rstrip("/"), s.llm_api_key
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     t0 = time.monotonic()
     try:

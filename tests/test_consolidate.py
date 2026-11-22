@@ -176,13 +176,13 @@ def test_source_budget_scales_with_context_window() -> None:
 
     from secai_gateway.poc.consolidate import _MAX_SOURCE_CHARS, _source_budget
 
-    qwen = _source_budget(SimpleNamespace(llm_provider="vllm", qwen_context_window=32768,
+    qwen = _source_budget(SimpleNamespace(llm_provider="vllm", llm_context_window=32768,
                                           deepseek_context_window=131072))
-    deep = _source_budget(SimpleNamespace(llm_provider="deepseek", qwen_context_window=32768,
+    deep = _source_budget(SimpleNamespace(llm_provider="deepseek", llm_context_window=32768,
                                           deepseek_context_window=131072))
     assert deep > qwen                      # bigger window → bigger source budget
     assert deep <= _MAX_SOURCE_CHARS        # but never above the latency ceiling
-    tiny = _source_budget(SimpleNamespace(llm_provider="vllm", qwen_context_window=4096,
+    tiny = _source_budget(SimpleNamespace(llm_provider="vllm", llm_context_window=4096,
                                           deepseek_context_window=131072))
     assert tiny >= 8_000                    # floored so we still attempt small PoCs
 

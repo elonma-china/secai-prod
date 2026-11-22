@@ -187,7 +187,7 @@ async def test_malformed_json_and_surrogate_are_safe_errors(incumbent):
 @pytest.mark.asyncio
 async def test_model_identity_mismatch_no_inference(incumbent):
     fake = EchoLiteralLlm()
-    wrong = incumbent.model_copy(update={"qwen_model": "Qwen/Qwen3-32B"})
+    wrong = incumbent.model_copy(update={"llm_model": "Qwen/Qwen3-32B"})
     app = routes.create_v3_app(settings_factory=configured, legacy=wrong, llm=fake)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://test") as client:

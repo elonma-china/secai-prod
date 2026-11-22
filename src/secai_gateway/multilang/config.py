@@ -284,5 +284,5 @@ def _build_pinned_counter(path: Path, digest: str) -> Callable[[str], int] | Non
 
 def incumbent_ok(legacy: LegacySettings) -> bool:
     return (legacy.llm_provider.lower() == "vllm"
-            and legacy.qwen_model == EXPECTED_MODEL
-            and legacy.qwen_base_url.startswith(("http://", "https://")))
+            and legacy.llm_model == EXPECTED_MODEL
+            and legacy.llm_base_url.startswith(("http://", "https://")))
