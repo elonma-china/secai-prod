@@ -11,8 +11,11 @@
 #             -v secai-gw-data:/app/data secai-agent-gateway:0.2.0
 #   (or just: docker compose up --build)
 
-# ---------- builder: resolve deps into an isolated venv ----------
-FROM python:3.12-slim AS builder
+# ---------- deps: third-party dependencies only (cached until pyproject.toml changes) ----------
+# Only pyproject.toml is copied here, so editing src/ does NOT invalidate this (slow, ~6 min)
+# layer. The dependency list is read from [project].dependencies + the `redis` extra, which
+# resolves exactly like `pip install ".[redis]"` did, minus the package itself.
+FROM python:3.12-slim AS deps
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -20,13 +23,26 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 
 WORKDIR /app
 
-# Only what the hatchling build backend needs to install the package + its deps.
+COPY pyproject.toml ./
+
+RUN python -c "import tomllib; p = tomllib.load(open('pyproject.toml', 'rb'))['project']; print('\n'.join(p['dependencies'] + p['optional-dependencies']['redis']))" > /tmp/requirements.txt \
+ && python -m venv /opt/venv \
+ && /opt/venv/bin/pip install --upgrade pip \
+ && /opt/venv/bin/pip install -r /tmp/requirements.txt
+
+# ---------- wheel: build the secai-agent-gateway package itself (cheap, reruns on src edits) ----------
+FROM python:3.12-slim AS wheel
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+WORKDIR /app
+
 COPY pyproject.toml ./
 COPY src ./src
 
-RUN python -m venv /opt/venv \
- && /opt/venv/bin/pip install --upgrade pip \
- && /opt/venv/bin/pip install ".[redis]"
+RUN pip wheel --no-deps --wheel-dir /wheels .
 
 # ---------- runtime: slim, non-root, source copied verbatim ----------
 FROM python:3.12-slim AS runtime
@@ -56,11 +72,24 @@ RUN useradd --system --create-home --uid 10001 app
 
 WORKDIR /app
 
-# Third-party dependencies, pre-installed in the builder venv.
-COPY --from=builder /opt/venv /opt/venv
+# Layer order (legacy builder): everything that does NOT depend on src/ comes first, so a
+# source-only edit re-runs just the package install + `COPY src` + the build-arg tail
+# (each re-run step costs a few seconds of layer commit on this host even when trivial).
 
-# Application source + the vendored searchsploit helper.
-COPY src ./src
+EXPOSE 8131
+
+# App-is-up probe: /health returns 200 even when LLM/Redis are "degraded".
+HEALTHCHECK --interval=30s --timeout=6s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8131/health',timeout=5).status==200 else 1)"
+
+ENTRYPOINT ["tini", "--"]
+CMD ["uvicorn", "secai_gateway.app:app", "--host", "0.0.0.0", "--port", "8131"]
+
+# Third-party dependencies, pre-installed in the deps venv (~440 MB, cached across
+# source-only rebuilds).
+COPY --from=deps /opt/venv /opt/venv
+
+# The vendored searchsploit helper.
 COPY bin ./bin
 
 # Vendored KPI bench code (KPI Studio "Live" run, groups B/C — see kpi_run.py) — was
@@ -75,22 +104,24 @@ RUN mkdir -p /app/data /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/p
  && chmod +x /app/bin/searchsploit \
  && chown -R app:app /app /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/poc-store
 
+# --- from here on, layers depend on src/ ---
+
+# The package itself (dist-info metadata + site-packages copy, as before), installed with
+# --no-deps on top of the cached venv: the only venv change on a source edit.
+COPY --from=wheel /wheels /tmp/wheels
+RUN /opt/venv/bin/pip install --no-deps --no-cache-dir --disable-pip-version-check /tmp/wheels/*.whl \
+ && rm -rf /tmp/wheels
+
+# Application source (PYTHONPATH=/app/src), owned by the non-root user as before.
+COPY --chown=app:app src ./src
+
 USER app
 
-# Build provenance, surfaced by /health (git_branch/git_sha). Declared late so changing them
-# only invalidates this layer. Pass at build time:
+# Build provenance, surfaced by /health (git_branch/git_sha). Declared last so changing them
+# only invalidates these layers. Pass at build time:
 #   docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) \
 #                --build-arg GIT_BRANCH=$(git branch --show-current) ...
 ARG GIT_SHA=""
 ARG GIT_BRANCH=""
 ENV GIT_SHA=${GIT_SHA} \
     GIT_BRANCH=${GIT_BRANCH}
-
-EXPOSE 8131
-
-# App-is-up probe: /health returns 200 even when LLM/Redis are "degraded".
-HEALTHCHECK --interval=30s --timeout=6s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8131/health',timeout=5).status==200 else 1)"
-
-ENTRYPOINT ["tini", "--"]
-CMD ["uvicorn", "secai_gateway.app:app", "--host", "0.0.0.0", "--port", "8131"]
