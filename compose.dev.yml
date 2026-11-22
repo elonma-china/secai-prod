@@ -1,0 +1,63 @@
+# Per-worktree DEV stack for the gateway — NOT production.
+#
+# Run it only through `scripts/dev.sh` (never `docker compose` directly): dev.sh loads
+# `.env.worktree` (project name, image tag, bind IP, port — unique per worktree) and refuses
+# values that could clash with production (port 8131/8140, BIND_IP 0.0.0.0, project
+# `secai-docker`). Production stays the `secai-docker` compose project on public :8131.
+#
+# What this stack shares with production (on purpose, so dev behaves like prod):
+#   qdrant / neo4j / redis / pentestcode pool via the external `secai-docker_secai-net`
+#   network, the Vast LLM/embedding/rerank endpoints and secai-data (exploitdb read-only,
+#   poc catalog/store read-write as prod needs WAL). Keep those uses read-mostly.
+# What it does NOT share: its own data volume (gateway/session/review DBs), its own image tag,
+# no container_name, no public port, review + reward integrations off.
+services:
+  devgw:   # deliberately NOT `gateway`: that alias on secai-net belongs to production
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DEV_IMAGE:?run scripts/dev.sh init}
+    command: ["uvicorn", "secai_gateway.unified_app:app", "--host", "0.0.0.0", "--port", "8131",
+              "--reload", "--reload-dir", "/app/src"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - ${DEV_ENV_FILE:?run scripts/dev.sh init}
+    environment:
+      GIT_BRANCH: ${GIT_BRANCH:-}
+      GIT_SHA: ${GIT_SHA:-}
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      TRANSLATION_UPSTREAM_URL: http://host.docker.internal:18185
+      SESSION_STORE_BACKEND: sqlite
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      SESSION_DB_PATH: /app/data/sessions.db
+      REVIEW_DB_PATH: /app/data/reviews.db
+      REPORT_DB_PATH: /app/data/reports.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      POC_CATALOG_DB: /srv/poc/catalog.db
+      POC_ARTIFACT_STORE: /srv/poc-store
+      POC_SOURCES_ROOT: /srv/poc-sources
+      REVIEW_ENABLED: "false"
+      REWARD_ENABLED: "false"
+    ports:
+      - "${BIND_IP:?run scripts/dev.sh init}:${APP_PORT:?run scripts/dev.sh init}:8131"
+    volumes:
+      - ./src:/app/src:ro                      # live code; uvicorn --reload picks up edits
+      - devgw-data:/app/data
+      - ${SECAI_DATA_ROOT}/exploitdb:/srv/exploitdb:ro
+      - ${SECAI_DATA_ROOT}/poc:/srv/poc
+      - ${SECAI_DATA_ROOT}/poc/store:/srv/poc-store
+      - ${SECAI_DATA_ROOT}/poc-sources:/srv/poc-sources:ro
+    networks: [secai-net, poc-labs-internal]
+
+networks:
+  secai-net:
+    name: secai-docker_secai-net
+    external: true
+  poc-labs-internal:
+    external: true
+
+volumes:
+  devgw-data: {}

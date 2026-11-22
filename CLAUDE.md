@@ -47,6 +47,7 @@ Chi tiết artifact, flags, installer và matrix: `secai-serving-vast/vast/gpu_s
 
 Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dưới đây là quy tắc bắt buộc, rút từ sự cố thật (main bị `reset --hard` mất 5 commit chưa push; worktree khác bị lệch index khi ai đó đổi `main` dùng chung; container dịch bị `docker run` tay đè tên không qua compose, `release.json` hỏng giữa đường không ai biết):
 
+- **Chạy/test trong worktree chỉ qua `scripts/dev.sh`** (stack Docker riêng, cổng LAN riêng, `health` báo đúng nhánh) — xem mục "Chạy thử theo worktree" trong AGENTS.md. Tạo/xoá worktree tay: `scripts/wt-new.sh <task>` / `scripts/wt-rm.sh <task>`.
 - **Mỗi agent 1 worktree riêng, 1 nhánh feature riêng.** `git worktree add ../wt-<task> -b fix/<task> main`. Không bao giờ `git checkout`/sửa trực tiếp trên checkout chính nếu không chắc có agent khác đang dùng — kiểm `git worktree list` trước.
 - **Không bao giờ code trực tiếp trên `main`.** Merge vào `main` chỉ qua `git merge-tree main <nhánh>` (kiểm xung đột, không cần checkout `main`, không đụng worktree ai khác). Nếu phải cập nhật `main` mà nó đang được checkout ở worktree khác, dùng plumbing (`git commit-tree` + `git update-ref`) rồi `git -C <worktree-đó> reset --mixed && git -C <worktree-đó> checkout HEAD -- .` để đồng bộ lại index của họ, không để lệch.
 - **Push nhánh lên origin ngay khi xong việc.** Commit chỉ nằm local là thứ dễ mất nhất khi nhiều agent cùng đụng nhánh chung.
