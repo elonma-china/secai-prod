@@ -42,3 +42,11 @@ def test_kwargs_and_defaults(monkeypatch):
     s = Settings(_env_file=None, llm_model="m")
     assert s.llm_model == "m" and s.llm_context_window == 32768
     assert "llm_api_key" not in repr(s)
+
+
+def test_legacy_attribute_aliases_read_new_fields(monkeypatch):
+    _clear(monkeypatch)
+    s = Settings(_env_file=None, llm_base_url="http://x/v1", llm_api_key="k",
+                 llm_model="m", llm_context_window=1234)
+    assert (s.qwen_base_url, s.qwen_api_key, s.qwen_model, s.qwen_context_window) == (
+        "http://x/v1", "k", "m", 1234)

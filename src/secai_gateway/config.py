@@ -589,6 +589,24 @@ class Settings(BaseSettings):
             self.searxng_url = ""
         return self
 
+    # Deprecated read-only aliases for code still on the old attribute names (e.g. open
+    # branches written before the LLM_* rename). New code must use llm_*.
+    @property
+    def qwen_base_url(self) -> str:
+        return self.llm_base_url
+
+    @property
+    def qwen_api_key(self) -> str:
+        return self.llm_api_key
+
+    @property
+    def qwen_model(self) -> str:
+        return self.llm_model
+
+    @property
+    def qwen_context_window(self) -> int:
+        return self.llm_context_window
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
