@@ -21,7 +21,7 @@ if [ "${1:-}" = "--remove" ]; then
     exit 0
 fi
 
-MAIN=$(git worktree list --porcelain | awk 'NR==1{print $2}')
+MAIN=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 [ -n "$MAIN" ] || { echo "install-wt-prune-timer: run inside the repo" >&2; exit 2; }
 
 mkdir -p "$UNIT_DIR" "$(dirname "$RUNNER")"

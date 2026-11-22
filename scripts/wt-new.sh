@@ -13,7 +13,7 @@ set -euo pipefail
 [ $# -ge 1 ] || { echo "usage: $0 <task> [branch] [base]" >&2; exit 2; }
 task=$1; branch=${2:-feat/$1}; base=${3:-origin/main}
 
-MAIN_CHECKOUT=$(git -C "$(dirname "$0")/.." worktree list --porcelain | awk 'NR==1{print $2}')
+MAIN_CHECKOUT=$(git -C "$(dirname "$0")/.." worktree list --porcelain | sed -n '1s/^worktree //p')
 dest=$(dirname "$MAIN_CHECKOUT")/wt-$task
 [ -e "$dest" ] && { echo "wt-new: $dest already exists" >&2; exit 1; }
 

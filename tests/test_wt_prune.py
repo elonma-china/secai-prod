@@ -49,6 +49,7 @@ class Sandbox:
         for name in ("wt-prune.sh", "wt-rm.sh"):
             shutil.copy(SCRIPTS / name, self.main / "scripts" / name)
         (self.main / "README").write_text("x\n")
+        (self.main / ".gitignore").write_text("data/\n.env\n.env.*\n__pycache__/\n.pytest_cache/\n")
         sh("git", "add", "-A", cwd=self.main, env=env)
         sh("git", "commit", "-q", "-m", "init", cwd=self.main, env=env)
         sh("git", "remote", "add", "origin", str(self.origin), cwd=self.main)
@@ -74,8 +75,8 @@ class Sandbox:
         with self.merged_file.open("a") as fh:
             fh.write(f"{branch} {sha}\n")
 
-    def prune(self, *flags: str) -> str:
-        res = sh(str(self.main / "scripts" / "wt-prune.sh"), *flags, cwd=self.main, env=self.env, check=False)
+    def prune(self, *flags: str, cwd: Path | None = None) -> str:
+        res = sh(str(self.main / "scripts" / "wt-prune.sh"), *flags, cwd=cwd or self.main, env=self.env, check=False)
         assert res.returncode == 0, res.stderr + res.stdout
         return res.stdout
 
@@ -199,3 +200,77 @@ def test_orphan_dev_stack_is_cleaned_but_prod_and_live_ones_are_not(sb: Sandbox)
     assert "image rm secai-agent-gateway:dev-gone" in calls
     assert "-p secai-gw-dev-live" not in calls   # worktree still exists
     assert "-p secai-docker" not in calls        # production is never matched
+
+
+def test_ignored_files_with_real_content_block_the_prune(sb: Sandbox) -> None:
+    """`git worktree remove` silently deletes gitignored files (data/ DBs, results, a nested repo)."""
+    wt = sb.worktree("data")
+    (wt / "data").mkdir()
+    (wt / "data" / "results.db").write_text("only copy")
+    out = sb.prune("--yes")
+    assert (wt / "data" / "results.db").exists() and "feat/data" in sb.branches()
+    assert "ignored files" in out and "data/" in out
+
+
+def test_regenerable_ignored_files_do_not_block_the_prune(sb: Sandbox) -> None:
+    wt = sb.worktree("caches")
+    (wt / ".env").write_text("copied from main")
+    (wt / ".env.worktree").write_text("generated")
+    (wt / "__pycache__").mkdir()
+    (wt / "__pycache__" / "x.pyc").write_text("")
+    (wt / ".pytest_cache").mkdir()
+    sb.prune("--yes")
+    assert not wt.exists()
+
+
+def test_main_checkout_with_a_space_in_its_path_is_never_touched(tmp_path: Path) -> None:
+    """The main checkout sits on a merged feature branch; a space in its path must not defeat the guard."""
+    root = tmp_path / "my repos"
+    root.mkdir()
+    sb = Sandbox(root)
+    (sb.main / ".env").write_text("SECRET=prod")
+    sb.git("checkout", "-q", "-b", "feat/on-main")
+    sb.git("commit", "-q", "--allow-empty", "-m", "x")
+    sb.mark_merged("feat/on-main", sb.git("rev-parse", "HEAD"))
+    wt = sb.worktree("spaced")
+    other = sb.worktree("other", merged=False)  # run from here (post-merge run from a session)
+    sb.prune("--yes", cwd=other)
+    assert (sb.main / ".env").read_text() == "SECRET=prod"
+    assert "feat/on-main" in sb.branches()
+    assert not wt.exists()  # an ordinary merged worktree under the same spaced root is still pruned
+
+
+def test_rejected_remote_delete_does_not_abort_the_run(sb: Sandbox) -> None:
+    """A refused `git push --delete` (protected branch, network) must not stop the remaining work."""
+    hook = sb.origin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\nwhile read old new ref; do\n"
+                    "  case $new in 0000000*) echo 'deletes are protected' >&2; exit 1 ;; esac\ndone\n")
+    hook.chmod(0o755)
+    first = sb.worktree("protected")
+    sb.git("push", "-q", "origin", "feat/protected", cwd=first)
+    second = sb.worktree("after")
+    out = sb.prune("--yes", "--remote")
+    assert not first.exists() and not second.exists()
+    assert "origin/feat/protected" in out and "done: 2 pruned" in out
+
+
+def _dev_init(sb: Sandbox, wt: Path) -> dict[str, str]:
+    shutil.copy(SCRIPTS / "dev.sh", wt / "scripts" / "dev.sh")
+    (sb.bin / "ip").write_text("#!/bin/sh\necho '1.1.1.1 via 10.0.0.1 dev eth0 src 10.0.0.5 uid 1000'\n")
+    (sb.bin / "ss").write_text("#!/bin/sh\nexit 0\n")
+    for f in ("ip", "ss"):
+        (sb.bin / f).chmod(0o755)
+    sh(str(wt / "scripts" / "dev.sh"), "init", cwd=wt, env=sb.env)
+    lines = (wt / ".env.worktree").read_text().splitlines()
+    return dict(line.split("=", 1) for line in lines if "=" in line and not line.startswith("#"))
+
+
+def test_dev_init_never_reuses_another_worktrees_compose_project(sb: Sandbox) -> None:
+    """Names that slug the same (case, punctuation, 30-char cut) must not share a stack:
+    `dev.sh clean` / wt-rm in one would `compose down -v` the other's containers and volume."""
+    a = sb.worktree("exploit-v2-admission-retry-pool-aaaa", merged=False)
+    b = sb.worktree("exploit-v2-admission-retry-pool-bbbb", merged=False)
+    ea, eb = _dev_init(sb, a), _dev_init(sb, b)
+    assert ea["COMPOSE_PROJECT_NAME"] != eb["COMPOSE_PROJECT_NAME"]
+    assert ea["DEV_IMAGE"] != eb["DEV_IMAGE"]
+    assert eb["COMPOSE_PROJECT_NAME"].startswith("secai-gw-dev-")
