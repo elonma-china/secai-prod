@@ -58,6 +58,17 @@ Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dư�
 - **Rollback bằng đổi tên, không xoá.** Trước khi thay container/image mới, `docker rename` container cũ thành `*-rollback-<ngày>` rồi `stop` (đúng quy ước đã có trong repo), giữ nguyên image cũ — không `rm`/`rmi` cho tới khi chắc bản mới ổn.
 - **Tag image theo commit SHA** (`secai-agent-gateway:<service>-<sha-ngắn>-<ngày>`) thay vì tên mô tả mơ hồ, để nhìn tag biết ngay build từ commit nào, đỡ phải điều tra bằng `docker history`/`grep` trong container.
 
+### Dọn nhánh/worktree sau merge
+
+`scripts/wt-prune.sh` dọn worktree, nhánh local và stack dev của các PR **đã merge**. Chạy trong repo (worktree nào cũng được): mặc định chỉ liệt kê (dry-run); `--yes` mới xoá (ghi log `~/.local/state/secai/wt-prune.log`); `--remote` thêm xoá nhánh trên origin.
+
+- **Chỉ dọn khi đủ cả 4:** (1) PR có head là nhánh đó ở trạng thái `MERGED` (hỏi `gh`, vì repo cho squash/rebase merge) **và** đỉnh nhánh local đúng bằng head của PR đó — commit làm thêm sau merge không bao giờ bị mất, nhánh mới tạo chưa có PR cũng không bị dọn; (2) không có thay đổi chưa commit/untracked; (3) không tiến trình nào đang đứng (cwd) trong worktree — phiên T3/agent đang mở được bỏ qua; (4) không phải `main`, `*-deploy-main`, checkout chính, worktree detached.
+- **Thứ tự mỗi worktree:** `wt-rm.sh` (stack dev + worktree) → `git branch -D` (an toàn vì đã khớp head PR đã merge) → nhánh origin nếu có `--remote` và đỉnh remote trùng. Kèm dọn stack dev mồ côi: compose project `secai-gw-dev-*` có worktree đã mất; không bao giờ đụng `secai-docker`.
+- **Sau `gh pr merge`**: chạy `scripts/wt-prune.sh --yes` (worktree của chính phiên đang mở tự được bỏ qua; lần timer kế tiếp sẽ dọn nốt).
+- **Định kỳ:** `scripts/install-wt-prune-timer.sh` cài `systemd --user` timer mỗi giờ (gỡ bằng `--remove`). Runner luôn lấy `scripts/` từ `origin/main` mới nhất nên không phụ thuộc checkout chính đang ở commit nào. Chỉ cài được sau khi script nằm trên `origin/main`.
+- Nhánh remote tự xoá sau merge: bật `delete_branch_on_merge` trong cài đặt repo GitHub (chưa bật).
+- Test: `scripts/dev.sh test tests/test_wt_prune.py` (repo tạm + `gh`/`docker` giả).
+
 Đọc [deploy/all-features/README.md](deploy/all-features/README.md) trước cập nhật full-feature image. Gateway/worker/report chạy CPU; giữ entrypoint, private env và volume theo từng service. Nhiều agent có thể triển khai chung: dùng lock hiện có, kiểm ownership và immutable image ngay trước switch/rollback; chỉ cập nhật service thuộc phạm vi.
 
 Devspace staticserver tách report `/ai/v2/reports` sang 18183, file/image và text v3 sang 18185, còn legacychat/report và `/review-api` sang 8131. Dùng `REPORT_GATEWAY_PROXY`/`TRANSLATION_GATEWAY_PROXY` hoặc `.report-upstream`/`.translation-upstream`; không chứa key trong URL. Build bật ba cờ report/file/image đã ghi trong README. Report phải persist nội dung và revision trong `REPORT_DB_PATH`; giữ DB khi rollback.

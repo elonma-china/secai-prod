@@ -8,7 +8,9 @@
 set -euo pipefail
 [ $# -eq 1 ] || { echo "usage: $0 <task|path>" >&2; exit 2; }
 
-MAIN_CHECKOUT=$(git -C "$(dirname "$0")/.." worktree list --porcelain | awk 'NR==1{print $2}')
+# Repo of the current directory (so a copy of this script run from elsewhere still works),
+# falling back to the repo this script lives in.
+MAIN_CHECKOUT=$( { git worktree list --porcelain 2>/dev/null || git -C "$(dirname "$0")/.." worktree list --porcelain; } | awk 'NR==1{print $2}')
 case "$1" in */*) dest=$(realpath "$1") ;; *) dest=$(dirname "$MAIN_CHECKOUT")/wt-$1 ;; esac
 
 git -C "$MAIN_CHECKOUT" worktree list --porcelain | grep -qx "worktree $dest" \
