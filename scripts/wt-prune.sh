@@ -9,7 +9,8 @@
 #   1. a PR with this head branch is MERGED (asked from GitHub via `gh`, since the repo allows
 #      squash/rebase merges that `git branch --merged` cannot see) AND the local branch tip is
 #      exactly that PR's head commit (=> no commit made after the merge is ever lost);
-#   2. no uncommitted/untracked changes;
+#   2. no uncommitted/untracked changes, and no gitignored files beyond regenerable ones
+#      (.env copies, caches) — `git worktree remove` would silently delete data/, results, …;
 #   3. no process has its cwd inside the worktree (T3 session / agent / shell still open);
 #   4. not main, *-deploy-main, the main checkout, or a detached worktree.
 # Order per worktree: wt-rm.sh (dev stack + worktree) -> delete local branch [-> origin branch].
@@ -29,7 +30,7 @@ done
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "wt-prune: run inside the repo" >&2; exit 2; }
-MAIN=$(git worktree list --porcelain | awk 'NR==1{print $2}')
+MAIN=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 LOG=${WT_PRUNE_LOG:-$HOME/.local/state/secai/wt-prune.log}
 mkdir -p "$(dirname "$LOG")"
 
@@ -55,24 +56,40 @@ gh pr list --state merged --limit 300 --json headRefName,headRefOid \
 # 0 when a merged PR exists for <branch> whose head commit is exactly <sha>.
 merged_at() { grep -qxF "$1 $2" "$MERGED"; }
 
-# 0 when some process has its cwd inside directory $1 (this script itself excluded).
+# 0 when some process (other than this script) has its cwd inside directory $1. One `find`
+# per call instead of a readlink fork per /proc entry (that cost ~5 s per worktree on a busy
+# host). The find itself has this script's cwd, as each readlink child had before.
 in_use() {
-    local d=$1 p c
-    for p in /proc/[0-9]*; do
-        [ "${p#/proc/}" = "$$" ] && continue
-        c=$(readlink "$p/cwd" 2>/dev/null) || continue
-        case $c in "$d"|"$d"/*) return 0 ;; esac
+    # `|| true`: find exits 1 on unreadable /proc entries (other users), which pipefail would
+    # otherwise turn into "not in use".
+    { find /proc -mindepth 2 -maxdepth 2 -name cwd -printf '%h\t%l\n' 2>/dev/null || true; } \
+        | awk -F'\t' -v me="/proc/$$" -v d="$1" '$1 != me && ($2 == d || index($2, d "/") == 1) {f=1} END {exit !f}'
+}
+
+# Gitignored entries in worktree $1 that `git worktree remove` would delete and that are not
+# regenerable (.env copies written by dev.sh, Python/tool caches). Printed one per line.
+ignored_content() {
+    git -C "$1" ls-files --others --ignored --exclude-standard --directory | while IFS= read -r f; do
+        case ${f%/} in
+            .env|.env.worktree|*.pyc|__pycache__|*/__pycache__|.pytest_cache|.ruff_cache|.cocoindex_code) ;;
+            *) printf '%s\n' "$f" ;;
+        esac
     done
-    return 1
 }
 
 delete_remote() {  # <branch> <sha>
     [ "$REMOTE" = 1 ] || return 0
     local rsha
-    rsha=$(git ls-remote --heads origin "$1" | awk '{print $1}')
+    # Never let a remote failure abort the run (set -e): the local work is already done.
+    rsha=$(git ls-remote --heads origin "$1" | awk '{print $1}') \
+        || { skip "origin/$1" "git ls-remote failed"; return 0; }
     if [ "$rsha" = "$2" ]; then
         if [ "$YES" = 1 ]; then
-            git push -q origin --delete "$1" && say "remote $1 deleted from origin"
+            if git push -q origin --delete "$1" 2>/dev/null; then
+                say "remote $1 deleted from origin"
+            else
+                skip "origin/$1" "git push --delete was refused"
+            fi
         else
             say "would  delete origin/$1"
         fi
@@ -93,6 +110,8 @@ while IFS=$'\t' read -r path ref; do
     sha=$(git -C "$path" rev-parse HEAD 2>/dev/null) || { skip "$path" "cannot read HEAD"; continue; }
     merged_at "$br" "$sha" || { skip "$path ($br)" "no merged PR at this exact commit (open, never PR'd, or commits after merge)"; continue; }
     [ -z "$(git -C "$path" status --porcelain)" ] || { skip "$path ($br)" "uncommitted or untracked changes"; continue; }
+    kept=$(ignored_content "$path" | awk 'NR<=3' | tr '\n' ' ')
+    [ -z "$kept" ] || { skip "$path ($br)" "ignored files would be deleted: ${kept}(move or delete them first)"; continue; }
     if in_use "$path"; then skip "$path ($br)" "a process is still running inside it"; continue; fi
 
     if [ "$YES" = 1 ]; then

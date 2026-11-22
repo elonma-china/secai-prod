@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
 WT_ENV=.env.worktree
-MAIN_CHECKOUT=$(git worktree list --porcelain | awk 'NR==1{print $2}')
+MAIN_CHECKOUT=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 
 die() { echo "dev.sh: $*" >&2; exit 1; }
 
@@ -38,6 +38,15 @@ cmd_init() {
     local name slug port ip
     name=$(basename "$ROOT"); name=${name#wt-}
     slug=$(printf '%s' "$name" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//' | cut -c1-30)
+    # The slug is lossy (case, punctuation, 30-char cut): never reuse another worktree's
+    # project, or `clean`/wt-rm there would `compose down -v` this stack (and vice versa).
+    local taken n=0 base=$slug
+    taken=$(git worktree list --porcelain | sed -n 's/^worktree //p' | while IFS= read -r w; do
+        [ "$w" = "$ROOT" ] || sed -n 's/^COMPOSE_PROJECT_NAME=//p' "$w/$WT_ENV" 2>/dev/null || true
+    done)
+    while printf '%s\n' "$taken" | grep -qxF "secai-gw-dev-$slug"; do
+        n=$((n + 1)); slug=$(printf '%s' "$base" | cut -c1-27)-$n
+    done
     port=$((20000 + $(printf '%s' "$name" | cksum | cut -d' ' -f1) % 1000))
     while port_busy "$port"; do port=$((port + 1)); done
     ip=$(lan_ip); [ -n "$ip" ] || die "cannot detect the LAN IP; set BIND_IP in $WT_ENV by hand"
@@ -103,7 +112,7 @@ cmd_health() {
     [ -n "${body:-}" ] || die "no answer on http://$BIND_IP:$APP_PORT/health (see: scripts/dev.sh logs)"
     printf '%s\n' "$body" | python3 -c '
 import json, sys
-b = json.load(sys.stdin); want = sys.argv[1]
+b = json.load(sys.stdin); want = sys.argv[1] or None  # detached HEAD: /health reports null
 print(json.dumps({k: b.get(k) for k in ("status", "git_branch", "git_sha", "llm", "redis")}, ensure_ascii=False))
 got = b.get("git_branch")
 if got != want:
