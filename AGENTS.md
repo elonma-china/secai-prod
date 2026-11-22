@@ -74,6 +74,15 @@ npm ci
 npm run build
 ```
 
+### Chạy thử theo worktree (nhiều phiên/agent song song)
+
+- Trong worktree, chạy Docker **chỉ qua `scripts/dev.sh`** (`init|up|rebuild|down|clean|logs|ps|health|test`); không gọi `docker compose`/`docker run` trực tiếp. Mỗi worktree có compose project `secai-gw-dev-<tên>`, cổng 20xxx riêng, bind IP LAN — không bao giờ 8131 hay 0.0.0.0 (public chỉ dành cho production `:8131`).
+- Trước khi kết luận gì từ stack đang chạy: `scripts/dev.sh health` phải in `git_branch` đúng nhánh hiện tại; lệch là đang nhìn nhầm stack.
+- Code mount sống và tự reload: sửa `.py` không cần build. Chỉ `rebuild` khi đổi `pyproject.toml`, `uv.lock`, `Dockerfile` hoặc `bin/`.
+- Test bằng `scripts/dev.sh test [pytest args]`: venv dùng chung cài editable bản **main**, chạy `.venv/bin/python -m pytest` trần trong worktree sẽ test nhầm code main.
+- Stack dev dùng chung qdrant/neo4j/redis/pentestcode pool và secai-data với production: chỉ đọc là chính, không xoá/ghi đè dữ liệu chung. Dữ liệu gateway/session/report nằm trong volume riêng của worktree.
+- Không đụng container/volume của worktree khác hay `secai-docker-*`. Xong việc: `scripts/dev.sh down`; bỏ worktree: `scripts/wt-rm.sh <tên>` (dọn stack, giữ nhánh).
+
 - `tests/conftest.py` dùng session memory, tắt Redis và tránh classifier gọi embedding thật; AIRGAP được đặt false cho test các tính năng mạng. Mock mọi dịch vụ ngoài mà test sử dụng, không giả định fixture chặn tất cả kết nối.
 - Test Bughunt có thể cần cây `claude-bug-bounty` bên ngoài checkout. Báo rõ dependency thiếu và tên test fail/skip; không coi suite là pass nếu chưa chạy xong.
 - Live eval/KPI cần dịch vụ, dữ liệu và có thể tốn chi phí. Chỉ chạy khi nằm trong phạm vi tác vụ; không dùng thay cho unit test.

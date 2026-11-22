@@ -396,3 +396,21 @@ async def test_translate_strips_wrapper_tag_echo() -> None:
 # a real Usage/StopReason payload to drive `final_text` through the stream() helper would
 # add real risk of testing the harness rather than the fix, for no extra behavioural
 # coverage). The live-model check below exercises the real streaming endpoint end-to-end.
+
+
+@pytest.mark.asyncio
+async def test_health_reports_git_build_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    """/health tells which branch/commit the running code came from (per-worktree dev stacks
+    and SHA-tagged images), and reports null rather than a guess when it is not set."""
+    fake = FakeRunner()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=create_app(fake)),
+                                 base_url="http://test") as client:
+        monkeypatch.delenv("GIT_BRANCH", raising=False)
+        monkeypatch.delenv("GIT_SHA", raising=False)
+        body = (await client.get("/health")).json()
+        assert body["git_branch"] is None and body["git_sha"] is None
+
+        monkeypatch.setenv("GIT_BRANCH", "feat/x")
+        monkeypatch.setenv("GIT_SHA", "abc1234")
+        body = (await client.get("/health")).json()
+        assert (body["git_branch"], body["git_sha"]) == ("feat/x", "abc1234")

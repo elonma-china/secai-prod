@@ -77,6 +77,15 @@ RUN mkdir -p /app/data /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/p
 
 USER app
 
+# Build provenance, surfaced by /health (git_branch/git_sha). Declared late so changing them
+# only invalidates this layer. Pass at build time:
+#   docker build --build-arg GIT_SHA=$(git rev-parse --short HEAD) \
+#                --build-arg GIT_BRANCH=$(git branch --show-current) ...
+ARG GIT_SHA=""
+ARG GIT_BRANCH=""
+ENV GIT_SHA=${GIT_SHA} \
+    GIT_BRANCH=${GIT_BRANCH}
+
 EXPOSE 8131
 
 # App-is-up probe: /health returns 200 even when LLM/Redis are "degraded".

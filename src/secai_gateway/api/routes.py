@@ -5,6 +5,7 @@ from collections import Counter
 import hashlib
 import json
 import logging
+import os
 import re
 import time
 import unicodedata
@@ -4007,7 +4008,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
         # over a real sample means the guard is bypassed on most requests right now.
         sanitize_stats = verdict_stats()
         status = _health_status(qwen_ok, sanitize_stats)
-        payload: dict[str, Any] = {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats}
+        payload: dict[str, Any] = {"status": status, "message": "secai gateway", "backend": provider_kind, "redis": redis_status, "session_backend": session_backend, "postgres": "disabled", "llm": qwen_ok, "qwen": qwen_ok, "searchsploit": searchsploit_ok, "exploitdb_commit": commit, "input_sanitize": sanitize_stats, **_build_info()}
         if s.health_deep_checks:
             # Real embedding/rerank probes + Qdrant/Neo4j + nightly-KB-sync age (see health_deps).
             # Lets an operator confirm after a restart or .env change that the stack is actually
@@ -4030,6 +4031,14 @@ def register_routes(app: FastAPI, state: Any) -> None:
         return payload
 
     _register_showcase_routes(app, state)
+
+
+def _build_info() -> dict[str, str | None]:
+    """Git branch/SHA the running code was built from (GIT_BRANCH/GIT_SHA env: Dockerfile
+    build-args for images, ``scripts/dev.sh`` for per-worktree dev stacks). Lets anyone check
+    which branch a container is actually serving instead of guessing from its name/tag."""
+    return {"git_branch": os.environ.get("GIT_BRANCH") or None,
+            "git_sha": os.environ.get("GIT_SHA") or None}
 
 
 def _register_showcase_routes(app: FastAPI, state: Any) -> None:
