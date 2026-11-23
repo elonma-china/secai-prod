@@ -79,13 +79,7 @@ load_env() {
     echo ">> dir=$ROOT branch=$GIT_BRANCH sha=$GIT_SHA project=$COMPOSE_PROJECT_NAME url=http://$BIND_IP:$APP_PORT" >&2
 }
 
-# DEV_COMPOSE_OVERRIDE (optional, in .env.worktree): extra compose file for experiments, e.g. the
-# pentestcode-vm eval stack (deploy/pentestcode-vm/dev-gateway.override.yml).
-compose() {
-    local f=(-f compose.dev.yml)
-    [ -z "${DEV_COMPOSE_OVERRIDE:-}" ] || f+=(-f "$DEV_COMPOSE_OVERRIDE")
-    docker compose --env-file "$WT_ENV" -p "$COMPOSE_PROJECT_NAME" "${f[@]}" "$@"
-}
+compose() { docker compose --env-file "$WT_ENV" -p "$COMPOSE_PROJECT_NAME" -f compose.dev.yml "$@"; }
 
 build() {
     docker build -t "$DEV_IMAGE" --build-arg GIT_SHA="$GIT_SHA" --build-arg GIT_BRANCH="$GIT_BRANCH" .

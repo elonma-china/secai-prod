@@ -219,6 +219,9 @@ class Settings(BaseSettings):
     # Cloned source repos (metasploit-framework, nuclei-templates, vulhub, advisory-database,
     # PoC-in-GitHub) live under here; each collector reads its own subdir.
     poc_sources_root: str = "/srv/poc-sources"
+    # Path to the poc-sources tree AS SEEN BY THE ENGINE (named in the exploit-v2 prompt). Default is the
+    # host path prod mounts; the stack package sets /srv/secai-data/poc-sources.
+    agent_poc_sources_path: str = "/home/ict/AIEngines/secai/secai-data/poc-sources"
     # Content-addressed store for artifacts fetched from link-only sources (GitHub PoCs),
     # so serving is fully offline (no runtime internet).
     poc_artifact_store: str = "/srv/poc-store"
