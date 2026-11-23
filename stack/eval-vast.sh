@@ -132,16 +132,17 @@ cmd_up() {
     pick="$(printf '%s' "$offers" | python3 -I -c '
 import json, sys
 cap, ram = float(sys.argv[1]), float(sys.argv[2])
+skip = set(sys.argv[3].split())   # EVAL_EXCLUDE_OFFERS: offer đã thuê mà không lên được ssh
 try:
     d = json.load(sys.stdin)
     d = d if isinstance(d, list) else d.get("offers", [])
 except Exception:
     sys.exit(2)
-ok = [o for o in d if isinstance(o, dict) and isinstance(o.get("dph_total"), (int, float)) and o["dph_total"] <= cap
+ok = [o for o in d if isinstance(o, dict) and str(o.get("id")) not in skip and isinstance(o.get("dph_total"), (int, float)) and o["dph_total"] <= cap
       and (o.get("cpu_ram") or 0) >= ram * 1024 and (o.get("disk_space") or 0) >= 100 and (o.get("inet_down") or 0) >= 200
       and (o.get("reliability2") or o.get("reliability") or 0) >= 0.98]
 if not ok: sys.exit(1)
-b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap" "$ram")" \
+b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap" "$ram" "${EVAL_EXCLUDE_OFFERS:-}")" \
         || die "không có offer nào <= \$$cap/h, RAM >= ${ram}GB, disk >= 100GB, mạng >= 200Mbps, reliability >= 0.98 (hoặc vastai trả dữ liệu lạ); không thuê"
     read -r OFFER PRICE <<<"$pick"
     [[ "$OFFER" =~ ^[0-9]+$ ]] || die "offer id lạ: '$OFFER'"

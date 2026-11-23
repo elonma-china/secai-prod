@@ -641,6 +641,18 @@ def test_up_dry_run_searches_but_never_creates_or_writes(box):
     assert "create instance 2 " in r.stdout  # offer re nhat hop le (0.25), khong phai 0.45 hay offer thieu RAM (id 3)
 
 
+def test_up_dry_run_skips_excluded_offers(box):
+    # offer da thue ma khong len duoc ssh phai bi loai de lan sau khong chon lai chinh no
+    (box.fake / "offers.json").write_text(json.dumps([
+        {"id": 2, "dph_total": 0.20, "cpu_ram": 65536, "disk_space": 200, "inet_down": 900, "reliability2": 0.99},
+        {"id": 5, "dph_total": 0.28, "cpu_ram": 65536, "disk_space": 200, "inet_down": 900, "reliability2": 0.99}]))
+    r = sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_EXCLUDE_OFFERS": "2"})
+    assert r.returncode == 0, r.stderr
+    assert "create instance 5 " in r.stdout and "create instance 2 " not in r.stdout
+    r = sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_EXCLUDE_OFFERS": "2 5"})
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+
+
 def test_up_search_blocks_price_over_cap(box):
     (box.fake / "offers.json").write_text(json.dumps(
         [{"id": 1, "dph_total": 0.45, "cpu_ram": 65536, "disk_space": 200, "inet_down": 900, "reliability2": 0.99}]))
