@@ -81,16 +81,17 @@ def _ready(tmp_path, profiles="exploit,translation,report,review"):
     assert _bs(d, "init").returncode == 0
     tmp_path = d.parent
     root = tmp_path / "data"
-    for s in ("exploitdb", "poc", "poc-sources", "exploitdb-mcp-server"):
+    for s in ("exploitdb", "poc", "poc/store", "poc-sources", "exploitdb-mcp-server"):
         (root / s).mkdir(parents=True)
-    (root / "poc").chmod(0o775)
+    (root / "poc").chmod(0o775)          # nhóm của thư mục = gid hiện tại = VM_SHARED_GID (đặt bên dưới)
+    (root / "poc/store").chmod(0o775)
     tok = tmp_path / "tok"
     tok.mkdir()
     (tok / "tokenizer.json").write_text("{}")
     (tok / "tokenizer_config.json").write_text("{}")
     mm = tmp_path / "max_map_count"
     mm.write_text("262144\n")
-    _set(d, COMPOSE_PROFILES=profiles, DATA_ROOT=root, TOKENIZER_DIR=tok,
+    _set(d, COMPOSE_PROFILES=profiles, DATA_ROOT=root, VM_SHARED_GID=os.getgid(), TOKENIZER_DIR=tok,
          QWEN_BASE_URL="http://llm/v1", QWEN_API_KEY="k", QWEN_MODEL="m",
          EMBEDDING_API_URL="http://e", EMBEDDING_API_KEY="k", EMBEDDING_MODEL="m",
          RERANKER_API_URL="http://r", RERANKER_API_KEY="k", RERANKER_MODEL="m",
@@ -288,3 +289,68 @@ def test_env_example_covers_compose_variables():
                 if "=" in l and not l.startswith("#")}
     internal = {"COMPOSE_PROJECT_NAME"}   # có thể bỏ trống: compose có mặc định
     assert names - declared - internal == set()
+
+
+def _poc_dirs(d):
+    root = Path(_get(d, "DATA_ROOT"))
+    return root / "poc", root / "poc/store"
+
+
+def test_preflight_poc_store_required_and_checked(tmp_path):
+    r = _fails(tmp_path, "poc/store", lambda d: shutil.rmtree(_poc_dirs(d)[1]))
+    assert "poc/store" in r.stderr
+    _fails(tmp_path, "poc/store", lambda d: _poc_dirs(d)[1].chmod(0o755))
+
+
+def test_preflight_group_branch(tmp_path):
+    # nhóm ghi được chỉ khi gid là VM_SHARED_GID (hoặc 999): gid hiện tại khác thì lỗi, trùng thì qua
+    _fails(tmp_path, "poc", VM_SHARED_GID=os.getgid() + 12345)
+    d, extra = _ready(tmp_path)
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_other_writable_is_warning_only(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, VM_SHARED_GID=os.getgid() + 12345)
+    for p in _poc_dirs(d):
+        p.chmod(0o757)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    assert "WARNING" in r.stderr and "chown -R 10001:" in r.stderr
+
+
+def test_preflight_unwritable_hint(tmp_path):
+    r = _fails(tmp_path, "poc/store", lambda d: _poc_dirs(d)[1].chmod(0o755))
+    assert "chown -R 10001:" in r.stderr and "o+w" in r.stderr
+
+
+def test_preflight_requires_ias_server_password(tmp_path):
+    _fails(tmp_path, "IAS_SERVER_PASSWORD", IAS_SERVER_PASSWORD="")
+    d, extra = _ready(tmp_path, "report")
+    _set(d, IAS_SERVER_PASSWORD="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_crlf_env_is_normalised_and_empty_detected(tmp_path):
+    d = _stack(tmp_path)
+    (d / ".env").write_bytes((d / ".env.example").read_bytes().replace(b"\n", b"\r\n"))
+    assert _bs(d, "init").returncode == 0
+    raw = (d / ".env").read_bytes()
+    assert b"\r" not in raw and re.fullmatch(r"[0-9a-f]{64}", _get(d, "NEO4J_PASSWORD"))
+    # CRLF chưa chuẩn hoá: KEY=\r vẫn là trống khi preflight
+    d2, extra = _ready(tmp_path)
+    (d2 / ".env").write_bytes((d2 / ".env").read_bytes().replace(b"REPORT_API_KEY=" + _get(d2, "REPORT_API_KEY").encode(), b"REPORT_API_KEY=").replace(b"\n", b"\r\n"))
+    r = _bs(d2, "preflight", **extra)
+    assert r.returncode != 0 and "REPORT_API_KEY" in r.stderr
+
+
+def test_profiles_with_spaces_and_unknown_warning(tmp_path):
+    d = _stack(tmp_path)
+    shutil.copy(d / ".env.example", d / ".env")
+    _set(d, COMPOSE_PROFILES="exploit, translation ,report, review, bogus")
+    r = _bs(d, "init")
+    assert r.returncode == 0
+    assert _get(d, "IAS_SERVER_POOL").count(",") == 23 and _get(d, "REVIEW_ENABLED") == "true"
+    assert _get(d, "TRANSLATION_UPSTREAM_URL") and "bogus" in r.stderr and "WARNING" in r.stderr
+    p = _bs(d, "preflight")
+    assert "bogus" in p.stderr and "VM_IMAGE" in p.stderr and "REVIEW_UI_IMAGE" in p.stderr

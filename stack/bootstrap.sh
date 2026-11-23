@@ -10,13 +10,14 @@ STACK_DIR="$(cd "${STACK_DIR:-$(dirname "${BASH_SOURCE[0]}")}" && pwd)"
 ENV_FILE="$STACK_DIR/.env"
 CRED_FILE="$STACK_DIR/secrets/review-credentials.json"
 GATEWAY_UID=10001   # uid app trong image gateway
+GATEWAY_GID=999     # gid chính thật của user app trong image gateway (compose thêm nhóm VM_SHARED_GID qua group_add)
 
 die() { echo "bootstrap.sh: $*" >&2; exit 1; }
 
 # Giá trị cuối cùng của KEY trong .env (docker compose cũng lấy dòng sau cùng); bỏ cặp nháy bao ngoài.
 val() {
     local v
-    v="$(grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)" || true
+    v="$(grep -E "^$1=" "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '\r')" || true
     v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
     printf '%s' "$v"
 }
@@ -35,7 +36,15 @@ fill() {
 
 rand_hex() { head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 
-has_profile() { [[ ",$(val COMPOSE_PROFILES)," == *",$1,"* ]]; }
+# Tên profile đã bỏ khoảng trắng quanh dấu phẩy ("exploit, translation" vẫn đúng như compose hiểu).
+profiles() { val COMPOSE_PROFILES | tr ',' '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$' || true; }
+has_profile() { profiles | grep -qxF "$1"; }
+warn_unknown_profiles() {
+    local p
+    while IFS= read -r p; do
+        case "$p" in exploit|translation|report|review) ;; *) echo "WARNING: COMPOSE_PROFILES: profile lạ '$p' (hợp lệ: exploit, translation, report, review)" >&2 ;; esac
+    done < <(profiles)
+}
 
 # Đường dẫn tương đối tính từ thư mục stack (compose cũng tính từ thư mục project).
 abs_path() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$STACK_DIR" "${1#./}" ;; esac; }
@@ -46,6 +55,10 @@ init() {
         (umask 077; cp "$STACK_DIR/.env.example" "$ENV_FILE")
     fi
     chmod 600 "$ENV_FILE"
+    if grep -q $'\r' "$ENV_FILE"; then   # CRLF (sửa trên Windows): chuẩn hoá về LF
+        local crlf; crlf="$(mktemp "$ENV_FILE.XXXXXX")"; tr -d '\r' <"$ENV_FILE" >"$crlf"; chmod 600 "$crlf"; mv "$crlf" "$ENV_FILE"
+    fi
+    warn_unknown_profiles
     local k
     for k in NEO4J_PASSWORD ADMIN_API_KEY LOGS_UI_PASSWORD LOGS_UI_SESSION_SECRET REPORT_API_KEY \
              IAS_SERVER_PASSWORD TRANSLATE_V2_CONVERTER_TOKEN; do
@@ -94,6 +107,21 @@ check_image() {
     [[ "${v##*/}" == *:* || "$v" == *@sha256:* ]] || err "$1: '$v' không có tag; thêm tag cố định"
 }
 
+# Gateway (uid 10001, gid 999 + nhóm VM_SHARED_GID) ghi được $1 khi: chủ là uid 10001 có quyền ghi chủ,
+# hoặc nhóm là 999/VM_SHARED_GID có quyền ghi nhóm, hoặc others-writable (chấp nhận nhưng cảnh báo).
+check_gateway_writable() {
+    local dir="$1" label="$2" uid gid mode shared
+    shared="$(val VM_SHARED_GID)"; shared="${shared:-10100}"
+    read -r uid gid mode < <(stat -c '%u %g %a' "$dir")
+    if [ "$uid" = "$GATEWAY_UID" ] && (( 8#$mode & 8#200 )); then return 0; fi
+    if (( 8#$mode & 8#020 )) && { [ "$gid" = "$GATEWAY_GID" ] || [ "$gid" = "$shared" ]; }; then return 0; fi
+    if (( 8#$mode & 8#002 )); then
+        echo "WARNING: $label: $dir (uid $uid gid $gid mode $mode) ai cũng ghi được; nên siết: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir" >&2
+        return 0
+    fi
+    err "$label: $dir (uid $uid gid $gid mode $mode) gateway (uid $GATEWAY_UID, gid $GATEWAY_GID, nhóm $shared) không ghi được; chạy: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir  (hoặc sudo chmod -R o+w $dir)"
+}
+
 preflight() {
     [ -f "$ENV_FILE" ] || die "chưa có $ENV_FILE: chạy '$0 init' trước"
     local k
@@ -101,6 +129,7 @@ preflight() {
              RERANKER_API_URL RERANKER_API_KEY RERANKER_MODEL NEO4J_PASSWORD; do
         need "$k" "nhập tay"
     done
+    warn_unknown_profiles
     check_image GATEWAY_IMAGE
 
     local root; root="$(val DATA_ROOT)"
@@ -110,17 +139,15 @@ preflight() {
         for k in exploitdb poc poc-sources; do
             [ -d "$root/$k" ] || err "DATA_ROOT: thiếu thư mục $root/$k (giải nén gói dữ liệu)"
         done
-        if [ -d "$root/poc" ]; then
-            local owner mode; owner="$(stat -c %u "$root/poc")"; mode="$(stat -c %a "$root/poc")"
-            if ! { [ "$owner" = "$GATEWAY_UID" ] && (( 8#$mode & 8#200 )) || (( 8#$mode & 8#020 )) || (( 8#$mode & 8#002 )); }; then
-                err "DATA_ROOT: $root/poc (uid $owner, mode $mode) gateway uid $GATEWAY_UID không ghi được; chạy: sudo chown -R $GATEWAY_UID $root/poc  (hoặc chmod -R g+w với nhóm $GATEWAY_UID)"
-            fi
-        fi
+        if [ -d "$root/poc" ]; then check_gateway_writable "$root/poc" DATA_ROOT; fi
+        if [ ! -d "$root/poc/store" ]; then err "DATA_ROOT: thiếu thư mục $root/poc/store (gói dữ liệu cung cấp, hoặc mkdir; không có thì Docker tạo root-owned và gateway không ghi được PoC)"
+        else check_gateway_writable "$root/poc/store" DATA_ROOT; fi
     fi
 
     if has_profile exploit; then
         check_image VM_IMAGE
         [ -n "$root" ] && [ -d "$root/exploitdb-mcp-server" ] || err "DATA_ROOT: thiếu ${root:-<DATA_ROOT>}/exploitdb-mcp-server (nằm NGOÀI secai-data trong cây nguồn; gói dữ liệu (data package) phải cung cấp)"
+        need IAS_SERVER_PASSWORD "để trống thì engine không xác thực; init sinh"
         need IAS_SERVER_POOL "chạy '$0 init' sau khi đặt VM_SLOTS"
         local want; want="$(bash "$STACK_DIR/lib/pool.sh" "$(val VM_SLOTS)" 2>/dev/null)" || err "VM_SLOTS: '$(val VM_SLOTS)' không hợp lệ (số nguyên 1..99)"
         if [ -n "${want:-}" ] && [ -n "$(val IAS_SERVER_POOL)" ] && [ "$(val IAS_SERVER_POOL)" != "$want" ]; then
