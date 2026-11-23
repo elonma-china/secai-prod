@@ -52,6 +52,7 @@ x-translation-env: &translation-env
   EXEC_ENABLED: "false"
   VERIFY_ENABLED: "false"
   WEB_SEARCH_ENABLED: "false"
+  REVIEW_ENABLED: "false"   # .env chung có thể bật review; chỉ gateway mount review-credentials.json
   MULTILANG_BACKEND: specialist
   MULTILANG_ENABLE_AR: "true"
   MULTILANG_ENABLE_DE: "true"
@@ -337,6 +338,7 @@ services:
     environment:
       AIRGAP: "true"
       REPORT_FEATURE_ENABLED: "true"
+      REVIEW_ENABLED: "false"   # xem x-translation-env
       REPORT_DB_PATH: /srv/reports/reports.db
       REPORT_API_KEY: ${REPORT_API_KEY:-}
       GATEWAY_DB_PATH: /app/data/gateway.db

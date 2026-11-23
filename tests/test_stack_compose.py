@@ -215,3 +215,12 @@ def test_shared_gid_for_gateway_and_vms():
     assert "${VM_SHARED_GID:-10100}" in services()["gateway"]["group_add"]
     for s in services("exploit").values():
         assert s["environment"]["VM_SHARED_GID"] == "${VM_SHARED_GID:-10100}"
+
+
+def test_review_only_on_gateway():
+    # .env chung có REVIEW_ENABLED=true (init đặt khi bật review); service khác không mount review-credentials.json
+    # nên phải ghi đè false, nếu không chúng chết lúc khởi động (load_credentials ValueError) — thấy ở smoke 2026-11-23.
+    c = load_compose()["services"]
+    for n, s in c.items():
+        if n != "gateway" and s.get("image") == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}":
+            assert s["environment"].get("REVIEW_ENABLED") == "false", n
