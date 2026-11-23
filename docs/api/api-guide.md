@@ -408,19 +408,18 @@ hình FE "Sinh PoC (v2)" (`ExploitV2Screen.tsx`).
 - `run_id` (string\|null) — session id phía pentestcode; dùng làm `run_id` khi trả lời `question`
   ([§7.2](#72-post-aiexploit-v2reply)).
 
-**Gói BÀN GIAO khi `ok:false` (mọi lý do thất bại).** Chỉ thêm, ca `ok:true` không đổi:
-- Ngay **trước** `final`, gateway phát **một event `log`** có khối văn bản `══ BÀN GIAO (chưa khai thác được) ══`:
-  thông tin CVE (ID, CVSS, ngày công bố, mô tả), mức đã đạt (STAGE), lý do dừng, dấu vết target (tiêu đề trang,
-  header `Server`) để đối chiếu với sản phẩm trong CVE, các lệnh đã thử, **code nháp có nhãn "CHƯA chạy ra bằng
-  chứng"** (tối đa 60 dòng), và các việc nên làm tiếp (đánh số). FE chỉ cần hiển thị `log` trong terminal như
-  bình thường (giữ nguyên xuống dòng) là người dùng thấy được.
-- `reason` trong `final` rút còn **một dòng**: "Chưa khai thác được <CVE> trên <target>: <lý do>. Xem mục BÀN GIAO
-  trong Terminal để làm tiếp."
-- Ba trường mới trong `final` (chỉ có khi `ok:false`) cho FE muốn hiển thị riêng:
+**Gói BÀN GIAO khi `ok:false` (mọi lý do thất bại).** Chỉ thêm trường, ca `ok:true` không đổi. Terminal chỉ dành cho
+log hệ thống nên gateway **không** in khối bàn giao thành event `log`.
+- `reason` thành **một đoạn tóm tắt** (FE hiện tại chỉ có ô Reason ở khối kết quả khi thất bại, không xuống dòng, không
+  có khối CVE riêng): CVE là gì (ID · CVSS — câu đầu của mô tả) + mức đạt (STAGE) + lý do dừng + dấu vết target
+  (tiêu đề trang, header `Server`) để tự đối chiếu "lab sai" + việc nên làm tiếp `(1) … (2) …`; nhắc code nháp ở ô Code.
+  Tối đa 900 ký tự.
+- Ba trường mới trong `final` (chỉ khi `ok:false`) cho FE muốn hiển thị riêng có cấu trúc:
   - `cve_info` — `{"id","description","cvss","published","source":"kb"|"nvd"|null}` (KB nội bộ trước, NVD bù).
   - `failure_code` — `INVALID_INPUT` · `TARGET_UNREACHABLE` · `TIMEOUT` · `ENGINE_ERROR` · `AGENT_STUCK` · `NO_IMPACT`.
-  - `handoff` — cùng nội dung khối BÀN GIAO ở trên (văn bản thuần).
-- Gateway **không** tự kết luận "lab sai": dấu vết target chỉ được đặt cạnh mô tả CVE để người dùng tự đối chiếu.
+  - `handoff` — khối văn bản đầy đủ `══ BÀN GIAO ══`: CVE, mức đạt, lý do dừng, dấu vết target, các lệnh đã thử,
+    **code nháp có nhãn "CHƯA chạy ra bằng chứng"** (≤60 dòng), việc nên làm tiếp (đánh số).
+- Gateway **không** tự kết luận "lab sai": dấu vết target chỉ đặt cạnh mô tả CVE để người dùng tự đối chiếu.
 
 > ⚠️ Stream gửi dòng keepalive `: ka\n\n` (comment SSE, không phải JSON) mỗi 20s khi agent chưa có
 > event mới, để giữ tunnel Cloudflare không timeout ở 100s. Parser FE phải bỏ qua dòng bắt đầu bằng
