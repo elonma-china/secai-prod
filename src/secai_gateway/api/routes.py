@@ -3902,7 +3902,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                             extra_requirements=body.extra_requirements,
                             goal=body.goal, mechanism=body.mechanism,
                             ias_server_pool=state.settings.ias_server_pool,
-                            ias_server_url=state.settings.ias_server_url):
+                            ias_server_url=state.settings.ias_server_url,
+                            ias_server_password=state.settings.ias_server_password):
                         await ev_queue.put(ev)
                 except Exception:
                     logger.exception("exploit-v2 stream failed target=%s cve=%s",
@@ -3967,7 +3968,8 @@ def register_routes(app: FastAPI, state: Any) -> None:
                {"user_id": body.user_id, "answer_len": len(body.answer)})
         slot = ias_pool.slot_for_run(body.run_id)
         url = slot["url"] if slot else state.settings.ias_server_url
-        await reply_exploit_v2_question(url, body.question_id, body.answer)
+        await reply_exploit_v2_question(url, body.question_id, body.answer,
+                                        state.settings.ias_server_password)
         return {"ok": True}
 
     @app.get("/health")

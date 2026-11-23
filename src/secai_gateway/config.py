@@ -397,6 +397,8 @@ class Settings(BaseSettings):
     # tái dùng verify_allow_all/verify_allowed_targets, giống mọi exploit endpoint khác.
     ias_server_url: str = ""
     ias_server_timeout_s: int = 900
+    # Mật khẩu Basic auth của engine (OPENCODE_SERVER_PASSWORD phía engine). Rỗng = không gửi auth (prod hiện tại).
+    ias_server_password: str = ""
     # ── pool nhiều instance @ias/server để chạy nhiều exploit-v2 ĐỒNG THỜI ─────
     # Rỗng = 1 slot duy nhất dùng ias_server_url (hành vi cũ, không đổi). Có giá trị =
     # "url|home" cách nhau bằng dấu phẩy, mỗi slot là 1 process bun riêng với HOME riêng
