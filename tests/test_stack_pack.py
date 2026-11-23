@@ -246,3 +246,24 @@ def test_pack_data_excludes_secrets_and_git_from_mcp_tarball(tmp_path):
     assert "7 points" in (out / "MANIFEST.md").read_text()
     assert subprocess.run(["sha256sum", "-c", "--quiet", "SHA256SUMS"], cwd=out).returncode == 0
     assert "-X DELETE" in log.read_text()
+
+
+def test_pack_data_accepts_relative_src_root(tmp_path):
+    """tar -C <work> ... -C <src>: src tương đối từng bị tính từ <work> nên pack chết ở poc.tar.zst."""
+    src = _fake_src(tmp_path)
+    (src / "poc" / "store" / "a").write_text("a")
+    binp = tmp_path / "bin"; binp.mkdir()
+    (binp / "curl").write_text(
+        '#!/bin/sh\ncase "$*" in\n'
+        '  *"-X POST"*) echo \'{"result":{"name":"snap1"}}\' ;;\n'
+        '  *"-X DELETE"*) ;;\n'
+        '  *"-o "*) while [ $# -gt 0 ]; do [ "$1" = -o ] && echo snap > "$2"; shift; done ;;\n'
+        '  *) echo \'{"result":{"points_count":7}}\' ;;\n'
+        'esac\n')
+    (binp / "curl").chmod(0o755)
+    r = subprocess.run(["bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", "neo4j.dump", "--mcp-dir", "exploitdb-mcp-server",
+                        "src", "out"], cwd=tmp_path, text=True, capture_output=True,
+                       env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
+    assert r.returncode == 0, r.stderr
+    names = subprocess.run(f"zstd -dc {tmp_path}/out/poc.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
+    assert "poc/catalog.db" in names and "poc/store/a" in names

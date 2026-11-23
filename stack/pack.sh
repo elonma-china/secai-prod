@@ -70,6 +70,7 @@ pack_data() {
   for p in "$src/exploitdb" "$src/poc/catalog.db" "$src/poc/store" "$src/poc-sources" "$mcp"; do [ -e "$p" ] || missing+=("$p"); done
   if [ -n "$ndir" ]; then [ -d "$ndir/databases" ] || missing+=("$ndir/databases"); else [ -f "$ndump" ] || missing+=("$ndump"); fi
   [ ${#missing[@]} -eq 0 ] || die "missing source: ${missing[*]}"
+  src=$(cd "$src" && pwd)   # tar -C "$work" ... -C "$src": đường tương đối sẽ bị tính từ $work
   if [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then die "out_dir not empty: $out"; fi
   [ ! -e "$out" ] && OUT_NEW=1 || OUT_NEW=0
   mkdir -p "$out/qdrant" "$out/neo4j"; OUT=$(cd "$out" && pwd); out=$OUT
