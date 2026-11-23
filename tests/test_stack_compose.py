@@ -66,7 +66,14 @@ def test_config_validates_without_dotenv(tmp_path):
     if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0:
         pytest.skip("docker compose plugin not available")
     assert not (COMPOSE.parent / ".env").exists(), "stack/.env must not exist for this test"
-    env = {**os.environ, "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path)}
+    env = {**os.environ, "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x"}
     r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), "config", "-q"],
                        env=env, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_no_default_secrets_or_unguarded_data_root():
+    text = COMPOSE.read_text()
+    assert "secai2026" not in text
+    assert "NEO4J_PASSWORD:?" in text
+    assert text.count("${DATA_ROOT") == text.count("${DATA_ROOT:?"), "every DATA_ROOT must use the :? form"
