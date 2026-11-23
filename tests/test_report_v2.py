@@ -748,3 +748,46 @@ def test_global_edit_is_not_narrowed_by_an_example_section_name():
     scoped = preserve_other_sections(proposed, previous, sections,
         'Không sửa toàn bộ báo cáo; chỉ sửa Tóm tắt.')
     assert scoped.endswith('## Kết luận\nNội dung dài.')
+
+
+def _capture_model_request(monkeypatch, settings):
+    import asyncio
+    import httpx
+    seen = {}
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+        async def post(self, url, **kwargs):
+            seen['body'] = kwargs['json']
+            return httpx.Response(200, json={'choices': [{'finish_reason': 'stop', 'message': {'content': 'ok'}}]}, request=httpx.Request('POST', url))
+
+    def factory(**kwargs):
+        seen['timeout'] = kwargs.get('timeout')
+        return FakeClient()
+
+    monkeypatch.setattr(api.httpx, 'AsyncClient', factory)
+    asyncio.run(api.generate_text('system', 'user', settings))
+    return seen
+
+
+def test_model_request_disables_thinking_for_local_model(monkeypatch):
+    # Reasoning models (Qwen3.x) otherwise write their chain of thought into `content` and exhaust max_tokens.
+    seen = _capture_model_request(monkeypatch, Settings())
+    assert seen['body']['chat_template_kwargs'] == {'enable_thinking': False}
+
+
+def test_model_request_omits_thinking_kwarg_for_deepseek(monkeypatch):
+    # DeepSeek rejects the chat-template kwarg (see agent/providers.py).
+    seen = _capture_model_request(monkeypatch, Settings(llm_provider='deepseek', airgap=False, deepseek_api_key='k'))
+    assert 'chat_template_kwargs' not in seen['body']
+
+
+def test_model_output_budget_and_timeout_come_from_settings(monkeypatch):
+    seen = _capture_model_request(monkeypatch, Settings(report_max_tokens=1234, report_llm_timeout_s=7))
+    assert seen['body']['max_tokens'] == 1234
+    assert seen['timeout'] == 7

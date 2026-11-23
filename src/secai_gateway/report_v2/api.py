@@ -90,10 +90,14 @@ async def generate_text(system: str, user: str, settings: Settings) -> str:
         base_url, api_key, model = settings.llm_base_url, settings.llm_api_key, settings.llm_model
     body = {
         'model': model, 'messages': [{'role': 'system', 'content': system}, {'role': 'user', 'content': user}],
-        'temperature': 0.2, 'max_tokens': 3000,
+        'temperature': 0.2, 'max_tokens': settings.report_max_tokens,
     }
+    if settings.llm_provider.lower() != 'deepseek':
+        # Reasoning models otherwise put their chain of thought into `content` and exhaust max_tokens
+        # (502 "output was truncated"); DeepSeek rejects this kwarg (see agent/providers.py).
+        body['chat_template_kwargs'] = {'enable_thinking': False}
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=settings.report_llm_timeout_s) as client:
             response = await client.post(base_url.rstrip('/') + '/chat/completions',
                                          headers={'Authorization': f'Bearer {api_key}'}, json=body)
             response.raise_for_status()
