@@ -26,7 +26,12 @@ TEMPLATE="${EVAL_TEMPLATE:-98fff0d0a96048e83c19da789fe7a979}"
 REMOTE=/opt/secai-stack
 HARD_DENY=62088958
 
-die() { echo "eval-vast: $*" >&2; exit 1; }
+KEYFILE="${XDG_CONFIG_HOME:-$HOME/.config}/vastai/vast_api_key"   # nơi timer (systemd --user) và vastai đọc khoá tài khoản
+die() {
+    echo "eval-vast: $*" >&2
+    [ ! -d "$SD" ] || printf '%s eval-vast: %s\n' "$(date '+%F %T')" "$*" >>"$SD/ALERT.txt" 2>/dev/null || true
+    exit 1
+}
 say() { echo "eval-vast: $*"; }
 nap() { sleep "$POLL"; }
 need_cmds() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "thiếu lệnh '$c' trong PATH"; done; }
@@ -35,12 +40,13 @@ need_cmds() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die 
 sget() { python3 -I -c 'import json,sys; v=json.load(open(sys.argv[1])).get(sys.argv[2],""); print(v if not isinstance(v,(list,dict)) else json.dumps(v))' "$SD/state.json" "$1" 2>/dev/null; }
 # sset KEY=JSONVALUE... -> ghi vào state.json (nguyên tử)
 sset() { python3 -I - "$SD/state.json" "$@" <<'PY'
-import json, os, sys
+import json, os, sys, tempfile
 p = sys.argv[1]
 d = json.load(open(p)) if os.path.exists(p) else {}
 for kv in sys.argv[2:]:
     k, v = kv.split("=", 1); d[k] = json.loads(v)
-t = p + ".tmp"; open(t, "w").write(json.dumps(d)); os.chmod(t, 0o600); os.replace(t, p)
+fd, t = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".state."); os.write(fd, json.dumps(d).encode()); os.close(fd)
+os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
 # find_by_label LABEL -> in ID các instance mang đúng label, đi hết các trang next_token; rc != 0 nếu không đọc được
@@ -148,10 +154,26 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
     [ -f "$KEY" ] || die "không thấy khoá ssh $KEY (EVAL_SSH_KEY)"
     [ -z "${EVAL_CONTAINER_API_KEY:-}" ] || refuse_if_account_key "$EVAL_CONTAINER_API_KEY"
     need_cmds ssh scp rsync systemd-run git flock
+    # Timer systemd --user chỉ có HOME (không có VAST_API_KEY của shell này): vastai ở đó đọc đúng $KEYFILE. Khoá env khác tệp, hay tệp
+    # thiếu => timer 401 mãi, hoặc (khác tài khoản) "show instance" trả null = "đã huỷ" giả. Nên bắt buộc: có tệp, và env (nếu có) = tệp.
+    [ -r "$KEYFILE" ] && [ -n "$(tr -d '[:space:]' <"$KEYFILE")" ] || die "không đọc được khoá Vast $KEYFILE (timer deadline dùng tệp này); chạy 'vastai set api-key' rồi thử lại"
+    if [ -n "${VAST_API_KEY:-}" ] && [ "$VAST_API_KEY" != "$(tr -d '[:space:]' <"$KEYFILE")" ]; then
+        die "VAST_API_KEY trong môi trường khác khoá trong $KEYFILE: timer sẽ dùng khoá ở tệp (có thể là tài khoản khác). Bỏ VAST_API_KEY hoặc đồng bộ tệp"
+    fi
+    # .env sẽ rời máy này: không được chứa khoá tài khoản Vast (khoá đọc trong python qua tệp/môi trường, không qua argv, không in).
+    python3 -I - "$EVAL_ENV_FILE" "$KEYFILE" <<'PY' || die "$EVAL_ENV_FILE chứa khoá API tài khoản Vast: từ chối đẩy sang máy thuê (gỡ nó khỏi tệp)"
+import os, sys
+text = open(sys.argv[1], errors="replace").read()
+keys = {os.environ.get("VAST_API_KEY", "").strip(), open(sys.argv[2]).read().strip()}
+sys.exit(1 if any(len(k) >= 8 and k in text for k in keys) else 0)
+PY
+    local acct
+    acct="$(vastai show user --raw </dev/null 2>/dev/null | python3 -I -c 'import json,sys
+print(int(json.load(sys.stdin)["id"]))' 2>/dev/null)" || die "không đọc được danh tính tài khoản (vastai show user); không thuê"
     mkdir -p "$SD"; chmod 700 "$SD"
     exec 9>"$SD/.lock"; flock -n 9 || die "đang có một 'up' khác chạy ($SD/.lock)"
     if [ -f "$SD/state.json" ]; then
-        [ -n "$(sget destroyed_at)" ] || die "state.json cũ chưa huỷ (id '$(sget id)', label $(sget label)); chạy 'down' hoặc 'status' trước"
+        [ -n "$(sget destroyed_at)$(sget abandoned_at)" ] || die "state.json cũ chưa huỷ (id '$(sget id)', label $(sget label)); chạy 'down' hoặc 'status' trước"
         mv "$SD/state.json" "$SD/state-$(date +%s).json"; rm -f "$SD/instance.id"
     fi
     [ -f "$SD/protected-instances" ] || (umask 077; echo "$HARD_DENY" >"$SD/protected-instances")
@@ -159,15 +181,16 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
 
     # --- Chuẩn bị TRƯỚC khi thuê: trap, state "pending" (có label, chưa có ID) và timer deadline. Nếu create thành công mà ID không rõ,
     # timer/trap vẫn huỷ được qua destroy-eval.sh (tra theo label). Không có deadline thì không thuê.
-    DONE=0; CREATING=0; trap 'on_exit_up' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
+    DONE=0; CREATING=0; PREPARED=1; trap 'on_exit_up' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
     local now; now="$(date +%s)"
     sset 'id=""' "label=\"$label\"" "created_at=$now" "deadline=$((now + hours * 3600))" "price=$PRICE" \
-         "max_dph=$cap" "max_hours=$hours" "timers=[]" "pending=true" || die "không ghi được state.json"
+         "max_dph=$cap" "max_hours=$hours" "timers=[]" "pending=true" "account_id=\"$acct\"" || die "không ghi được state.json"
     local tag unit timers=() secs
     for tag in B D; do
         secs=$((hours * 3600)); [ "$tag" = D ] && secs=$((secs + 600))
         unit="secai-eval-destroy-$tag-$(date +%Y%m%d)-$(head -c3 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-        local envs=(--setenv=STACK_EVAL_DIR="$SD" --setenv=PATH="$PATH")
+        local envs=(--setenv=STACK_EVAL_DIR="$SD" --setenv=PATH="$PATH" --setenv=HOME="$HOME" --setenv=EVAL_EXPECT_LABEL="$label")
+        [ -z "${XDG_CONFIG_HOME:-}" ] || envs+=(--setenv=XDG_CONFIG_HOME="$XDG_CONFIG_HOME")
         [ -z "${STACK_EVAL_PROTECTED:-}" ] || envs+=(--setenv=STACK_EVAL_PROTECTED="$STACK_EVAL_PROTECTED")
         # --on-unit-active: lặp lại mỗi 10 phút (huỷ thất bại/chưa chứng minh được thì thử lại); destroy-eval.sh tự dừng timer khi thành công.
         systemd-run --user --unit="$unit" --on-active="$secs" --on-unit-active=600 "${envs[@]}" "$HERE/destroy-eval.sh" --force-deadline >/dev/null 2>&1 \
@@ -200,9 +223,16 @@ except Exception: pass' 2>/dev/null)"
     say "đã thuê instance $ID ($label); ID ghi vào $SD/instance.id"
 
     # --- chờ máy chạy + ssh
-    local host="" port="" n info
+    local host="" port="" n info row rprice priced=0
     for n in $(seq 1 60); do
-        info="$(vshow "$ID" | awk -F'\t' '$1 == "FIELDS" && $4 == "running" && $5 != "" { print $5, $6 }')" || info=""
+        row="$(vshow "$ID")" || row=""
+        rprice="$(awk -F'\t' '$1 == "FIELDS" { print $3 }' <<<"$row")"
+        if [ "$priced" = 0 ] && [ -n "$rprice" ]; then   # giá THẬT của instance sau create (offer có thể đã đổi giá)
+            priced=1
+            awk -v p="$rprice" -v c="$cap" 'BEGIN { exit !(p ~ /^[0-9.]+$/ && p + 0 <= c + 1e-9) }' \
+                || die "giá thật của instance $ID là \$$rprice/h > cap \$$cap/h: huỷ (qua destroy-eval; nếu nó từ chối vì > 1.5 x cap thì HUỶ TAY trên console Vast, ID $ID)"
+        fi
+        info="$(awk -F'\t' '$1 == "FIELDS" && $4 == "running" && $5 != "" { print $5, $6 }' <<<"$row")"
         [ -z "$info" ] || break
         nap
     done
@@ -263,12 +293,20 @@ REMOTE_PROVISION
 on_exit_up() {
     local rc=$?
     trap - EXIT
+    if [ "${CREATING:-0}" = 0 ] && [ "${PREPARED:-0}" = 1 ] && [ "${DONE:-0}" != 1 ] && [ -f "$SD/state.json" ]; then
+        # Chưa thuê gì (lỗi lúc chuẩn bị/đặt timer): dừng timer đã đặt, bỏ state pending để lần `up` sau không bị chặn 3 giờ.
+        local u
+        for u in $(python3 -I -c 'import json,sys; print(" ".join(x for x in json.load(open(sys.argv[1])).get("timers", []) if isinstance(x, str)))' "$SD/state.json" 2>/dev/null); do
+            systemctl --user stop "$u.timer" >/dev/null 2>&1 || true
+        done
+        mv "$SD/state.json" "$SD/state-aborted-$(date +%s).json" 2>/dev/null || true
+    fi
     if [ "${CREATING:-0}" = 1 ] && [ "${DONE:-0}" != 1 ]; then
         echo "!!!!!! up THẤT BẠI sau khi (có thể) đã thuê instance: HUỶ NGAY !!!!!!" >&2
         STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; local d=$?
         case "$d" in
             0) ;;
-            4) echo "eval-vast: chưa thấy instance nào theo label; timer lặp vẫn tra tới deadline." >&2 ;;
+            4|6) echo "eval-vast: chưa thấy instance nào theo label; timer lặp vẫn chạy. KIỂM CONSOLE Vast (label $(sget label)); chỉ khi chắc không có: destroy-eval.sh --abandon-pending" >&2 ;;
             *) echo "!!!!!! HUỶ CHƯA XONG (rc=$d): kiểm console Vast ngay (instance '$(sget id)', label $(sget label)); timer lặp vẫn chạy !!!!!!" >&2 ;;
         esac
     fi
@@ -319,6 +357,7 @@ cmd_down() { exec env STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; }
 
 cmd_status() {
     need_cmds vastai python3
+    if [ -s "$SD/ALERT.txt" ]; then echo "=== ALERT ($SD/ALERT.txt) ==="; tail -n 20 "$SD/ALERT.txt"; echo "=== hết ALERT ==="; fi
     [ -f "$SD/state.json" ] || die "chưa có state ($SD/state.json)"
     local id label price deadline now row
     id="$(sget id)"; label="$(sget label)"; price="$(sget price)"; deadline="$(sget deadline)"; now="$(date +%s)"

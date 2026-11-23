@@ -10,8 +10,12 @@
 # (đã phân trang, rỗng/lỗi/id kiểu khác) không bao giờ là bằng chứng. Thử lại tối đa STACK_EVAL_DESTROY_RETRIES (5) lần, chờ
 # STACK_EVAL_DESTROY_WAIT giây (10). Chưa chứng minh biến mất: exit 1, timer lặp (eval-vast.sh đặt) vẫn chạy. Chứng minh rồi: exit 0
 # (idempotent), dừng timer, ghi destroyed_at.
+# Danh tính tài khoản: state.json ghi account_id (id người dùng Vast, không phải khoá) lúc `up`; trước mọi thao tác phải khớp
+# `vastai show user --raw` hiện tại. Lệch/không đọc được/state không có account_id => KHÔNG chứng minh được gì (show instance chỉ thấy
+# instance của chính tài khoản, tài khoản khác sẽ trả null = "gone" giả): exit 5, giữ timer. Mọi từ chối/thất bại ghi vào $SD/ALERT.txt.
+# --abandon-pending: bỏ state pending (chưa bao giờ thấy ID) sau khi operator đã kiểm console; dừng timer, ghi abandoned_at.
 # state.json có pending=true và id rỗng (create chưa trả ID): tìm theo label (phân trang, đúng một khớp); không thấy: exit 4 (timer
-# tiếp tục) cho tới deadline, qua deadline thì exit 0 và dừng timer. Không có state.json mà có instance.id: vẫn kiểm prefix label + giá.
+# tiếp tục) trước deadline; qua deadline vẫn không thấy: exit 6 + cảnh báo lớn, GIỮ timer (không bao giờ tự dừng dựa trên danh sách). Không có state.json mà có instance.id: vẫn kiểm prefix label + giá.
 # Không đụng khoá API tài khoản Vast: vastai tự đọc ~/.config/vastai/vast_api_key.
 set -uo pipefail
 
@@ -20,17 +24,20 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SD="${STACK_EVAL_DIR:-$REPO/local/stack-eval}"
 PROTECTED="${STACK_EVAL_PROTECTED:-$SD/protected-instances}"
 RETRIES="${STACK_EVAL_DESTROY_RETRIES:-5}"
+LOCK_WAIT="${STACK_EVAL_LOCK_WAIT:-300}"
 WAIT="${STACK_EVAL_DESTROY_WAIT:-10}"
 
-refuse() { echo "!!!!!! DESTROY-EVAL REFUSED (không huỷ gì): $* !!!!!!" >&2; exit 3; }
-[ "$#" -eq 1 ] && { [ "$1" = "--yes" ] || [ "$1" = "--force-deadline" ]; } \
-    || { echo "usage: destroy-eval.sh --yes|--force-deadline (không nhận ID; ID lấy từ state.json)" >&2; exit 2; }
+alert() { [ -d "$SD" ] && printf '%s destroy-eval: %s\n' "$(date '+%F %T')" "$*" >>"$SD/ALERT.txt" || true; }
+refuse() { alert "REFUSED: $*"; echo "!!!!!! DESTROY-EVAL REFUSED (không huỷ gì): $* !!!!!!" >&2; exit 3; }
+[ "$#" -eq 1 ] && { [ "$1" = "--yes" ] || [ "$1" = "--force-deadline" ] || [ "$1" = "--abandon-pending" ]; } \
+    || { echo "usage: destroy-eval.sh --yes|--force-deadline|--abandon-pending (không nhận ID; ID lấy từ state.json)" >&2; exit 2; }
+MODE="$1"
 [[ "$RETRIES" =~ ^[1-9][0-9]*$ ]] || refuse "STACK_EVAL_DESTROY_RETRIES không hợp lệ"
 
-ID=""; LABEL=""; CAP=0.30; TIMERS=""; PENDING=0; DEADLINE=0
+ID=""; LABEL=""; CAP=0.30; TIMERS=""; PENDING=0; DEADLINE=0; ACCOUNT=""
 if [ -f "$SD/state.json" ]; then
     # i:<id> l:<label> m:<max_dph> t:<timers> p:<pending> d:<deadline>; id chỉ nhận chuỗi/số nguyên, kiểu khác thành BAD.
-    IFS=$'\t' read -r si sl sm st sp sd < <(python3 -I - "$SD/state.json" <<'PY'
+    IFS=$'\t' read -r si sl sm st sp sd sa < <(python3 -I - "$SD/state.json" <<'PY'
 import json, sys
 try:
     d = json.load(open(sys.argv[1]))
@@ -41,18 +48,23 @@ try:
     except (TypeError, ValueError): m = 0.30
     try: dl = int(d.get("deadline", 0))
     except (TypeError, ValueError): dl = 0
+    a = d.get("account_id"); a = str(a) if isinstance(a, (int, str)) and not isinstance(a, bool) else ""
     t = " ".join(x for x in d.get("timers", []) if isinstance(x, str)) if isinstance(d.get("timers", []), list) else ""
-    print("\t".join(["i:" + i, "l:" + l, "m:%s" % m, "t:" + t, "p:%d" % (d.get("pending") is True), "d:%d" % dl]).replace("\n", " "))
+    print("\t".join(["i:" + i, "l:" + l, "m:%s" % m, "t:" + t, "p:%d" % (d.get("pending") is True), "d:%d" % dl, "a:" + a]).replace("\n", " "))
 except Exception:
-    print("i:BAD\tl:\tm:0.30\tt:\tp:0\td:0")
+    print("i:BAD\tl:\tm:0.30\tt:\tp:0\td:0\ta:")
 PY
     ) || refuse "đọc state.json lỗi"
-    ID="${si#i:}"; LABEL="${sl#l:}"; CAP="${sm#m:}"; TIMERS="${st#t:}"; PENDING="${sp#p:}"; DEADLINE="${sd#d:}"
+    ID="${si#i:}"; LABEL="${sl#l:}"; CAP="${sm#m:}"; TIMERS="${st#t:}"; PENDING="${sp#p:}"; DEADLINE="${sd#d:}"; ACCOUNT="${sa#a:}"
+    [ -z "${EVAL_EXPECT_LABEL:-}" ] || [ "$EVAL_EXPECT_LABEL" = "$LABEL" ] \
+        || refuse "timer gắn với label '$EVAL_EXPECT_LABEL' nhưng state.json là '$LABEL' (state của lần chạy khác); không huỷ"
 elif [ -f "$SD/instance.id" ]; then
     ID="$(tr -d '[:space:]' <"$SD/instance.id")"   # không có state: vẫn kiểm prefix label + giá mặc định bên dưới
 else
     refuse "không có $SD/state.json hay instance.id (không biết huỷ ID nào)"
 fi
+exec 8>"$SD/.destroy.lock"
+flock -w "$LOCK_WAIT" 8 || { alert "không lấy được khoá $SD/.destroy.lock"; echo "destroy-eval: một destroy-eval khác đang chạy; thử lại sau" >&2; exit 7; }
 
 # list_by_label LABEL -> in ID các instance mang đúng label (đi hết các trang next_token); rc != 0 nếu không đọc được.
 list_by_label() {
@@ -85,14 +97,38 @@ stop_timers() {
         systemctl --user stop "$u.timer" >/dev/null 2>&1 || true
     done
 }
-mark_destroyed() {
+mark_state() {   # mark_state KEY=VALUE...: ghi nguyên tử (tệp tạm tên riêng rồi rename)
     [ -f "$SD/state.json" ] || return 0
-    python3 -I - "$SD/state.json" <<'PY' >/dev/null 2>&1 || true
-import json, os, sys, time
-p = sys.argv[1]; d = json.load(open(p)); d.setdefault("destroyed_at", int(time.time()))
-t = p + ".tmp"; open(t, "w").write(json.dumps(d)); os.chmod(t, 0o600); os.replace(t, p)
+    python3 -I - "$SD/state.json" "$@" <<'PY' >/dev/null 2>&1 || true
+import json, os, sys, tempfile, time
+p = sys.argv[1]; d = json.load(open(p))
+for kv in sys.argv[2:]:
+    k, v = kv.split("=", 1)
+    if k.endswith("_at") and d.get(k): continue
+    d[k] = int(time.time()) if v == "NOW" else (False if v == "false" else v)
+fd, t = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".state."); os.write(fd, json.dumps(d).encode()); os.close(fd)
+os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
+
+if [ "$MODE" = "--abandon-pending" ]; then
+    [ "$PENDING" = 1 ] && [ -z "$ID" ] || refuse "--abandon-pending chỉ dùng cho state pending chưa có ID"
+    stop_timers; mark_state abandoned_at=NOW pending=false
+    echo "destroy-eval: đã bỏ state pending (label $LABEL) theo yêu cầu của operator; timer đã dừng. Bạn đã kiểm console Vast xem label đó có instance nào không?"
+    exit 0
+fi
+# Danh tính tài khoản (xem đầu tệp). IDENT=ok chỉ khi state có account_id và khớp tài khoản hiện tại.
+IDENT=unknown
+if [ -n "$ACCOUNT" ]; then
+    cur="$(vastai show user --raw </dev/null 2>/dev/null | python3 -I -c 'import json,sys
+d = json.load(sys.stdin); print(int(d["id"]))' 2>/dev/null)" || cur=""
+    if [ -z "$cur" ] || [ "$cur" != "$ACCOUNT" ]; then
+        alert "ACCOUNT MISMATCH/UNKNOWN: state account_id=$ACCOUNT, hiện tại='$cur'. Khoá vastai của timer khác tài khoản đã thuê: KHÔNG chứng minh được gì. Kiểm console Vast, instance ${ID:-<pending $LABEL>}."
+        echo "!!!!!! destroy-eval: danh tính tài khoản vastai KHÔNG khớp state (state=$ACCOUNT, hiện tại='${cur:-không đọc được}'); không huỷ, không kết luận 'đã biến mất'; giữ timer. Kiểm ~/.config/vastai/vast_api_key và console Vast (instance ${ID:-label $LABEL}). !!!!!!" >&2
+        exit 5
+    fi
+    IDENT=ok
+fi
 
 if [ "$PENDING" = 1 ] && [ -z "$ID" ]; then
     case "$LABEL" in secai-stack-eval-?*) ;; *) refuse "state pending nhưng label '$LABEL' không bắt đầu secai-stack-eval-" ;; esac
@@ -101,15 +137,18 @@ if [ "$PENDING" = 1 ] && [ -z "$ID" ]; then
     [ "$n" -le 1 ] || refuse "$n instance cùng label '$LABEL'; kiểm tay trên console"
     if [ "$n" = 0 ]; then
         if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-            stop_timers; echo "destroy-eval: không có instance nào mang label $LABEL tới hết deadline; dừng timer."; exit 0
+            alert "PENDING quá deadline, không thấy label $LABEL trong danh sách. KIỂM CONSOLE VAST; chỉ khi chắc chắn không có instance: destroy-eval.sh --abandon-pending"
+            echo "!!!!!! destroy-eval: quá deadline mà danh sách không có label $LABEL. Danh sách KHÔNG phải bằng chứng: KIỂM CONSOLE VAST và huỷ tay nếu có. Timer vẫn chạy; khi chắc chắn không có gì: destroy-eval.sh --abandon-pending !!!!!!" >&2
+            exit 6
         fi
         echo "destroy-eval: chưa thấy instance nào mang label $LABEL (create chưa lộ ra?); giữ timer tới deadline." >&2; exit 4
     fi
     ID="$found"
     python3 -I - "$SD/state.json" "$ID" <<'PY' >/dev/null 2>&1 || true
-import json, os, sys
+import json, os, sys, tempfile
 p = sys.argv[1]; d = json.load(open(p)); d["id"] = sys.argv[2]; d["pending"] = False
-t = p + ".tmp"; open(t, "w").write(json.dumps(d)); os.chmod(t, 0o600); os.replace(t, p)
+fd, t = tempfile.mkstemp(dir=os.path.dirname(p), prefix=".state."); os.write(fd, json.dumps(d).encode()); os.close(fd)
+os.chmod(t, 0o600); os.replace(t, p)
 PY
 fi
 
@@ -148,9 +187,14 @@ print("FOUND\t%s\t%s" % (str(row.get("label", "")).replace("\t", " "), row.get("
 }
 
 finish() {
+    if [ "$IDENT" != ok ]; then
+        alert "gone không chứng minh được: state không có account_id (không biết tài khoản nào thấy instance $ID)"
+        echo "!!!!!! destroy-eval: instance $ID trả 'không tồn tại' nhưng state không có account_id nên không thể chắc đây là đúng tài khoản; KHÔNG dừng timer. Kiểm console Vast. !!!!!!" >&2
+        exit 5
+    fi
     stop_timers
-    mark_destroyed
-    echo "destroy-eval: instance $ID đã được chứng minh biến mất (tra theo ID); timer đã dừng."
+    mark_state destroyed_at=NOW
+    echo "destroy-eval: instance $ID đã được chứng minh biến mất (tra theo ID, đúng tài khoản $ACCOUNT); timer đã dừng."
     exit 0
 }
 
@@ -172,5 +216,6 @@ for ((n = 1; n <= RETRIES; n++)); do
     res="$(show_instance)" && [ "$res" = "GONE" ] && finish
     echo "destroy-eval: lần $n/$RETRIES: chưa chứng minh instance $ID đã biến mất" >&2
 done
+alert "destroy thất bại sau $RETRIES lần: instance $ID có thể còn; HUỶ TAY trên console"
 echo "!!!!!! destroy-eval: THẤT BẠI sau $RETRIES lần. Instance $ID CÓ THỂ CÒN và đang tính tiền: HUỶ TAY trên console Vast (https://console.vast.ai/instances/) ngay. Timer lặp (nếu có) vẫn thử lại. !!!!!!" >&2
 exit 1

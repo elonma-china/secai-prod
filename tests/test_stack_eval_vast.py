@@ -48,12 +48,15 @@ if a[:2] == ["create", "instance"]:
     if mode == "prod":
         print(json.dumps({"success": True, "new_contract": 62088958})); sys.exit(0)
     offer = a[2]; label = a[a.index("--label") + 1]
-    price = next((o["dph_total"] for o in json.load(open(d + "/offers.json")) if str(o["id"]) == offer), 0.25)
+    price = float(rd("create_price") or next((o["dph_total"] for o in json.load(open(d + "/offers.json")) if str(o["id"]) == offer), 0.25))
     x = inst(); x.append({"id": 777, "label": label, "dph_total": price, "actual_status": "running",
                           "ssh_host": "1.2.3.4", "ssh_port": 2222, "public_ipaddr": "1.2.3.4"}); save(x)
     if mode == "ambiguous":
         print("Error: gateway timeout"); sys.exit(1)
     print(json.dumps({"success": True, "new_contract": 777})); sys.exit(0)
+if a[:2] == ["show", "user"]:
+    if bad(rd("user_mode", "ok")): sys.exit(0)
+    print(json.dumps({"id": int(rd("account_id", "4242")), "email": "x@example.invalid"})); sys.exit(0)
 if a[:2] == ["show", "instances-v1"]:
     m = rd("list_mode", "ok")
     if bad(m): sys.exit(0)
@@ -159,7 +162,7 @@ def set_mode(b, name: str, value: str) -> None:
 def write_state(b, id_="777", label="secai-stack-eval-20261123-ab12", max_dph=0.30, timers=("tB", "tD"), **kw) -> None:
     b.sdir.mkdir(parents=True, exist_ok=True)
     st = {"id": id_, "label": label, "created_at": 0, "deadline": 0, "price": 0.25, "max_dph": max_dph,
-          "max_hours": 3, "timers": list(timers), **kw}
+          "max_hours": 3, "timers": list(timers), "account_id": "4242", **kw}
     (b.sdir / "state.json").write_text(json.dumps(st))
 
 
@@ -396,14 +399,81 @@ def test_destroy_pending_state_finds_instance_by_label_across_pages(box, mode):
     assert_prod_alive(box)
 
 
-def test_destroy_pending_not_found_keeps_timers_until_deadline_then_stops(box):
+def test_destroy_pending_not_found_never_stops_timers_even_past_deadline(box):
     lab = "secai-stack-eval-20261123-ab12"
     write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) + 3600)
     r = sh(DESTROY, "--force-deadline", b=box)
     assert r.returncode == 4 and destroys(box) == [] and log(box, "systemctl") == []
     write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) - 5)
     r = sh(DESTROY, "--force-deadline", b=box)
-    assert r.returncode == 0 and destroys(box) == [] and any("tB.timer" in x for x in log(box, "systemctl"))
+    assert r.returncode == 6 and destroys(box) == [] and log(box, "systemctl") == []  # danh sach khong phai bang chung
+    assert "console" in r.stderr.lower() and lab in r.stderr and "--abandon-pending" in r.stderr
+    assert lab in (box.sdir / "ALERT.txt").read_text()
+
+
+def test_destroy_abandon_pending_requires_flag_stops_timers_and_unblocks_next_up(box):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) - 5)
+    r = sh(DESTROY, "--abandon-pending", b=box)
+    assert r.returncode == 0 and destroys(box) == []
+    assert any("tB.timer" in x for x in log(box, "systemctl"))
+    assert "abandoned_at" in json.loads((box.sdir / "state.json").read_text())
+    assert sh(EVAL, "up", b=box).returncode == 0  # state da bo => cho phep up moi
+    # khong dung cho state da co ID
+    write_state(box)
+    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+
+
+@pytest.mark.parametrize("what", ["other_account", "user_fails", "no_account_in_state"])
+def test_destroy_identity_mismatch_or_unknown_is_never_a_gone_proof(box, what):
+    # instance KHONG nam trong danh sach cua tai khoan hien tai (tai khoan khac thi show instance tra null = "gone" gia)
+    if what == "no_account_in_state":
+        write_state(box, account_id="")
+    else:
+        write_state(box)
+    if what == "other_account":
+        set_mode(box, "account_id", "9999")
+    if what == "user_fails":
+        set_mode(box, "user_mode", "garbage")
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 5 and destroys(box) == []
+    assert log(box, "systemctl") == []  # timer van chay
+    assert "destroyed_at" not in json.loads((box.sdir / "state.json").read_text())
+    assert (box.sdir / "ALERT.txt").exists()
+
+
+def test_destroy_identity_mismatch_also_blocks_destroy_of_existing_instance(box):
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    set_mode(box, "account_id", "9999")
+    assert sh(DESTROY, "--yes", b=box).returncode == 5 and destroys(box) == []
+
+
+def test_destroy_expected_label_from_timer_must_match_state(box):
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    r = sh(DESTROY, "--force-deadline", b=box, extra={"EVAL_EXPECT_LABEL": "secai-stack-eval-20260101-zzzz"})
+    assert r.returncode == 3 and destroys(box) == []
+    r = sh(DESTROY, "--force-deadline", b=box, extra={"EVAL_EXPECT_LABEL": "secai-stack-eval-20261123-ab12"})
+    assert r.returncode == 0 and destroys(box) == [D777]
+
+
+def test_destroy_second_instance_waits_on_lock_then_gives_up(box):
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    holder = subprocess.Popen(["flock", "-n", str(box.sdir / ".destroy.lock"), "sleep", "20"])
+    try:
+        time.sleep(0.5)
+        r = sh(DESTROY, "--yes", b=box, extra={"STACK_EVAL_LOCK_WAIT": "1"})
+        assert r.returncode == 7 and destroys(box) == []
+    finally:
+        holder.kill()
+
+
+def test_destroy_refusal_writes_alert_file(box):
+    write_state(box, id_=PROD)
+    assert sh(DESTROY, "--yes", b=box).returncode == 3
+    assert "REFUSED" in (box.sdir / "ALERT.txt").read_text()
 
 
 def test_destroy_pending_with_unreadable_list_refuses(box):
@@ -437,7 +507,8 @@ def test_destroy_without_state_uses_instance_id_but_still_checks_label_and_price
     box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW, {"id": 777, "label": "secai-stack-eval-x", "dph_total": 0.9}]))
     assert sh(DESTROY, "--yes", b=box).returncode == 3 and destroys(box) == []
     box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW, {"id": 777, "label": "secai-stack-eval-x", "dph_total": 0.25}]))
-    assert sh(DESTROY, "--yes", b=box).returncode == 0 and destroys(box) == [D777]
+    r = sh(DESTROY, "--yes", b=box, extra={"STACK_EVAL_DESTROY_RETRIES": "1"})
+    assert destroys(box) == [D777] and r.returncode == 5  # huy duoc, nhung khong co account_id nen khong tuyen bo "da bien mat"
     (box.sdir / "instance.id").write_text(PROD + "\n")
     assert sh(DESTROY, "--yes", b=box).returncode == 3
     assert_prod_alive(box)
@@ -518,6 +589,70 @@ def test_up_layer_a_only_with_instance_key_and_via_stdin(box):
     assert "INSTKEY_MARK_5" not in r.stdout + r.stderr
     layer_a = [x for x in log(box, "ssh") if ".vast-instance" in x][0]
     assert "-H @" in layer_a and "INSTKEY_MARK_5" not in layer_a  # khoa khong len argv cua curl tren instance
+
+
+def test_up_refuses_when_env_key_differs_from_key_file_or_file_missing(box):
+    r = sh(EVAL, "up", b=box, extra={"VAST_API_KEY": "OTHERACCT_MARK_2"})
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+    assert "OTHERACCT_MARK_2" not in r.stdout + r.stderr and VASTKEY not in r.stdout + r.stderr
+    (box.tmp / "home/.config/vastai/vast_api_key").unlink()
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+    assert sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY}).returncode != 0  # van thieu tep khoa cho timer
+
+
+def test_up_accepts_env_key_equal_to_key_file(box):
+    assert sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY}).returncode == 0
+    assert VASTKEY not in "\n".join(log(box, "systemd-run") + log(box, "ssh") + log(box, "rsync") + log(box, "scp"))
+
+
+def test_up_refuses_env_file_containing_account_key_without_printing_it(box):
+    Path(box.env["EVAL_ENV_FILE"]).write_text(f"QWEN_API_KEY={SECRET}\nVAST={VASTKEY}\n")
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create") and log(box, "ssh") == []
+    assert VASTKEY not in r.stdout + r.stderr + "\n".join(log(box, "vastai"))
+
+
+def test_up_records_account_identity_not_key_and_binds_timers_to_label(box):
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode == 0, r.stderr
+    st = json.loads((box.sdir / "state.json").read_text())
+    assert st["account_id"] == "4242" and VASTKEY not in json.dumps(st)
+    assert all(f"--setenv=EVAL_EXPECT_LABEL={st['label']}" in x for x in log(box, "systemd-run"))
+
+
+def test_up_aborts_when_account_identity_unreadable(box):
+    set_mode(box, "user_mode", "garbage")
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+
+
+def test_up_failed_timer_setup_does_not_block_next_up(box):
+    set_mode(box, "systemd-run_rc", "1")
+    assert sh(EVAL, "up", b=box).returncode != 0
+    assert not (box.sdir / "state.json").exists()  # khong thue gi => khong de state pending chan 3 gio
+    (box.fake / "systemd-run_rc").unlink()
+    assert sh(EVAL, "up", b=box).returncode == 0
+
+
+@pytest.mark.parametrize("price,destroyed", [("0.40", True), ("0.90", False)])
+def test_up_aborts_if_instance_price_exceeds_cap_after_create(box, price, destroyed):
+    set_mode(box, "create_price", price)
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and "giá" in r.stderr
+    assert destroys(box) == ([D777] if destroyed else [])  # > 1.5 x cap: destroy-eval tu choi, bao huy tay
+    if not destroyed:
+        assert "console" in r.stderr.lower()
+    assert_prod_alive(box)
+
+
+def test_status_prints_alert_file(box):
+    now = int(time.time())
+    write_state(box, created_at=now, deadline=now + 3600)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    (box.sdir / "ALERT.txt").write_text("2026-11-23 destroy-eval: REFUSED: something\n")
+    r = sh(EVAL, "status", b=box)
+    assert "REFUSED: something" in r.stdout and "ALERT" in r.stdout
 
 
 def test_up_refuses_container_key_equal_to_account_key(box):
