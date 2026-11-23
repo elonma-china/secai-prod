@@ -57,6 +57,33 @@ python3 core_score.py $ACCEPT_OUT/core_eval.json [stack.json]
 - `run-api.sh` thoát 0 khi không ca nào trượt (ca bỏ qua không tính). `SKIP_CASES` để bỏ ca (mỗi ca PoC chỉ chạy 1 lần trên LLM dùng chung), `STACK_HAS_OCR=0` bỏ UI-TR-3.
 - Cú pháp kỳ vọng trong `cases.json`: `a|b` = một trong các chuỗi; `re:<regex>` = regex; không phân biệt hoa thường.
 
+### UI-TR-2 / UI-TR-3: model thật hay stub
+
+Gateway chỉ nhận Hy-MT2 và OCR ở `http://127.0.0.1:<cổng>` (chặn SSRF trong `src/`, không đổi). Trên mạng bridge, sidecar `specialist-tunnel` (profile `translation`) chung netns với `translation-gateway` và `translation-worker`, mở `127.0.0.1:18868` (Hy-MT2) và `127.0.0.1:18083` (OCR). `check.sh health` nối hai cổng đó từ trong cả hai container và đòi một dòng trạng thái HTTP, nên tunnel hỏng là trượt ngay ở `health`.
+
+| Cách chạy | `.env` | Chứng minh được |
+|---|---|---|
+| **Thật** | `TUNNEL_MODE=ssh`, `TUNNEL_SSH_HOST/PORT/USER`, `secrets/tunnel/key` (0600, chủ = `TUNNEL_UID`) và `secrets/tunnel/known_hosts` (đã đối chiếu fingerprint); image `docker build --build-arg TUNNEL_UID=$(id -u) -t secai-specialist-tunnel:<ngày> images/tunnel` | Đường ống **và** chất lượng dịch/OCR của model thật |
+| **Stub (chỉ để test)** | `TUNNEL_MODE=direct`, `TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868`, `TUNNEL_DIRECT_OCR=stub-ocr:18083`, hai `*_SPECIALIST_MODEL=tencent/Hy-MT2-7B`, khoá `*_API_KEY` ngẫu nhiên; chạy thêm `-f acceptance/stubs/compose.stubs.yml` (xem đầu tệp đó) | **Chỉ đường ống**: tunnel, chuyển đổi, job, xem trước (`/result`), tệp tải về có tiếng Việt. **Không** chứng minh chất lượng: stub dịch bằng bảng từ cố định có tiền tố `[stub] `, OCR luôn trả chữ cố định của `sample-en.png` |
+
+```sh
+# Stub (từ stack/):
+docker compose -f compose.yml -f acceptance/stubs/compose.stubs.yml --profile translation up -d
+./check.sh health      # các dòng "tunnel 127.0.0.1:18868/18083 trả HTTP từ trong netns ..."
+acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT> UI-TR-2 UI-TR-3
+```
+
+Ghi kết quả UI-TR-2/TR-3 luôn kèm cột "nguồn" (`thật` hoặc `stub`). Kết quả `stub` không thay cho kết quả `thật`.
+
+### Kết quả trên stack
+
+| Ca | Nguồn | Kết quả | Ngày / ghi chú |
+|---|---|---|---|
+| UI-TR-2 | stub, `TUNNEL_MODE=direct` | đạt (3 s) | 2026-11-23, smoke 8d: job `succeeded`, kết quả có `lỗ hổng`, `máy chủ`, `Apache Log4j2` giữ nguyên |
+| UI-TR-3 | stub, `TUNNEL_MODE=direct` | đạt (3 s) | như trên, OCR stub → dịch stub |
+| UI-TR-2, UI-TR-3 | stub, `TUNNEL_MODE=ssh` qua sshd thử (ghim host key) | đạt / đạt (3 s) | 2026-11-23, smoke 8d: đường ssh thật của sidecar, đầu xa là stub |
+| UI-TR-2, UI-TR-3 | **thật** (Hy-MT2/OCR) | **chưa kiểm** | `127.0.0.1:18868`/`:18083` trên host prod đang từ chối kết nối; chạy lại khi dịch vụ chuyên dụng sống |
+
 ## Endpoint mà mỗi trang gọi
 
 Bắt bằng `page.on('request')` trên prod. Bộ lọc `/ai/` ở mô tả ban đầu không khớp: trình duyệt không nói chuyện trực tiếp với gateway mà qua **backend IAS** (`/api/ais/...`, header `Authorization` do backend IAS cấp khi đăng nhập — cơ chế đăng nhập IAS, không phải khoá gateway). Cột phải là đường gateway tương ứng, xác nhận qua log container gateway/translation-gateway trong lúc chạy ca. `run-api.sh` gọi đúng cột phải.
@@ -88,7 +115,7 @@ UI chạy trên https://ias.id.vn; API chạy trên http://127.0.0.1:8131. Kết
 | UI-POC-2 | **chưa có baseline hợp lệ** | không chạy | Mục tiêu đúng là `192.168.96.21:9000` (nginx-ui; host 19000). Lần chạy đầu dùng nhầm cổng 80 (không có dịch vụ nghe) → dừng ở `[check_target]`, **không phải kết quả hợp lệ** (lỗi của đặc tả, đã bỏ; giữ ở `wrongport80-UI-POC-2.*`). Chạy lại một lần với `:9000`: `[check_target] 192.168.96.21:9000 reachable ✓`, `[pool]Khởi tạo engine`, `[init]session ses_df783d7f…`, agent bắt đầu chạy lệnh; sau **97 s** trình duyệt báo `Không thể kết nối tới API stream` / `Quá trình xử lý kết thúc với lỗi`, không có `final` (gateway ghi `client gone … grace 45s`, container gateway không khởi động lại). Đứt luồng phía client/đường truyền, kết quả khai thác **chưa xác định**; không tính là đạt hay trượt về nội dung. Theo quy tắc mỗi ca PoC chỉ chạy một lần nên không chạy lại. Baseline prod cho POC-2 lấy từ lần chạy N=24 xen kẽ prod/stack ở Task 8 (cùng lab); cho tới lúc đó POC-2 không được tính là đạt cũng không được loại như ca miễn |
 | UI-POC-3 | đạt (13 s) | đạt (4 s) | dừng ở `[check_target]` "Không kết nối được tới 192.168.96.250:9" |
 
-Hệ quả cho so sánh stack vs prod: UI-TR-2/3 là **ca prod trượt** (MT/OCR đang tắt) nên không dùng để kết luận "stack trượt khi prod đạt" (nhưng xem điều kiện hoàn tất bên dưới); stack phải đạt các ca còn lại. UI-POC-2 **không phải ca được miễn**: chưa có baseline hợp lệ nên chưa tính đạt, cũng không bị loại khỏi so sánh; baseline prod của nó đến từ lần chạy N=24 xen kẽ prod/stack ở Task 8 (cùng lab, CVE-2026-27944 @ 192.168.96.21:9000), và chỉ khi có số đó mới so được stack với prod cho ca này. **Nhưng điều kiện hoàn tất gói**: stack phải được chứng minh **ĐẠT UI-TR-2 và UI-TR-3** (dịch tệp và dịch ảnh, nhánh thành công: job hoàn tất, `Xem trước`, tệp tải về chứa tiếng Việt) trước khi gói được gọi là hoàn chỉnh; nếu không, đường dịch tệp được giao mà chưa được chứng minh. Dịch tệp/ảnh trên prod đang hỏng là phát hiện cần báo cho chủ dự án; chạy lại baseline khi tunnel dịch/OCR được dựng lại.
+Hệ quả cho so sánh stack vs prod: UI-TR-2/3 là **ca prod trượt** (MT/OCR đang tắt) nên không dùng để kết luận "stack trượt khi prod đạt" (nhưng xem điều kiện hoàn tất bên dưới); stack phải đạt các ca còn lại. UI-POC-2 **không phải ca được miễn**: chưa có baseline hợp lệ nên chưa tính đạt, cũng không bị loại khỏi so sánh; baseline prod của nó đến từ lần chạy N=24 xen kẽ prod/stack ở Task 8 (cùng lab, CVE-2026-27944 @ 192.168.96.21:9000), và chỉ khi có số đó mới so được stack với prod cho ca này. **Nhưng điều kiện hoàn tất gói**: stack phải được chứng minh **ĐẠT UI-TR-2 và UI-TR-3** (dịch tệp và dịch ảnh, nhánh thành công: job hoàn tất, `Xem trước`, tệp tải về chứa tiếng Việt) trước khi gói được gọi là hoàn chỉnh; nếu không, đường dịch tệp được giao mà chưa được chứng minh. Đến 2026-11-23 điều kiện này mới đạt **với stub** (đường ống qua sidecar, xem "UI-TR-2 / UI-TR-3: model thật hay stub"); với Hy-MT2/OCR thật vẫn **chưa kiểm**. Dịch tệp/ảnh trên prod đang hỏng là phát hiện cần báo cho chủ dự án; chạy lại baseline khi tunnel dịch/OCR được dựng lại.
 
 Ca PoC chạy **một lần mỗi ca** trên UI (UI-POC-1, -2, -3; riêng POC-2 xem trên) và API chỉ chạy UI-POC-3 (`SKIP_CASES="UI-POC-1 UI-POC-2"`), vì LLM dùng chung.
 
