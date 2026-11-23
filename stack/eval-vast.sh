@@ -11,7 +11,8 @@
 #   pack.sh data, BẮT BUỘC), EVAL_SSH_KEY (~/.ssh/id_ed25519), EVAL_MAX_DPH (0.30), EVAL_MAX_HOURS (3), EVAL_MIN_RAM_GB (32; 48 nếu
 #   EVAL_EXPLOIT=1), EVAL_EXPLOIT=1 (bật profile exploit + build image VM), EVAL_CONTAINER_API_KEY (khoá GIỚI HẠN THEO INSTANCE cho lớp A;
 #   không có thì bỏ lớp A), EVAL_TEMPLATE (98fff0d0a96048e83c19da789fe7a979, VM Ubuntu), STACK_EVAL_DIR (local/stack-eval),
-#   EVAL_REPO_ROOT (nguồn git archive), EVAL_POLL_SLEEP (15).
+#   EVAL_REPO_ROOT (nguồn git archive), EVAL_POLL_SLEEP (15). Riêng run: EVAL_SKIP_CASES (mặc định UI-POC-1..3 UI-TR-2 UI-TR-3:
+#   máy thuê không có lab/profile exploit, không có Hy-MT2/OCR), STACK_HAS_OCR (0). Ca bỏ qua được ghi kèm lý do (không tính là đạt).
 # Deadline: lớp B = timer systemd-run --user +max_hours; lớp D = timer dự phòng +10 phút; lớp EXIT = trap huỷ khi `up` lỗi sau khi đã thuê;
 #   lớp A = tự huỷ trên instance (chỉ khi có khoá instance). Mọi lớp huỷ đều đi qua destroy-eval.sh. Không bao giờ đưa khoá API TÀI KHOẢN
 #   Vast lên máy thuê; secret chỉ đi qua stdin/tệp 0600, không qua argv.
@@ -291,14 +292,21 @@ if [ "$EXPLOIT" = 1 ]; then
     docker build -f stack/images/pentestcode-vm/Dockerfile --build-arg GIT_SHA="$SHA" -t "secai-pentestcode-vm:eval-$SHA" .
     P="exploit,$P"
 fi
+# Profile translation luôn cần image sidecar (cả TUNNEL_MODE=off). init chạy bằng root sẽ đặt TUNNEL_UID=0 (preflight từ chối): ghim uid khác 0.
+TU=$(grep -E '^TUNNEL_UID=' stack/.env | tail -n1 | cut -d= -f2-)
+[[ "$TU" =~ ^[1-9][0-9]*$ ]] || TU=10002
+docker build --build-arg TUNNEL_UID="$TU" -t "secai-specialist-tunnel:eval-$SHA" stack/images/tunnel
 mkdir -p /srv/secai-data
-# giá trị cuối trong .env thắng (compose và bootstrap.sh đều lấy dòng sau cùng)
+# giá trị cuối trong .env thắng (compose và bootstrap.sh đều lấy dòng sau cùng). Máy thuê có IP công khai, gateway không xác thực: chỉ loopback.
 cat >> stack/.env <<EOF
 DATA_ROOT=/srv/secai-data
 GATEWAY_IMAGE=secai-agent-gateway:eval-$SHA
 VM_IMAGE=secai-pentestcode-vm:eval-$SHA
 CONVERTER_IMAGE=secai-converter:eval-$SHA
 REVIEW_UI_IMAGE=secai-review-ui:eval-$SHA
+TUNNEL_IMAGE=secai-specialist-tunnel:eval-$SHA
+TUNNEL_UID=$TU
+GATEWAY_BIND=127.0.0.1
 COMPOSE_PROFILES=$P
 EOF
 REMOTE_PROVISION
@@ -331,10 +339,24 @@ on_exit_up() {
 
 # ---------------------------------------------------------------------------------------------------- run / collect / down / status
 cmd_run() {
+    local skip="${EVAL_SKIP_CASES-UI-POC-1 UI-POC-2 UI-POC-3 UI-TR-2 UI-TR-3}" ocr="${STACK_HAS_OCR:-0}"
+    # Hai giá trị này lên argv của ssh (shell từ xa): chỉ nhận ký tự an toàn.
+    [[ "$skip" =~ ^[A-Z0-9\ -]*$ ]] || die "EVAL_SKIP_CASES chỉ gồm mã ca (A-Z, 0-9, '-') cách nhau bằng dấu cách: '$skip'"
+    [[ "$ocr" =~ ^[01]$ ]] || die "STACK_HAS_OCR phải là 0 hoặc 1: '$ocr'"
     need_cmds ssh; load_conn
     # Chạy trên instance; mọi bước ghi log vào $REMOTE/results, kết thúc bằng SHA256SUMS. Không có secret trong script.
-    rssh "bash -s" <<'REMOTE_RUN'
+    rssh "SKIP_CASES='$skip' STACK_HAS_OCR=$ocr bash -s" <<'REMOTE_RUN'
 set -uo pipefail
+# Lý do cho từng ca bỏ qua, ghi vào <id>.json và summary.json: ca bỏ qua không bao giờ được đọc là đạt.
+SKIP_REASONS=$(python3 -c '
+import json, sys
+r = {}
+for i in sys.argv[1].split():
+    if i in ("UI-TR-2", "UI-TR-3"): r[i] = "không chạy: không có Hy-MT2/OCR trên máy thuê (TUNNEL_MODE=off)"
+    elif i.startswith("UI-POC-"): r[i] = "không chạy: profile exploit tắt; lab 192.168.96.x không tới được từ máy thuê"
+    else: r[i] = "không chạy: bỏ qua theo EVAL_SKIP_CASES"
+print(json.dumps(r, ensure_ascii=False))' "$SKIP_CASES")
+export SKIP_CASES STACK_HAS_OCR SKIP_REASONS
 cd /opt/secai-stack/stack
 R=/opt/secai-stack/results; mkdir -p "$R"; rc=0; ABORT=0
 step() { local name=$1; shift; [ "$ABORT" = 0 ] || { echo "$name skipped" >>"$R/steps.txt"; return 0; }
@@ -352,6 +374,16 @@ fi
 step up docker compose up -d --wait
 step check ./check.sh all
 step acceptance env ACCEPT_OUT="$R/acceptance" ./acceptance/run-api.sh http://127.0.0.1:8131
+# summary.json: rc từng bước + kết quả ca (pass/fail/skipped kèm lý do); acceptance=null nghĩa là bộ ca không chạy.
+python3 -c '
+import json, os, sys
+R = sys.argv[1]; steps = {}
+for l in open(R + "/steps.txt"):
+    n, _, v = l.strip().partition(" ")
+    steps[n] = v
+a = R + "/acceptance/summary.json"
+json.dump({"steps": steps, "skip_cases": os.environ["SKIP_CASES"].split(), "stack_has_ocr": os.environ["STACK_HAS_OCR"],
+           "acceptance": json.load(open(a)) if os.path.exists(a) else None}, open(R + "/summary.json", "w"), ensure_ascii=False, indent=1)' "$R"
 (cd "$R" && find . -type f ! -name SHA256SUMS -exec sha256sum {} + >SHA256SUMS)
 exit "$rc"
 REMOTE_RUN

@@ -7,8 +7,9 @@
 #   run-api.sh <base_url> [ID ...]        ví dụ: run-api.sh http://127.0.0.1:8131 UI-CHAT-1
 #   ACCEPT_OUT=<thư mục>   nơi ghi <id>.json (mặc định local/stack-acceptance/<ngày>-api)
 #   SKIP_CASES="UI-POC-1 UI-POC-2"   bỏ ca (vd. đã chạy qua UI, mỗi ca PoC chỉ chạy 1 lần trên LLM dùng chung)
+#   SKIP_REASONS='{"UI-TR-2": "..."}'  lý do ghi cho ca bỏ qua (mặc định "bỏ qua theo SKIP_CASES")
 #   STACK_HAS_OCR=0                   bỏ UI-TR-3
-# Thoát 0 khi không ca nào trượt (ca bỏ qua không tính).
+# Ca bỏ qua vẫn có <id>.json (pass=null + lý do); summary.json gom pass/fail/skipped. Thoát 0 khi không ca nào trượt.
 set -euo pipefail
 BASE=${1:?usage: run-api.sh <base_url> [ID ...]}; shift || true
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -22,6 +23,7 @@ BASE, HERE, OUT = os.environ["BASE"].rstrip("/"), os.environ["HERE"], os.environ
 CASES = json.load(open(f"{HERE}/cases.json", encoding="utf-8"))["cases"]
 ONLY = os.environ["IDS"].split()
 SKIP = os.environ.get("SKIP_CASES", "").split()
+SKIP_REASONS = json.loads(os.environ.get("SKIP_REASONS") or "{}")
 USER = f"acceptance-{uuid.uuid4().hex[:8]}"
 VI = re.compile("[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]")
 
@@ -182,12 +184,15 @@ def run_exploit(c):
 RUN = {"chat": run_chat, "translate_text": run_translate_text, "translate_file": run_translate_file, "report": run_report, "exploit": run_exploit}
 
 failed = 0
+summary = {"base": BASE, "pass": [], "fail": [], "skipped": {}}
 for c in CASES:
-    if (ONLY and c["id"] not in ONLY) or c["id"] in SKIP:
+    if ONLY and c["id"] not in ONLY:
         continue
     rec = {"id": c["id"], "base": BASE, "started": time.strftime("%FT%T")}
     t0 = time.time()
-    if c.get("requires") == "ocr" and os.environ.get("STACK_HAS_OCR") == "0":
+    if c["id"] in SKIP:  # ghi lại để ca bỏ qua không bao giờ bị đọc nhầm là đạt
+        rec.update(pass_=None, reason=SKIP_REASONS.get(c["id"], "bỏ qua theo SKIP_CASES"))
+    elif c.get("requires") == "ocr" and os.environ.get("STACK_HAS_OCR") == "0":
         rec.update(pass_=None, reason=c.get("skip_message"))
     else:
         try:
@@ -204,5 +209,10 @@ for c in CASES:
     flag = {True: "PASS", False: "FAIL", None: "SKIP"}[rec["pass"]]
     print(f"{flag} {c['id']} ({rec['duration_s']}s) {rec['reason'][:140]}", flush=True)
     failed += rec["pass"] is False
+    if rec["pass"] is None:
+        summary["skipped"][c["id"]] = rec["reason"]
+    else:
+        summary["pass" if rec["pass"] else "fail"].append(c["id"])
+json.dump(summary, open(f"{OUT}/summary.json", "w"), ensure_ascii=False, indent=1)
 sys.exit(1 if failed else 0)
 PY

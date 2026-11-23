@@ -683,6 +683,16 @@ def test_up_full_flow_records_id_state_timers_and_is_secret_safe(box):
     assert destroys(box) == [] and (box.fake / "PROD_DESTROYED").exists() is False
 
 
+def test_up_provision_builds_tunnel_image_and_binds_gateway_to_loopback(box):
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode == 0, r.stderr
+    script = (box.fake / "ssh.stdin").read_text()
+    # profile translation can image sidecar (ke ca TUNNEL_MODE=off); init chay bang root dat TUNNEL_UID=0 -> preflight tu choi
+    assert "stack/images/tunnel" in script and "TUNNEL_IMAGE=secai-specialist-tunnel:eval-" in script
+    assert "TUNNEL_UID=$TU" in script and "--build-arg TUNNEL_UID=" in script
+    assert "GATEWAY_BIND=127.0.0.1" in script  # may thue co IP cong khai: gateway khong xac thuc, khong mo ra ngoai
+
+
 def test_up_layer_a_only_with_instance_key_and_via_stdin(box):
     r = sh(EVAL, "up", b=box, extra={"EVAL_CONTAINER_API_KEY": "INSTKEY_MARK_5"})
     assert r.returncode == 0, r.stderr
@@ -920,6 +930,32 @@ def test_run_executes_remote_sequence_via_ssh_stdin(box):
     assert SECRET not in "\n".join(log(box, "ssh"))
 
 
+def test_run_passes_eval_skip_defaults_and_writes_summary(box):
+    write_state(box, ssh_host="1.2.3.4", ssh_port=2222)
+    r = sh(EVAL, "run", b=box)
+    assert r.returncode == 0, r.stderr
+    argv = "\n".join(log(box, "ssh"))
+    # mac dinh eval tren may thue: khong co lab/exploit, khong co Hy-MT2/OCR
+    assert "SKIP_CASES='UI-POC-1 UI-POC-2 UI-POC-3 UI-TR-2 UI-TR-3'" in argv and "STACK_HAS_OCR=0" in argv
+    script = (box.fake / "ssh.stdin").read_text()
+    assert "SKIP_REASONS" in script and "không có Hy-MT2/OCR" in script and "summary.json" in script
+
+
+def test_run_custom_skip_cases_and_ocr(box):
+    write_state(box, ssh_host="1.2.3.4", ssh_port=2222)
+    r = sh(EVAL, "run", b=box, extra={"EVAL_SKIP_CASES": "UI-TR-3", "STACK_HAS_OCR": "1"})
+    assert r.returncode == 0, r.stderr
+    argv = "\n".join(log(box, "ssh"))
+    assert "SKIP_CASES='UI-TR-3'" in argv and "STACK_HAS_OCR=1" in argv
+
+
+@pytest.mark.parametrize("extra", [{"EVAL_SKIP_CASES": "UI-TR-3;reboot"}, {"EVAL_SKIP_CASES": "x'y"}, {"STACK_HAS_OCR": "yes"}])
+def test_run_rejects_unsafe_skip_values_before_ssh(box, extra):
+    write_state(box, ssh_host="1.2.3.4", ssh_port=2222)
+    r = sh(EVAL, "run", b=box, extra=extra)
+    assert r.returncode != 0 and not log(box, "ssh")
+
+
 def test_run_propagates_failure_but_still_leaves_results(box):
     write_state(box, ssh_host="1.2.3.4", ssh_port=2222)
     set_mode(box, "ssh_rc", "3")
@@ -971,3 +1007,24 @@ def test_rsync_e_quotes_ssh_key_path_with_spaces(box):
 def test_scripts_pass_bash_syntax_check():
     for s in (EVAL, DESTROY):
         assert subprocess.run(["bash", "-n", str(s)], capture_output=True).returncode == 0
+
+
+RUN_API = STACK / "acceptance" / "run-api.sh"
+
+
+def test_run_api_records_skipped_cases_with_reason_and_summary(tmp_path):
+    ids = [c["id"] for c in json.loads((STACK / "acceptance" / "cases.json").read_text())["cases"]]
+    out = tmp_path / "acc"
+    reasons = {"UI-TR-2": "không chạy: không có Hy-MT2/OCR"}
+    # port 9 (discard): bo qua het nen khong co request nao; ca bi bo qua phai co ban ghi pass=null + ly do, khong phai PASS
+    r = subprocess.run(["bash", str(RUN_API), "http://127.0.0.1:9"], text=True, capture_output=True, timeout=60,
+                       env={**os.environ, "ACCEPT_OUT": str(out), "SKIP_CASES": " ".join(ids), "SKIP_REASONS": json.dumps(reasons)})
+    assert r.returncode == 0, r.stderr
+    tr2 = json.loads((out / "UI-TR-2.json").read_text())
+    assert tr2["pass"] is None and tr2["reason"] == reasons["UI-TR-2"]
+    other = json.loads((out / "UI-CHAT-1.json").read_text())
+    assert other["pass"] is None and "SKIP_CASES" in other["reason"]
+    s = json.loads((out / "summary.json").read_text())
+    assert s["pass"] == [] and s["fail"] == [] and sorted(s["skipped"]) == sorted(ids)
+    assert s["skipped"]["UI-TR-2"] == reasons["UI-TR-2"]
+    assert all(line.startswith("SKIP") for line in r.stdout.splitlines() if line.strip())
