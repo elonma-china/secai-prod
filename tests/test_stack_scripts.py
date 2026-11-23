@@ -1,4 +1,5 @@
 import subprocess
+import pytest
 from pathlib import Path
 
 STACK = Path(__file__).resolve().parents[1] / "stack"
@@ -50,6 +51,8 @@ GENERATED = (
 def _stack(tmp_path):
     d = Path(tempfile.mkdtemp(dir=tmp_path)) / "stack"    # mỗi lần gọi một thư mục riêng
     shutil.copytree(STACK, d, ignore=shutil.ignore_patterns(".env", "secrets", "tokenizer", "acceptance", "images", "__pycache__"))
+    (d / "images/tunnel").mkdir(parents=True)                              # bootstrap.sh source luật direct dùng chung
+    shutil.copy(STACK / "images/tunnel/direct_target.sh", d / "images/tunnel/direct_target.sh")
     return d
 
 
@@ -92,7 +95,7 @@ def _ready(tmp_path, profiles="exploit,translation,report,review"):
     mm = tmp_path / "max_map_count"
     mm.write_text("262144\n")
     _set(d, COMPOSE_PROFILES=profiles, DATA_ROOT=root, VM_SHARED_GID=os.getgid(), TOKENIZER_DIR=tok,
-         QWEN_BASE_URL="http://llm/v1", QWEN_API_KEY="k", QWEN_MODEL="m",
+         LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m",
          EMBEDDING_API_URL="http://e", EMBEDDING_API_KEY="k", EMBEDDING_MODEL="m",
          RERANKER_API_URL="http://r", RERANKER_API_KEY="k", RERANKER_MODEL="m",
          GATEWAY_IMAGE="secai-agent-gateway:main-abc12345", VM_IMAGE="secai-pentestcode-vm:abc",
@@ -557,26 +560,60 @@ def test_preflight_tunnel_uid_numeric_nonroot_and_matches_image(tmp_path):
 def test_preflight_direct_refuses_real_api_keys(tmp_path):
     # M10/I1: direct gửi Bearer qua TCP thô -> chỉ khoá stub giả cố định.
     for k in ("TRANSLATE_V2_SPECIALIST_API_KEY", "MULTILANG_SPECIALIST_API_KEY", "TRANSLATE_V2_OCR_API_KEY"):
-        r = _direct(tmp_path, **{k: "sk-real-looking"})
+        ocr = {"TRANSLATE_V2_OCR_BASE_URL": "http://127.0.0.1:18083", "TUNNEL_DIRECT_OCR": "stub-ocr:18083"}   # OCR qua đầu tunnel
+        r = _direct(tmp_path, **{**ocr, k: "sk-real-looking"})
         assert r.returncode != 0 and k in r.stderr and "sk-real-looking" not in r.stderr
     assert _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY="stub-test-key-not-secret",
                    MULTILANG_SPECIALIST_API_KEY="stub-test-key-not-secret",
                    TRANSLATE_V2_OCR_API_KEY="stub-test-key-not-secret").returncode == 0
 
 
-# ---- Task 8e: LLM_* chuẩn, QWEN_* cũ (_ready dùng QWEN_* = .env kiểu prod) ----
-def test_preflight_qwen_only_still_passes(tmp_path):
+# ---- Task 8e: LLM_* chuẩn, QWEN_* cũ. Ngữ nghĩa giống pydantic AliasChoices: dòng LLM_X có mặt (kể cả rỗng) là tên
+# đang dùng; gateway KHÔNG rơi về QWEN_X khi LLM_X rỗng. _ready dùng LLM_* (như init sinh). ----
+LLM_KEYS = ("BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW")
+
+
+def _del(d, *keys):
+    lines = [l for l in (d / ".env").read_text().splitlines() if l.split("=", 1)[0] not in keys]
+    (d / ".env").write_text("\n".join(lines) + "\n")
+
+
+def _qwen_only(tmp_path):
     d, extra = _ready(tmp_path)
-    assert not _get(d, "LLM_BASE_URL") and _get(d, "QWEN_BASE_URL")
+    _del(d, *(f"LLM_{x}" for x in LLM_KEYS))
+    _set(d, QWEN_BASE_URL="http://q/v1", QWEN_API_KEY="k", QWEN_MODEL="m", QWEN_CONTEXT_WINDOW="4096")
+    return d, extra
+
+
+def test_init_env_has_llm_lines_and_preflight_names_them(tmp_path):
+    d = _stack(tmp_path)
+    assert _bs(d, "init").returncode == 0
+    assert _get(d, "LLM_BASE_URL") == "" and _get(d, "LLM_CONTEXT_WINDOW") == "131072" and _get(d, "QWEN_BASE_URL") is None
+
+
+def test_preflight_qwen_only_without_llm_lines_passes(tmp_path):
+    d, extra = _qwen_only(tmp_path)
     r = _bs(d, "preflight", **extra)
-    assert r.returncode == 0 and "WARNING: LLM_" not in r.stderr, r.stderr
+    assert r.returncode == 0 and "LLM_" not in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("x", ["BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW"])
+def test_preflight_empty_llm_line_shadowing_qwen_fails(tmp_path, x):
+    d, extra = _qwen_only(tmp_path)
+    _set(d, **{f"LLM_{x}": ""})
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and f"LLM_{x}" in r.stderr and "xoá dòng" in r.stderr, r.stderr
+
+
+def test_preflight_llm_context_window_must_be_int(tmp_path):
+    for bad in ("", "abc", "0"):
+        _fails(tmp_path, "LLM_CONTEXT_WINDOW", LLM_CONTEXT_WINDOW=bad)
 
 
 def test_preflight_llm_only(tmp_path):
     d, extra = _ready(tmp_path)
-    _set(d, QWEN_BASE_URL="", QWEN_API_KEY="", QWEN_MODEL="", LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m")
     r = _bs(d, "preflight", **extra)
-    assert r.returncode == 0, r.stderr
+    assert r.returncode == 0 and "QWEN_" not in r.stderr, r.stderr
     _set(d, LLM_MODEL="")
     r = _bs(d, "preflight", **extra)
     assert r.returncode != 0 and "LLM_MODEL" in r.stderr
@@ -584,16 +621,28 @@ def test_preflight_llm_only(tmp_path):
 
 def test_preflight_both_same_no_warning(tmp_path):
     d, extra = _ready(tmp_path)
-    _set(d, LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m")
+    _set(d, QWEN_BASE_URL="http://llm/v1", QWEN_API_KEY="k", QWEN_MODEL="m")
     r = _bs(d, "preflight", **extra)
-    assert r.returncode == 0 and "QWEN_" not in r.stderr, r.stderr
+    assert r.returncode == 0 and "WARNING: LLM_" not in r.stderr, r.stderr
 
 
 def test_preflight_both_different_warns_llm_wins_without_values(tmp_path):
     d, extra = _ready(tmp_path)
-    _set(d, LLM_BASE_URL="http://new/v1", LLM_API_KEY="sk-new-secret-xyz", LLM_MODEL="new-m", QWEN_API_KEY="sk-old-secret-abc")
+    _set(d, LLM_BASE_URL="http://new/v1", LLM_API_KEY="sk-new-secret-xyz", LLM_MODEL="new-m",
+         QWEN_BASE_URL="http://old/v1", QWEN_API_KEY="sk-old-secret-abc", QWEN_MODEL="old-m")
     r = _bs(d, "preflight", **extra)
     assert r.returncode == 0, r.stderr
     for x in ("BASE_URL", "API_KEY", "MODEL"):
         assert f"WARNING: LLM_{x}" in r.stderr and f"QWEN_{x}" in r.stderr, x
     assert "sk-new-secret-xyz" not in r.stderr and "sk-old-secret-abc" not in r.stderr
+
+
+# ---- M2: khoá stub cho OCR chỉ khi OCR đi qua đầu tunnel ----
+def test_preflight_direct_real_ocr_key_ok_when_ocr_not_tunnelled(tmp_path):
+    k = "stub-test-key-not-secret"
+    r = _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY=k, MULTILANG_SPECIALIST_API_KEY=k,
+                TRANSLATE_V2_OCR_BASE_URL="http://10.0.0.7:18083", TRANSLATE_V2_OCR_API_KEY="real-ocr-key")
+    assert r.returncode == 0, r.stderr
+    r = _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="stub-ocr:18083",
+                TRANSLATE_V2_OCR_API_KEY="real-ocr-key")
+    assert r.returncode != 0 and "TRANSLATE_V2_OCR_API_KEY" in r.stderr

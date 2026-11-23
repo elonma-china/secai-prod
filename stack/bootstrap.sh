@@ -166,14 +166,8 @@ SPEC_URL=http://127.0.0.1:18868   # đầu tunnel cố định trong netns trans
 OCR_URL=http://127.0.0.1:18083
 STUB_KEY=stub-test-key-not-secret  # khoá giả cố định của acceptance/stubs/compose.stubs.yml
 
-# direct (chỉ test) chỉ được tới stub-* trong secai-net hoặc IPv4 private/loopback: không bao giờ ra Internet.
-direct_target_ok() {
-    [[ "$1" =~ ^([A-Za-z0-9._-]+):([0-9]+)$ ]] || return 1
-    local h="${BASH_REMATCH[1]}"
-    is_port "${BASH_REMATCH[2]}" || return 1
-    [[ "$h" =~ ^stub-[a-z0-9-]+$ ]] && return 0
-    python3 -I -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if a.version == 4 and (a.is_private or a.is_loopback) and not a.is_link_local else 1)' "$h" 2>/dev/null
-}
+# direct (chỉ test): luật đích dùng chung với sidecar (images/tunnel/direct_target.sh), một định nghĩa.
+. "$STACK_DIR/images/tunnel/direct_target.sh"
 url_port() { [[ "$1" =~ ^[a-z]+://[^/]*:([0-9]+)/?$ ]] && printf '%s' "${BASH_REMATCH[1]}"; }
 
 # Sidecar specialist-tunnel (compose.yml): mở 127.0.0.1:18868 (Hy-MT2) và 127.0.0.1:18083 (OCR) trong netns của
@@ -218,6 +212,8 @@ check_tunnel() {
             direct_target_ok "$v" || err "$k: '$v' không được: direct chỉ tới stub-*:<cổng> hoặc IPv4 private/loopback:<cổng>"
         done
         for k in TRANSLATE_V2_SPECIALIST_API_KEY MULTILANG_SPECIALIST_API_KEY TRANSLATE_V2_OCR_API_KEY; do
+            # OCR thật (https/http IP private, không qua đầu tunnel) giữ khoá thật của nó.
+            [ "$k" = TRANSLATE_V2_OCR_API_KEY ] && [ "$(val TRANSLATE_V2_OCR_BASE_URL)" != "$OCR_URL" ] && continue
             v="$(val "$k")"
             [ -z "$v" ] || [ "$v" = "$STUB_KEY" ] || err "$k: TUNNEL_MODE=direct chỉ dùng khoá stub giả '$STUB_KEY' (không gửi khoá thật qua TCP thô); dùng .env riêng cho stub"
         done
@@ -266,18 +262,36 @@ check_tunnel_uid() {
     fi
 }
 
-# llm_var X: tên biến LLM đang dùng: LLM_X (chuẩn, config.py) nếu có, không thì QWEN_X (tên cũ) nếu có, không thì LLM_X.
-llm_var() { if [ -n "$(val "LLM_$1")" ] || [ -z "$(val "QWEN_$1")" ]; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
+# Tên biến LLM theo đúng pydantic AliasChoices (config.py): tên đầu tiên CÓ MẶT thắng, kể cả khi rỗng. Dòng `LLM_X=`
+# rỗng KHÔNG rơi về QWEN_X ở gateway (LLM_MODEL rỗng -> ConfigError, LLM_CONTEXT_WINDOW rỗng -> lỗi parse int).
+present() { grep -qE "^$1=" "$ENV_FILE" 2>/dev/null; }
+# llm_var X: LLM_X nếu dòng có mặt, không thì QWEN_X nếu có mặt, không thì LLM_X (báo thiếu theo tên chuẩn).
+llm_var() { if present "LLM_$1" || ! present "QWEN_$1"; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
+
+check_llm_names() {
+    local k v
+    for k in BASE_URL API_KEY MODEL CONTEXT_WINDOW; do   # không in giá trị (có khoá API)
+        if present "LLM_$k" && [ -z "$(val "LLM_$k")" ] && [ -n "$(val "QWEN_$k")" ]; then
+            err "LLM_$k: dòng rỗng che QWEN_$k (gateway dùng LLM_$k rỗng, không rơi về QWEN_$k): xoá dòng LLM_$k rỗng hoặc điền giá trị"
+        elif [ -n "$(val "LLM_$k")" ] && [ -n "$(val "QWEN_$k")" ] && [ "$(val "LLM_$k")" != "$(val "QWEN_$k")" ]; then
+            echo "WARNING: LLM_$k và QWEN_$k (tên cũ) khác nhau; gateway và VM dùng LLM_$k. Xoá QWEN_$k cho khỏi nhầm" >&2
+        fi
+    done
+    for k in BASE_URL API_KEY MODEL; do
+        present "LLM_$k" && [ -z "$(val "LLM_$k")" ] && [ -n "$(val "QWEN_$k")" ] && continue   # đã báo ở trên
+        need "$(llm_var "$k")" "nhập tay (.env kiểu cũ: xoá các dòng LLM_* và dùng QWEN_$k)"
+    done
+    k="$(llm_var CONTEXT_WINDOW)"
+    if present "$k"; then   # trống mặc định 32768 của gateway chỉ khi KHÔNG có dòng nào
+        v="$(val "$k")"
+        [[ "$v" =~ ^[1-9][0-9]*$ ]] || err "$k: '$v' phải là số nguyên dương (token); rỗng thì gateway không khởi động"
+    fi
+}
 
 preflight() {
     [ -f "$ENV_FILE" ] || die "chưa có $ENV_FILE: chạy '$0 init' trước"
     local k
-    for k in BASE_URL API_KEY MODEL CONTEXT_WINDOW; do   # không in giá trị (có khoá API)
-        if [ -n "$(val "LLM_$k")" ] && [ -n "$(val "QWEN_$k")" ] && [ "$(val "LLM_$k")" != "$(val "QWEN_$k")" ]; then
-            echo "WARNING: LLM_$k và QWEN_$k (tên cũ) khác nhau; gateway và VM dùng LLM_$k. Xoá QWEN_$k cho khỏi nhầm" >&2
-        fi
-    done
-    for k in BASE_URL API_KEY MODEL; do need "$(llm_var "$k")" "nhập tay (tên cũ QWEN_$k vẫn nhận)"; done
+    check_llm_names
     for k in EMBEDDING_API_URL EMBEDDING_API_KEY EMBEDDING_MODEL \
              RERANKER_API_URL RERANKER_API_KEY RERANKER_MODEL NEO4J_PASSWORD; do
         need "$k" "nhập tay"

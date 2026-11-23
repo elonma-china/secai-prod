@@ -72,7 +72,13 @@ Các biến phải điền tay (init để trống): `LLM_BASE_URL`, `LLM_MODEL`
 `EMBEDDING_API_KEY`, `RERANKER_API_URL`, `RERANKER_MODEL`, `RERANKER_API_KEY`, `DATA_ROOT`, `GATEWAY_IMAGE` (cộng `VM_IMAGE`,
 `CONVERTER_IMAGE`, `TUNNEL_IMAGE`, `REVIEW_UI_IMAGE` khi bật profile tương ứng), `VERIFY_ALLOWED_TARGETS` (profile exploit),
 khoá và tên model OCR/dịch (profile translation). `LLM_*` là tên chuẩn; `.env` kiểu cũ dùng `QWEN_*` vẫn chạy (`LLM_*`
-thắng, preflight cảnh báo khi hai bên khác nhau). `NEO4J_PASSWORD` do init sinh; compose đòi `DATA_ROOT`, `GATEWAY_IMAGE`,
+thắng, preflight cảnh báo khi hai bên khác nhau). Gateway chọn tên giống pydantic: dòng **có mặt** đầu tiên thắng, kể cả
+khi rỗng, nên dòng `LLM_X=` rỗng che `QWEN_X` (LLM_MODEL rỗng làm gateway không khởi động). `.env` do `init` sinh có sẵn
+các dòng `LLM_BASE_URL=`, `LLM_API_KEY=`, `LLM_MODEL=` (phải điền) và `LLM_CONTEXT_WINDOW=131072`. Người vận hành giữ
+`.env` kiểu prod chỉ có `QWEN_*` thì **xoá các dòng `LLM_*`** (cả `LLM_CONTEXT_WINDOW` nếu dùng `QWEN_CONTEXT_WINDOW`);
+preflight và `check.sh` báo lỗi "xoá dòng LLM_X rỗng hoặc điền giá trị" khi thấy dòng rỗng che `QWEN_X`.
+Biến `export` trong shell chỉ đi vào phần thay thế `${...}` của compose (ví dụ `ORCA_LOCAL_*` của VM, cổng, image), KHÔNG
+vào môi trường gateway: gateway/worker/report chỉ nhận `.env` qua `env_file`. Mọi cấu hình gateway phải nằm trong `.env`. `NEO4J_PASSWORD` do init sinh; compose đòi `DATA_ROOT`, `GATEWAY_IMAGE`,
 `NEO4J_PASSWORD` (không đặt thì `docker compose` báo lỗi ngay). Profile translation cần thêm tokenizer HY-MT2
 (`tokenizer.json`, `tokenizer_config.json`) trong `TOKENIZER_DIR` (mặc định `stack/tokenizer/`, gitignore).
 

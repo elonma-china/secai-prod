@@ -140,6 +140,8 @@ def _stack_copy(tmp_path):
         if (STACK / f).exists():
             shutil.copy(STACK / f, d / f)
     shutil.copy(STACK / "lib/pool.sh", d / "lib/pool.sh")
+    (d / "images/tunnel").mkdir(parents=True)                      # bootstrap.sh source luật direct dùng chung
+    shutil.copy(STACK / "images/tunnel/direct_target.sh", d / "images/tunnel/direct_target.sh")
     return d
 
 
@@ -656,3 +658,19 @@ def test_models_missing_both_names_canonical(tmp_path):
     env = {k: v for k, v in MODEL_ENV.items() if not k.startswith("QWEN_")}
     r = _run(tmp_path, "models", OK_ROUTES, env)
     assert r.returncode != 0 and "LLM_BASE_URL" in r.stderr and "LLM_API_KEY" in r.stderr and "LLM_MODEL" in r.stderr
+
+
+# ---- re-review 8e: dòng LLM_X rỗng che QWEN_X (pydantic không rơi về QWEN_X) ----
+@pytest.mark.parametrize("x", ["BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW"])
+def test_models_empty_llm_line_shadowing_qwen_fails(tmp_path, x):
+    envf = tmp_path / "stack.env"
+    envf.write_text(f"LLM_{x}=\n")
+    r = _run(tmp_path, "models", OK_ROUTES, {**MODEL_ENV, "QWEN_CONTEXT_WINDOW": "4096", "STACK_ENV": str(envf)})
+    assert r.returncode != 0 and f"LLM_{x}" in r.stderr and "xoá dòng" in r.stderr, r.stderr
+
+
+def test_models_qwen_only_dotenv_without_llm_lines_passes(tmp_path):
+    envf = tmp_path / "stack.env"
+    envf.write_text("".join(f"{k}={v}\n" for k, v in MODEL_ENV.items()))
+    r = _run(tmp_path, "models", OK_ROUTES, {"STACK_ENV": str(envf)})
+    assert r.returncode == 0, r.stderr

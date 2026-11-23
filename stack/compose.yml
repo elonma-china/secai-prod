@@ -29,7 +29,8 @@ x-vm: &vm
     OPENCODE_ENABLE_QUESTION_TOOL: "true"
     OPENCODE_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
     ORCAROUTER_API_KEY: ${ORCAROUTER_API_KEY:-}
-    # LLM_* là tên chuẩn (config.py, PR #44); QWEN_* cũ vẫn nhận, LLM_* thắng.
+    # LLM_* là tên chuẩn (config.py, PR #44); QWEN_* cũ vẫn nhận, LLM_* thắng. `:-` của compose rơi về QWEN_* khi LLM_X
+    # RỖNG, còn gateway (pydantic) thì không: lệch nhau chỉ khi có dòng `LLM_X=` rỗng, và preflight/check.sh từ chối trường hợp đó.
     ORCA_LOCAL_BASE_URL: ${LLM_BASE_URL:-${QWEN_BASE_URL:-}}
     ORCA_LOCAL_API_KEY: ${LLM_API_KEY:-${QWEN_API_KEY:-}}
     ORCA_LOCAL_MODEL_ID: ${LLM_MODEL:-${QWEN_MODEL:-}}

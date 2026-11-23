@@ -45,8 +45,13 @@ val() {
     printf '%s' "$v"
 }
 get() { local v="${!1:-}"; [ -n "$v" ] || v="$(val "$1")"; printf '%s' "$v"; }
-# llm_var X: LLM_X (chuẩn) nếu có, không thì QWEN_X (tên cũ) nếu có, không thì LLM_X (để báo thiếu đúng tên chuẩn).
-llm_var() { if [ -n "$(get "LLM_$1")" ] || [ -z "$(get "QWEN_$1")" ]; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
+# Tên LLM như pydantic AliasChoices (config.py): tên đầu tiên CÓ MẶT thắng kể cả rỗng; dòng `LLM_X=` rỗng không rơi về QWEN_X.
+# Có mặt = biến môi trường khác rỗng hoặc có dòng trong .env.
+present() { [ -n "${!1:-}" ] || grep -qE "^$1=" "$ENV_FILE" 2>/dev/null; }
+# llm_var X: LLM_X nếu có mặt, không thì QWEN_X nếu có mặt, không thì LLM_X (để báo thiếu đúng tên chuẩn).
+llm_var() { if present "LLM_$1" || ! present "QWEN_$1"; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
+# llm_shadowed X: dòng LLM_X rỗng che QWEN_X (preflight cũng từ chối).
+llm_shadowed() { present "LLM_$1" && [ -z "$(get "LLM_$1")" ] && [ -n "$(get "QWEN_$1")" ]; }
 
 profiles() { get COMPOSE_PROFILES | tr ',' '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$' || true; }
 
@@ -208,8 +213,12 @@ cmd_models() {
     require_tools python3 curl
     local url key model served shown U K M
     U="$(llm_var BASE_URL)"; K="$(llm_var API_KEY)"; M="$(llm_var MODEL)"
+    local x shadow=0
+    for x in BASE_URL API_KEY MODEL CONTEXT_WINDOW; do
+        llm_shadowed "$x" && { fail "models: LLM_$x: dòng rỗng che QWEN_$x (gateway dùng LLM_$x rỗng, không rơi về QWEN_$x): xoá dòng LLM_$x rỗng hoặc điền giá trị"; shadow=1; }
+    done
     # LLM: gateway gọi GET {base}/models với Bearer (api/routes.py /health).
-    if need_vars "$U" "$K" "$M"; then
+    if [ "$shadow" -eq 0 ] && need_vars "$U" "$K" "$M"; then
         url="$(get "$U")"; url="${url%/}"; key="$(get "$K")"; model="$(get "$M")"; shown="$(safe_url "$url")"
         http GET "$url/models" 15 "$key"
         if timed_out || [ "$HTTP_CODE" = "000" ]; then fail "models: $U ($shown) không kết nối được/quá thời gian 15 s"

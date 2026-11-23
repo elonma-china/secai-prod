@@ -1,4 +1,5 @@
 """stack/images/tunnel/entrypoint.sh (Task 8d): ssh/socat giả qua PATH, không mạng thật."""
+import pytest
 import os
 import signal
 import subprocess
@@ -136,3 +137,37 @@ def test_direct_mode_refuses_without_opt_in_or_with_public_target(tmp_path):
         r = subprocess.run(["sh", str(ENTRY)], env=_env(tmp_path, **{**base, **kv}), capture_output=True, text=True, timeout=10)
         assert r.returncode != 0 and needle in r.stderr, kv
     assert not (tmp_path / "log").exists()   # không bao giờ chạy socat
+
+
+DIRECT = Path(__file__).resolve().parents[1] / "stack/images/tunnel/direct_target.sh"
+DIRECT_CASES = [
+    ("stub-specialist:18868", True), ("stub-ocr:18083", True), ("10.0.0.5:18868", True), ("172.31.255.1:1", True),
+    ("192.168.1.5:65535", True), ("127.0.0.1:9", True),
+    ("stub-:1", False), ("stub:1", False), ("STUB-X:1", False), ("stub-x_y:1", False),
+    ("127.1:1", False), ("10.1:1", False), ("010.0.0.1:1", False), ("10.0.0.256:1", False), ("10.0.0.5", False),
+    ("10.0.0.5:0", False), ("10.0.0.5:70000", False), ("10.0.0.5:080", False),
+    ("0.0.0.0:1", False), ("198.18.0.1:1", False), ("192.0.2.1:1", False), ("198.51.100.1:1", False),
+    ("203.0.113.1:1", False), ("240.0.0.1:1", False), ("255.255.255.255:1", False), ("172.32.0.1:1", False),
+    ("8.8.8.8:18868", False), ("example.com:443", False), ("169.254.1.1:1", False), ("100.64.0.1:1", False),
+]
+
+
+@pytest.mark.parametrize("shell", ["sh", "bash"])
+@pytest.mark.parametrize("target,ok", DIRECT_CASES)
+def test_direct_target_rule_single_definition(shell, target, ok):
+    # bootstrap.sh (bash) và entrypoint.sh (busybox sh) cùng source một tệp: một luật, hai shell.
+    r = subprocess.run([shell, "-c", '. "$1"; direct_target_ok "$2"', "_", str(DIRECT), target], capture_output=True, timeout=10)
+    assert (r.returncode == 0) is ok, (shell, target)
+
+
+def test_both_scripts_source_the_shared_rule():
+    for f in ("stack/bootstrap.sh", "stack/images/tunnel/entrypoint.sh"):
+        t = (Path(__file__).resolve().parents[1] / f).read_text()
+        assert "direct_target.sh" in t and "direct_target_ok()" not in t and "direct_ok()" not in t, f   # không định nghĩa riêng
+    assert "COPY direct_target.sh" in (DIRECT.parent / "Dockerfile").read_text()
+
+
+def test_entrypoint_rejects_short_ipv4_that_preflight_rejects(tmp_path):
+    env = _env(tmp_path, TUNNEL_MODE="direct", TUNNEL_DIRECT_ALLOW_TEST="1", TUNNEL_DIRECT_SPECIALIST="127.1:18868")
+    r = subprocess.run(["sh", str(ENTRY)], env=env, capture_output=True, text=True, timeout=10)
+    assert r.returncode != 0 and "TUNNEL_DIRECT_SPECIALIST" in r.stderr
