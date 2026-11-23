@@ -1,0 +1,53 @@
+# CHỈ ĐỂ TEST: stub Hy-MT2 + OCR để chạy UI-TR-2/UI-TR-3 đầu-cuối trên máy KHÔNG có model thật.
+# Stub chứng minh ĐƯỜNG ỐNG (tunnel sidecar, convert, job, kết quả, tiếng Việt trong đầu ra), KHÔNG chứng minh chất
+# lượng dịch/OCR: dịch = bảng từ cố định + tiền tố "[stub] ", OCR = chữ cố định của fixtures/sample-en.png.
+# Không bao giờ dùng trên máy thật/prod.
+#
+# .env (ngoài các biến thường):
+#   TUNNEL_MODE=direct
+#   TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868
+#   TUNNEL_DIRECT_OCR=stub-ocr:18083
+#   TRANSLATE_V2_SPECIALIST_BASE_URL=http://127.0.0.1:18868   MULTILANG_SPECIALIST_BASE_URL=http://127.0.0.1:18868
+#   TRANSLATE_V2_OCR_BASE_URL=http://127.0.0.1:18083
+#   TRANSLATE_V2_SPECIALIST_MODEL=MULTILANG_SPECIALIST_MODEL=tencent/Hy-MT2-7B   (stub trả một tên cho cả hai)
+#   *_SPECIALIST_API_KEY / TRANSLATE_V2_OCR_API_KEY: giá trị ngẫu nhiên bất kỳ (stub nhận đúng các khoá này)
+# Chạy (từ thư mục stack/; đường dẫn tương đối tính theo compose.yml):
+#   docker compose -f compose.yml -f acceptance/stubs/compose.stubs.yml --profile translation up -d
+#   ./check.sh health && acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT> UI-TR-2 UI-TR-3
+x-stub: &stub
+  image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}   # chỉ cần python stdlib có sẵn trong image gateway
+  profiles: [translation]
+  restart: unless-stopped
+  user: "65534:65534"
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  volumes: ["./acceptance/stubs:/stubs:ro"]
+  networks: [secai-net]
+
+services:
+  stub-specialist:
+    <<: *stub
+    command: ["python", "-I", "/stubs/specialist_stub.py"]
+    environment:
+      STUB_API_KEYS: "${TRANSLATE_V2_SPECIALIST_API_KEY:-},${MULTILANG_SPECIALIST_API_KEY:-}"
+      STUB_MODEL: ${TRANSLATE_V2_SPECIALIST_MODEL:-}
+      STUB_PORT: "18868"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18868/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  stub-ocr:
+    <<: *stub
+    command: ["python", "-I", "/stubs/ocr_stub.py"]
+    environment:
+      STUB_API_KEYS: ${TRANSLATE_V2_OCR_API_KEY:-}
+      STUB_MODEL: ${TRANSLATE_V2_OCR_MODEL:-}
+      STUB_PORT: "18083"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18083/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
