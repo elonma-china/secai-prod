@@ -25,8 +25,12 @@ def test_core_services_and_pinned_images():
 
 def test_no_host_coupling_anywhere():
     text = COMPOSE.read_text()
-    for bad in ("/home/ict", "docker.sock", "network_mode", "host.docker.internal", "container_name", ":latest"):
+    for bad in ("/home/ict", "docker.sock", "host.docker.internal", "container_name", ":latest"):
         assert bad not in text, bad
+    # network_mode chỉ được dùng để chung netns với translation-gateway (sidecar tunnel + worker), không host/none/container:.
+    nm = {n: s["network_mode"] for n, s in load_compose()["services"].items() if "network_mode" in s}
+    assert nm == {"specialist-tunnel": "service:translation-gateway", "translation-worker": "service:translation-gateway"}
+    assert text.count("network_mode") == 2
 
 
 def test_gateway_wiring():
@@ -49,7 +53,8 @@ def test_networks_and_volumes_declared():
     assert {"secai-net", "poc-labs-internal"} <= set(c["networks"])
     assert {"gw-data", "redis-data", "es-data"} <= set(c["volumes"])
     for s in c["services"].values():
-        assert "secai-net" in s["networks"]
+        if "network_mode" not in s:   # service chung netns thì không khai networks (thừa hưởng của translation-gateway)
+            assert "secai-net" in s["networks"]
 
 
 def test_env_files_not_required():
@@ -129,7 +134,7 @@ def test_config_validates_with_and_without_exploit_profile(tmp_path):
 
 def test_translation_profile_on_bridge():
     t = services("translation")
-    assert set(t) == {"translation-gateway", "translation-worker", "translation-converter"}
+    assert set(t) == {"translation-gateway", "translation-worker", "translation-converter", "specialist-tunnel"}
     for n in ("translation-gateway", "translation-worker"):
         assert t[n]["image"] == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}"
         e = t[n]["environment"]
@@ -231,3 +236,29 @@ def test_worker_does_not_inherit_http_healthcheck():
     # (prod chạy host network nên probe trúng gateway prod — xanh giả). Smoke 2026-11-23.
     w = services("translation")["translation-worker"]
     assert w["healthcheck"] == {"disable": True}
+
+
+def test_specialist_tunnel_sidecar_shares_translation_netns():
+    # specialist.py/provider.py chỉ nhận http loopback (giữ chặn SSRF, không sửa src/): sidecar ở chung netns với
+    # translation-gateway nên 127.0.0.1:18868/18083 trong gateway và worker là đầu tunnel.
+    t = services("translation")
+    s = t["specialist-tunnel"]
+    assert s["network_mode"] == "service:translation-gateway"
+    assert "networks" not in s and "ports" not in s and "env_file" not in s   # không nhận cả .env (khoá API)
+    assert s["image"] == "${TUNNEL_IMAGE:-secai-specialist-tunnel:MISSING-set-TUNNEL_IMAGE}"
+    assert s["cap_drop"] == ["ALL"] and "cap_add" not in s
+    assert "no-new-privileges:true" in s["security_opt"]
+    assert s["read_only"] is True and "privileged" not in s
+    assert s["user"] == "${TUNNEL_UID:-10002}"
+    assert s["volumes"] == ["${TUNNEL_SECRETS_DIR:-./secrets/tunnel}:/run/tunnel:ro"]
+    assert not any("docker.sock" in v for v in s["volumes"])
+    env = s["environment"]
+    assert set(env) == {"TUNNEL_MODE", "TUNNEL_SSH_HOST", "TUNNEL_SSH_PORT", "TUNNEL_SSH_USER",
+                        "TUNNEL_REMOTE_SPECIALIST_PORT", "TUNNEL_REMOTE_OCR_PORT",
+                        "TUNNEL_DIRECT_SPECIALIST", "TUNNEL_DIRECT_OCR"}
+    assert env["TUNNEL_MODE"] == "${TUNNEL_MODE:-ssh}"
+    w = t["translation-worker"]
+    assert w["network_mode"] == "service:translation-gateway" and "networks" not in w
+    for n in ("specialist-tunnel", "translation-worker"):
+        # gateway dịch bị tạo lại/khởi động lại qua compose thì netns cũ mất: compose phải khởi động lại cả hai.
+        assert t[n]["depends_on"]["translation-gateway"] == {"condition": "service_started", "restart": True}, n

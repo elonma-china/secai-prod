@@ -23,8 +23,8 @@ sys.stdout.flush()
 sys.exit(rc[0] if rc else 0)   # rc 28 = curl quá thời gian (write-out vẫn in mã + phần thân đã nhận)
 '''
 DOCKER_STUB = '''#!/bin/sh
-echo "$@" >> "$DOCKER_LOG"
-case " $* " in *" ps "*) cat "$DOCKER_PS" ;; *" config "*) [ -z "${DOCKER_CONFIG_OUT:-}" ] || { cat "$DOCKER_CONFIG_OUT"; exit 0; }; echo "stub docker: config không được stub" >&2; exit 9 ;; *) echo "stub docker: chỉ cho phép ps" >&2; exit 9 ;; esac
+printf '%s\\n' "$*" >> "$DOCKER_LOG"
+case " $* " in *" exec "*) for a in "$@"; do last=$a; done; svc=$(printf ' %s ' "$*" | sed -E 's/.* -T ([^ ]+) .*/\\1/'); case " ${DOCKER_EXEC_FAIL:-} " in *" $svc:$last "*) echo "stub: connection refused" >&2; exit 1 ;; esac; exit 0 ;; *" ps "*) cat "$DOCKER_PS" ;; *" config "*) [ -z "${DOCKER_CONFIG_OUT:-}" ] || { cat "$DOCKER_CONFIG_OUT"; exit 0; }; echo "stub docker: config không được stub" >&2; exit 9 ;; *) echo "stub docker: chỉ cho phép ps" >&2; exit 9 ;; esac
 '''
 
 LLM, EMB, RR, GW = "http://llm/v1", "http://emb", "http://rr", "http://gw:8131"
@@ -481,3 +481,73 @@ def test_failure_messages_strip_url_credentials_and_query(tmp_path):
     assert r.returncode != 0 and "llm/v1" in r.stderr and "PWSECRET" not in r.stderr and "QSECRET" not in r.stderr
     r = _health(tmp_path, {f"GET http://u:PWSECRET@gw:8131/health": [500, ""]}, GATEWAY_URL="http://u:PWSECRET@gw:8131")
     assert r.returncode != 0 and "gw:8131" in r.stderr and "PWSECRET" not in r.stderr
+
+
+# ================= Task 8d: sidecar specialist-tunnel =================
+@needs_docker
+@pytest.mark.parametrize("svc,mode", [("qdrant", "host"), ("specialist-tunnel", "host"), ("review-frontend", "service:translation-gateway")])
+def test_config_flags_network_mode_outside_tunnel_rule(tmp_path, svc, mode):
+    # Chỉ specialist-tunnel và translation-worker được chung netns với translation-gateway; host/khác service luôn cấm.
+    d = _stack_copy(tmp_path)
+    c = d / "compose.yml"
+    t = c.read_text()
+    if svc == "specialist-tunnel":
+        t = t.replace("    network_mode: service:translation-gateway\n    depends_on:\n      translation-gateway: { condition: service_started, restart: true }\n    # Chỉ biến",
+                      "    network_mode: host\n    # Chỉ biến", 1)
+    else:
+        anchor = {"qdrant": "  qdrant:\n    image: qdrant/qdrant:v1.10.1\n",
+                  "review-frontend": "  review-frontend:\n"}[svc]
+        t = t.replace(anchor, anchor + f"    network_mode: {mode}\n", 1)
+        if svc == "qdrant":
+            t = t.replace("    networks: [secai-net]\n    healthcheck:\n      test: [\"CMD-SHELL\", \"bash -c 'echo > /dev/tcp/localhost/6333'", "    healthcheck:\n      test: [\"CMD-SHELL\", \"bash -c 'echo > /dev/tcp/localhost/6333'", 1)
+        else:
+            t = t.replace("      VITE_GATEWAY_PROXY: http://gateway:8131\n    ports:\n      - \"${REVIEW_BIND:-127.0.0.1}:${REVIEW_HOST_PORT:-5174}:5174\"\n    networks: [secai-net]\n",
+                          "      VITE_GATEWAY_PROXY: http://gateway:8131\n", 1)
+    assert t != c.read_text()
+    c.write_text(t)
+    r = _config(tmp_path, d)
+    assert r.returncode != 0 and "network_mode" in r.stderr and "FAIL" in r.stderr, r.stdout + r.stderr
+
+
+TUNNEL_PS = CORE + ["translation-gateway", "translation-worker", "translation-converter", "specialist-tunnel"]
+
+
+def _docker_calls(tmp_path):
+    return (tmp_path / "docker.log").read_text().splitlines()
+
+
+def test_health_tunnel_forward_checked_in_gateway_and_worker_netns(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS), COMPOSE_PROFILES="translation", TUNNEL_MODE="ssh",
+                TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083")
+    assert r.returncode == 0, r.stderr
+    ex = [l for l in _docker_calls(tmp_path) if " exec " in f" {l} "]
+    for svc in ("translation-gateway", "translation-worker"):
+        for port in ("18868", "18083"):
+            assert any(f"-T {svc} " in l and l.endswith(port) for l in ex), (svc, port, ex)
+    assert "specialist-tunnel" in r.stdout
+
+
+def test_health_tunnel_not_forwarding_fails_naming_port_and_service(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS), COMPOSE_PROFILES="translation", TUNNEL_MODE="ssh",
+                DOCKER_EXEC_FAIL="translation-worker:18868")
+    assert r.returncode != 0
+    assert "18868" in r.stderr and "translation-worker" in r.stderr and "tunnel" in r.stderr
+
+
+def test_health_ocr_not_probed_when_ocr_url_is_not_loopback(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS), COMPOSE_PROFILES="translation", TUNNEL_MODE="direct",
+                TRANSLATE_V2_OCR_BASE_URL="http://10.0.0.7:18083")
+    assert r.returncode == 0, r.stderr
+    ex = [l for l in _docker_calls(tmp_path) if " exec " in f" {l} "]
+    assert ex and not any(l.endswith("18083") for l in ex)
+
+
+def test_health_tunnel_off_skips_probe_and_sidecar(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS[:-1]), COMPOSE_PROFILES="translation", TUNNEL_MODE="off")
+    assert r.returncode == 0, r.stderr
+    assert not [l for l in _docker_calls(tmp_path) if " exec " in f" {l} "]
+
+
+def test_health_tunnel_sidecar_required_when_on(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS[:-1]), COMPOSE_PROFILES="translation", TUNNEL_MODE="ssh")
+    assert r.returncode != 0 and "specialist-tunnel" in r.stderr

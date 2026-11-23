@@ -302,10 +302,52 @@ services:
     volumes:
       - translation-data:/app/data
       - *translation-tokenizer
-    networks: [secai-net]
+    # Chung netns với translation-gateway: thấy cùng đầu tunnel 127.0.0.1:18868/18083 (specialist-tunnel), vẫn gọi
+    # translation-converter qua DNS secai-net. Worker không mở cổng nên không đụng cổng của gateway dịch.
+    network_mode: service:translation-gateway
+    depends_on:
+      translation-gateway: { condition: service_started, restart: true }
     # Worker không mở cổng HTTP: HEALTHCHECK của image (127.0.0.1:8131) luôn trượt trên bridge. Tiến trình chết thì
     # container thoát và restart, nên trạng thái container là đủ.
     healthcheck: {disable: true}
+
+  # Gateway chỉ nhận dịch vụ chuyên dụng ở http://127.0.0.1 (chặn SSRF trong src/). Sidecar này chung netns với
+  # translation-gateway (và worker) và mở 127.0.0.1:18868 (Hy-MT2) + 127.0.0.1:18083 (OCR) tới máy model:
+  #   TUNNEL_MODE=ssh    ssh -L tới loopback máy model (khoá + known_hosts trong TUNNEL_SECRETS_DIR, tự nối lại)
+  #   TUNNEL_MODE=off    không làm gì (URL dịch là https://<IP private> trực tiếp)
+  #   TUNNEL_MODE=direct CHỈ ĐỂ TEST: socat tới host:port trong secai-net (stub, acceptance/stubs/compose.stubs.yml)
+  # Docker tự khởi động lại translation-gateway (crash) thì netns cũ mất: chạy `docker compose up -d` (check.sh health bắt được).
+  specialist-tunnel:
+    # Không dùng :? (compose nội suy cả khi profile tắt); bootstrap.sh kiểm TUNNEL_IMAGE khi bật translation.
+    image: ${TUNNEL_IMAGE:-secai-specialist-tunnel:MISSING-set-TUNNEL_IMAGE}
+    profiles: [translation]
+    restart: unless-stopped
+    user: ${TUNNEL_UID:-10002}   # phải là chủ tệp khoá (ssh không đọc được khoá 0600 của uid khác); image dựng với cùng uid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:size=8m"]
+    network_mode: service:translation-gateway
+    depends_on:
+      translation-gateway: { condition: service_started, restart: true }
+    # Chỉ biến tunnel, không env_file (.env có khoá API). Thư mục (không phải tệp): bind tệp thiếu làm Docker tạo thư mục root.
+    environment:
+      TUNNEL_MODE: ${TUNNEL_MODE:-ssh}
+      TUNNEL_SSH_HOST: ${TUNNEL_SSH_HOST:-}
+      TUNNEL_SSH_PORT: ${TUNNEL_SSH_PORT:-22}
+      TUNNEL_SSH_USER: ${TUNNEL_SSH_USER:-}
+      TUNNEL_REMOTE_SPECIALIST_PORT: ${TUNNEL_REMOTE_SPECIALIST_PORT:-18868}
+      TUNNEL_REMOTE_OCR_PORT: ${TUNNEL_REMOTE_OCR_PORT:-18083}
+      TUNNEL_DIRECT_SPECIALIST: ${TUNNEL_DIRECT_SPECIALIST:-}
+      TUNNEL_DIRECT_OCR: ${TUNNEL_DIRECT_OCR:-}
+    volumes:
+      - ${TUNNEL_SECRETS_DIR:-./secrets/tunnel}:/run/tunnel:ro
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tunnel-health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
   # .doc -> .docx bằng LibreOffice; image dựng từ stack/images/converter. Không cổng publish: chỉ gateway/worker gọi qua secai-net.
   translation-converter:

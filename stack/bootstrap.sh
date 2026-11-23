@@ -69,6 +69,10 @@ init() {
     fi
     if has_profile review; then fill REVIEW_ENABLED true; fi
     if has_profile translation; then fill TRANSLATION_UPSTREAM_URL http://translation-gateway:18185; fi
+    # specialist-tunnel chạy bằng uid của người vận hành (chủ tệp khoá 0600); image dựng với cùng --build-arg TUNNEL_UID.
+    fill TUNNEL_UID "$(id -u)"
+    local tdir; tdir="$(val TUNNEL_SECRETS_DIR)"
+    if [ -z "$tdir" ] || [ "$tdir" = "./secrets/tunnel" ]; then mkdir -p "$STACK_DIR/secrets/tunnel"; chmod 700 "$STACK_DIR/secrets/tunnel"; fi
 
     # Tokenizer mặc định: tạo thư mục rỗng để bind mount không bị Docker tạo (root); preflight đòi có tệp bên trong.
     local tok; tok="$(val TOKENIZER_DIR)"
@@ -150,7 +154,75 @@ ok = priv and (u.scheme == "https" or (u.scheme == "http" and loop)) and port is
     and not (u.username or u.password or u.query or u.fragment) and u.path in ("", "/")
 sys.exit(0 if ok else 1)
 PY
-    err "$1: gateway chỉ nhận http://127.0.0.1:<cổng> hoặc https://<IP private>:<cổng> (không path/user/query); trên mạng bridge 127.0.0.1 là chính container, nên cần tunnel/sidecar chung network namespace với translation-gateway/worker hoặc https"
+    err "$1: gateway chỉ nhận http://127.0.0.1:<cổng> hoặc https://<IP private>:<cổng> (không path/user/query); trên mạng bridge 127.0.0.1 là chính container, nên dùng sidecar specialist-tunnel (TUNNEL_MODE=ssh) hoặc https"
+}
+
+is_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+
+# URL có phải http(s)://127.0.0.1|localhost|[::1] không, và cổng của nó (rỗng nếu không có).
+url_loopback() { [[ "$1" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:|/|$) ]]; }
+url_port() { [[ "$1" =~ ^[a-z]+://[^/]*:([0-9]+)/?$ ]] && printf '%s' "${BASH_REMATCH[1]}"; }
+
+# Sidecar specialist-tunnel (compose.yml): mở 127.0.0.1:18868 (Hy-MT2) và 127.0.0.1:18083 (OCR) trong netns của
+# translation-gateway/worker. TUNNEL_MODE ssh (mặc định) | direct (chỉ để test, socat tới stub) | off (URL https IP private).
+check_tunnel() {
+    local mode k v
+    mode="$(val TUNNEL_MODE)"; mode="${mode:-ssh}"
+    check_image TUNNEL_IMAGE
+    case "$mode" in ssh|direct|off) ;; *) err "TUNNEL_MODE: '$mode' không hợp lệ (ssh | off | direct (chỉ để test))"; return ;; esac
+    if [ "$mode" = off ]; then
+        for k in TRANSLATE_V2_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_BASE_URL TRANSLATE_V2_OCR_BASE_URL; do
+            if url_loopback "$(val "$k")"; then
+                err "$k: trỏ loopback nhưng TUNNEL_MODE=off; trên mạng bridge không có gì nghe ở 127.0.0.1 của container. Bật TUNNEL_MODE=ssh hoặc dùng https://<IP private>:<cổng>"
+            fi
+        done
+        return
+    fi
+    # Tunnel bật: dịch vụ chuyên dụng phải đi qua đầu tunnel cố định; OCR nếu loopback cũng vậy.
+    for k in TRANSLATE_V2_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_BASE_URL; do
+        v="$(val "$k")"
+        [ -z "$v" ] || { url_loopback "$v" && [ "$(url_port "$v")" = 18868 ]; } \
+            || err "$k: TUNNEL_MODE=$mode thì phải là http://127.0.0.1:18868 (đầu tunnel trong netns translation-gateway)"
+    done
+    v="$(val TRANSLATE_V2_OCR_BASE_URL)"
+    if url_loopback "$v" && [ "$(url_port "$v")" != 18083 ]; then
+        err "TRANSLATE_V2_OCR_BASE_URL: loopback thì phải là http://127.0.0.1:18083 (đầu tunnel OCR)"
+    fi
+    if [ "$mode" = direct ]; then
+        echo "WARNING: TUNNEL_MODE=direct CHỈ ĐỂ TEST (socat tới stub trong secai-net, không mã hoá, không xác thực máy); máy thật dùng ssh" >&2
+        for k in TUNNEL_DIRECT_SPECIALIST TUNNEL_DIRECT_OCR; do
+            v="$(val "$k")"
+            [ "$k" = TUNNEL_DIRECT_OCR ] && [ -z "$v" ] && continue
+            [[ "$v" =~ ^[A-Za-z0-9._-]+:([0-9]+)$ ]] && is_port "${BASH_REMATCH[1]}" \
+                || err "$k: TUNNEL_MODE=direct cần host:cổng (ví dụ stub-specialist:18868)"
+        done
+        return
+    fi
+    need TUNNEL_SSH_HOST "máy model (IP/tên) mà sidecar ssh -L tới loopback của nó"
+    need TUNNEL_SSH_USER "user ssh trên máy model (chỉ cần quyền port-forward)"
+    v="$(val TUNNEL_SSH_HOST)"
+    [ -z "$v" ] || [[ "$v" =~ ^[A-Za-z0-9._:-]+$ ]] || err "TUNNEL_SSH_HOST: '$v' không hợp lệ (chỉ IP hoặc tên máy, không user@/cổng)"
+    for k in TUNNEL_SSH_PORT TUNNEL_REMOTE_SPECIALIST_PORT TUNNEL_REMOTE_OCR_PORT; do
+        v="$(val "$k")"; [ -z "$v" ] || is_port "$v" || err "$k: '$v' không phải cổng 1..65535"
+    done
+    local dir uid key kh host port mode_bits owner
+    dir="$(val TUNNEL_SECRETS_DIR)"; dir="$(abs_path "${dir:-./secrets/tunnel}")"
+    uid="$(val TUNNEL_UID)"; uid="${uid:-10002}"
+    key="$dir/key"; kh="$dir/known_hosts"
+    if [ ! -f "$key" ]; then
+        err "TUNNEL_SECRETS_DIR: thiếu khoá $key (ssh-keygen -t ed25519 -N '' -f $key; đưa $key.pub vào authorized_keys của máy model, nên kèm restrict,port-forwarding,permitopen=\"127.0.0.1:18868\",permitopen=\"127.0.0.1:18083\")"
+    else
+        read -r owner mode_bits <<<"$(stat -L -c '%u %a' "$key")"
+        (( (8#$mode_bits & 8#077) == 0 )) || err "TUNNEL_SECRETS_DIR: $key mode $mode_bits; phải 0600 (chmod 600 $key)"
+        [ "$owner" = "$uid" ] || err "TUNNEL_UID: $key thuộc uid $owner nhưng sidecar chạy uid $uid; đặt TUNNEL_UID=$owner và dựng lại image tunnel với --build-arg TUNNEL_UID=$owner"
+    fi
+    host="$(val TUNNEL_SSH_HOST)"; port="$(val TUNNEL_SSH_PORT)"; port="${port:-22}"
+    [ "$port" = 22 ] || host="[$host]:$port"
+    if [ ! -s "$kh" ]; then
+        err "TUNNEL_SECRETS_DIR: thiếu hoặc rỗng $kh (ghim khoá máy model: ssh-keyscan -p $port <host> > $kh, rồi đối chiếu fingerprint)"
+    elif ! awk -v h="$host" '$1 ~ /^\|1\|/ { found=1 } { n=split($1, a, ","); for (i=1;i<=n;i++) if (a[i]==h) found=1 } END { exit !found }' "$kh"; then
+        err "TUNNEL_SECRETS_DIR: known_hosts không có dòng cho $host (StrictHostKeyChecking=yes sẽ từ chối); ssh-keyscan -p $port <host> >> $kh"
+    fi
 }
 
 preflight() {
@@ -195,6 +267,7 @@ preflight() {
         done
         check_specialist_url TRANSLATE_V2_SPECIALIST_BASE_URL
         check_specialist_url MULTILANG_SPECIALIST_BASE_URL
+        check_tunnel
         local tok; tok="$(abs_path "$(val TOKENIZER_DIR)")"
         [ -n "$(val TOKENIZER_DIR)" ] || tok="$STACK_DIR/tokenizer"
         for k in tokenizer.json tokenizer_config.json; do

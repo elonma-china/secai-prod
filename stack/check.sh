@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # check.sh env|config|models|health|all - kiểm gói stack trước và sau `docker compose up`.
 #   env     chạy `bootstrap.sh preflight` (một điểm vào cho người vận hành).
-#   config  `docker compose config` cho: không profile, từng profile lẻ, cả bốn; cấm container_name, network_mode,
-#           docker.sock, host.docker.internal, :latest; /home/ict cấm trong NGUỒN compose.yml (và image/command đã render).
+#   config  `docker compose config` cho: không profile, từng profile lẻ, cả bốn; cấm container_name, docker.sock,
+#           host.docker.internal, :latest; /home/ict cấm trong NGUỒN compose.yml (và image/command đã render).
+#           network_mode chỉ được là service:translation-gateway và chỉ ở specialist-tunnel/translation-worker
+#           (chung netns để thấy đầu tunnel 127.0.0.1:18868/18083); host/none/container:/service khác đều cấm.
 #           Biến `:?` thiếu thì dùng giá trị giả; giá trị thật trong .env luôn thắng giá trị giả. Không in giá trị render.
 #   models  LLM: GET $QWEN_BASE_URL/models. Embedding/rerank: gateway KHÔNG liệt kê model, nên probe y như gateway
 #           (retrieval/embedding.py): POST $EMBEDDING_API_URL/v1/embeddings, POST $RERANKER_API_URL/v1/rerank, Bearer key.
 #           404/model-not-found = tên model sai (RAG rơi về BM25-only dù health xanh).
 #   health  GET $GATEWAY_URL/health (khối serving/databases do health_deep_checks) + MỘT truy vấn RAG thật qua
 #           POST /sessions + /sessions/{sid}/chat/stream (UI-CHAT-1) + `docker compose ps` các service của profile bật.
+#           Profile translation và TUNNEL_MODE != off: từ TRONG netns translation-gateway và translation-worker
+#           (`compose exec`), nối 127.0.0.1:18868 (và 18083 nếu URL OCR là loopback) và đòi một dòng trạng thái HTTP:
+#           chứng minh tunnel chuyển tới đầu xa, không chỉ là cổng nghe cục bộ.
 #   all     env -> config -> models -> health, dừng ở giai đoạn đầu tiên trượt.
 # Mọi bộ phân tích python (py_run) kết thúc bằng dòng __OK__; thiếu dấu, rc != 0 hoặc traceback = "parser error" = FAIL
 # của đúng kiểm tra đó, không bao giờ là pass (đầu ra rỗng KHÔNG có nghĩa là không có lỗi).
@@ -109,7 +114,8 @@ cmd_env() { exec bash "$STACK_DIR/bootstrap.sh" preflight; }
 # ───────────────────────────── config ──────────────────────────
 # Các chuỗi cấm. /home/ict chỉ xét ở NGUỒN compose.yml và image/command đã render: nguồn bind mount render ra đường dẫn
 # tuyệt đối theo vị trí worktree (có thể chứa tên người dùng hợp lệ), và env_file đã bung cả .env (DATA_ROOT...) vào environment.
-FORBIDDEN=(docker.sock network_mode host.docker.internal container_name ':latest')
+FORBIDDEN=(docker.sock host.docker.internal container_name ':latest')
+NETNS_OK_LINE='[[:space:]]*network_mode: service:translation-gateway[[:space:]]*$'   # dạng duy nhất được phép trong nguồn
 
 SCAN_PY='
 import json, sys
@@ -117,13 +123,17 @@ cfg = json.load(sys.stdin)
 if not isinstance(cfg, dict): raise ValueError("config render không phải JSON object")
 svcs = cfg.get("services")
 if not isinstance(svcs, dict) or not svcs: raise ValueError("config render không có services")
-PAT = ["docker.sock", "network_mode", "host.docker.internal", "container_name", ":latest"]
+PAT = ["docker.sock", "host.docker.internal", "container_name", ":latest"]
+NETNS = {"specialist-tunnel", "translation-worker"}   # chung netns với translation-gateway (đầu tunnel loopback)
 def hit(txt, pats, where):
     for p in pats:
         if p in txt: print(p + "\t" + where)
 for name, svc in svcs.items():
     if not isinstance(svc, dict): raise ValueError("service %s không phải object" % name)
     hit(json.dumps(svc), PAT, name)
+    nm = svc.get("network_mode")
+    if nm is not None and not (name in NETNS and nm == "service:translation-gateway"):
+        print("network_mode=%s\t%s" % (nm, name))
     hit(json.dumps([svc.get("image"), svc.get("command"), svc.get("entrypoint")]), ["/home/ict"], name)
 hit(json.dumps({k: v for k, v in cfg.items() if k != "services"}), PAT, "(top-level)")
 print("__OK__")
@@ -138,6 +148,9 @@ cmd_config() {
             [ -z "$n" ] || fail "config: '$p' có trong nguồn compose.yml (dòng $n)"
         done < <(grep -nF -- "$p" "$COMPOSE_FILE" || true)
     done
+    while IFS=: read -r n _; do
+        [ -z "$n" ] || fail "config: 'network_mode' khác 'service:translation-gateway' trong nguồn compose.yml (dòng $n)"
+    done < <(grep -n -- network_mode "$COMPOSE_FILE" | grep -vE "^[0-9]+:$NETNS_OK_LINE" || true)
     export_compose_vars
     export COMPOSE_PROFILES=""   # profile chỉ đến từ cờ --profile; COMPOSE_PROFILES trong .env không được làm lệch "không profile"
     local combos=("" exploit translation report review "exploit translation report review") c label args out err rc pat where line
@@ -232,6 +245,27 @@ print("__OK__")'
 
 # ───────────────────────────── health ──────────────────────────
 declare -A PROFILE_SERVICES=([exploit]="vm-a vm-b" [translation]="translation-gateway translation-worker translation-converter" [report]="report-backend" [review]="review-frontend")
+
+# Chạy trong container (python của image gateway): nối 127.0.0.1:<cổng>, gửi GET /health, đòi dòng trạng thái "HTTP/".
+# Bất kỳ mã HTTP nào (kể cả 401/404) đều chứng minh đầu xa trả lời; ssh -L nhận kết nối rồi đóng khi đầu xa chết.
+TUNNEL_PROBE_PY='import socket,sys; s=socket.create_connection(("127.0.0.1",int(sys.argv[1])),5); s.settimeout(10); s.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n"); sys.exit(0 if s.recv(5)==b"HTTP/" else 1)'
+
+# is_loopback_url URL: http(s)://127.0.0.1|localhost|[::1]...
+is_loopback_url() { [[ "$1" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:|/|$) ]]; }
+
+check_tunnel() {   # check_tunnel PROJECT
+    local proj="$1" svc port ports="18868"
+    is_loopback_url "$(get TRANSLATE_V2_OCR_BASE_URL)" && ports+=" 18083"
+    for svc in translation-gateway translation-worker; do
+        for port in $ports; do
+            if docker compose -p "$proj" -f "$COMPOSE_FILE" exec -T "$svc" python -c "$TUNNEL_PROBE_PY" "$port" >/dev/null 2>&1; then
+                pass "health: tunnel 127.0.0.1:$port trả HTTP từ trong netns $svc"
+            else
+                fail "health: tunnel 127.0.0.1:$port không chuyển tới dịch vụ đầu xa từ trong netns $svc (TUNNEL_MODE=$(get TUNNEL_MODE); xem 'docker compose logs specialist-tunnel'; translation-gateway khởi động lại thì 'docker compose up -d')"
+            fi
+        done
+    done
+}
 
 HEALTH_PY='
 import json, sys
@@ -351,7 +385,11 @@ print("__OK__")'; then
     if ! command -v docker >/dev/null 2>&1; then fail "health: không có lệnh docker để kiểm service"
     else
         local want="gateway qdrant neo4j redis es" p proj ps_out
-        while IFS= read -r p; do want+=" ${PROFILE_SERVICES[$p]:-}"; done < <(profiles)
+        local tunnel=0
+        while IFS= read -r p; do
+            want+=" ${PROFILE_SERVICES[$p]:-}"
+            if [ "$p" = translation ] && [ "$(get TUNNEL_MODE)" != off ]; then want+=" specialist-tunnel"; tunnel=1; fi
+        done < <(profiles)
         proj="$(get COMPOSE_PROJECT_NAME)"; proj="${proj:-secai-stack}"
         export_compose_vars
         if ! ps_out="$(docker compose -p "$proj" -f "$COMPOSE_FILE" ps -a --format json 2>/dev/null)"; then
@@ -364,6 +402,7 @@ print("__OK__")'; then
                 [ "$n" -ne 0 ] || pass "health: service chạy tốt ($want)"
             fi
         fi
+        [ "$tunnel" -eq 0 ] || check_tunnel "$proj"
     fi
     summary health
 }

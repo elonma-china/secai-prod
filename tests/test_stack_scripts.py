@@ -99,9 +99,22 @@ def _ready(tmp_path, profiles="exploit,translation,report,review"):
          CONVERTER_IMAGE="secai-doc-convert:abc", REVIEW_UI_IMAGE="secai-review-ui:abc",
          TRANSLATE_V2_OCR_BASE_URL="http://o", TRANSLATE_V2_OCR_MODEL="m",
          TRANSLATE_V2_SPECIALIST_BASE_URL="http://127.0.0.1:18868", TRANSLATE_V2_SPECIALIST_MODEL="m",
-         MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_MODEL="m",
+         MULTILANG_SPECIALIST_BASE_URL="http://127.0.0.1:18868", MULTILANG_SPECIALIST_MODEL="m",
          VERIFY_ALLOWED_TARGETS="192.168.96.0/20")
+    _tunnel_ready(d)
     return d, {"MAX_MAP_COUNT_FILE": str(mm)}
+
+
+def _tunnel_ready(d):
+    """Tunnel ssh hợp lệ: khoá 0600 của chính uid đang chạy, known_hosts có máy model."""
+    t = d.parent / "tunnel"
+    t.mkdir(mode=0o700)
+    (t / "key").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n")
+    (t / "key").chmod(0o600)
+    (t / "known_hosts").write_text("[10.0.0.9]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake\n")
+    _set(d, TUNNEL_IMAGE="secai-specialist-tunnel:abc", TUNNEL_MODE="ssh", TUNNEL_SSH_HOST="10.0.0.9",
+         TUNNEL_SSH_PORT="2222", TUNNEL_SSH_USER="tunnel", TUNNEL_SECRETS_DIR=t, TUNNEL_UID=os.getuid())
+    return t
 
 
 def test_init_generates_secrets_once(tmp_path):
@@ -175,8 +188,8 @@ def test_preflight_names_missing_vars(tmp_path):
     assert r.returncode != 0
     for k in ("QWEN_BASE_URL", "QWEN_API_KEY", "QWEN_MODEL", "EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL",
               "RERANKER_API_URL", "RERANKER_API_KEY", "RERANKER_MODEL", "GATEWAY_IMAGE", "DATA_ROOT",
-              "VM_IMAGE", "CONVERTER_IMAGE", "REVIEW_UI_IMAGE", "TRANSLATE_V2_OCR_BASE_URL", "TRANSLATE_V2_SPECIALIST_MODEL",
-              "MULTILANG_SPECIALIST_BASE_URL"):
+              "VM_IMAGE", "CONVERTER_IMAGE", "REVIEW_UI_IMAGE", "TRANSLATE_V2_OCR_MODEL", "TRANSLATE_V2_SPECIALIST_MODEL",
+              "MULTILANG_SPECIALIST_MODEL", "TUNNEL_IMAGE", "TUNNEL_SSH_HOST", "TUNNEL_SSH_USER"):   # URL dịch có mặc định đầu tunnel
         assert k in r.stderr, k
     assert not re.search(r"\b[0-9a-f]{64}\b", r.stderr + r.stdout)     # không in secret
 
@@ -404,4 +417,74 @@ def test_preflight_exploit_needs_target_allowlist(tmp_path):
     assert _bs(d, "preflight", **extra).returncode == 0
     d, extra = _ready(tmp_path, "report")
     _set(d, VERIFY_ALLOWED_TARGETS="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+# ---- Task 8d: sidecar specialist-tunnel ----
+def test_init_prepares_tunnel_dir_and_uid(tmp_path):
+    d = _stack(tmp_path)
+    assert _bs(d, "init").returncode == 0
+    t = d / "secrets/tunnel"
+    assert t.is_dir() and stat.S_IMODE(t.stat().st_mode) == 0o700   # chỉ chủ (= TUNNEL_UID) vào được
+    assert _get(d, "TUNNEL_UID") == str(os.getuid())
+
+
+def test_preflight_tunnel_ssh_requires_settings(tmp_path):
+    for k in ("TUNNEL_SSH_HOST", "TUNNEL_SSH_USER", "TUNNEL_IMAGE"):
+        _fails(tmp_path, k, **{k: ""})
+    _fails(tmp_path, "TUNNEL_SSH_PORT", TUNNEL_SSH_PORT="22x")
+    _fails(tmp_path, "TUNNEL_REMOTE_OCR_PORT", TUNNEL_REMOTE_OCR_PORT="70000")
+    _fails(tmp_path, "TUNNEL_MODE", TUNNEL_MODE="sshh")
+
+
+def test_preflight_tunnel_key_must_be_private_and_owned_by_tunnel_uid(tmp_path):
+    _fails(tmp_path, "0600", mutate=lambda d: (d.parent / "tunnel/key").chmod(0o640))
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID=os.getuid() + 1)
+    _fails(tmp_path, "key", mutate=lambda d: (d.parent / "tunnel/key").unlink())
+
+
+def test_preflight_tunnel_known_hosts_must_pin_host(tmp_path):
+    _fails(tmp_path, "known_hosts", mutate=lambda d: (d.parent / "tunnel/known_hosts").write_text(""))
+    _fails(tmp_path, "known_hosts", TUNNEL_SSH_HOST="10.0.0.10")     # không có dòng cho máy này
+    _fails(tmp_path, "known_hosts", TUNNEL_SSH_PORT="22")            # cổng khác 22 thì dòng phải là [host]:port
+    d, extra = _ready(tmp_path)
+    (d.parent / "tunnel/known_hosts").write_text("|1|abc=|def= ssh-ed25519 AAAA\n")   # dạng băm (HashKnownHosts)
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_tunnel_on_needs_loopback_urls_on_tunnel_ports(tmp_path):
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        _fails(tmp_path, k, **{k: "https://10.0.0.5:18868"})
+        _fails(tmp_path, k, **{k: "http://127.0.0.1:18869"})
+    _fails(tmp_path, "TRANSLATE_V2_OCR_BASE_URL", TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18084")
+    d, extra = _ready(tmp_path)
+    _set(d, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_tunnel_off_rejects_loopback_and_skips_ssh(tmp_path):
+    # Trên bridge, không tunnel thì 127.0.0.1 là chính container: không có gì nghe.
+    _fails(tmp_path, "TUNNEL_MODE=off", TUNNEL_MODE="off")
+    d, extra = _ready(tmp_path)
+    _set(d, TUNNEL_MODE="off", TUNNEL_SSH_HOST="", TUNNEL_SSH_USER="",
+         TRANSLATE_V2_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868")
+    (d.parent / "tunnel/key").unlink()
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+
+
+def test_preflight_tunnel_direct_is_test_only(tmp_path):
+    _fails(tmp_path, "TUNNEL_DIRECT_SPECIALIST", TUNNEL_MODE="direct")
+    d, extra = _ready(tmp_path)
+    _set(d, TUNNEL_MODE="direct", TUNNEL_SSH_HOST="", TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    assert "CHỈ ĐỂ TEST" in r.stderr
+    _set(d, TUNNEL_DIRECT_SPECIALIST="stub-specialist")              # thiếu cổng
+    assert "TUNNEL_DIRECT_SPECIALIST" in _bs(d, "preflight", **extra).stderr
+
+
+def test_preflight_tunnel_ignored_without_translation_profile(tmp_path):
+    d, extra = _ready(tmp_path, "report")
+    _set(d, TUNNEL_MODE="ssh", TUNNEL_SSH_HOST="", TUNNEL_IMAGE="")
     assert _bs(d, "preflight", **extra).returncode == 0
