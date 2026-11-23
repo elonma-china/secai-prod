@@ -72,7 +72,8 @@ def _start(tmp_path, **kv):
 
 
 def test_direct_mode_socat_to_stub_and_stops_on_term(tmp_path):
-    p = _start(tmp_path, TUNNEL_MODE="direct", TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868", TUNNEL_DIRECT_OCR="stub-ocr:18083")
+    p = _start(tmp_path, TUNNEL_MODE="direct", TUNNEL_DIRECT_ALLOW_TEST="1",
+               TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868", TUNNEL_DIRECT_OCR="stub-ocr:18083")
     p.send_signal(signal.SIGTERM)
     out, err = p.communicate(timeout=10)
     calls = sorted((tmp_path / "log").read_text().splitlines())
@@ -96,7 +97,7 @@ def test_exits_when_translation_gateway_netns_is_gone(tmp_path):
     # cho nó nhập netns mới (thấy ở smoke 8d: không thoát thì tunnel chết lặng lẽ).
     net = tmp_path / "net"
     (net / "lo").mkdir(parents=True)
-    for kv in ({"TUNNEL_MODE": "direct", "TUNNEL_DIRECT_SPECIALIST": "s:1"}, SSH):
+    for kv in ({"TUNNEL_MODE": "direct", "TUNNEL_DIRECT_ALLOW_TEST": "1", "TUNNEL_DIRECT_SPECIALIST": "stub-s:1"}, SSH):
         r = subprocess.run(["sh", str(ENTRY)], env=_env(tmp_path, TUNNEL_NET_DIR=str(net), **kv), capture_output=True, text=True, timeout=20)
         assert r.returncode != 0 and "netns" in r.stderr, kv
 
@@ -123,3 +124,15 @@ def test_worker_watch_passes_exit_code_and_forwards_term(tmp_path):
     time.sleep(1)
     p.send_signal(signal.SIGTERM)
     assert p.wait(10) == 7
+
+
+def test_direct_mode_refuses_without_opt_in_or_with_public_target(tmp_path):
+    # I1, phòng thủ lớp hai: entrypoint tự từ chối dù preflight bị bỏ qua.
+    base = {"TUNNEL_MODE": "direct", "TUNNEL_DIRECT_SPECIALIST": "stub-specialist:18868"}
+    for kv, needle in (({}, "TUNNEL_DIRECT_ALLOW_TEST"),
+                       ({"TUNNEL_DIRECT_ALLOW_TEST": "1", "TUNNEL_DIRECT_SPECIALIST": "example.com:443"}, "TUNNEL_DIRECT_SPECIALIST"),
+                       ({"TUNNEL_DIRECT_ALLOW_TEST": "1", "TUNNEL_DIRECT_SPECIALIST": "8.8.8.8:18868"}, "TUNNEL_DIRECT_SPECIALIST"),
+                       ({"TUNNEL_DIRECT_ALLOW_TEST": "1", "TUNNEL_DIRECT_OCR": "1.1.1.1:18083"}, "TUNNEL_DIRECT_OCR")):
+        r = subprocess.run(["sh", str(ENTRY)], env=_env(tmp_path, **{**base, **kv}), capture_output=True, text=True, timeout=10)
+        assert r.returncode != 0 and needle in r.stderr, kv
+    assert not (tmp_path / "log").exists()   # không bao giờ chạy socat

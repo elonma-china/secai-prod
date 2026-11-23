@@ -474,9 +474,9 @@ def test_preflight_tunnel_off_rejects_loopback_and_skips_ssh(tmp_path):
 
 
 def test_preflight_tunnel_direct_is_test_only(tmp_path):
-    _fails(tmp_path, "TUNNEL_DIRECT_SPECIALIST", TUNNEL_MODE="direct")
+    _fails(tmp_path, "TUNNEL_DIRECT_SPECIALIST", TUNNEL_MODE="direct", TUNNEL_DIRECT_ALLOW_TEST="1")
     d, extra = _ready(tmp_path)
-    _set(d, TUNNEL_MODE="direct", TUNNEL_SSH_HOST="", TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868")
+    _set(d, TUNNEL_MODE="direct", TUNNEL_SSH_HOST="", TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868", TUNNEL_DIRECT_ALLOW_TEST="1")
     r = _bs(d, "preflight", **extra)
     assert r.returncode == 0, r.stderr
     assert "CHỈ ĐỂ TEST" in r.stderr
@@ -488,3 +488,76 @@ def test_preflight_tunnel_ignored_without_translation_profile(tmp_path):
     d, extra = _ready(tmp_path, "report")
     _set(d, TUNNEL_MODE="ssh", TUNNEL_SSH_HOST="", TUNNEL_IMAGE="")
     assert _bs(d, "preflight", **extra).returncode == 0
+
+
+# ---- 8d review ----
+def _direct(tmp_path, **kv):
+    d, extra = _ready(tmp_path)
+    _set(d, **{"TUNNEL_MODE": "direct", "TUNNEL_SSH_HOST": "", "TUNNEL_DIRECT_ALLOW_TEST": "1",
+               "TUNNEL_DIRECT_SPECIALIST": "stub-specialist:18868", **kv})
+    return _bs(d, "preflight", **extra)
+
+
+def test_preflight_direct_needs_explicit_test_opt_in(tmp_path):
+    # I1: direct vượt chặn SSRF loopback-only và gửi khoá Bearer qua TCP thô: chỉ khi bật tường minh.
+    r = _direct(tmp_path, TUNNEL_DIRECT_ALLOW_TEST="")
+    assert r.returncode != 0 and "TUNNEL_DIRECT_ALLOW_TEST" in r.stderr
+    assert _direct(tmp_path, TUNNEL_DIRECT_ALLOW_TEST="yes").returncode != 0
+
+
+def test_preflight_direct_target_restricted_to_stub_or_private(tmp_path):
+    for bad in ("example.com:443", "8.8.8.8:18868", "api.openai.com:80", "stubby.example.com:1", "172.32.0.1:1"):
+        r = _direct(tmp_path, TUNNEL_DIRECT_SPECIALIST=bad)
+        assert r.returncode != 0 and "TUNNEL_DIRECT_SPECIALIST" in r.stderr, bad
+    assert _direct(tmp_path, TUNNEL_DIRECT_OCR="1.1.1.1:18083").returncode != 0
+    for ok in ("stub-specialist:18868", "10.231.0.7:18868", "192.168.1.5:1", "172.16.0.2:9", "127.0.0.1:9"):
+        r = _direct(tmp_path, TUNNEL_DIRECT_SPECIALIST=ok)
+        assert r.returncode == 0, (ok, r.stderr)
+
+
+def test_preflight_direct_loopback_ocr_needs_direct_ocr_target(tmp_path):
+    # M4
+    r = _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="")
+    assert r.returncode != 0 and "TUNNEL_DIRECT_OCR" in r.stderr
+    assert _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="stub-ocr:18083").returncode == 0
+
+
+def test_preflight_tunnel_urls_must_be_exact(tmp_path):
+    # M3: đúng http://127.0.0.1:18868 / :18083; không [::1], localhost, https.
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        for bad in ("http://localhost:18868", "http://[::1]:18868", "https://127.0.0.1:18868", "http://127.0.0.2:18868"):
+            _fails(tmp_path, k, **{k: bad})
+    for bad in ("http://localhost:18083", "http://[::1]:18083", "https://127.0.0.1:18083"):
+        _fails(tmp_path, "TRANSLATE_V2_OCR_BASE_URL", TRANSLATE_V2_OCR_BASE_URL=bad)
+
+
+FAKE_DOCKER_USER = """#!/bin/sh
+case "$*" in *"image inspect"*) [ -n "$FAKE_USER" ] || exit 1; echo "$FAKE_USER" ;; *) exit 9 ;; esac
+"""
+
+
+def test_preflight_tunnel_uid_numeric_nonroot_and_matches_image(tmp_path):
+    # M5
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID="abc")
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID="0")
+    b = tmp_path / "fakebin"
+    b.mkdir()
+    (b / "docker").write_text(FAKE_DOCKER_USER)
+    (b / "docker").chmod(0o755)
+    path = f"{b}:{os.environ['PATH']}"
+    d, extra = _ready(tmp_path)
+    r = _bs(d, "preflight", PATH=path, FAKE_USER="4242", **extra)
+    assert r.returncode != 0 and "TUNNEL_UID" in r.stderr and "4242" in r.stderr
+    assert _bs(d, "preflight", PATH=path, FAKE_USER=str(os.getuid()), **extra).returncode == 0
+    r = _bs(d, "preflight", PATH=path, FAKE_USER="", **extra)          # image chưa có: bỏ qua, có thông báo
+    assert r.returncode == 0 and "TUNNEL_IMAGE" in r.stderr
+
+
+def test_preflight_direct_refuses_real_api_keys(tmp_path):
+    # M10/I1: direct gửi Bearer qua TCP thô -> chỉ khoá stub giả cố định.
+    for k in ("TRANSLATE_V2_SPECIALIST_API_KEY", "MULTILANG_SPECIALIST_API_KEY", "TRANSLATE_V2_OCR_API_KEY"):
+        r = _direct(tmp_path, **{k: "sk-real-looking"})
+        assert r.returncode != 0 and k in r.stderr and "sk-real-looking" not in r.stderr
+    assert _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY="stub-test-key-not-secret",
+                   MULTILANG_SPECIALIST_API_KEY="stub-test-key-not-secret",
+                   TRANSLATE_V2_OCR_API_KEY="stub-test-key-not-secret").returncode == 0

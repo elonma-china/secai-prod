@@ -551,3 +551,73 @@ def test_health_tunnel_off_skips_probe_and_sidecar(tmp_path):
 def test_health_tunnel_sidecar_required_when_on(tmp_path):
     r = _health(tmp_path, ps=_ps(TUNNEL_PS[:-1]), COMPOSE_PROFILES="translation", TUNNEL_MODE="ssh")
     assert r.returncode != 0 and "specialist-tunnel" in r.stderr
+
+
+# ---- 8d review ----
+def test_health_direct_mode_prints_loud_warning(tmp_path):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS), COMPOSE_PROFILES="translation", TUNNEL_MODE="direct")
+    out = r.stdout + r.stderr
+    assert "WARNING" in out and "direct" in out and "CHỈ ĐỂ TEST" in out
+
+
+@pytest.mark.parametrize("k,v", [("TRANSLATE_V2_SPECIALIST_BASE_URL", "http://localhost:18868"),
+                                 ("MULTILANG_SPECIALIST_BASE_URL", "http://[::1]:18868"),
+                                 ("TRANSLATE_V2_SPECIALIST_BASE_URL", "https://127.0.0.1:18868"),
+                                 ("TRANSLATE_V2_OCR_BASE_URL", "http://localhost:18083")])
+def test_health_tunnel_urls_must_be_exact(tmp_path, k, v):
+    r = _health(tmp_path, ps=_ps(TUNNEL_PS), COMPOSE_PROFILES="translation", TUNNEL_MODE="ssh", **{k: v})
+    assert r.returncode != 0 and k in r.stderr
+
+
+# ---- I2: TUNNEL_PROBE_PY chạy thật ----
+import re as _re
+import socket as _socket
+import threading as _threading
+import time as _time
+
+PROBE = _re.search(r"^TUNNEL_PROBE_PY='(.*)'$", (STACK / "check.sh").read_text(), _re.M).group(1)
+
+
+def _serve(handler):
+    srv = _socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    def run():
+        c, _ = srv.accept()
+        try:
+            handler(c)
+        finally:
+            c.close()
+            srv.close()
+    _threading.Thread(target=run, daemon=True).start()
+    return srv.getsockname()[1]
+
+
+def _probe(port):
+    return subprocess.run(["python3", "-I", "-c", PROBE, str(port)], capture_output=True, timeout=30).returncode
+
+
+def _split(c):
+    c.recv(1024)
+    c.sendall(b"HTT")
+    _time.sleep(0.3)
+    c.sendall(b"P/1.1 200 OK\r\n\r\n")
+
+
+@pytest.mark.parametrize("name,handler,ok", [
+    ("accept-then-close", lambda c: None, False),
+    ("http-404", lambda c: (c.recv(1024), c.sendall(b"HTTP/1.0 404 Not Found\r\n\r\n")), True),
+    ("ssh-banner", lambda c: c.sendall(b"SSH-2.0-OpenSSH_10.3\r\n"), False),
+    ("split-status-line", _split, True),
+    ("garbage-http-prefix", lambda c: (c.recv(1024), c.sendall(b"HTTP/xx\r\n")), False),
+])
+def test_tunnel_probe_judges_far_end(name, handler, ok):
+    assert (_probe(_serve(handler)) == 0) is ok, name
+
+
+def test_tunnel_probe_refused_connection_fails():
+    s = _socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    assert _probe(port) != 0

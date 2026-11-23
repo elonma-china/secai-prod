@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# bootstrap.sh init|preflight - chuẩn bị và kiểm tra stack trước `docker compose up`. Không gọi docker.
+# bootstrap.sh init|preflight - chuẩn bị và kiểm tra stack trước `docker compose up`. Chỉ gọi docker để đọc
+# (`docker image inspect` của TUNNEL_IMAGE), không bao giờ đổi gì.
 #   init       tạo .env từ .env.example (0600), sinh secret còn trống, pool, secrets/review-credentials.json.
 #              Chạy lại an toàn: chỉ điền giá trị còn trống, không bao giờ ghi đè.
 #   preflight  kiểm .env/đường dẫn/máy chủ; mỗi vấn đề một dòng trên stderr (tên biến + cách sửa), thoát != 0 nếu có.
@@ -160,7 +161,19 @@ PY
 is_port() { [[ "$1" =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
 
 # URL có phải http(s)://127.0.0.1|localhost|[::1] không, và cổng của nó (rỗng nếu không có).
-url_loopback() { [[ "$1" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:|/|$) ]]; }
+url_loopback() { [[ "$1" =~ ^https?://(127\.[0-9.]+|localhost|\[::1\])(:|/|$) ]]; }
+SPEC_URL=http://127.0.0.1:18868   # đầu tunnel cố định trong netns translation-gateway (đúng chuỗi này, không localhost/[::1]/https)
+OCR_URL=http://127.0.0.1:18083
+STUB_KEY=stub-test-key-not-secret  # khoá giả cố định của acceptance/stubs/compose.stubs.yml
+
+# direct (chỉ test) chỉ được tới stub-* trong secai-net hoặc IPv4 private/loopback: không bao giờ ra Internet.
+direct_target_ok() {
+    [[ "$1" =~ ^([A-Za-z0-9._-]+):([0-9]+)$ ]] || return 1
+    local h="${BASH_REMATCH[1]}"
+    is_port "${BASH_REMATCH[2]}" || return 1
+    [[ "$h" =~ ^stub-[a-z0-9-]+$ ]] && return 0
+    python3 -I -c 'import ipaddress,sys; a=ipaddress.ip_address(sys.argv[1]); sys.exit(0 if a.version == 4 and (a.is_private or a.is_loopback) and not a.is_link_local else 1)' "$h" 2>/dev/null
+}
 url_port() { [[ "$1" =~ ^[a-z]+://[^/]*:([0-9]+)/?$ ]] && printf '%s' "${BASH_REMATCH[1]}"; }
 
 # Sidecar specialist-tunnel (compose.yml): mở 127.0.0.1:18868 (Hy-MT2) và 127.0.0.1:18083 (OCR) trong netns của
@@ -169,6 +182,7 @@ check_tunnel() {
     local mode k v
     mode="$(val TUNNEL_MODE)"; mode="${mode:-ssh}"
     check_image TUNNEL_IMAGE
+    check_tunnel_uid
     case "$mode" in ssh|direct|off) ;; *) err "TUNNEL_MODE: '$mode' không hợp lệ (ssh | off | direct (chỉ để test))"; return ;; esac
     if [ "$mode" = off ]; then
         for k in TRANSLATE_V2_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_BASE_URL TRANSLATE_V2_OCR_BASE_URL; do
@@ -181,20 +195,31 @@ check_tunnel() {
     # Tunnel bật: dịch vụ chuyên dụng phải đi qua đầu tunnel cố định; OCR nếu loopback cũng vậy.
     for k in TRANSLATE_V2_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_BASE_URL; do
         v="$(val "$k")"
-        [ -z "$v" ] || { url_loopback "$v" && [ "$(url_port "$v")" = 18868 ]; } \
-            || err "$k: TUNNEL_MODE=$mode thì phải là http://127.0.0.1:18868 (đầu tunnel trong netns translation-gateway)"
+        [ -z "$v" ] || [ "$v" = "$SPEC_URL" ] \
+            || err "$k: TUNNEL_MODE=$mode thì phải đúng $SPEC_URL (đầu tunnel trong netns translation-gateway)"
     done
     v="$(val TRANSLATE_V2_OCR_BASE_URL)"
-    if url_loopback "$v" && [ "$(url_port "$v")" != 18083 ]; then
-        err "TRANSLATE_V2_OCR_BASE_URL: loopback thì phải là http://127.0.0.1:18083 (đầu tunnel OCR)"
+    if url_loopback "$v" && [ "$v" != "$OCR_URL" ]; then
+        err "TRANSLATE_V2_OCR_BASE_URL: loopback thì phải đúng $OCR_URL (đầu tunnel OCR)"
     fi
     if [ "$mode" = direct ]; then
         echo "WARNING: TUNNEL_MODE=direct CHỈ ĐỂ TEST (socat tới stub trong secai-net, không mã hoá, không xác thực máy); máy thật dùng ssh" >&2
+        # direct vượt chặn SSRF loopback-only của gateway và gửi khoá Bearer qua TCP thô: phải bật tường minh,
+        # chỉ tới stub/IP private, và chỉ với khoá stub giả.
+        [ "$(val TUNNEL_DIRECT_ALLOW_TEST)" = 1 ] \
+            || err "TUNNEL_DIRECT_ALLOW_TEST: TUNNEL_MODE=direct chỉ để test, phải đặt TUNNEL_DIRECT_ALLOW_TEST=1 tường minh (máy thật dùng ssh)"
         for k in TUNNEL_DIRECT_SPECIALIST TUNNEL_DIRECT_OCR; do
             v="$(val "$k")"
-            [ "$k" = TUNNEL_DIRECT_OCR ] && [ -z "$v" ] && continue
-            [[ "$v" =~ ^[A-Za-z0-9._-]+:([0-9]+)$ ]] && is_port "${BASH_REMATCH[1]}" \
-                || err "$k: TUNNEL_MODE=direct cần host:cổng (ví dụ stub-specialist:18868)"
+            if [ -z "$v" ]; then
+                [ "$k" = TUNNEL_DIRECT_OCR ] && [ "$(val TRANSLATE_V2_OCR_BASE_URL)" != "$OCR_URL" ] && continue
+                err "$k: TUNNEL_MODE=direct cần host:cổng (ví dụ ${k#TUNNEL_DIRECT_}: stub-specialist:18868 / stub-ocr:18083)"
+                continue
+            fi
+            direct_target_ok "$v" || err "$k: '$v' không được: direct chỉ tới stub-*:<cổng> hoặc IPv4 private/loopback:<cổng>"
+        done
+        for k in TRANSLATE_V2_SPECIALIST_API_KEY MULTILANG_SPECIALIST_API_KEY TRANSLATE_V2_OCR_API_KEY; do
+            v="$(val "$k")"
+            [ -z "$v" ] || [ "$v" = "$STUB_KEY" ] || err "$k: TUNNEL_MODE=direct chỉ dùng khoá stub giả '$STUB_KEY' (không gửi khoá thật qua TCP thô); dùng .env riêng cho stub"
         done
         return
     fi
@@ -222,6 +247,22 @@ check_tunnel() {
         err "TUNNEL_SECRETS_DIR: thiếu hoặc rỗng $kh (ghim khoá máy model: ssh-keyscan -p $port <host> > $kh, rồi đối chiếu fingerprint)"
     elif ! awk -v h="$host" '$1 ~ /^\|1\|/ { found=1 } { n=split($1, a, ","); for (i=1;i<=n;i++) if (a[i]==h) found=1 } END { exit !found }' "$kh"; then
         err "TUNNEL_SECRETS_DIR: known_hosts không có dòng cho $host (StrictHostKeyChecking=yes sẽ từ chối); ssh-keyscan -p $port <host> >> $kh"
+    fi
+}
+
+# TUNNEL_UID: số, khác 0, và bằng USER của image tunnel nếu image đã có (chỉ đọc `docker image inspect`).
+check_tunnel_uid() {
+    local uid img iu
+    uid="$(val TUNNEL_UID)"
+    if ! [[ "$uid" =~ ^[0-9]+$ ]] || (( 10#$uid == 0 )); then
+        err "TUNNEL_UID: '$uid' phải là số uid khác 0 (init đặt \$(id -u)); sidecar không chạy root"; return
+    fi
+    img="$(val TUNNEL_IMAGE)"
+    [ -n "$img" ] && [[ "$img" != *MISSING* ]] || return 0
+    if command -v docker >/dev/null 2>&1 && iu="$(docker image inspect -f '{{.Config.User}}' "$img" 2>/dev/null)"; then
+        [ "${iu%%:*}" = "$uid" ] || err "TUNNEL_UID: $uid nhưng image $img chạy user '$iu'; dựng lại với --build-arg TUNNEL_UID=$uid"
+    else
+        echo "NOTICE: TUNNEL_IMAGE: $img chưa có trên máy này; bỏ qua so khớp TUNNEL_UID với USER của image" >&2
     fi
 }
 

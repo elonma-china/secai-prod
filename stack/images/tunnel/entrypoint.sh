@@ -43,9 +43,25 @@ run_ssh() {
     done
 }
 
+# direct_ok HOST:PORT: chỉ stub-* (secai-net) hoặc IPv4 private/loopback; không bao giờ ra Internet.
+direct_ok() {
+    h="${1%:*}"; p="${1##*:}"
+    [ "$h" != "$1" ] || return 1
+    case "$p" in ''|*[!0-9]*) return 1 ;; esac
+    case "$h" in
+        stub-*) case "$h" in *[!a-z0-9-]*) return 1 ;; esac; return 0 ;;
+        10.*|127.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*) case "$h" in *[!0-9.]*) return 1 ;; esac; return 0 ;;
+    esac
+    return 1
+}
+
 run_direct() {
     echo "specialist-tunnel: TUNNEL_MODE=direct CHỈ ĐỂ TEST (stub), không dùng cho máy thật" >&2
+    # Phòng thủ lớp hai (preflight cũng chặn): direct vượt chặn SSRF loopback-only của gateway.
+    [ "${TUNNEL_DIRECT_ALLOW_TEST:-}" = 1 ] || die "TUNNEL_MODE=direct cần TUNNEL_DIRECT_ALLOW_TEST=1 (chỉ để test)"
     [ -n "${TUNNEL_DIRECT_SPECIALIST:-}" ] || die "TUNNEL_DIRECT_SPECIALIST chưa đặt (host:cổng)"
+    direct_ok "$TUNNEL_DIRECT_SPECIALIST" || die "TUNNEL_DIRECT_SPECIALIST '$TUNNEL_DIRECT_SPECIALIST': chỉ stub-*:cổng hoặc IPv4 private/loopback"
+    [ -z "${TUNNEL_DIRECT_OCR:-}" ] || direct_ok "$TUNNEL_DIRECT_OCR" || die "TUNNEL_DIRECT_OCR '$TUNNEL_DIRECT_OCR': chỉ stub-*:cổng hoặc IPv4 private/loopback"
     netns_ok || die "netns của translation-gateway đã mất; thoát để Docker nối lại"
     socat TCP-LISTEN:18868,bind=127.0.0.1,reuseaddr,fork "TCP:$TUNNEL_DIRECT_SPECIALIST" & a=$!
     b=""

@@ -3,14 +3,16 @@
 # lượng dịch/OCR: dịch = bảng từ cố định + tiền tố "[stub] ", OCR = chữ cố định của fixtures/sample-en.png.
 # Không bao giờ dùng trên máy thật/prod.
 #
-# .env (ngoài các biến thường):
+# Dùng .env RIÊNG cho lần chạy stub (không phải .env thật có khoá thật). Ngoài các biến thường:
 #   TUNNEL_MODE=direct
+#   TUNNEL_DIRECT_ALLOW_TEST=1
 #   TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868
 #   TUNNEL_DIRECT_OCR=stub-ocr:18083
 #   TRANSLATE_V2_SPECIALIST_BASE_URL=http://127.0.0.1:18868   MULTILANG_SPECIALIST_BASE_URL=http://127.0.0.1:18868
 #   TRANSLATE_V2_OCR_BASE_URL=http://127.0.0.1:18083
 #   TRANSLATE_V2_SPECIALIST_MODEL=MULTILANG_SPECIALIST_MODEL=tencent/Hy-MT2-7B   (stub trả một tên cho cả hai)
-#   *_SPECIALIST_API_KEY / TRANSLATE_V2_OCR_API_KEY: giá trị ngẫu nhiên bất kỳ (stub nhận đúng các khoá này)
+#   TRANSLATE_V2_SPECIALIST_API_KEY=MULTILANG_SPECIALIST_API_KEY=TRANSLATE_V2_OCR_API_KEY=stub-test-key-not-secret
+#   (khoá giả cố định; stub KHÔNG đọc khoá từ .env, preflight từ chối khoá khác khi TUNNEL_MODE=direct)
 # Chạy (từ thư mục stack/; đường dẫn tương đối tính theo compose.yml):
 #   docker compose -f compose.yml -f acceptance/stubs/compose.stubs.yml --profile translation up -d
 #   ./check.sh health && acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT> UI-TR-2 UI-TR-3
@@ -30,7 +32,7 @@ services:
     <<: *stub
     command: ["python", "-I", "/stubs/specialist_stub.py"]
     environment:
-      STUB_API_KEYS: "${TRANSLATE_V2_SPECIALIST_API_KEY:-},${MULTILANG_SPECIALIST_API_KEY:-}"
+      STUB_API_KEYS: stub-test-key-not-secret
       STUB_MODEL: ${TRANSLATE_V2_SPECIALIST_MODEL:-}
       STUB_PORT: "18868"
     healthcheck:
@@ -43,7 +45,7 @@ services:
     <<: *stub
     command: ["python", "-I", "/stubs/ocr_stub.py"]
     environment:
-      STUB_API_KEYS: ${TRANSLATE_V2_OCR_API_KEY:-}
+      STUB_API_KEYS: stub-test-key-not-secret
       STUB_MODEL: ${TRANSLATE_V2_OCR_MODEL:-}
       STUB_PORT: "18083"
     healthcheck:

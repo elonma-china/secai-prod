@@ -95,6 +95,7 @@ def test_stub_override_renders_with_base_compose(tmp_path):
         pytest.skip("docker compose not available")
     base = STUBS.parents[1] / "compose.yml"
     env = {"PATH": os.environ["PATH"], "GATEWAY_IMAGE": "x:1", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x",
+           "TRANSLATE_V2_SPECIALIST_API_KEY": "real-secret", "TRANSLATE_V2_OCR_API_KEY": "real-secret",
            "TRANSLATE_V2_SPECIALIST_MODEL": "tencent/Hy-MT2-7B", "TRANSLATE_V2_OCR_MODEL": "ocr-m"}
     r = subprocess.run(["docker", "compose", "-f", str(base), "-f", str(STUBS / "compose.stubs.yml"), "--profile", "translation",
                         "config", "--format", "json"], env=env, capture_output=True, text=True)
@@ -104,4 +105,6 @@ def test_stub_override_renders_with_base_compose(tmp_path):
         s = svcs[n]
         assert s["environment"]["STUB_PORT"] == port and "ports" not in s and s["cap_drop"] == ["ALL"]
         assert s["volumes"][0]["source"] == str(STUBS) and s["volumes"][0]["read_only"] is True
+        assert s["environment"]["STUB_API_KEYS"] == "stub-test-key-not-secret"   # M10: không lấy khoá thật từ .env
     assert "CHỈ ĐỂ TEST" in (STUBS / "compose.stubs.yml").read_text()
+    assert "_API_KEY:" not in (STUBS / "compose.stubs.yml").read_text().split("services:", 1)[1]

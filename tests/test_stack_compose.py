@@ -258,7 +258,7 @@ def test_specialist_tunnel_sidecar_shares_translation_netns():
     env = s["environment"]
     assert set(env) == {"TUNNEL_MODE", "TUNNEL_SSH_HOST", "TUNNEL_SSH_PORT", "TUNNEL_SSH_USER",
                         "TUNNEL_REMOTE_SPECIALIST_PORT", "TUNNEL_REMOTE_OCR_PORT",
-                        "TUNNEL_DIRECT_SPECIALIST", "TUNNEL_DIRECT_OCR"}
+                        "TUNNEL_DIRECT_SPECIALIST", "TUNNEL_DIRECT_OCR", "TUNNEL_DIRECT_ALLOW_TEST"}
     assert env["TUNNEL_MODE"] == "${TUNNEL_MODE:-ssh}"
     w = t["translation-worker"]
     assert w["network_mode"] == "service:translation-gateway" and "networks" not in w

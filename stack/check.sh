@@ -248,14 +248,25 @@ declare -A PROFILE_SERVICES=([exploit]="vm-a vm-b" [translation]="translation-ga
 
 # Chạy trong container (python của image gateway): nối 127.0.0.1:<cổng>, gửi GET /health, đòi dòng trạng thái "HTTP/".
 # Bất kỳ mã HTTP nào (kể cả 401/404) đều chứng minh đầu xa trả lời; ssh -L nhận kết nối rồi đóng khi đầu xa chết.
-TUNNEL_PROBE_PY='import socket,sys; s=socket.create_connection(("127.0.0.1",int(sys.argv[1])),5); s.settimeout(10); s.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n"); sys.exit(0 if s.recv(5)==b"HTTP/" else 1)'
+# Đọc trọn dòng trạng thái (readline: chịu được dòng bị chia nhiều gói; hết 10 s thì lỗi) và đòi dạng "HTTP/x.y NNN".
+TUNNEL_PROBE_PY='import re,socket,sys; s=socket.create_connection(("127.0.0.1",int(sys.argv[1])),5); s.settimeout(10); s.sendall(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n"); sys.exit(0 if re.match(rb"HTTP/[0-9][.][0-9] [0-9]{3}[ \r\n]", s.makefile("rb").readline(256)) else 1)'
 
 # is_loopback_url URL: http(s)://127.0.0.1|localhost|[::1]...
-is_loopback_url() { [[ "$1" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:|/|$) ]]; }
+is_loopback_url() { [[ "$1" =~ ^https?://(127\.[0-9.]+|localhost|\[::1\])(:|/|$) ]]; }
 
 check_tunnel() {   # check_tunnel PROJECT
-    local proj="$1" svc port ports="18868"
-    is_loopback_url "$(get TRANSLATE_V2_OCR_BASE_URL)" && ports+=" 18083"
+    local proj="$1" svc port ports="18868" k v
+    if [ "$(get TUNNEL_MODE)" = direct ]; then
+        echo "WARNING: health: TUNNEL_MODE=direct CHỈ ĐỂ TEST: dịch/OCR đi tới stub qua TCP thô, KHÔNG phải model thật; kết quả dịch không có giá trị chất lượng" >&2
+    fi
+    # Đầu tunnel cố định: đúng chuỗi, không localhost/[::1]/https.
+    for k in TRANSLATE_V2_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_BASE_URL; do
+        v="$(get "$k")"
+        [ -z "$v" ] || [ "$v" = http://127.0.0.1:18868 ] || fail "health: $k phải đúng http://127.0.0.1:18868 khi bật tunnel (đang khác)"
+    done
+    v="$(get TRANSLATE_V2_OCR_BASE_URL)"
+    if [ "$v" = http://127.0.0.1:18083 ]; then ports+=" 18083"
+    elif is_loopback_url "$v"; then fail "health: TRANSLATE_V2_OCR_BASE_URL loopback phải đúng http://127.0.0.1:18083 khi bật tunnel"; fi
     for svc in translation-gateway translation-worker; do
         for port in $ports; do
             if docker compose -p "$proj" -f "$COMPOSE_FILE" exec -T "$svc" python -c "$TUNNEL_PROBE_PY" "$port" >/dev/null 2>&1; then

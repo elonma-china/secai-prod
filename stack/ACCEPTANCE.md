@@ -64,7 +64,7 @@ Gateway chỉ nhận Hy-MT2 và OCR ở `http://127.0.0.1:<cổng>` (chặn SSRF
 | Cách chạy | `.env` | Chứng minh được |
 |---|---|---|
 | **Thật** | `TUNNEL_MODE=ssh`, `TUNNEL_SSH_HOST/PORT/USER`, `secrets/tunnel/key` (0600, chủ = `TUNNEL_UID`) và `secrets/tunnel/known_hosts` (đã đối chiếu fingerprint); image `docker build --build-arg TUNNEL_UID=$(id -u) -t secai-specialist-tunnel:<ngày> images/tunnel` | Đường ống **và** chất lượng dịch/OCR của model thật |
-| **Stub (chỉ để test)** | `TUNNEL_MODE=direct`, `TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868`, `TUNNEL_DIRECT_OCR=stub-ocr:18083`, hai `*_SPECIALIST_MODEL=tencent/Hy-MT2-7B`, khoá `*_API_KEY` ngẫu nhiên; chạy thêm `-f acceptance/stubs/compose.stubs.yml` (xem đầu tệp đó) | **Chỉ đường ống**: tunnel, chuyển đổi, job, xem trước (`/result`), tệp tải về có tiếng Việt. **Không** chứng minh chất lượng: stub dịch bằng bảng từ cố định có tiền tố `[stub] `, OCR luôn trả chữ cố định của `sample-en.png` |
+| **Stub (chỉ để test)** | **`.env` riêng cho lần chạy stub** (không dùng `.env` có khoá thật): `TUNNEL_MODE=direct`, `TUNNEL_DIRECT_ALLOW_TEST=1`, `TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868`, `TUNNEL_DIRECT_OCR=stub-ocr:18083`, hai `*_SPECIALIST_MODEL=tencent/Hy-MT2-7B`, `TRANSLATE_V2_SPECIALIST_API_KEY` = `MULTILANG_SPECIALIST_API_KEY` = `TRANSLATE_V2_OCR_API_KEY` = `stub-test-key-not-secret` (khoá giả cố định, stub không đọc khoá từ `.env`); chạy thêm `-f acceptance/stubs/compose.stubs.yml` (xem đầu tệp đó) | **Chỉ đường ống**: tunnel, chuyển đổi, job, xem trước (`/result`), tệp tải về có tiếng Việt. **Không** chứng minh chất lượng: stub dịch bằng bảng từ cố định có tiền tố `[stub] `, OCR luôn trả chữ cố định của `sample-en.png` |
 
 ```sh
 # Stub (từ stack/):
@@ -72,6 +72,8 @@ docker compose -f compose.yml -f acceptance/stubs/compose.stubs.yml --profile tr
 ./check.sh health      # các dòng "tunnel 127.0.0.1:18868/18083 trả HTTP từ trong netns ..."
 acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT> UI-TR-2 UI-TR-3
 ```
+
+Rào chắn của `direct` (vì nó vượt chặn SSRF loopback-only của gateway và gửi Bearer qua TCP thô): preflight và sidecar đều từ chối khi thiếu `TUNNEL_DIRECT_ALLOW_TEST=1` hoặc khi đích không phải `stub-*:<cổng>` / IPv4 private hay loopback; preflight từ chối mọi `*_API_KEY` khác khoá stub giả; `check.sh health` in dòng `WARNING … CHỈ ĐỂ TEST`.
 
 Ghi kết quả UI-TR-2/TR-3 luôn kèm cột "nguồn" (`thật` hoặc `stub`). Kết quả `stub` không thay cho kết quả `thật`.
 
