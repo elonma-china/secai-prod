@@ -155,14 +155,28 @@ def run_exploit(c):
             lines.append(d.get("line", ""))
         elif ev == "final":
             final = d
-    fails = []
+    # Kiểm thẳng trên SSE: tên/trạng thái step và các trường của `final` (khác UI: chuỗi hiển thị của FE không có ở đây).
+    names = [x.get("name") for x in steps]
+    fails = [f"thiếu step {n}" for n in c["api"]["steps"] if n not in names]
+    fails += [f"không được có step {n}" for n in c["api"].get("steps_none", []) if n in names]
+    if c["api"].get("check_target_status"):
+        st = [x.get("status") for x in steps if x.get("name") == "check_target"]
+        if c["api"]["check_target_status"] not in st:
+            fails.append(f"check_target phải có status {c['api']['check_target_status']}, thấy {st}")
     if not final:
         fails.append("không có sự kiện final")
+    elif c["id"] == "UI-POC-3":
+        if final.get("ok") is not False or not final.get("reason") or final.get("run_id"):
+            fails.append("final của ca dừng ở check_target phải ok=false, có reason, run_id rỗng")
     else:
-        lines.append(f"Kết quả phiên chạy ok={final.get('ok')} Run ID {final.get('run_id')} Code {'có' if final.get('code') else '--'} Reason {final.get('reason')}")
-        if "reason" not in final or "run_id" not in final:
-            fails.append("final thiếu reason/run_id")
-    return "\n".join(lines), ["POST /ai/exploit-v2/stream"], fails, {"steps": [s.get("name") for s in steps]}
+        if not final.get("run_id"):
+            fails.append("final thiếu run_id")
+        if final.get("ok") is True and not (final.get("code") and final.get("run_instructions")):
+            fails.append("final ok=true nhưng thiếu code/run_instructions")
+        if final.get("ok") is False and not final.get("reason"):
+            fails.append("final ok=false nhưng thiếu reason")
+    lines.append(f"final ok={final.get('ok') if final else None} run_id={final.get('run_id') if final else None} reason={str((final or {}).get('reason'))[:200]}")
+    return "\n".join(lines), ["POST /ai/exploit-v2/stream"], fails, {"steps": names, "final_ok": (final or {}).get("ok"), "judge": False}
 
 
 RUN = {"chat": run_chat, "translate_text": run_translate_text, "translate_file": run_translate_file, "report": run_report, "exploit": run_exploit}
@@ -179,7 +193,8 @@ for c in CASES:
         try:
             text, eps, fails, notes = RUN[c["kind"]](c)
             extra = notes.pop("extra", [])
-            why = judge(c, text, extra) + fails
+            judged = notes.pop("judge", True)  # exploit: kiểm trực tiếp trên SSE (fails), không dùng chuỗi hiển thị của UI
+            why = (judge(c, text, extra) if judged else []) + fails
             rec.update(pass_=not why, reason="; ".join(why) or "đạt", output_head=text[:600], endpoints=eps, notes=notes)
         except Exception as e:  # ca lỗi là dữ liệu, không dừng cả bộ
             rec.update(pass_=False, reason=f"lỗi chạy: {type(e).__name__}: {str(e)[:200]}")

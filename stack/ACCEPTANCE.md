@@ -14,8 +14,8 @@ Giao diện production (https://ias.id.vn) là frontend sản phẩm IAS, nằm 
 | UI-TR-2 | `/ai/translate` tab `Dịch tệp và hình ảnh`, `English` → `Việt Nam`, `Chọn tệp` | `stack/acceptance/fixtures/sample-en.docx` (1 trang) | tải lên | Job hoàn tất (thẻ `Dịch hoàn tất`), có nút `Xem trước`, tệp tải về mở được, chứa tiếng Việt | 5 phút |
 | UI-TR-3 | như UI-TR-2 | `stack/acceptance/fixtures/sample-en.png` (ảnh chữ, cần OCR) | tải lên | Như UI-TR-2. **Chỉ áp dụng khi `.env` có `TRANSLATE_V2_OCR_BASE_URL`**; nếu không: ghi "bỏ qua, chưa cấu hình OCR" (`STACK_HAS_OCR=0`) | 5 phút |
 | UI-RPT-1 | `/ai/report`: `Từ ngày`/`Đến ngày` mặc định, chọn `Thiết bị`, template `1. Tổng quan, 2. Chi tiết`, định dạng `docx` | — | `Phân tích thông minh` | Khối `Kết quả phân tích` có tiêu đề `BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN`, mục `1. Tổng quan` và `2. Chi tiết`, khoảng ngày đúng với hai ô ngày; `Tải báo cáo` trả tệp .docx mở được | 120 s |
-| UI-POC-1 | `/ai/exploit`: ô `Nhập CVE...` = `CVE-2022-22963`, ô `Nhập target...` = `192.168.96.7:8080` | — | `Sinh PoC` | Terminal lần lượt có `[check_cve]… tìm thấy`, `[check_target]… reachable ✓`, `[pool]Khởi tạo engine`, `[init]session ses_…`; kết thúc có **một** trong hai khối kết quả (xem "Đo thực tế") | 30 phút |
-| UI-POC-2 | như trên, CVE `CVE-2026-27944`, target `192.168.96.21:80` | — | `Sinh PoC` | như UI-POC-1 | 30 phút |
+| UI-POC-1 | `/ai/exploit`: ô `Nhập CVE...` = `CVE-2022-22963`, ô `Nhập target...` = `192.168.96.7:8080` | — | `Sinh PoC` | Terminal lần lượt có `[check_cve]… tìm thấy`, `[check_target]… reachable ✓`, `[pool]Khởi tạo engine`, `[init]session ses_…`; kết thúc có **một** trong hai khối kết quả (xem "Ghi chú lệch" bên dưới) | 30 phút |
+| UI-POC-2 | như trên, CVE `CVE-2026-27944`, target `192.168.96.21:9000` | — | `Sinh PoC` | như UI-POC-1 | 30 phút |
 | UI-POC-3 | như trên, target `192.168.96.250:9` (không có máy) | — | `Sinh PoC` | Dừng ở `[check_target]` với thông báo không kết nối được; **không** chiếm slot, không treo | 60 s |
 
 Ghi chú lệch so với mô tả ban đầu (đo trên UI thật 2026-11-23):
@@ -70,7 +70,7 @@ Bắt bằng `page.on('request')` trên prod. Bộ lọc `/ai/` ở mô tả ban
 | `/ai/report` | `POST /api/ais/report-ai` (multipart: `from_date`, `to_date`, `scan_type`, `template`, `export_type`, `templateFile`) | `POST /ai/generate-template-report` (multipart; `run-api.sh` gửi `data`, `template_text`, `from_date`, `to_date`, `summary` synthetic, `output_format=markdown`) |
 | `/ai/exploit` | `POST /api/ais/stream` (SSE; sau khi xong FE còn gọi `POST /api/ais/sessions` + `.../chat/stream` để sinh khối "Thông tin lỗ hổng CVE") | `POST /ai/exploit-v2/stream` (SSE `step`/`log`/`final`) |
 
-Giới hạn của đường API: backend IAS gom dữ liệu quét thật rồi mới gọi gateway làm báo cáo; `run-api.sh` thay bằng dữ liệu tổng hợp cố định, nên chỉ kiểm cấu trúc/ngày, không kiểm số liệu. Với PoC, kiểm cấu trúc sự kiện (`check_cve`, `check_target`, `final` có `ok`/`reason`/`run_id`) thay cho chuỗi hiển thị của FE. Không có khoá API gateway cần cấu hình.
+Giới hạn của đường API: backend IAS gom dữ liệu quét thật rồi mới gọi gateway làm báo cáo; `run-api.sh` thay bằng dữ liệu tổng hợp cố định, nên chỉ kiểm cấu trúc/ngày, không kiểm số liệu. Với PoC, `run-api.sh` **không** dùng chuỗi hiển thị của FE: nó kiểm thẳng trên luồng SSE của `/ai/exploit-v2/stream` theo trường `api` của từng ca trong `cases.json` (các `step` phải có/không có, trạng thái `error` của `check_target` ở UI-POC-3, và các trường của sự kiện `final`: `run_id` bắt buộc; `ok=true` thì phải có `code` và `run_instructions`; `ok=false` thì phải có `reason`; UI-POC-3 phải `ok=false`, có `reason`, `run_id` rỗng). Dòng `final ok=… run_id=…` trong `output_head` chỉ để người đọc, không được dùng để chấm. Không có khoá API gateway cần cấu hình.
 
 ## Số gốc (prod, 2026-11-23, image `main-033b2aa3-20261123`)
 
@@ -85,21 +85,22 @@ UI chạy trên https://ias.id.vn; API chạy trên http://127.0.0.1:8131. Kết
 | UI-TR-3 | **trượt** | **trượt** | job `failed`: `OCR_UNAVAILABLE`. `127.0.0.1:18083` (OCR) từ chối kết nối; `TRANSLATE_V2_OCR_BASE_URL` có cấu hình nên ca áp dụng |
 | UI-RPT-1 | đạt (26 s) | đạt (7 s) | khoảng ngày `24/09/2026`–`23/11/2026`, `.docx` hợp lệ (zip có `word/document.xml`) |
 | UI-POC-1 | đạt cấu trúc (914 s) | không chạy | **thành công** (`ok=true`, stage 3.3, có code + `Cách chạy`); terminal vẫn in cảnh báo `[watchdog] Agent không có tiến triển mới trong 90s`. Lần chạy gốc báo trượt vì kỳ vọng ban đầu đòi khối `Kết quả phiên chạy`; chấm lại offline từ `UI-POC-1.page.txt` sau khi sửa kỳ vọng (không chạy lại) |
-| UI-POC-2 | trượt (12 s) | không chạy | target `192.168.96.21:80` **từ chối kết nối** (cổng đóng ngay lúc đo: lab chưa chạy) → dừng ở `[check_target]`, khối `Kết quả phiên chạy` = `FAILED`, Run ID `--`. Luồng đúng, nhưng prod không đạt ca này |
+| UI-POC-2 | **chưa có baseline hợp lệ** | không chạy | Mục tiêu đúng là `192.168.96.21:9000` (nginx-ui; host 19000). Lần chạy đầu dùng nhầm cổng 80 (không có dịch vụ nghe) → dừng ở `[check_target]`, **không phải kết quả hợp lệ** (lỗi của đặc tả, đã bỏ; giữ ở `wrongport80-UI-POC-2.*`). Chạy lại một lần với `:9000`: `[check_target] 192.168.96.21:9000 reachable ✓`, `[pool]Khởi tạo engine`, `[init]session ses_df783d7f…`, agent bắt đầu chạy lệnh; sau **97 s** trình duyệt báo `Không thể kết nối tới API stream` / `Quá trình xử lý kết thúc với lỗi`, không có `final` (gateway ghi `client gone … grace 45s`, container gateway không khởi động lại). Đứt luồng phía client/đường truyền, kết quả khai thác **chưa xác định**; không tính là đạt hay trượt về nội dung. Theo quy tắc mỗi ca PoC chỉ chạy một lần nên không chạy lại; cần chạy lại khi chủ dự án cho phép |
 | UI-POC-3 | đạt (13 s) | đạt (4 s) | dừng ở `[check_target]` "Không kết nối được tới 192.168.96.250:9" |
 
-Hệ quả cho so sánh stack vs prod: UI-TR-2/3 và UI-POC-2 là **ca prod trượt** (vì hạ tầng đang tắt), stack không bị tính trượt nếu cũng trượt; stack phải đạt các ca còn lại. Dịch tệp/ảnh trên prod đang hỏng là phát hiện cần báo cho chủ dự án. Chạy lại ca này khi tunnel dịch/OCR được dựng lại.
+Hệ quả cho so sánh stack vs prod: UI-TR-2/3 là **ca prod trượt** (MT/OCR đang tắt) và UI-POC-2 **chưa có baseline hợp lệ**, nên ba ca này không dùng để kết luận "stack trượt khi prod đạt"; stack phải đạt các ca còn lại. **Nhưng điều kiện hoàn tất gói**: stack phải được chứng minh **ĐẠT UI-TR-2 và UI-TR-3** (dịch tệp và dịch ảnh, nhánh thành công: job hoàn tất, `Xem trước`, tệp tải về chứa tiếng Việt) trước khi gói được gọi là hoàn chỉnh; nếu không, đường dịch tệp được giao mà chưa được chứng minh. Dịch tệp/ảnh trên prod đang hỏng là phát hiện cần báo cho chủ dự án; chạy lại baseline khi tunnel dịch/OCR được dựng lại.
 
-Ca PoC chạy **một lần mỗi ca** (UI-POC-1, -2, -3) và API chỉ chạy UI-POC-3 (`SKIP_CASES="UI-POC-1 UI-POC-2"`), vì LLM dùng chung.
+Ca PoC chạy **một lần mỗi ca** trên UI (UI-POC-1, -2, -3; riêng POC-2 xem trên) và API chỉ chạy UI-POC-3 (`SKIP_CASES="UI-POC-1 UI-POC-2"`), vì LLM dùng chung.
 
-### RAG core eval (20 câu đầu, không phải 100)
+### RAG core eval (đủ 100 câu)
 
-`run_core_eval.py` tuần tự trên `http://127.0.0.1:8131`, 100 câu ước ~20 phút (> 10 phút) nên chỉ chạy `core-001..core-020` (12 `cve_lookup` + 8 `cve_alias`, cùng `--only`). Cần chạy cùng 20 câu này trên stack để so. Script gốc chỉ ghi câu trả lời; `acceptance/core_score.py` chấm cơ học (không LLM-judge): trả lời được (HTTP 200, ≥ 50 ký tự), và kiểm `facts.cve` + `facts.cvss` có trong câu trả lời.
+`run_core_eval.py` tuần tự, một request một lúc, đúng thứ tự `core_eval_set.jsonl`, trên `http://127.0.0.1:8131` (2026-11-23, ~16 phút, thô: `core_eval_full100.json`; lần chạy 20 câu đầu trước đó giữ ở `core_eval_first20.json`). Script gốc chỉ ghi câu trả lời; `acceptance/core_score.py` là **kiểm tra chuỗi con cơ học**, khác với điểm chất lượng của chính bộ eval (xem docstring): trả lời được (HTTP 200, ≥ 50 ký tự) và các giá trị `facts.cve`/`facts.cvss`/`facts.catalog_poc_count` có nguyên văn trong câu trả lời.
 
-| Chỉ số | Prod |
+| Chỉ số (prod, 100 câu) | Số gốc |
 |---|---|
-| Trả lời được | 20/20 |
-| Đúng CVE + CVSS theo `facts` | 17/20 (`core-014`, `core-015`, `core-020` trượt; cả 3 thuộc nhóm `cve_alias`) |
-| Thời gian trung bình / p95 | 10.9 s / 19.3 s |
+| Trả lời được | 100/100 |
+| Có đáp án máy kiểm được (`cve_lookup`, `cve_alias`, `poc`, một phần `multilingual`/`followup`) | 33 câu, **29/33 khớp** |
+| Câu trượt kiểm chuỗi | `core-020` (cve_alias), `core-042`, `core-043`, `core-050` (nhóm `poc`: số PoC trong catalog) |
+| Thời gian trung bình / p95 (nearest-rank) | 9.6 s / 17.2 s |
 
-Đây là kiểm hồi quy cơ học trên nhóm dễ, không thay cho điểm chất lượng 100 câu; khi so với stack, dùng đúng 20 câu này.
+Điều kiện so sánh: "điểm stack ≥ điểm prod cùng ngày" chạy lại **đúng 100 câu** này trên stack bằng `core_score.py prod.json stack.json`. Lưu ý độ nhiễu: 20 câu đầu cho 17/20 ở lần chạy 20 câu và 19/20 ở lần chạy 100 câu trên cùng prod (`core-014`/`core-015` đổi từ trượt sang khớp), tức số cơ học dao động ±2 câu giữa hai lần chạy giống hệt. Nên so stack với prod chạy **cùng ngày, cùng điều kiện**, và coi chênh ≤ 2 câu là trong nhiễu; số này không thay cho điểm chất lượng ngữ nghĩa.

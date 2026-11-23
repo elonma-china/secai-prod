@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Chấm cơ học kết quả run_core_eval.py (không dùng LLM-judge), để so prod với stack cùng bộ câu hỏi.
-  python3 core_score.py a.json [b.json]     in điểm từng file; hai file thì so theo id chung.
-Chỉ tính các ca có đáp án máy kiểm được: facts.cvss (cve_lookup/cve_alias), facts.cve, facts.catalog_poc_count.
-Ca còn lại chỉ tính "trả lời được" (HTTP 200, không error, >= 50 ký tự). Đây là đo hồi quy, không phải điểm chất lượng ngữ nghĩa."""
-import json, statistics, sys
+"""Chấm CƠ HỌC kết quả run_core_eval.py để so prod với stack cùng bộ câu hỏi.
+
+  python3 core_score.py a.json [b.json]     in số từng file; hai file thì chỉ so các id chung.
+
+ĐÂY LÀ KIỂM TRA CHUỖI CON, không phải điểm của chính bộ eval: run_core_eval.py chỉ ghi câu trả lời/tool/thời gian,
+còn điểm chất lượng (so với `expect`/`facts`/`must_not`) do bước chấm riêng của eval quyết định. Ở đây chỉ kiểm
+(1) trả lời được: HTTP 200, không error, >= 50 ký tự; (2) với ca có facts máy kiểm được (facts.cve, facts.cvss,
+facts.catalog_poc_count): các giá trị đó xuất hiện nguyên văn trong câu trả lời. Ca không có facts như vậy chỉ tính (1).
+Hai số này là thước đo hồi quy rẻ, KHÔNG thay thế điểm chất lượng; đừng so với điểm chấm của eval."""
+import json, math, statistics, sys
 
 
 def score(row):
@@ -30,7 +35,7 @@ def summary(rows, ids):
     fact = [s[1] for s in sc if s[1] is not None]
     lat = [rows[i].get("total_s") or 0 for i in ids]
     return {"n": len(ids), "answered": ans, "fact_checked": len(fact), "fact_ok": sum(fact),
-            "mean_s": round(statistics.mean(lat), 1) if lat else None, "p95_s": round(sorted(lat)[int(len(lat) * .95) - 1], 1) if lat else None}
+            "mean_s": round(statistics.mean(lat), 1) if lat else None, "p95_s": round(sorted(lat)[math.ceil(len(lat) * .95) - 1], 1) if lat else None}
 
 
 if __name__ == "__main__":

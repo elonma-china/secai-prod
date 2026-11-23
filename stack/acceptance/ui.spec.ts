@@ -29,6 +29,7 @@ function judge(c: any, text: string, extra: string[] = []): string[] {
 }
 
 async function login(page: Page) {
+  for (const v of ["IAS_UI_USER", "IAS_UI_PASS"]) if (!process.env[v]) throw new Error(`thiếu biến môi trường ${v} (đăng nhập UI chỉ đọc từ env)`);
   for (let attempt = 0; attempt < 2; attempt++) {
     await page.goto(`${BASE}/login`);
     const user = page.getByPlaceholder("Nhập tên đăng nhập");

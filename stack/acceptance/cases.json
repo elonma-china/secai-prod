@@ -146,7 +146,17 @@
     "re:(File exploit[\\s\\S]*Cách chạy|Run ID[\\s\\S]*Code[\\s\\S]*Reason)"
    ],
    "expect_none": [],
-   "timeout_s": 1800
+   "timeout_s": 1800,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target",
+     "pool",
+     "init"
+    ],
+    "steps_none": [],
+    "final": "ok có code+run_instructions; ok=false có reason; luôn có run_id"
+   }
   },
   {
    "id": "UI-POC-2",
@@ -154,7 +164,7 @@
    "page": "/ai/exploit",
    "fields": {
     "Nhập CVE": "CVE-2026-27944",
-    "Nhập target": "192.168.96.21:80"
+    "Nhập target": "192.168.96.21:9000"
    },
    "click": "Sinh PoC",
    "expect_all": [
@@ -170,7 +180,17 @@
     "re:(File exploit[\\s\\S]*Cách chạy|Run ID[\\s\\S]*Code[\\s\\S]*Reason)"
    ],
    "expect_none": [],
-   "timeout_s": 1800
+   "timeout_s": 1800,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target",
+     "pool",
+     "init"
+    ],
+    "steps_none": [],
+    "final": "ok có code+run_instructions; ok=false có reason; luôn có run_id"
+   }
   },
   {
    "id": "UI-POC-3",
@@ -189,7 +209,19 @@
     "Khởi tạo engine",
     "[init]"
    ],
-   "timeout_s": 60
+   "timeout_s": 60,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target"
+    ],
+    "steps_none": [
+     "pool",
+     "init"
+    ],
+    "final": "ok=false, reason không rỗng, run_id rỗng",
+    "check_target_status": "error"
+   }
   }
  ]
 }
