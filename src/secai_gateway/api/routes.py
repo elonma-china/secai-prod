@@ -3934,10 +3934,11 @@ def register_routes(app: FastAPI, state: Any) -> None:
                         _audit(run_id, "exploit_v2_final", f"{body.cve}:{body.target}",
                                {"ok": ev.get("ok"), "reason": ev.get("reason"),
                                 "session_id": ev.get("run_id")})
-                        yield sse_frame("final", {k: ev.get(k) for k in
-                                                  ("ok", "reason", "code", "run_instructions",
-                                                   "attempted_steps", "stage", "recommend",
-                                                   "run_id")})
+                        yield sse_frame("final", {
+                            **{k: ev.get(k) for k in ("ok", "reason", "code", "run_instructions",
+                                                      "attempted_steps", "stage", "recommend", "run_id")},
+                            # gói bàn giao (chỉ ca thất bại): trường mới, chỉ thêm
+                            **{k: ev[k] for k in ("cve_info", "failure_code", "handoff") if k in ev}})
                     elif et == "step":
                         yield sse_frame("step", {k: ev.get(k) for k in
                                                  ("index", "name", "status", "detail", "verdict")})

@@ -141,3 +141,13 @@ async def fingerprint_target(target: str, *, timeout: float = 5.0,
         return " · ".join(parts) or None
     except Exception:
         return None
+
+
+def reason_detail(reason: str | None) -> str | None:
+    """Phần lý do thật trong `reason` dạng 'Đạt STAGE x — nhãn.\n\n<lý do>\n\nGợi ý: …' (bỏ khung và gợi ý)."""
+    body = (reason or "").strip()
+    if not body:
+        return None
+    body = re.sub(r"^Đạt\s+STAGE\s+\S+\s+—[^\n]*\n+", "", body)
+    body = body.split("Gợi ý:")[0].strip()
+    return body or None
