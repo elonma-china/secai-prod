@@ -224,3 +224,10 @@ def test_review_only_on_gateway():
     for n, s in c.items():
         if n != "gateway" and s.get("image") == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}":
             assert s["environment"].get("REVIEW_ENABLED") == "false", n
+
+
+def test_worker_does_not_inherit_http_healthcheck():
+    # Image gateway có HEALTHCHECK gọi 127.0.0.1:8131; worker không mở cổng nào nên luôn unhealthy trên bridge
+    # (prod chạy host network nên probe trúng gateway prod — xanh giả). Smoke 2026-11-23.
+    w = services("translation")["translation-worker"]
+    assert w["healthcheck"] == {"disable": True}

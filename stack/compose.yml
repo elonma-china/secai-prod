@@ -303,6 +303,9 @@ services:
       - translation-data:/app/data
       - *translation-tokenizer
     networks: [secai-net]
+    # Worker không mở cổng HTTP: HEALTHCHECK của image (127.0.0.1:8131) luôn trượt trên bridge. Tiến trình chết thì
+    # container thoát và restart, nên trạng thái container là đủ.
+    healthcheck: {disable: true}
 
   # .doc -> .docx bằng LibreOffice; image dựng từ stack/images/converter. Không cổng publish: chỉ gateway/worker gọi qua secai-net.
   translation-converter:
