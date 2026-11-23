@@ -21,7 +21,13 @@ def test_pool_string_24_slots():
 
 
 def test_pool_rejects_bad_slots():
-    for bad in ("0", "-1", "abc", "1.5", ""):
+    for bad in ("0", "-1", "abc", "1.5", "", "08", "09", "100", "007"):
         r = run("bash", str(STACK / "lib/pool.sh"), bad)
         assert r.returncode != 0 and "slots" in r.stderr and not r.stdout, bad
     assert run("bash", str(STACK / "lib/pool.sh")).returncode != 0
+
+
+def test_pool_accepts_1_to_99():
+    for ok, n in (("1", 2), ("9", 18), ("10", 20), ("99", 198)):
+        r = run("bash", str(STACK / "lib/pool.sh"), ok)
+        assert r.returncode == 0 and len(r.stdout.strip().split(",")) == n, ok

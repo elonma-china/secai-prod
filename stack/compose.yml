@@ -155,6 +155,7 @@ services:
       - ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/poc
       - ${DATA_ROOT:?set DATA_ROOT}/poc/store:/srv/poc-store
       - ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/poc-sources:ro
+      # HOME slot: supervisor đặt nhóm = gid của user app (VM_GATEWAY_GID, mặc định 10001), mode 2770, để gateway dọn được engagements.
       - pool-home-a:/ias-pool-home-a
       - pool-home-b:/ias-pool-home-b
       # Bind mount tệp thiếu làm Docker tạo THƯ MỤC và gateway không khởi động: `bootstrap.sh init` luôn tạo tệp này trước `up`.

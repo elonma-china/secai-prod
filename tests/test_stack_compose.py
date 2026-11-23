@@ -200,3 +200,12 @@ def test_config_validates_every_profile_combination(tmp_path):
         r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), *extra, "config", "-q"],
                            env=env, capture_output=True, text=True)
         assert r.returncode == 0, (extra, r.stderr)
+
+
+def test_vm_healthcheck_uses_ias_user_and_has_no_password_branch():
+    for s in services("exploit").values():
+        cmd = s["healthcheck"]["test"][1]
+        auth, plain = cmd.split("; else ")
+        assert 'curl -fsS -u "ias:$$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:$$VM_PORT_BASE/global/health' in auth
+        assert "-u" not in plain and plain.startswith("curl -fsS http://127.0.0.1:$$VM_PORT_BASE/global/health")
+        assert "opencode:" not in cmd
