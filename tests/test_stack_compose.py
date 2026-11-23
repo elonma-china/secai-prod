@@ -77,3 +77,51 @@ def test_no_default_secrets_or_unguarded_data_root():
     assert "secai2026" not in text
     assert "NEO4J_PASSWORD:?" in text
     assert text.count("${DATA_ROOT") == text.count("${DATA_ROOT:?"), "every DATA_ROOT must use the :? form"
+
+
+def test_exploit_profile_two_vms_hardened():
+    vms = services("exploit")
+    assert set(vms) == {"vm-a", "vm-b"}
+    for name, port in (("vm-a", "5101"), ("vm-b", "5201")):
+        s = vms[name]
+        # `:?` làm `config` lỗi khi profile tắt (compose nội suy cả service ngoài profile) -> mặc định là tag MISSING.
+        assert s["image"] == "${VM_IMAGE:-secai-pentestcode-vm:MISSING-set-VM_IMAGE}"
+        assert s["cap_drop"] == ["ALL"]
+        assert set(s["cap_add"]) == {"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID", "KILL"}
+        assert "no-new-privileges:true" in s["security_opt"]
+        assert s["mem_limit"] == "${VM_MEM_LIMIT:-48g}"
+        assert s["pids_limit"] == "${VM_PIDS_LIMIT:-16384}"
+        assert s["environment"]["VM_PORT_BASE"] == port
+        assert s["environment"]["VM_SLOTS"] == "${VM_SLOTS:-12}"
+        assert s["environment"]["OPENCODE_SERVER_PASSWORD"] == "${IAS_SERVER_PASSWORD:-}"
+        assert s["environment"]["ORCA_LOCAL_BASE_URL"] == "${QWEN_BASE_URL:-}"
+        assert set(s["networks"]) == {"secai-net", "poc-labs-internal"}
+        assert "ports" not in s
+        assert all(":ro" in v or v.startswith("pool-home-") for v in s["volumes"])
+        data = {v.split(":")[-2] for v in s["volumes"] if ":ro" in v}
+        assert data == {f"/srv/secai-data/{d}" for d in ("exploitdb", "poc", "poc-sources", "exploitdb-mcp-server")}
+        assert "OPENCODE_SERVER_PASSWORD" in s["healthcheck"]["test"][1]
+    assert any(v.startswith("pool-home-a:/ias-pool-home:") or v == "pool-home-a:/ias-pool-home" for v in vms["vm-a"]["volumes"])
+    assert any(v == "pool-home-b:/ias-pool-home" for v in vms["vm-b"]["volumes"])
+
+
+def test_gateway_pool_wiring_without_depends_on_vm():
+    gw = services()["gateway"]
+    assert gw["environment"]["IAS_SERVER_POOL"] == "${IAS_SERVER_POOL:-}"
+    assert gw["environment"]["IAS_POOL_GPU_COUNT"] == "${IAS_POOL_GPU_COUNT:-0}"
+    assert gw["environment"]["IAS_SERVER_PASSWORD"] == "${IAS_SERVER_PASSWORD:-}"
+    assert "pool-home-a:/ias-pool-home-a" in gw["volumes"] and "pool-home-b:/ias-pool-home-b" in gw["volumes"]
+    assert not {"vm-a", "vm-b"} & set(gw["depends_on"])
+    assert {"pool-home-a", "pool-home-b"} <= set(load_compose()["volumes"])
+
+
+def test_config_validates_with_and_without_exploit_profile(tmp_path):
+    import os, shutil, subprocess
+    import pytest
+    if not shutil.which("docker") or subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0:
+        pytest.skip("docker compose not available")
+    env = {"PATH": os.environ["PATH"], "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x"}
+    for extra in ([], ["--profile", "exploit"]):
+        r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), *extra, "config", "-q"],
+                           env=env, capture_output=True, text=True)
+        assert r.returncode == 0, (extra, r.stderr)

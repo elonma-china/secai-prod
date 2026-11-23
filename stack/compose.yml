@@ -1,6 +1,44 @@
-# SecAI stack - core (gateway + qdrant + neo4j + redis + es). Các profile exploit, translation, report, review do task sau thêm.
+# SecAI stack - core (gateway + qdrant + neo4j + redis + es) + profile exploit (vm-a, vm-b). Các profile translation, report, review do task sau thêm.
 # Tên project lấy từ COMPOSE_PROJECT_NAME (mặc định secai-stack); `-p` ghi đè.
 name: ${COMPOSE_PROJECT_NAME:-secai-stack}
+
+x-vm-data:
+  - &vm-data-1 ${DATA_ROOT:?set DATA_ROOT}/exploitdb:/srv/secai-data/exploitdb:ro
+  - &vm-data-2 ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/secai-data/poc:ro
+  - &vm-data-3 ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/secai-data/poc-sources:ro
+  - &vm-data-4 ${DATA_ROOT:?set DATA_ROOT}/exploitdb-mcp-server:/srv/secai-data/exploitdb-mcp-server:ro
+
+# Auth engine: Basic, user mặc định `ias` (pentestcode/packages/opencode/src/server/auth.ts).
+x-vm: &vm
+  # Không dùng :? ở đây: compose nội suy cả service ngoài profile, `config` sẽ lỗi khi profile exploit tắt.
+  # Thiếu VM_IMAGE thì pull thất bại ở tag MISSING-set-VM_IMAGE; up.sh phải kiểm VM_IMAGE khi bật exploit.
+  image: ${VM_IMAGE:-secai-pentestcode-vm:MISSING-set-VM_IMAGE}
+  profiles: [exploit]
+  restart: unless-stopped
+  cap_drop: [ALL]
+  cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]   # supervisor tạo user + chạy engine bằng user riêng
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: ${VM_MEM_LIMIT:-48g}
+  pids_limit: ${VM_PIDS_LIMIT:-16384}
+  networks: [secai-net, poc-labs-internal]
+  environment: &vmenv
+    VM_SLOTS: ${VM_SLOTS:-12}
+    VM_HOME_ROOT: /ias-pool-home
+    OPENCODE_AUTO_UPDATE: "false"
+    OPENCODE_ENABLE_QUESTION_TOOL: "true"
+    OPENCODE_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
+    ORCAROUTER_API_KEY: ${ORCAROUTER_API_KEY:-}
+    ORCA_LOCAL_BASE_URL: ${QWEN_BASE_URL:-}
+    ORCA_LOCAL_API_KEY: ${QWEN_API_KEY:-}
+    ORCA_LOCAL_MODEL_ID: ${QWEN_MODEL:-}
+    ORCA_LOCAL_CONTEXT: ${QWEN_CONTEXT_WINDOW:-131072}
+    NUCLEI_TEMPLATES: /srv/secai-data/poc-sources/nuclei-templates
+  healthcheck:
+    test: ["CMD-SHELL", 'if [ -n "$$OPENCODE_SERVER_PASSWORD" ]; then curl -fsS -u "ias:$$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:$$VM_PORT_BASE/global/health; else curl -fsS http://127.0.0.1:$$VM_PORT_BASE/global/health; fi']
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 60s
 
 services:
   gateway:
@@ -25,6 +63,10 @@ services:
       SHOWCASE_RETRAINING_UPSTREAM: ""
       SHOWCASE_TENSORBOARD_UPSTREAM: ""
       REVIEW_ENABLED: ${REVIEW_ENABLED:-false}
+      # Pool tường minh (stack/lib/pool.sh); rỗng khi không bật profile exploit. Không dùng pool động (sinh tên pentestcode-N).
+      IAS_SERVER_POOL: ${IAS_SERVER_POOL:-}
+      IAS_POOL_GPU_COUNT: ${IAS_POOL_GPU_COUNT:-0}
+      IAS_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
     ports:
       - "${GATEWAY_BIND:-0.0.0.0}:${GATEWAY_HOST_PORT:-8131}:8131"
     volumes:
@@ -33,6 +75,9 @@ services:
       - ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/poc
       - ${DATA_ROOT:?set DATA_ROOT}/poc/store:/srv/poc-store
       - ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/poc-sources:ro
+      - pool-home-a:/ias-pool-home-a
+      - pool-home-b:/ias-pool-home-b
+    # Không depends_on vm-*: profile exploit tùy chọn, depends_on vào service ngoài profile làm config lỗi.
     depends_on:
       qdrant: { condition: service_healthy }
       neo4j: { condition: service_healthy }
@@ -113,6 +158,16 @@ services:
       retries: 20
       start_period: 60s
 
+  # Engine pentestcode: mỗi container VM_SLOTS slot, mỗi slot 1 user Linux + HOME riêng. Cổng chỉ trong secai-net.
+  vm-a:
+    <<: *vm
+    environment: {<<: *vmenv, VM_PORT_BASE: "5101"}
+    volumes: [pool-home-a:/ias-pool-home, *vm-data-1, *vm-data-2, *vm-data-3, *vm-data-4]
+  vm-b:
+    <<: *vm
+    environment: {<<: *vmenv, VM_PORT_BASE: "5201"}
+    volumes: [pool-home-b:/ias-pool-home, *vm-data-1, *vm-data-2, *vm-data-3, *vm-data-4]
+
 networks:
   secai-net:
     driver: bridge
@@ -124,3 +179,5 @@ volumes:
   gw-data:
   redis-data:
   es-data:
+  pool-home-a:
+  pool-home-b:
