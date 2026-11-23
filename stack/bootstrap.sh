@@ -107,18 +107,26 @@ check_image() {
     [[ "${v##*/}" == *:* || "$v" == *@sha256:* ]] || err "$1: '$v' không có tag; thêm tag cố định"
 }
 
-# Gateway (uid 10001, gid 999 + nhóm VM_SHARED_GID) ghi được $1 khi: chủ là uid 10001 có quyền ghi chủ,
-# hoặc nhóm là 999/VM_SHARED_GID có quyền ghi nhóm, hoặc others-writable (chấp nhận nhưng cảnh báo).
+# Quyền ghi của gateway (uid 10001, gid 999 + nhóm $4) theo POSIX: chỉ MỘT lớp được áp dụng.
+# In ok (ghi được), warn (chỉ nhờ others-writable) hoặc no. Args: uid gid mode(bát phân) shared_gid.
+gateway_write_class() {
+    local uid="$1" gid="$2" mode="$3" shared="$4"
+    if [ "$uid" = "$GATEWAY_UID" ]; then (( 8#$mode & 8#200 )) && echo ok || echo no
+    elif [ "$gid" = "$GATEWAY_GID" ] || [ "$gid" = "$shared" ]; then (( 8#$mode & 8#020 )) && echo ok || echo no
+    else (( 8#$mode & 8#002 )) && echo warn || echo no
+    fi
+}
+
+# stat -L: Docker mount đích của symlink nên phải xét đích, không xét chính liên kết.
+# STAT_FAKE="uid gid mode" thay đầu ra stat (CHỈ để test, không dùng khi chạy thật).
 check_gateway_writable() {
     local dir="$1" label="$2" uid gid mode shared
     shared="$(val VM_SHARED_GID)"; shared="${shared:-10100}"
-    read -r uid gid mode < <(stat -c '%u %g %a' "$dir")
-    if [ "$uid" = "$GATEWAY_UID" ] && (( 8#$mode & 8#200 )); then return 0; fi
-    if (( 8#$mode & 8#020 )) && { [ "$gid" = "$GATEWAY_GID" ] || [ "$gid" = "$shared" ]; }; then return 0; fi
-    if (( 8#$mode & 8#002 )); then
-        echo "WARNING: $label: $dir (uid $uid gid $gid mode $mode) ai cũng ghi được; nên siết: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir" >&2
-        return 0
-    fi
+    read -r uid gid mode <<<"${STAT_FAKE:-$(stat -L -c '%u %g %a' "$dir")}"
+    case "$(gateway_write_class "$uid" "$gid" "$mode" "$shared")" in
+        ok) return 0 ;;
+        warn) echo "WARNING: $label: $dir (uid $uid gid $gid mode $mode) ai cũng ghi được; nên siết: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir" >&2; return 0 ;;
+    esac
     err "$label: $dir (uid $uid gid $gid mode $mode) gateway (uid $GATEWAY_UID, gid $GATEWAY_GID, nhóm $shared) không ghi được; chạy: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir  (hoặc sudo chmod -R o+w $dir)"
 }
 

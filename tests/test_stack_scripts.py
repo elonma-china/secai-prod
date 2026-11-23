@@ -354,3 +354,31 @@ def test_profiles_with_spaces_and_unknown_warning(tmp_path):
     assert _get(d, "TRANSLATION_UPSTREAM_URL") and "bogus" in r.stderr and "WARNING" in r.stderr
     p = _bs(d, "preflight")
     assert "bogus" in p.stderr and "VM_IMAGE" in p.stderr and "REVIEW_UI_IMAGE" in p.stderr
+
+
+def test_preflight_symlinked_dirs_judged_on_target(tmp_path):
+    def link_to(target_mode):
+        def mutate(d):
+            store = _poc_dirs(d)[1]
+            tgt = store.parent.parent / "tgt"
+            tgt.mkdir()
+            tgt.chmod(target_mode)
+            shutil.rmtree(store)
+            store.symlink_to(tgt)       # liên kết mode 777 nhưng đích mới là thứ Docker mount
+        return mutate
+    r = _fails(tmp_path, "poc/store", link_to(0o755))
+    assert "tgt" not in r.stderr or "uid" in r.stderr
+    d, extra = _ready(tmp_path)
+    link_to(0o775)(d)
+    assert _bs(d, "preflight", **extra).returncode == 0
+    # symlink treo vẫn là "thiếu"
+    _fails(tmp_path, "poc/store", lambda d: (shutil.rmtree(_poc_dirs(d)[1]), _poc_dirs(d)[1].symlink_to("/khong/co")))
+
+
+def test_preflight_owner_class_only(tmp_path):
+    # chủ uid 10001 chỉ xét quyền chủ (không rơi sang nhóm/others); không tạo được tệp uid 10001 nên dùng STAT_FAKE
+    for fake, ok in (("10001 5 557", False), ("10001 5 755", True), ("10001 999 070", False),
+                     ("5 999 070", True), ("5 999 707", False), ("5 77 002", True), ("5 77 770", False)):
+        d, extra = _ready(tmp_path)
+        r = _bs(d, "preflight", STAT_FAKE=fake, **extra)
+        assert (r.returncode == 0) == ok, (fake, r.stderr)
