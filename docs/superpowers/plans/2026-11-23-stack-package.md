@@ -19,7 +19,8 @@
 - Tag DB cố định: `qdrant/qdrant:v1.10.1`, `neo4j:5.20-community`, `redis:7-alpine`, `docker.elastic.co/elasticsearch/elasticsearch:8.15.3`.
 - Tên model request phải khớp serving; `.env.example` để trống tên model, `check.sh` fail nếu endpoint không phục vụ đúng tên (không cho rơi BM25-only).
 - Bí mật chỉ trong `stack/.env` (mode 600, gitignored). `docker push` và smoke N=24 là bước **thủ công, chờ chủ dự án cho phép**.
-- Đường dẫn dữ liệu trong container: `/srv/secai-data/{exploitdb,poc,poc-sources,exploitdb-mcp-server}`; mã engine tại `/opt/pentestcode`.
+- Đường dẫn dữ liệu trong container **engine (VM)**: `/srv/secai-data/{exploitdb,poc,poc-sources,exploitdb-mcp-server}`; mã engine tại `/opt/pentestcode`. Container **gateway** giữ đường dẫn riêng của nó (`/srv/exploitdb`, `/srv/poc`, `/srv/poc-store`, `/srv/poc-sources`) qua biến môi trường.
+- **Prod không được đổi hành vi**: prod mount live checkout `main` vào 25 container pentestcode theo đường dẫn `/home/ict/...`. Vì vậy **không sửa** `pentestcode/.ias/ias.jsonc` trong git; mọi đổi đường dẫn cho stack làm lúc build image (sed trong Dockerfile) hoặc qua biến môi trường có **mặc định = giá trị hiện tại**.
 - Commit kết thúc bằng dòng `Co-Authored-By` theo cấu hình phiên.
 
 ## Review Focus
@@ -35,6 +36,8 @@
 ### Task 0: File tiêu chí nghiệm thu + data test + số gốc của prod
 
 **Điều kiện bắt đầu cả plan:** thread T3 `adafef05-7370-4dee-8779-8286cc6b4c52` đã mở PR cho nhánh `fix/ev2-target-scope` (chủ dự án yêu cầu chờ). Kiểm bằng `gh pr list --head fix/ev2-target-scope`.
+
+**Ghi chú thực thi:** Playwright dùng lại `/home/ict/AIEngines/secai/secai-agent-gateway/test/ai-ui-tests/node_modules` (symlink `stack/acceptance/node_modules`, thêm vào `.gitignore`, không commit). Thông tin đăng nhập UI nằm trong tệp 0600 `IAS_UI_ENV_FILE` do người điều phối cấp (ngoài repo, xoá sau khi xong); script đọc `IAS_UI_USER`/`IAS_UI_PASS` từ đó, không in, không ghi vào artifact. Chạy UI-POC-* trên prod tối đa 1 ca tại một thời điểm.
 
 **Files:**
 - Create: `stack/ACCEPTANCE.md`, `stack/acceptance/cases.json`, `stack/acceptance/ui.spec.ts`, `stack/acceptance/run-api.sh`
@@ -79,7 +82,7 @@
 - Move: `deploy/pentestcode-vm/{Dockerfile,supervisor.py,install-tools.sh,tools.txt}` → `stack/images/pentestcode-vm/`
 - Delete: `deploy/pentestcode-vm/{compose.yml,vm.sh,firewall.sh,dev-gateway.override.yml}` và phần `DEV_COMPOSE_OVERRIDE` trong `scripts/dev.sh` do `ec4dd404` thêm
 - Create: `stack/images/pentestcode-vm/build.sh`
-- Modify: `pentestcode/.ias/ias.jsonc:108-110`, `src/secai_gateway/poc/exploit_v2_prompt.py:64,97`
+- Modify: `src/secai_gateway/config.py` + `src/secai_gateway/poc/exploit_v2_prompt.py:64,97` (đường dẫn poc-sources trong prompt đọc từ setting `agent_poc_sources_path`, env `AGENT_POC_SOURCES_PATH`, **mặc định giữ nguyên** `/home/ict/AIEngines/secai/secai-data/poc-sources`)
 - Test: `tests/test_stack_vm_image.py`
 
 **Interfaces:**
@@ -102,9 +105,15 @@ def test_dockerfile_self_contained():
     assert "COPY pentestcode/ /opt/pentestcode/" in df
     assert "bun install --frozen-lockfile" in df
 
-def test_no_host_paths_in_engine_config_and_prompt():
-    for rel in ("pentestcode/.ias/ias.jsonc", "src/secai_gateway/poc/exploit_v2_prompt.py"):
-        assert "/home/ict" not in (ROOT / rel).read_text(), rel
+def test_engine_paths_rewritten_at_build_not_in_git():
+    df = (VM / "Dockerfile").read_text()
+    # ias.jsonc trong git giữ nguyên (prod mount live checkout); image stack sed sang đường dẫn nội bộ
+    assert "sed" in df and "/srv/secai-data/exploitdb-mcp-server" in df
+    assert "/home/ict/AIEngines/secai/exploitdb-mcp-server" in (ROOT / "pentestcode/.ias/ias.jsonc").read_text()
+
+def test_prompt_poc_sources_path_configurable_default_unchanged():
+    from secai_gateway.config import Settings
+    assert Settings().agent_poc_sources_path == "/home/ict/AIEngines/secai/secai-data/poc-sources"
 
 def test_build_script_tags_by_sha():
     sh = (VM / "build.sh").read_text()
@@ -115,7 +124,7 @@ def test_build_script_tags_by_sha():
 
 - [ ] **Step 4: Gộp Dockerfile.** Lấy phần cài công cụ từ `/home/ict/AIEngines/secai/secai-docker/Dockerfile.pentestcode` (apt list, `NUCLEI_VERSION=v3.11.1`, `HTTPX_VERSION=v1.7.1`, searchsploit) làm stage đầu `FROM oven/bun:1.3.14`, bỏ `docker-cli`; nối tiếp các lệnh của Dockerfile VM. `VM_SRC=/opt/pentestcode`, `WORKDIR /opt/pentestcode`, `NUCLEI_TEMPLATES=/srv/secai-data/poc-sources/nuclei-templates`. Ghim pip transitive: tạo `stack/images/pentestcode-vm/pip-constraints.txt` từ `docker run --rm secai-pentestcode-vm:056ed5db-20261123 pip freeze` (image đã đo), và `install-tools.sh` cài mọi gói pip với `-c pip-constraints.txt`.
 
-- [ ] **Step 5: Sửa đường dẫn.** `ias.jsonc`: `"/srv/secai-data/exploitdb-mcp-server/build/index.js"` và `DB_PATH` tương ứng. `exploit_v2_prompt.py`: hai chuỗi `/home/ict/AIEngines/secai/secai-data/poc-sources` → `/srv/secai-data/poc-sources`.
+- [ ] **Step 5: Sửa đường dẫn mà không đổi prod.** Dockerfile: sau `COPY pentestcode/`, `sed -i 's#/home/ict/AIEngines/secai/exploitdb-mcp-server#/srv/secai-data/exploitdb-mcp-server#g' /opt/pentestcode/.ias/ias.jsonc` rồi `! grep -r /home/ict /opt/pentestcode/.ias`. `exploit_v2_prompt.py`: hai chuỗi poc-sources dùng `settings.agent_poc_sources_path` (mặc định không đổi); `stack/.env.example` đặt `AGENT_POC_SOURCES_PATH=/srv/secai-data/poc-sources` (Task 6). Thêm test prompt: với setting đổi, chuỗi mới xuất hiện và chuỗi `/home/ict` biến mất.
 
 - [ ] **Step 6: `build.sh [sha]`**: `git archive <sha> pentestcode stack/images/pentestcode-vm | tar -x -C <tmp>`; `docker build --build-arg GIT_SHA=<sha> -t secai-pentestcode-vm:<sha8>-$(date +%Y%m%d)`; in tag. Không push.
 
@@ -309,6 +318,8 @@ def test_translation_profile_on_bridge():
         assert e["QDRANT_URL"] == "http://qdrant:6333"
         assert "QWEN_BASE_URL" not in e and "EMBEDDING_API_URL" not in e   # chỉ từ .env chung
     assert services()["gateway"]["environment"]["TRANSLATION_UPSTREAM_URL"] == "${TRANSLATION_UPSTREAM_URL:-}"
+    g = services()["gateway"]["environment"]
+    assert g["REVIEW_ENABLED"] == "${REVIEW_ENABLED:-false}" and g["REVIEW_CREDENTIALS_FILE"] == "/app/review-credentials.json"
 
 def test_report_and_review_profiles():
     r = services("report")["report-backend"]
@@ -320,7 +331,7 @@ def test_report_and_review_profiles():
 ```
 
 - [ ] **Step 3:** Run → FAIL.
-- [ ] **Step 4:** Viết ba profile. Env dịch: chép **tên và giá trị không bí mật** từ `/home/ict/secai-releases/main-033b2aa3-20261123/translation-main.json` (các `MULTILANG_*`, `TRANSLATE_V2_*` giới hạn/concurrency), bỏ mọi `SHOWCASE_*`, bỏ endpoint model (đến từ `env_file: .env`), URL nội bộ theo tên service; giá trị bí mật (`*_API_KEY`, `*_TOKEN`) thành `${VAR}` đọc từ `.env`. Healthcheck dịch sửa cho đúng cổng 18185 (bản prod đang kiểm nhầm 8131). `.env` đặt `TRANSLATION_UPSTREAM_URL=http://translation-gateway:18185` khi bật profile.
+- [ ] **Step 4:** Bổ sung cho service `gateway` (core): `TRANSLATION_UPSTREAM_URL: ${TRANSLATION_UPSTREAM_URL:-}`, `REVIEW_ENABLED: ${REVIEW_ENABLED:-false}`, `REVIEW_CREDENTIALS_FILE: /app/review-credentials.json`, `REVIEW_DB_PATH: /app/review-data/reviews.db`, mount `./secrets/review-credentials.json:/app/review-credentials.json:ro` và volume `review-data:/app/review-data` (tệp credentials luôn do `bootstrap.sh init` tạo trước `up`). Converter nhận `CONVERTER_TOKEN: ${TRANSLATE_V2_CONVERTER_TOKEN}`. Viết ba profile. Env dịch: chép **tên và giá trị không bí mật** từ `/home/ict/secai-releases/main-033b2aa3-20261123/translation-main.json` (các `MULTILANG_*`, `TRANSLATE_V2_*` giới hạn/concurrency), bỏ mọi `SHOWCASE_*`, bỏ endpoint model (đến từ `env_file: .env`), URL nội bộ theo tên service; giá trị bí mật (`*_API_KEY`, `*_TOKEN`) thành `${VAR}` đọc từ `.env`. Healthcheck dịch sửa cho đúng cổng 18185 (bản prod đang kiểm nhầm 8131). `.env` đặt `TRANSLATION_UPSTREAM_URL=http://translation-gateway:18185` khi bật profile.
 - [ ] **Step 5:** Converter Dockerfile: nền `ubuntu:24.04@sha256:a853f94d…` như `deploy/translate-v2/Dockerfile.converter` + python venv tại `/opt/v` + `server.py`; `CONVERTER_HOST=0.0.0.0`, `CONVERTER_PORT=18091`, `USER 65534`. Review-ui Dockerfile: `FROM python:3.12-slim`, `COPY static/ /app/review-ui/`, `USER 65534`.
 - [ ] **Step 6:** Run test → PASS; `docker compose --profile translation --profile report --profile review config -q` → exit 0; build hai image phụ, mỗi cái `docker run --rm` khởi động và trả HTTP ở cổng của nó.
 - [ ] **Step 7:** Commit `feat(stack): profile dịch, báo cáo, review`.
@@ -370,12 +381,12 @@ def test_env_example_has_no_secret_values():
     for line in (STACK / ".env.example").read_text().splitlines():
         if "=" in line and not line.startswith("#"):
             k, v = line.split("=", 1)
-            if any(t in k for t in ("KEY", "PASSWORD", "SECRET", "TOKEN")):
+            if k.endswith(("_KEY", "_PASSWORD", "_SECRET", "_TOKEN")):   # không bắt *_TOKENS (số)
                 assert v == "", k
 ```
 
 - [ ] **Step 2:** Run → FAIL.
-- [ ] **Step 3:** Viết `.env.example` theo 5 khối có tiêu đề (`# ── ENDPOINTS`, `SECRETS`, `PATHS & IMAGES`, `POOL`, `TRANSLATION`), mỗi biến một dòng chú thích. Mặc định: `COMPOSE_PROFILES=exploit,translation,report,review`, `VM_SLOTS=12`, `QDRANT_COLLECTION=cve_kb_hybrid`, `AIRGAP=true`, `VERIFY_ENABLED=false`, `EXEC_ENABLED=false`, `RATE_LIMIT_ENABLED=false`, `QWEN_CONTEXT_WINDOW=131072`.
+- [ ] **Step 3:** Viết `.env.example` (đặt `IAS_POOL_GPU_COUNT=0` để pool chỉ lấy từ `IAS_SERVER_POOL` tường minh; bootstrap đặt `REVIEW_ENABLED=true` khi `COMPOSE_PROFILES` có `review`) theo 5 khối có tiêu đề (`# ── ENDPOINTS`, `SECRETS`, `PATHS & IMAGES`, `POOL`, `TRANSLATION`), mỗi biến một dòng chú thích. Mặc định: `COMPOSE_PROFILES=exploit,translation,report,review`, `VM_SLOTS=12`, `QDRANT_COLLECTION=cve_kb_hybrid`, `AIRGAP=true`, `VERIFY_ENABLED=false`, `EXEC_ENABLED=false`, `RATE_LIMIT_ENABLED=false`, `QWEN_CONTEXT_WINDOW=131072`.
 - [ ] **Step 4:** Viết `bootstrap.sh`. Định dạng `credentials.json`: đọc `src/secai_gateway/api/review_auth.py` để sinh đúng schema (hash SHA-256 của token, `actor_id`, `role`); token thô in **một lần** ra stdout, không lưu.
 - [ ] **Step 5:** Run test → PASS. Commit `feat(stack): .env.example và bootstrap`.
 
