@@ -47,6 +47,7 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 
 - [Dịch v3 stream và cập nhật Devspace 05/10](archive/test-results/translation-v3-stream-devspace-20261005.md).
 
+- [Gói triển khai `stack/` cho máy mới](../stack/README.md), [tiêu chí nghiệm thu](../stack/ACCEPTANCE.md), [smoke 2026-11-23](archive/test-results/stack-package-smoke-20261123.md); thay `deploy/docker-compose.yml`/`deploy/up.sh` (deprecated).
 - [Full-feature image và routing Devspace](../deploy/all-features/README.md).
 - [Tích hợp main và giới hạn suite](archive/test-results/all-features-main-integration.md).
 - [Docker/Vast smoke, persist báo cáo và rollback](archive/test-results/all-features-deployment-20261004.md).

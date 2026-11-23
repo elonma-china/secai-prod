@@ -1,3 +1,4 @@
+# ═══ DEPRECATED (2026-11-24): dùng `stack/` (stack/README.md) cho máy mới. Tệp này giữ nguyên hành vi, chỉ để tham chiếu/rollback. ═══
 # ═══════════════════════════════════════════════════════════════════════════════
 #  deploy/docker-compose.yml — bộ Docker THỐNG NHẤT cho secai-agent-gateway, giờ
 #  SỐNG TRONG chính repo gateway (trước đây là secai-docker/, sibling dir riêng —

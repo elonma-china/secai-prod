@@ -1,3 +1,5 @@
+> **DEPRECATED (2026-11-24):** bộ triển khai cho máy mới là [`stack/`](../stack/README.md). Thư mục này giữ nguyên để tham chiếu và rollback.
+
 # deploy/ — consolidated Docker stack for secai-agent-gateway
 
 2026-09-19: this directory vendors what used to live in the sibling `secai-docker/`

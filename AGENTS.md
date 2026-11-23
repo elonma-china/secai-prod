@@ -95,6 +95,7 @@ npm run build
 - Stage đường dẫn cụ thể; tránh `git add .` hoặc `git add -A` ở Git root có nhiều dự án.
 - Không commit `.env`, khóa/token, dữ liệu session, log, backup, cache, build output hay kết quả eval phát sinh, trừ artifact đã được yêu cầu rõ và kiểm tra nội dung.
 - Giữ phạm vi commit/merge theo yêu cầu hiện tại. Khi được yêu cầu merge: cập nhật remote, kiểm tra worktree đích, kiểm tra conflict và test kết quả merge; không force-push hoặc reset lịch sử để xử lý lỗi.
+- Dựng backend trên máy mới: dùng `stack/` (đọc `stack/README.md`: `bootstrap.sh`, `pack.sh`, `restore-data.sh`, `check.sh`); `deploy/docker-compose.yml` và `deploy/up.sh` đã deprecated. Chỉ chạy `docker compose up`/`eval-vast.sh` khi tác vụ đã bao gồm triển khai; không `docker push`.
 - Đọc `deploy/README.md` trước thao tác Docker. Stack ở `deploy/` có thể dùng chung tên container/volume với stack đang chạy; `up`, `down`, `restart` có thể tác động production. Chỉ thực hiện khi tác vụ đã bao gồm triển khai.
 - Full-feature rollout: đọc `deploy/all-features/README.md`; giữ service entrypoint, private env và persistent volume. Pin immutable image, snapshot profile và kiểm lock/ownership trước thao tác, không chạy `down -v`.
 - Dọn env: chỉ xoá backup cũ đã xác định không còn dùng; giữ `.env`, `.env.local`, `.env.pentest`, cấu hình deployment đang tham chiếu và các `.env.example`. Không đưa nội dung secret vào log/diff/commit.

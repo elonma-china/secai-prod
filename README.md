@@ -211,6 +211,10 @@ Two operator/demo surfaces are mounted same-origin (no CORS or separate deploy):
 
 ## Deploy
 
+**New machine:** use [`stack/`](stack/README.md) (compose + bootstrap/preflight, data package pack/restore,
+checks, acceptance). It supersedes `deploy/docker-compose.yml` and `deploy/up.sh`, which are deprecated but kept
+for reference and rollback.
+
 This repository is the source for building the gateway image. To stand up the full backend —
 gateway + Qdrant + Neo4j + Redis — use [`deploy/`](deploy/), a docker-compose stack that builds
 this repo's `Dockerfile`, brings up the datastores on an internal `secai-net` network, and

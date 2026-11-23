@@ -286,3 +286,27 @@ def test_vm_llm_env_canonical_with_legacy_fallback(tmp_path, env, want):
     assert r.returncode == 0, r.stderr
     v = json.loads(r.stdout)["services"]["vm-a"]["environment"]
     assert (v["ORCA_LOCAL_BASE_URL"], v["ORCA_LOCAL_MODEL_ID"], v["ORCA_LOCAL_API_KEY"], v["ORCA_LOCAL_CONTEXT"]) == want
+
+
+def test_readme():
+    import re
+    stack = COMPOSE.parent
+    readme = stack / "README.md"
+    assert readme.exists()
+    t = readme.read_text()
+    for var in set(re.findall(r"\$\{(\w+):\?", COMPOSE.read_text())):
+        assert var in t, var
+    for script in ("bootstrap.sh", "pack.sh", "restore-data.sh", "check.sh", "eval-vast.sh", "destroy-eval.sh"):
+        assert (stack / script).exists() and script in t, script
+    for profile in ("exploit", "translation", "report", "review"):
+        assert f"`{profile}`" in t, profile
+    assert "## Chưa kiểm" in t
+    for s in ("bootstrap.sh init", "restore-data.sh", "docker compose up -d", "check.sh", "Rollback", "docker push"):
+        assert s in t, s
+    assert "/home/ict" not in t
+    for pat in (r"\b[0-9a-f]{32,}\b", r"\bsk-[A-Za-z0-9]{16,}", r"\bghp_\w{20,}", r"-----BEGIN", r"\bAKIA[0-9A-Z]{12,}"):
+        assert not re.search(pat, t), pat
+    # deploy/ cũ phải trỏ về stack/ nhưng không đổi hành vi
+    root = stack.parent
+    for f in ("deploy/docker-compose.yml", "deploy/up.sh", "deploy/README.md"):
+        assert "DEPRECATED" in (root / f).read_text()[:1500], f
