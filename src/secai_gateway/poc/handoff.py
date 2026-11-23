@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import re
 
+import httpx
+
 FAILURE_LABELS: dict[str, str] = {
     "INVALID_INPUT": "đầu vào không hợp lệ (CVE hoặc target)",
     "TARGET_UNREACHABLE": "không kết nối được tới target",
@@ -115,3 +117,27 @@ def build_handoff(*, cve: dict, target: str, stage: str | None, stage_label: str
 def one_line_reason(cve: str, target: str, failure_code: str) -> str:
     return (f"Chưa khai thác được {cve} trên {target}: {FAILURE_LABELS.get(failure_code, failure_code)}. "
             "Xem mục BÀN GIAO trong Terminal để làm tiếp.")
+
+
+_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
+
+
+async def fingerprint_target(target: str, *, timeout: float = 5.0,
+                             transport: httpx.AsyncBaseTransport | None = None) -> str | None:
+    """Dấu vết nhận diện sản phẩm của target (tiêu đề trang, header Server/X-Powered-By) để người dùng tự đối chiếu
+    với mô tả CVE. Một GET, timeout ngắn; lỗi hoặc không có gì → None (không bao giờ làm hỏng kết quả)."""
+    url = target if "://" in target else f"http://{target}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout, verify=False, follow_redirects=True, transport=transport) as c:
+            r = await c.get(url)
+        parts: list[str] = []
+        m = _TITLE_RE.search(r.text[:20000]) if r.text else None
+        title = " ".join(m.group(1).split())[:120] if m else ""
+        if title:
+            parts.append(f'tiêu đề: "{title}"')
+        for name in ("Server", "X-Powered-By"):
+            if r.headers.get(name):
+                parts.append(f"{name}: {r.headers[name][:80]}")
+        return " · ".join(parts) or None
+    except Exception:
+        return None
