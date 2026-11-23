@@ -1094,7 +1094,7 @@ def run_remote(tmp_path, acc=None, fail_step="", skip="UI-TR-2 UI-POC-1", env_li
     accw = ("" if acc is None else f"mkdir -p \"$ACCEPT_OUT\"; printf '%s' '{json.dumps(acc)}' > \"$ACCEPT_OUT/summary.json\"\n"
             "echo \"$SKIP_REASONS\" > \"$ACCEPT_OUT/reasons.json\"")
     stub(st / "acceptance/run-api.sh", accw + f'\n[ "{fail_step}" = acceptance ] && exit 1\nexit 0')
-    stub(tmp_path / "bin/docker", 'echo cid')
+    stub(tmp_path / "bin/docker", 'case "$1" in ps) ;; *) echo cid ;; esac')   # `docker ps -q --filter health=...` rong = khong con container starting/unhealthy
     return subprocess.run(["bash", str(remote_script("REMOTE_RUN", root))], text=True, capture_output=True, timeout=60,
                           env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "SKIP_CASES": skip, "STACK_HAS_OCR": "0"}), root / "results"
 
