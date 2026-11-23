@@ -17,18 +17,27 @@ STACK = Path(__file__).resolve().parents[1] / "stack"
 EVAL = STACK / "eval-vast.sh"
 DESTROY = STACK / "destroy-eval.sh"
 PROD = "62088958"
+PRODROW = {"id": 62088958, "label": "secai-prod-vast", "dph_total": 3.14, "actual_status": "running"}
 SECRET = "SECRET_MARK_9f3a"
 VASTKEY = "VASTKEY_MARK_77c1"
 
 FAKE_VASTAI = r'''#!/usr/bin/env python3
+# Mo hinh vastai 1.3.0: destroy can -y (khong -y: "Aborted." rc 0, no-op); show instances-v1 phan trang (next_token);
+# show instance --raw tra {"instances": null} khi khong co; loi van rc 0; thong bao cap nhat o stderr.
 import json, os, sys
 d = os.environ["FAKE_DIR"]
 open(d + "/vastai.log", "a").write(" ".join(sys.argv[1:]) + "\n")
+sys.stderr.write("update available: vastai 9.9.9\n")
 def rd(n, default=""):
     try: return open(f"{d}/{n}").read().strip()
     except OSError: return default
 def inst(): return json.load(open(d + "/instances.json"))
 def save(x): json.dump(x, open(d + "/instances.json", "w"))
+def bad(mode):
+    if mode == "deprecated": print("DEPRECATED: use `show instances-v2`"); return True
+    if mode == "garbage": print("{not json"); return True
+    if mode == "fail": return True
+    return False
 a = sys.argv[1:]
 if a[:2] == ["search", "offers"]:
     print(open(d + "/offers.json").read()); sys.exit(0)
@@ -36,6 +45,8 @@ if a[:2] == ["create", "instance"]:
     mode = rd("create_mode", "ok")
     if mode == "fail":
         print("Error: boom"); sys.exit(1)
+    if mode == "prod":
+        print(json.dumps({"success": True, "new_contract": 62088958})); sys.exit(0)
     offer = a[2]; label = a[a.index("--label") + 1]
     price = next((o["dph_total"] for o in json.load(open(d + "/offers.json")) if str(o["id"]) == offer), 0.25)
     x = inst(); x.append({"id": 777, "label": label, "dph_total": price, "actual_status": "running",
@@ -43,20 +54,33 @@ if a[:2] == ["create", "instance"]:
     if mode == "ambiguous":
         print("Error: gateway timeout"); sys.exit(1)
     print(json.dumps({"success": True, "new_contract": 777})); sys.exit(0)
-if a[:2] == ["show", "instances-v1"] or a[:2] == ["show", "instances"]:
+if a[:2] == ["show", "instances-v1"]:
     m = rd("list_mode", "ok")
-    if m == "deprecated": print("DEPRECATED: use `show instances-v2`"); sys.exit(0)
-    if m == "garbage": print("{not json"); sys.exit(0)
-    if m == "fail": sys.exit(1)
-    print(json.dumps(inst())); sys.exit(0)
+    if bad(m): sys.exit(0)
+    rows = [] if m == "empty" else inst()
+    if m == "stringids": rows = [dict(r, id=str(r["id"])) for r in rows]
+    if m == "floatids": rows = [dict(r, id=float(r["id"])) for r in rows]
+    tok = a[a.index("--next-token") + 1] if "--next-token" in a else None
+    off = int(tok[1:]) if tok else 0
+    size = int(rd("page_size", "25"))
+    page = rows[off:off + size]
+    print(json.dumps({"instances": page, "next_token": ("p%d" % (off + size)) if off + size < len(rows) else None,
+                      "total_instances": len(rows)})); sys.exit(0)
+if a[:2] == ["show", "instance"]:
+    if bad(rd("show_mode_after_destroy") if int(rd("destroy_count", "0")) > 0 and rd("show_mode_after_destroy") else rd("show_mode", "ok")):
+        sys.exit(0)
+    row = next((r for r in inst() if str(r["id"]) == a[2]), None)
+    print(json.dumps(row if row else {"instances": None})); sys.exit(0)
 if a[:2] == ["destroy", "instance"]:
-    ids = a[2:]
-    if ids and ids[0] == "62088958": open(d + "/PROD_DESTROYED", "w").write("x")
+    ids = [x for x in a[2:] if not x.startswith("-")]
+    if "62088958" in a: open(d + "/PROD_DESTROYED", "w").write("x")
+    if "-y" not in a and "--yes" not in a:
+        print("\nAborted."); sys.exit(0)
     n = int(rd("destroy_count", "0")) + 1; open(d + "/destroy_count", "w").write(str(n))
     mode = rd("destroy_mode", "ok")
-    if mode == "fail": print("Error"); sys.exit(1)
-    if mode == "stuck" and n < 3: print("queued"); sys.exit(0)
-    save([i for i in inst() if str(i["id"]) not in ids]); print("destroyed"); sys.exit(0)
+    if mode == "fail": print(json.dumps({"success": False, "msg": "nope"})); sys.exit(0)
+    if mode == "stuck" and n < 3: print(json.dumps({"success": True})); sys.exit(0)
+    save([i for i in inst() if str(i["id"]) not in ids]); print(json.dumps({"success": True})); sys.exit(0)
 print("unknown fake vastai command", a); sys.exit(9)
 '''
 FAKE_LOGGER = '''#!/bin/sh
@@ -156,6 +180,9 @@ def assert_prod_alive(b) -> None:
     assert not any(PROD in line.split() for line in lines_with(b, "vastai", "destroy"))
 
 
+D777 = "destroy instance 777 -y --raw"
+
+
 def destroys(b) -> list[str]:
     return lines_with(b, "vastai", "destroy")
 
@@ -167,7 +194,7 @@ def test_destroy_exact_id_single_command_then_verifies_and_cancels_timers(box):
     add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
     r = sh(DESTROY, "--yes", b=box)
     assert r.returncode == 0, r.stderr
-    assert destroys(box) == ["destroy instance 777"]
+    assert destroys(box) == [D777]
     assert "777" not in ids_listed(box)
     stops = log(box, "systemctl")
     assert any("tB.timer" in s for s in stops) and any("tD.timer" in s for s in stops)
@@ -190,7 +217,7 @@ def test_destroy_force_deadline_still_goes_through_checks(box):
     box.fake.joinpath("instances.json").write_text(json.dumps(
         [{"id": 777, "label": "secai-stack-eval-20261123-ab12", "dph_total": 0.25}, {"id": int(PROD), "label": "p", "dph_total": 3.14}]))
     r = sh(DESTROY, "--force-deadline", b=box)
-    assert r.returncode == 0 and destroys(box) == ["destroy instance 777"]
+    assert r.returncode == 0 and destroys(box) == [D777]
     assert_prod_alive(box)
 
 
@@ -256,6 +283,7 @@ def test_destroy_rejects_price_above_one_and_half_cap(box):
     add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.46)
     r = sh(DESTROY, "--yes", b=box)
     assert r.returncode != 0 and destroys(box) == []
+    assert "console" in r.stderr and "777" in r.stderr  # bao operator huy tay
     box.fake.joinpath("instances.json").write_text(json.dumps(
         [{"id": 777, "label": "secai-stack-eval-20261123-ab12", "dph_total": 0.45}]))
     assert sh(DESTROY, "--yes", b=box).returncode == 0  # == 1.5 x cap van duoc
@@ -276,7 +304,7 @@ def test_destroy_retries_until_gone(box):
     set_mode(box, "destroy_mode", "stuck")  # chi that su bien mat tu lan goi thu 3
     r = sh(DESTROY, "--yes", b=box, extra={"STACK_EVAL_DESTROY_RETRIES": "5"})
     assert r.returncode == 0, r.stderr
-    assert destroys(box) == ["destroy instance 777"] * 3
+    assert destroys(box) == [D777] * 3
     assert_prod_alive(box)
 
 
@@ -288,6 +316,7 @@ def test_destroy_gives_up_nonzero_and_keeps_timers(box):
     assert r.returncode != 0
     assert len(destroys(box)) == 3
     assert log(box, "systemctl") == []  # timer van chay de thu lai
+    assert "console" in r.stderr and "777" in r.stderr  # to tieng yeu cau huy tay
     assert "777" in ids_listed(box)
 
 
@@ -296,6 +325,7 @@ def test_destroy_idempotent_when_already_gone(box):
     r = sh(DESTROY, "--yes", b=box)
     assert r.returncode == 0 and destroys(box) == []
     assert any("tB.timer" in s for s in log(box, "systemctl"))
+    assert "destroyed_at" in json.loads((box.sdir / "state.json").read_text())
     assert sh(DESTROY, "--force-deadline", b=box).returncode == 0
     assert_prod_alive(box)
 
@@ -304,10 +334,114 @@ def test_destroy_idempotent_when_already_gone(box):
 def test_destroy_fails_safe_when_vastai_output_unparseable(box, mode):
     write_state(box)
     add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
-    set_mode(box, "list_mode", mode)
+    set_mode(box, "show_mode", mode)
     r = sh(DESTROY, "--yes", b=box)
     assert r.returncode != 0 and destroys(box) == []  # khong doan: khong destroy, cung khong bao "da huy"
     assert log(box, "systemctl") == []
+
+
+def test_destroy_passes_yes_flag_since_vastai_prompts_otherwise(box):
+    # fake mo hinh vastai that: khong -y thi "Aborted." rc 0 va khong huy gi. Thieu -y => instance con => script phai that bai.
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    r = sh(DESTROY, "--yes", b=box)
+    assert r.returncode == 0, r.stderr
+    assert D777 in destroys(box) and "-y" in destroys(box)[0].split()
+    assert "777" not in ids_listed(box)
+
+
+def test_destroy_failed_success_field_is_not_success(box):
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    set_mode(box, "destroy_mode", "fail")  # rc 0 nhung {"success": false}
+    r = sh(DESTROY, "--yes", b=box, extra={"STACK_EVAL_DESTROY_RETRIES": "2"})
+    assert r.returncode != 0 and "success" in r.stderr
+
+
+@pytest.mark.parametrize("mode", ["empty", "stringids", "floatids", "garbage"])
+def test_destroy_never_decides_from_the_list(box, mode):
+    # danh sach rong/id kieu khac/loi KHONG duoc anh huong: tra theo ID (show instance)
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    set_mode(box, "list_mode", mode)
+    r = sh(DESTROY, "--yes", b=box)
+    assert r.returncode == 0 and destroys(box) == [D777]
+    assert not lines_with(box, "vastai", "instances-v1")
+
+
+def test_destroy_gone_not_proven_by_unreadable_lookup_keeps_timers_and_state(box):
+    write_state(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    set_mode(box, "show_mode_after_destroy", "garbage")  # that ra da huy, nhung khong chung minh duoc
+    r = sh(DESTROY, "--yes", b=box, extra={"STACK_EVAL_DESTROY_RETRIES": "2"})
+    assert r.returncode != 0
+    assert log(box, "systemctl") == []
+    assert "destroyed_at" not in json.loads((box.sdir / "state.json").read_text())
+
+
+@pytest.mark.parametrize("mode", ["ok", "stringids", "floatids"])
+def test_destroy_pending_state_finds_instance_by_label_across_pages(box, mode):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) + 3600)
+    add_instance(box, 701, "decoy", 1.0)
+    add_instance(box, 702, "decoy", 1.0)
+    add_instance(box, 777, lab, 0.25)  # trang 2 (page_size 2: prod+701 | 702+777)
+    set_mode(box, "page_size", "2")
+    set_mode(box, "list_mode", mode)
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 0, r.stderr
+    assert destroys(box) == [D777]
+    assert len([x for x in log(box, "vastai") if "instances-v1" in x]) >= 2  # da di het trang
+    assert json.loads((box.sdir / "state.json").read_text())["id"] == "777"
+    assert_prod_alive(box)
+
+
+def test_destroy_pending_not_found_keeps_timers_until_deadline_then_stops(box):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) + 3600)
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 4 and destroys(box) == [] and log(box, "systemctl") == []
+    write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) - 5)
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 0 and destroys(box) == [] and any("tB.timer" in x for x in log(box, "systemctl"))
+
+
+def test_destroy_pending_with_unreadable_list_refuses(box):
+    write_state(box, id_="", label="secai-stack-eval-20261123-ab12", pending=True, deadline=1)
+    set_mode(box, "list_mode", "garbage")
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 3 and destroys(box) == [] and log(box, "systemctl") == []
+
+
+def test_destroy_pending_label_resolving_to_prod_is_refused(box):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=1)
+    f = box.fake / "instances.json"
+    x = json.loads(f.read_text()); x[0]["label"] = lab; x[0]["dph_total"] = 0.2; f.write_text(json.dumps(x))
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 3 and destroys(box) == []
+    assert_prod_alive(box)
+
+
+def test_destroy_empty_id_without_pending_flag_still_refused_even_if_label_matches(box):
+    write_state(box, id_="", label="secai-stack-eval-20261123-ab12")
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    assert sh(DESTROY, "--yes", b=box).returncode == 3 and destroys(box) == []
+
+
+def test_destroy_without_state_uses_instance_id_but_still_checks_label_and_price(box):
+    box.sdir.mkdir(parents=True)
+    (box.sdir / "instance.id").write_text("777\n")
+    add_instance(box, 777, "random-name", 0.25)
+    assert sh(DESTROY, "--yes", b=box).returncode == 3 and destroys(box) == []
+    box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW, {"id": 777, "label": "secai-stack-eval-x", "dph_total": 0.9}]))
+    assert sh(DESTROY, "--yes", b=box).returncode == 3 and destroys(box) == []
+    box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW, {"id": 777, "label": "secai-stack-eval-x", "dph_total": 0.25}]))
+    assert sh(DESTROY, "--yes", b=box).returncode == 0 and destroys(box) == [D777]
+    (box.sdir / "instance.id").write_text(PROD + "\n")
+    assert sh(DESTROY, "--yes", b=box).returncode == 3
+    assert_prod_alive(box)
+
 
 
 def test_destroy_without_state_refuses(box):
@@ -389,7 +523,7 @@ def test_up_records_id_immediately_even_if_later_step_fails_then_destroys_via_ex
     assert r.returncode != 0
     assert (box.sdir / "instance.id").read_text().strip() == "777"
     assert json.loads((box.sdir / "state.json").read_text())["id"] == "777"
-    assert destroys(box) == ["destroy instance 777"]  # EXIT trap huy qua destroy-eval.sh
+    assert destroys(box) == [D777]  # EXIT trap huy qua destroy-eval.sh
     assert_prod_alive(box)
 
 
@@ -398,7 +532,7 @@ def test_up_id_recorded_before_timer_step_failure(box):
     r = sh(EVAL, "up", b=box)
     assert r.returncode != 0
     assert (box.sdir / "instance.id").read_text().strip() == "777"
-    assert destroys(box) == ["destroy instance 777"]  # khong co deadline thi khong duoc de may chay
+    assert destroys(box) == [D777]  # khong co deadline thi khong duoc de may chay
 
 
 def test_up_create_error_finds_orphan_by_label(box):
@@ -449,7 +583,7 @@ def test_down_delegates_to_destroy_eval(box):
     add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
     r = sh(EVAL, "down", b=box)
     assert r.returncode == 0, r.stderr
-    assert destroys(box) == ["destroy instance 777"]
+    assert destroys(box) == [D777]
     assert_prod_alive(box)
 
 
