@@ -103,7 +103,7 @@ rssh() { ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" "$@"; }
 refuse_if_account_key() {
     local k="$1" f v
     for v in "${VAST_API_KEY:-}"; do [ -z "$v" ] || [ "$v" != "$k" ] || die "EVAL_CONTAINER_API_KEY trùng khoá tài khoản Vast (VAST_API_KEY); dùng khoá giới hạn theo instance"; done
-    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/vastai/vast_api_key" "$HOME/.vast_api_key"; do
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/vastai/vast_api_key" "${XDG_CONFIG_HOME:-$HOME/.config}/vastai/vast_tfa_key" "$HOME/.vast_api_key"; do
         [ -f "$f" ] || continue
         v="$(tr -d '[:space:]' <"$f")"
         [ -z "$v" ] || [ "$v" != "$k" ] || die "EVAL_CONTAINER_API_KEY trùng khoá tài khoản Vast ($f); dùng khoá giới hạn theo instance"
@@ -153,7 +153,10 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
     [ -d "${EVAL_DATA_PKG:-}" ] && [ -f "$EVAL_DATA_PKG/SHA256SUMS" ] || die "đặt EVAL_DATA_PKG = thư mục gói dữ liệu (pack.sh data) có SHA256SUMS"
     [ -f "$KEY" ] || die "không thấy khoá ssh $KEY (EVAL_SSH_KEY)"
     [ -z "${EVAL_CONTAINER_API_KEY:-}" ] || refuse_if_account_key "$EVAL_CONTAINER_API_KEY"
-    need_cmds ssh scp rsync systemd-run git flock
+    need_cmds ssh scp rsync systemd-run git flock loginctl
+    # Timer systemd --user chỉ chạy khi phiên user còn sống: không linger thì đăng xuất là mất deadline.
+    [ "$(loginctl show-user "${USER:-$(id -un)}" -p Linger 2>/dev/null)" = "Linger=yes" ] \
+        || die "systemd --user chưa bật linger (timer deadline sẽ chết khi đăng xuất): chạy 'sudo loginctl enable-linger ${USER:-$(id -un)}' rồi thử lại"
     # Timer systemd --user chỉ có HOME (không có VAST_API_KEY của shell này): vastai ở đó đọc đúng $KEYFILE. Khoá env khác tệp, hay tệp
     # thiếu => timer 401 mãi, hoặc (khác tài khoản) "show instance" trả null = "đã huỷ" giả. Nên bắt buộc: có tệp, và env (nếu có) = tệp.
     [ -r "$KEYFILE" ] && [ -n "$(tr -d '[:space:]' <"$KEYFILE")" ] || die "không đọc được khoá Vast $KEYFILE (timer deadline dùng tệp này); chạy 'vastai set api-key' rồi thử lại"
@@ -161,10 +164,13 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
         die "VAST_API_KEY trong môi trường khác khoá trong $KEYFILE: timer sẽ dùng khoá ở tệp (có thể là tài khoản khác). Bỏ VAST_API_KEY hoặc đồng bộ tệp"
     fi
     # .env sẽ rời máy này: không được chứa khoá tài khoản Vast (khoá đọc trong python qua tệp/môi trường, không qua argv, không in).
-    python3 -I - "$EVAL_ENV_FILE" "$KEYFILE" <<'PY' || die "$EVAL_ENV_FILE chứa khoá API tài khoản Vast: từ chối đẩy sang máy thuê (gỡ nó khỏi tệp)"
+    python3 -I - "$EVAL_ENV_FILE" "$KEYFILE" "$(dirname "$KEYFILE")/vast_tfa_key" "$HOME/.vast_api_key" <<'PY' || die "$EVAL_ENV_FILE chứa khoá API tài khoản Vast: từ chối đẩy sang máy thuê (gỡ nó khỏi tệp)"
 import os, sys
 text = open(sys.argv[1], errors="replace").read()
-keys = {os.environ.get("VAST_API_KEY", "").strip(), open(sys.argv[2]).read().strip()}
+keys = {os.environ.get("VAST_API_KEY", "").strip()}
+for f in sys.argv[2:]:   # khoá api, khoá 2FA, khoá cũ (legacy): tệp không có thì bỏ qua
+    try: keys.add(open(f).read().strip())
+    except OSError: pass
 sys.exit(1 if any(len(k) >= 8 and k in text for k in keys) else 0)
 PY
     local acct
@@ -173,7 +179,11 @@ print(int(json.load(sys.stdin)["id"]))' 2>/dev/null)" || die "không đọc đư
     mkdir -p "$SD"; chmod 700 "$SD"
     exec 9>"$SD/.lock"; flock -n 9 || die "đang có một 'up' khác chạy ($SD/.lock)"
     if [ -f "$SD/state.json" ]; then
-        [ -n "$(sget destroyed_at)$(sget abandoned_at)" ] || die "state.json cũ chưa huỷ (id '$(sget id)', label $(sget label)); chạy 'down' hoặc 'status' trước"
+        if [ -z "$(sget destroyed_at)" ]; then
+            # abandoned_at chỉ hợp lệ khi chưa từng có ID (state không có id và không có instance.id), nếu không thì bỏ nhầm instance đang tính tiền
+            [ -n "$(sget abandoned_at)" ] && [ -z "$(sget id)" ] && [ ! -s "$SD/instance.id" ] \
+                || die "state.json cũ chưa huỷ hoặc đã 'abandoned' nhưng có ID (id '$(sget id)', label $(sget label), instance.id $(cat "$SD/instance.id" 2>/dev/null)); chạy 'down' hoặc kiểm console"
+        fi
         mv "$SD/state.json" "$SD/state-$(date +%s).json"; rm -f "$SD/instance.id"
     fi
     [ -f "$SD/protected-instances" ] || (umask 077; echo "$HARD_DENY" >"$SD/protected-instances")
@@ -193,7 +203,7 @@ print(int(json.load(sys.stdin)["id"]))' 2>/dev/null)" || die "không đọc đư
         [ -z "${XDG_CONFIG_HOME:-}" ] || envs+=(--setenv=XDG_CONFIG_HOME="$XDG_CONFIG_HOME")
         [ -z "${STACK_EVAL_PROTECTED:-}" ] || envs+=(--setenv=STACK_EVAL_PROTECTED="$STACK_EVAL_PROTECTED")
         # --on-unit-active: lặp lại mỗi 10 phút (huỷ thất bại/chưa chứng minh được thì thử lại); destroy-eval.sh tự dừng timer khi thành công.
-        systemd-run --user --unit="$unit" --on-active="$secs" --on-unit-active=600 "${envs[@]}" "$HERE/destroy-eval.sh" --force-deadline >/dev/null 2>&1 \
+        systemd-run --user --unit="$unit" --on-active="$secs" --on-unit-active=600 -p RuntimeMaxSec=300 "${envs[@]}" "$HERE/destroy-eval.sh" --force-deadline >/dev/null 2>&1 \
             || die "không đặt được timer deadline $tag (không có deadline thì không thuê)"
         timers+=("\"$unit\""); sset "timers=[$(IFS=,; echo "${timers[*]}")]" || die "không ghi được state.json"
     done

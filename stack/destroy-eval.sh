@@ -111,8 +111,29 @@ os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
 
+# check_id: ID phải là một số nguyên đơn, không phải prod (cứng), không nằm trong danh sách bảo vệ.
+check_id() {
+    [[ "$ID" =~ ^[1-9][0-9]*$ ]] || refuse "ID '$ID' không phải một số nguyên đơn (rỗng/glob/nhiều ID/sai kiểu)"
+    [ "$ID" != "$HARD_DENY" ] || refuse "ID $ID là instance PROD (denylist cứng)"
+    if [ -f "$PROTECTED" ]; then
+        local p
+        while IFS= read -r p || [ -n "$p" ]; do
+            p="${p//[[:space:]]/}"
+            [ -n "$p" ] || continue
+            [ "$p" != "$ID" ] || refuse "ID $ID nằm trong danh sách bảo vệ $PROTECTED"
+        done <"$PROTECTED"
+    fi
+}
+
 if [ "$MODE" = "--abandon-pending" ]; then
     [ "$PENDING" = 1 ] && [ -z "$ID" ] || refuse "--abandon-pending chỉ dùng cho state pending chưa có ID"
+    # Không được tranh với `up` đang chờ create (nó sẽ ghi ID sau khi ta dừng timer): cần giữ được khoá của up.
+    exec 7>"$SD/.lock"
+    flock -n 7 || refuse "'up' đang chạy (giữ $SD/.lock); chờ nó kết thúc rồi thử lại"
+    [ ! -s "$SD/instance.id" ] || refuse "đã có $SD/instance.id ($(tr -d '[:space:]' <"$SD/instance.id")): instance có thật, KHÔNG bỏ; chạy destroy-eval.sh --yes"
+    case "$LABEL" in secai-stack-eval-?*) ;; *) refuse "label '$LABEL' không bắt đầu secai-stack-eval-" ;; esac
+    found="$(list_by_label "$LABEL")" || refuse "danh sách vastai không đọc được; không thể xác nhận label $LABEL không có instance"
+    [ -z "$found" ] || refuse "label $LABEL CÓ instance ($(printf '%s' "$found" | tr '\n' ' ')): KHÔNG bỏ; chạy destroy-eval.sh --yes"
     stop_timers; mark_state abandoned_at=NOW pending=false
     echo "destroy-eval: đã bỏ state pending (label $LABEL) theo yêu cầu của operator; timer đã dừng. Bạn đã kiểm console Vast xem label đó có instance nào không?"
     exit 0
@@ -132,9 +153,14 @@ fi
 
 if [ "$PENDING" = 1 ] && [ -z "$ID" ]; then
     case "$LABEL" in secai-stack-eval-?*) ;; *) refuse "state pending nhưng label '$LABEL' không bắt đầu secai-stack-eval-" ;; esac
-    found="$(list_by_label "$LABEL")" || refuse "danh sách vastai không đọc được khi tìm theo label; không đoán, không huỷ"
-    n="$(printf '%s' "$found" | grep -c .)"
-    [ "$n" -le 1 ] || refuse "$n instance cùng label '$LABEL'; kiểm tay trên console"
+    if [ -s "$SD/instance.id" ]; then
+        found="$(tr -d '[:space:]' <"$SD/instance.id")"   # up đã ghi ID nhưng chưa kịp cập nhật state: tin ID đó, không chờ danh sách (có thể trễ)
+        n=1
+    else
+        found="$(list_by_label "$LABEL")" || refuse "danh sách vastai không đọc được khi tìm theo label; không đoán, không huỷ"
+        n="$(printf '%s' "$found" | grep -c .)"
+        [ "$n" -le 1 ] || refuse "$n instance cùng label '$LABEL'; kiểm tay trên console"
+    fi
     if [ "$n" = 0 ]; then
         if [ "$(date +%s)" -ge "$DEADLINE" ]; then
             alert "PENDING quá deadline, không thấy label $LABEL trong danh sách. KIỂM CONSOLE VAST; chỉ khi chắc chắn không có instance: destroy-eval.sh --abandon-pending"
@@ -144,6 +170,7 @@ if [ "$PENDING" = 1 ] && [ -z "$ID" ]; then
         echo "destroy-eval: chưa thấy instance nào mang label $LABEL (create chưa lộ ra?); giữ timer tới deadline." >&2; exit 4
     fi
     ID="$found"
+    check_id   # kiểm TRƯỚC khi lưu vào state
     python3 -I - "$SD/state.json" "$ID" <<'PY' >/dev/null 2>&1 || true
 import json, os, sys, tempfile
 p = sys.argv[1]; d = json.load(open(p)); d["id"] = sys.argv[2]; d["pending"] = False
@@ -152,15 +179,7 @@ os.chmod(t, 0o600); os.replace(t, p)
 PY
 fi
 
-[[ "$ID" =~ ^[1-9][0-9]*$ ]] || refuse "ID '$ID' không phải một số nguyên đơn (rỗng/glob/nhiều ID/sai kiểu)"
-[ "$ID" != "$HARD_DENY" ] || refuse "ID $ID là instance PROD (denylist cứng)"
-if [ -f "$PROTECTED" ]; then
-    while IFS= read -r p || [ -n "$p" ]; do
-        p="${p//[[:space:]]/}"
-        [ -n "$p" ] || continue
-        [ "$p" != "$ID" ] || refuse "ID $ID nằm trong danh sách bảo vệ $PROTECTED"
-    done <"$PROTECTED"
-fi
+check_id
 if [ -f "$SD/instance.id" ]; then
     [ "$(tr -d '[:space:]' <"$SD/instance.id")" = "$ID" ] || refuse "instance.id lệch state.json (không rõ huỷ ID nào)"
 fi
@@ -203,6 +222,8 @@ if [ "$res" = "GONE" ]; then finish; fi
 case "$res" in FOUND*) ;; *) refuse "kết quả vastai lạ" ;; esac
 IFS=$'\t' read -r _ ilabel iprice <<<"$res"
 case "$ilabel" in secai-stack-eval-?*) ;; *) refuse "label thật của instance $ID ('$ilabel') không bắt đầu secai-stack-eval-" ;; esac
+[ -z "${EVAL_EXPECT_LABEL:-}" ] || [ "$ilabel" = "$EVAL_EXPECT_LABEL" ] \
+    || refuse "label thật của instance $ID ('$ilabel') khác label timer mong đợi ('$EVAL_EXPECT_LABEL'); không huỷ"
 [ -z "$LABEL" ] || [ "$ilabel" = "$LABEL" ] || refuse "label thật của instance $ID ('$ilabel') khác state ('$LABEL')"
 awk -v p="$iprice" -v c="$CAP" 'BEGIN { exit !(p ~ /^[0-9.]+$/ && c ~ /^[0-9.]+$/ && p + 0 <= 1.5 * c + 1e-9) }' \
     || refuse "giá '$iprice' vượt 1.5 x cap $CAP (hoặc không đọc được). Nếu đúng là instance eval của bạn: HUỶ TAY trên console Vast (ID $ID)"

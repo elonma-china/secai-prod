@@ -102,6 +102,8 @@ def box(tmp_path: Path):
     fake.mkdir()
     binp = tmp_path / "bin"
     binp.mkdir()
+    (binp / "loginctl").write_text('#!/bin/sh\necho "$*" >> "$FAKE_DIR/loginctl.log"\ncat "$FAKE_DIR/linger" 2>/dev/null || echo Linger=yes\n')
+    (binp / "loginctl").chmod(0o755)
     (binp / "vastai").write_text(FAKE_VASTAI)
     (binp / "vastai").chmod(0o755)
     for name, extra in (("ssh", ""), ("scp", ""), ("rsync", ""), ("systemctl", ""),
@@ -411,6 +413,87 @@ def test_destroy_pending_not_found_never_stops_timers_even_past_deadline(box):
     assert lab in (box.sdir / "ALERT.txt").read_text()
 
 
+def _pending(box, **kw):
+    write_state(box, id_="", label="secai-stack-eval-20261123-ab12", pending=True, deadline=int(time.time()) - 5, **kw)
+
+
+def test_abandon_refused_while_up_holds_lock(box):  # (A) up con dang cho create
+    _pending(box)
+    holder = subprocess.Popen(["flock", "-n", str(box.sdir / ".lock"), "sleep", "20"])
+    try:
+        time.sleep(0.5)
+        r = sh(DESTROY, "--abandon-pending", b=box)
+        assert r.returncode == 3 and log(box, "systemctl") == []
+        assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
+    finally:
+        holder.kill()
+
+
+def test_abandon_refused_when_instance_id_already_recorded(box):  # (B) ID da ghi nhung state chua cap nhat / danh sach tre
+    _pending(box)
+    (box.sdir / "instance.id").write_text("777\n")
+    r = sh(DESTROY, "--abandon-pending", b=box)
+    assert r.returncode == 3 and log(box, "systemctl") == []
+    assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
+
+
+def test_abandon_refused_when_label_found_or_list_unreadable(box):
+    _pending(box)
+    add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
+    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+    box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW]))
+    set_mode(box, "list_mode", "garbage")
+    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+    assert log(box, "systemctl") == [] and destroys(box) == []
+
+
+def test_up_does_not_accept_abandoned_state_that_holds_an_id(box):
+    write_state(box, abandoned_at=1)  # co ID 777
+    assert sh(EVAL, "up", b=box).returncode != 0 and not lines_with(box, "vastai", "create")
+    _pending(box, abandoned_at=1)
+    (box.sdir / "instance.id").write_text("777\n")
+    assert sh(EVAL, "up", b=box).returncode != 0 and not lines_with(box, "vastai", "create")
+
+
+def test_destroy_pending_uses_instance_id_when_listing_lags(box):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) + 3600)
+    add_instance(box, 777, lab, 0.25)
+    (box.sdir / "instance.id").write_text("777\n")
+    set_mode(box, "list_mode", "empty")  # danh sach chua thay
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 0, r.stderr
+    assert destroys(box) == [D777]
+
+
+@pytest.mark.parametrize("via", ["prod", "protected"])
+def test_destroy_pending_validates_label_found_id_before_saving_it(box, via):
+    lab = "secai-stack-eval-20261123-ab12"
+    write_state(box, id_="", label=lab, pending=True, deadline=1)
+    extra = {}
+    if via == "prod":
+        f = box.fake / "instances.json"
+        x = json.loads(f.read_text()); x[0]["label"] = lab; x[0]["dph_total"] = 0.2; f.write_text(json.dumps(x))
+    else:
+        add_instance(box, 777, lab, 0.25)
+        (box.tmp / "prot").write_text("777\n")
+        extra["STACK_EVAL_PROTECTED"] = str(box.tmp / "prot")
+    r = sh(DESTROY, "--force-deadline", b=box, extra=extra)
+    assert r.returncode == 3 and destroys(box) == []
+    st = json.loads((box.sdir / "state.json").read_text())
+    assert st["id"] == "" and st["pending"] is True  # khong luu ID chua hop le vao state
+
+
+def test_destroy_fallback_without_state_honors_expected_label(box):
+    box.sdir.mkdir(parents=True)
+    (box.sdir / "instance.id").write_text("777\n")
+    add_instance(box, 777, "secai-stack-eval-x", 0.25)
+    r = sh(DESTROY, "--force-deadline", b=box, extra={"EVAL_EXPECT_LABEL": "secai-stack-eval-y", "STACK_EVAL_DESTROY_RETRIES": "1"})
+    assert r.returncode == 3 and destroys(box) == []
+    r = sh(DESTROY, "--force-deadline", b=box, extra={"EVAL_EXPECT_LABEL": "secai-stack-eval-x", "STACK_EVAL_DESTROY_RETRIES": "1"})
+    assert destroys(box) == [D777]
+
+
 def test_destroy_abandon_pending_requires_flag_stops_timers_and_unblocks_next_up(box):
     lab = "secai-stack-eval-20261123-ab12"
     write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) - 5)
@@ -599,6 +682,27 @@ def test_up_refuses_when_env_key_differs_from_key_file_or_file_missing(box):
     r = sh(EVAL, "up", b=box)
     assert r.returncode != 0 and not lines_with(box, "vastai", "create")
     assert sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY}).returncode != 0  # van thieu tep khoa cho timer
+
+
+@pytest.mark.parametrize("fname", ["vast_tfa_key", "../../.vast_api_key"])
+def test_up_refuses_env_file_with_tfa_or_legacy_key_and_container_key_equal_to_them(box, fname):
+    kf = box.tmp / "home/.config/vastai" / fname
+    kf.write_text("OTHERKEY_MARK_88")
+    Path(box.env["EVAL_ENV_FILE"]).write_text("X=OTHERKEY_MARK_88\n")
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create") and "OTHERKEY_MARK_88" not in r.stdout + r.stderr
+    Path(box.env["EVAL_ENV_FILE"]).write_text(f"QWEN_API_KEY={SECRET}\n")
+    r = sh(EVAL, "up", b=box, extra={"EVAL_CONTAINER_API_KEY": "OTHERKEY_MARK_88"})
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+
+
+def test_up_requires_linger_and_sets_runtime_max_on_timers(box):
+    set_mode(box, "linger", "Linger=no")
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create") and "linger" in r.stderr.lower()
+    (box.fake / "linger").unlink()
+    assert sh(EVAL, "up", b=box).returncode == 0
+    assert all("-p RuntimeMaxSec=300" in x for x in log(box, "systemd-run"))
 
 
 def test_up_accepts_env_key_equal_to_key_file(box):
