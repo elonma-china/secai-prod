@@ -86,7 +86,11 @@ try:
 except Exception:
     sys.exit(2)
 g = lambda k: str(row.get(k, "") if row.get(k) is not None else "").replace("\t", " ")
-print("\t".join(["FIELDS", g("label"), g("dph_total"), g("actual_status"), g("ssh_host") or g("public_ipaddr"), g("ssh_port") or "22"]))' "$1"; }
+pt = row.get("ports") or {}
+dp = ""
+try: dp = str(pt["22/tcp"][0]["HostPort"])
+except Exception: pass
+print("\t".join(["FIELDS", g("label"), g("dph_total"), g("actual_status"), g("ssh_host") or g("public_ipaddr"), g("ssh_port") or "22", g("public_ipaddr"), dp]))' "$1"; }
 
 ssh_opts() { SSHO=(-i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=30); }
 # Chuỗi cho `rsync -e`: rsync tách theo khoảng trắng và hiểu nháy kép, nên đường dẫn khoá có dấu cách vẫn đúng.
@@ -256,9 +260,21 @@ except Exception: pass' 2>/dev/null)"
     done
     read -r host port <<<"$info"
     [ -n "$host" ] || die "instance $ID chưa running/chưa có ssh sau khi chờ"
-    sset "ssh_host=\"$host\"" "ssh_port=$port" || die "không ghi được state.json"
+    # Thử proxy ssh_host:ssh_port trước, rồi cổng trực tiếp public_ip:ports[22/tcp]; ghi lỗi ssh cuối để chẩn đoán.
+    local dhost dport cand sshok=0 sshlog="$SD/ssh-last-error.txt"
+    read -r dhost dport <<<"$(awk -F'\t' '$1 == "FIELDS" { print $7, $8 }' <<<"$(vshow "$ID")")"
     HOST="$host"; PORT="$port"; ssh_opts
-    for n in $(seq 1 40); do rssh true 2>/dev/null && break; nap; [ "$n" != 40 ] || die "ssh vào $host:$port không được"; done
+    for n in $(seq 1 60); do
+        for cand in "$host $port" "${dhost:--} ${dport:--}"; do
+            read -r HOST PORT <<<"$cand"
+            [ "$HOST" != "-" ] && [[ "$PORT" =~ ^[0-9]+$ ]] || continue
+            if rssh true >/dev/null 2>"$sshlog"; then sshok=1; break; fi
+        done
+        [ "$sshok" = 1 ] && break
+        nap
+    done
+    [ "$sshok" = 1 ] || die "ssh vào $host:$port (và ${dhost:--}:${dport:--}) không được sau 60 lần; lỗi cuối: $(tail -c 300 "$sshlog" 2>/dev/null | tr '\n' ' ')"
+    sset "ssh_host=\"$HOST\"" "ssh_port=$PORT" || die "không ghi được state.json"
 
     if [ -n "${EVAL_CONTAINER_API_KEY:-}" ]; then
         # Lớp A: khoá giới hạn THEO INSTANCE đi qua stdin vào tệp header 0600 (curl -H @tệp, không lên argv); instance tự DELETE chính nó.
