@@ -99,7 +99,8 @@ def _ready(tmp_path, profiles="exploit,translation,report,review"):
          CONVERTER_IMAGE="secai-doc-convert:abc", REVIEW_UI_IMAGE="secai-review-ui:abc",
          TRANSLATE_V2_OCR_BASE_URL="http://o", TRANSLATE_V2_OCR_MODEL="m",
          TRANSLATE_V2_SPECIALIST_BASE_URL="http://127.0.0.1:18868", TRANSLATE_V2_SPECIALIST_MODEL="m",
-         MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_MODEL="m")
+         MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_MODEL="m",
+         VERIFY_ALLOWED_TARGETS="192.168.96.0/20")
     return d, {"MAX_MAP_COUNT_FILE": str(mm)}
 
 
@@ -392,3 +393,15 @@ def test_preflight_specialist_url_shape(tmp_path):
                     "http://127.0.0.1:18868/v1"):
             r = _fails(tmp_path, k, **{k: bad})
             assert "u:p" not in r.stderr
+
+
+def test_preflight_exploit_needs_target_allowlist(tmp_path):
+    # Thiếu VERIFY_ALLOWED_TARGETS (và VERIFY_ALLOW_ALL khác true) thì gateway trả 403 cho MỌI yêu cầu exploit-v2
+    # (routes._exploit_v2_authz, fail-closed) — smoke 2026-11-23 UI-POC-3 403.
+    _fails(tmp_path, "VERIFY_ALLOWED_TARGETS", VERIFY_ALLOWED_TARGETS="")
+    d, extra = _ready(tmp_path)
+    _set(d, VERIFY_ALLOWED_TARGETS="", VERIFY_ALLOW_ALL="true")
+    assert _bs(d, "preflight", **extra).returncode == 0
+    d, extra = _ready(tmp_path, "report")
+    _set(d, VERIFY_ALLOWED_TARGETS="")
+    assert _bs(d, "preflight", **extra).returncode == 0

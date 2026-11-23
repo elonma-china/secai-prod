@@ -180,6 +180,7 @@ preflight() {
         [ -n "$root" ] && [ -d "$root/exploitdb-mcp-server" ] || err "DATA_ROOT: thiếu ${root:-<DATA_ROOT>}/exploitdb-mcp-server (nằm NGOÀI secai-data trong cây nguồn; gói dữ liệu (data package) phải cung cấp)"
         need IAS_SERVER_PASSWORD "để trống thì engine không xác thực; init sinh"
         need IAS_SERVER_POOL "chạy '$0 init' sau khi đặt VM_SLOTS"
+        [ "$(val VERIFY_ALLOW_ALL)" = true ] || need VERIFY_ALLOWED_TARGETS "host/CIDR lab được phép khai thác; trống thì mọi yêu cầu exploit-v2 bị 403"
         local want; want="$(bash "$STACK_DIR/lib/pool.sh" "$(val VM_SLOTS)" 2>/dev/null)" || err "VM_SLOTS: '$(val VM_SLOTS)' không hợp lệ (số nguyên 1..99)"
         if [ -n "${want:-}" ] && [ -n "$(val IAS_SERVER_POOL)" ] && [ "$(val IAS_SERVER_POOL)" != "$want" ]; then
             err "IAS_SERVER_POOL: không khớp VM_SLOTS=$(val VM_SLOTS); xoá dòng IAS_SERVER_POOL trong .env rồi chạy init"
