@@ -26,7 +26,7 @@ Thêm **lịch sử chat đa hội thoại** cho chatbot, **giữ nguyên tuyệ
 | `POST /ai/conversations` | Tạo hội thoại mới |
 | `DELETE /ai/conversations/{cid}` | Xoá (soft-delete) |
 
-Chi tiết I/O + SSE cho FE: `docs/chat-history-api-guide.md`.
+Chi tiết I/O + SSE cho FE: `docs/api/chat-history-api-guide.md`.
 
 ---
 

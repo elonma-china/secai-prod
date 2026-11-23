@@ -3,7 +3,7 @@
 Credentials (apiKey) sống phía 5568 (`/tmp/proxy_node_credentials.json`) — gateway chỉ gọi
 register/status/rotate/exploits_cve, không giữ key.
 
-Xem docs/poc-api-guide.md."""
+Xem docs/api/poc-api-guide.md."""
 from __future__ import annotations
 
 from typing import Any

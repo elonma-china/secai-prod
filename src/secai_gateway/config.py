@@ -347,7 +347,7 @@ class Settings(BaseSettings):
 
     # ── PoC-Verify (Mode A: ephemeral docker → secai-kali-executor) ─────────────
     # TẮT mặc định (reversible): bật bằng VERIFY_ENABLED=true. Toàn bộ đường "thực thi PoC vào
-    # target" gated ở đây; gỡ tính năng = để flag false. Xem docs/poc-verify-architecture.md.
+    # target" gated ở đây; gỡ tính năng = để flag false. Xem docs/design/poc-verify-architecture.md.
     verify_enabled: bool = False
     kali_executor_image: str = "secai-kali-executor:latest"
     verify_timeout_s: int = 120

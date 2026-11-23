@@ -96,4 +96,4 @@ npm run build
 FE_HOST=127.0.0.1 FE_PORT=5173 python3 serve_static.py
 ```
 
-Không chạy thêm server nếu cổng đang được sử dụng. Không công khai file credential hoặc tắt Bearer/kiểm tra quyền để demo hoạt động. Luồng kiểm thử và ảnh: [báo cáo demo hai vai trò](../docs/test-results/devspace-ab-two-roles-20261006.md).
+Không chạy thêm server nếu cổng đang được sử dụng. Không công khai file credential hoặc tắt Bearer/kiểm tra quyền để demo hoạt động. Luồng kiểm thử và ảnh: [báo cáo demo hai vai trò](../docs/archive/test-results/devspace-ab-two-roles-20261006.md).

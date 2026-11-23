@@ -68,7 +68,7 @@ lên). Thang **0–100**, 6 nhóm. Mỗi tiêu chí ghi rõ **cách kiểm chứ
 
 | # | Tiêu chí | Trọng số | Kiểm chứng |
 |---|----------|:---:|-----------|
-| N6.1 | `docs/input-classifier-improvement-plan.md`: roadmap Ư1–Ư5 + phương pháp eval, **dẫn chứng literature** (InjecGuard/MOF+NotInject, LODO distribution-shift, cascade CPU→LLM, PII Presidio+GLiNER, indirect: spotlighting/tool-result-parsing/CaMeL); nêu rõ giới hạn & việc hoãn (retrain/cascade/indirect) | **10** | Đọc doc; kiểm mục lục & citation |
+| N6.1 | `docs/design/input-classifier-improvement-plan.md`: roadmap Ư1–Ư5 + phương pháp eval, **dẫn chứng literature** (InjecGuard/MOF+NotInject, LODO distribution-shift, cascade CPU→LLM, PII Presidio+GLiNER, indirect: spotlighting/tool-result-parsing/CaMeL); nêu rõ giới hạn & việc hoãn (retrain/cascade/indirect) | **10** | Đọc doc; kiểm mục lục & citation |
 
 ---
 

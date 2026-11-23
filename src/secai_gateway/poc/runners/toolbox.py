@@ -5,7 +5,7 @@ không nối chuỗi) → không có command/argv injection. KHÔNG mở raw tù
 tool dùng chung authz allowlist với verify. Bật/tắt chung flag `verify_enabled`.
 
 Danh mục: nmap (recon) · searchsploit (offline, không target) · gobuster (dir brute) ·
-sqlmap (SQLi) · hydra (login brute). Xem docs/poc-verify-architecture.md."""
+sqlmap (SQLi) · hydra (login brute). Xem docs/design/poc-verify-architecture.md."""
 from __future__ import annotations
 
 import json

@@ -1,6 +1,6 @@
 # API đánh giá A/B
 
-Prefix `/review-api`; chỉ hoạt động khi `REVIEW_ENABLED=true`. Tất cả endpoint yêu cầu `Authorization: Bearer <token>`. Identity do credential server xác thực, không nhận user_id làm quyền truy cập. Cấu hình và workflow: [hướng dẫn vận hành](../review-operator-guide.md).
+Prefix `/review-api`; chỉ hoạt động khi `REVIEW_ENABLED=true`. Tất cả endpoint yêu cầu `Authorization: Bearer <token>`. Identity do credential server xác thực, không nhận user_id làm quyền truy cập. Cấu hình và workflow: [hướng dẫn vận hành](../operations/review-operator-guide.md).
 
 ## Kiểu dữ liệu chung
 

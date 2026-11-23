@@ -129,7 +129,7 @@ trained offline against the same embedding space (`scripts/train_sanitize_head.p
 embedding error passes the prompt through, so the classifier can only add a block, never take
 chat down. `/health` surfaces the live fail-open rate. Toggle and tune via `INPUT_CLASSIFIER_*`
 env vars (enable, per-action block flags, per-label thresholds, embed timeout). Methodology:
-`docs/input-sanitization-classifier.md`.
+`docs/design/input-sanitization-classifier.md`.
 
 **Output — language + anti-XSS.** Legacy IAS answers pass through `sanitize_output_language`
 (`security.py`): it drops leaked reasoning/meta-planning and tool-call echoes, strips CJK
@@ -313,10 +313,10 @@ for tools/turn caps) without touching Python. `data/` and `logs/` are local, out
 ## Docs
 
 Full documentation is under [`docs/`](docs/); start with the [index](docs/README.md).
-- `docs/api-guide.md`, `docs/poc-api-guide.md`, `docs/api-userguide-exploitDB.md`,
-  `docs/session-project-api-guide.md` — API references.
-- `docs/exploit-advance-*.md`, `docs/poc-verify-architecture.md` — live-exploit / verify design.
-- `docs/input-sanitization-classifier.md`, `docs/model-classification-*.md` — input-classifier
+- `docs/api/api-guide.md`, `docs/api/poc-api-guide.md`, `docs/api/api-userguide-exploitDB.md`,
+  `docs/api/session-project-api-guide.md` — API references.
+- `docs/reports/exploit-advance-live-results.md`, `docs/design/poc-verify-architecture.md` — live-exploit / verify design.
+- `docs/design/input-sanitization-classifier.md`, `docs/design/model-classification-*.md` — input-classifier
   design.
 - `docs/nghiem-thu-showcase/` — `/showcase-api/*` design + API reference (start at
   `00-TONG-QUAN.md`).

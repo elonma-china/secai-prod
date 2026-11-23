@@ -1,5 +1,5 @@
 """Uncertain-band cascade: escalate an ambiguous injection score to an LLM judge instead of a
-binary threshold call. See docs/input-classifier-improvement-plan.md §Ư2.
+binary threshold call. See docs/design/input-classifier-improvement-plan.md §Ư2.
 
 The numpy head's calibrated injection score is usually decisive: after the over-defense retrain
 (2026-09-01), held-out ATTACK scores sit >= 0.60 and held-out BENIGN scores sit <= 0.36 (see

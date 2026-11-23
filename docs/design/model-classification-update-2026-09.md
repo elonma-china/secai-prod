@@ -8,7 +8,7 @@
 > - Nhánh: `feat/input-sanitization-classifier` (monorepo) → đã port + merge vào `main` (PR #4, merge `31169c4`).
 > - Serving verify: vast instance `49599040` (2×A100 SXM4), `DuyTa/Cyber-F1-AWQ` +
 >   `DuyTa/sec-embedding` + `DuyTa/sec-rerank`.
-> - Chi tiết kỹ thuật & literature: `docs/input-classifier-improvement-plan.md`.
+> - Chi tiết kỹ thuật & literature: `docs/design/input-classifier-improvement-plan.md`.
 > - Báo cáo số liệu gốc: `evals/sanitize/report-*.md`.
 
 ---

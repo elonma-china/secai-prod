@@ -4,7 +4,7 @@
 
 Purpose: get REAL comparative numbers instead of just the literature's general claim
 ("hybrid regex+neural beats either alone") before deciding whether GLiNER is worth the
-torch-in-runtime tradeoff (see docs/input-classifier-improvement-plan.md Ư5 section — GLiNER
+torch-in-runtime tradeoff (see docs/design/input-classifier-improvement-plan.md Ư5 section — GLiNER
 needs torch, conflicting with the numpy-only air-gap serving runtime; this script is a dev-only,
 offline exploration, NOT a production integration).
 

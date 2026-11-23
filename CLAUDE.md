@@ -85,4 +85,4 @@ Prod (`secai-docker-gateway` :8131 + `secai-translation-gateway` + `secai-transl
 
 Devspace staticserver tách report `/ai/v2/reports` sang 18183, file/image và text v3 sang 18185, còn legacychat/report và `/review-api` sang 8131. Dùng `REPORT_GATEWAY_PROXY`/`TRANSLATION_GATEWAY_PROXY` hoặc `.report-upstream`/`.translation-upstream`; không chứa key trong URL. Build bật ba cờ report/file/image đã ghi trong README. Report phải persist nội dung và revision trong `REPORT_DB_PATH`; giữ DB khi rollback.
 
-Bằng chứng rollout và lệnh rollback hiện tại: [all-features-deployment-20261004.md](docs/test-results/all-features-deployment-20261004.md). Profile/env/backup nằm private ngoài Git. Chỉ dọn `.env.bak*` khi không còn tham chiếu; giữ `.env` đang dùng, `.env.pentest` và `.env.example`.
+Bằng chứng rollout và lệnh rollback hiện tại: [all-features-deployment-20261004.md](docs/archive/test-results/all-features-deployment-20261004.md). Profile/env/backup nằm private ngoài Git. Chỉ dọn `.env.bak*` khi không còn tham chiếu; giữ `.env` đang dùng, `.env.pentest` và `.env.example`.
