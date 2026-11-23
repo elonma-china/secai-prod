@@ -36,5 +36,5 @@ output/*.png
 **/node_modules
 **/test-results/
 pentestcode/packages/opencode/js/
-# Kết quả đo tải (N=16/24/28...): mỗi lần đo 1 thư mục con, không commit
-/loadtest-results/
+# Việc cục bộ không commit: kế hoạch (local/plans/), kết quả đo (local/loadtest-results/)
+/local/
