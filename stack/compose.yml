@@ -29,10 +29,11 @@ x-vm: &vm
     OPENCODE_ENABLE_QUESTION_TOOL: "true"
     OPENCODE_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
     ORCAROUTER_API_KEY: ${ORCAROUTER_API_KEY:-}
-    ORCA_LOCAL_BASE_URL: ${QWEN_BASE_URL:-}
-    ORCA_LOCAL_API_KEY: ${QWEN_API_KEY:-}
-    ORCA_LOCAL_MODEL_ID: ${QWEN_MODEL:-}
-    ORCA_LOCAL_CONTEXT: ${QWEN_CONTEXT_WINDOW:-131072}
+    # LLM_* là tên chuẩn (config.py, PR #44); QWEN_* cũ vẫn nhận, LLM_* thắng.
+    ORCA_LOCAL_BASE_URL: ${LLM_BASE_URL:-${QWEN_BASE_URL:-}}
+    ORCA_LOCAL_API_KEY: ${LLM_API_KEY:-${QWEN_API_KEY:-}}
+    ORCA_LOCAL_MODEL_ID: ${LLM_MODEL:-${QWEN_MODEL:-}}
+    ORCA_LOCAL_CONTEXT: ${LLM_CONTEXT_WINDOW:-${QWEN_CONTEXT_WINDOW:-131072}}
     NUCLEI_TEMPLATES: /srv/secai-data/poc-sources/nuclei-templates
   healthcheck:
     test: ["CMD-SHELL", 'if [ -n "$$OPENCODE_SERVER_PASSWORD" ]; then curl -fsS -u "ias:$$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:$$VM_PORT_BASE/global/health; else curl -fsS http://127.0.0.1:$$VM_PORT_BASE/global/health; fi']

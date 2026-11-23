@@ -621,3 +621,38 @@ def test_tunnel_probe_refused_connection_fails():
     port = s.getsockname()[1]
     s.close()
     assert _probe(port) != 0
+
+
+# ---- Task 8e: LLM_* chuẩn, QWEN_* cũ ----
+LLM_ENV = {k.replace("QWEN_", "LLM_"): v for k, v in MODEL_ENV.items()}
+
+
+def test_models_llm_only_names(tmp_path):
+    assert _run(tmp_path, "models", OK_ROUTES, LLM_ENV).returncode == 0
+    routes = {**OK_ROUTES, f"GET {LLM}/models": [200, json.dumps({"data": [{"id": "other"}]})]}
+    r = _run(tmp_path, "models", routes, LLM_ENV)
+    assert r.returncode != 0 and "LLM_MODEL" in r.stderr and "QWEN_" not in r.stderr
+
+
+def test_models_qwen_only_names_legacy(tmp_path):
+    routes = {**OK_ROUTES, f"GET {LLM}/models": ["000", ""]}
+    r = _run(tmp_path, "models", routes, MODEL_ENV)
+    assert r.returncode != 0 and "QWEN_BASE_URL" in r.stderr and "LLM_BASE_URL" not in r.stderr
+
+
+def test_models_both_same_uses_llm_names(tmp_path):
+    r = _run(tmp_path, "models", {**OK_ROUTES, f"GET {LLM}/models": ["000", ""]}, {**MODEL_ENV, **LLM_ENV})
+    assert r.returncode != 0 and "LLM_BASE_URL" in r.stderr and "QWEN_BASE_URL" not in r.stderr
+
+
+def test_models_both_different_llm_wins(tmp_path):
+    env = {**MODEL_ENV, "QWEN_BASE_URL": "http://dead/v1", "QWEN_MODEL": "old-m", **LLM_ENV}
+    r = _run(tmp_path, "models", OK_ROUTES, env)
+    assert r.returncode == 0, r.stderr
+    assert not any("http://dead" in l for l in (tmp_path / "curl.log").read_text().splitlines())
+
+
+def test_models_missing_both_names_canonical(tmp_path):
+    env = {k: v for k, v in MODEL_ENV.items() if not k.startswith("QWEN_")}
+    r = _run(tmp_path, "models", OK_ROUTES, env)
+    assert r.returncode != 0 and "LLM_BASE_URL" in r.stderr and "LLM_API_KEY" in r.stderr and "LLM_MODEL" in r.stderr

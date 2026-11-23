@@ -266,10 +266,19 @@ check_tunnel_uid() {
     fi
 }
 
+# llm_var X: tên biến LLM đang dùng: LLM_X (chuẩn, config.py) nếu có, không thì QWEN_X (tên cũ) nếu có, không thì LLM_X.
+llm_var() { if [ -n "$(val "LLM_$1")" ] || [ -z "$(val "QWEN_$1")" ]; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
+
 preflight() {
     [ -f "$ENV_FILE" ] || die "chưa có $ENV_FILE: chạy '$0 init' trước"
     local k
-    for k in QWEN_BASE_URL QWEN_API_KEY QWEN_MODEL EMBEDDING_API_URL EMBEDDING_API_KEY EMBEDDING_MODEL \
+    for k in BASE_URL API_KEY MODEL CONTEXT_WINDOW; do   # không in giá trị (có khoá API)
+        if [ -n "$(val "LLM_$k")" ] && [ -n "$(val "QWEN_$k")" ] && [ "$(val "LLM_$k")" != "$(val "QWEN_$k")" ]; then
+            echo "WARNING: LLM_$k và QWEN_$k (tên cũ) khác nhau; gateway và VM dùng LLM_$k. Xoá QWEN_$k cho khỏi nhầm" >&2
+        fi
+    done
+    for k in BASE_URL API_KEY MODEL; do need "$(llm_var "$k")" "nhập tay (tên cũ QWEN_$k vẫn nhận)"; done
+    for k in EMBEDDING_API_URL EMBEDDING_API_KEY EMBEDDING_MODEL \
              RERANKER_API_URL RERANKER_API_KEY RERANKER_MODEL NEO4J_PASSWORD; do
         need "$k" "nhập tay"
     done

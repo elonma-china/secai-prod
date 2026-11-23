@@ -186,7 +186,7 @@ def test_preflight_names_missing_vars(tmp_path):
     _bs(d, "init")
     r = _bs(d, "preflight")
     assert r.returncode != 0
-    for k in ("QWEN_BASE_URL", "QWEN_API_KEY", "QWEN_MODEL", "EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL",
+    for k in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL",
               "RERANKER_API_URL", "RERANKER_API_KEY", "RERANKER_MODEL", "GATEWAY_IMAGE", "DATA_ROOT",
               "VM_IMAGE", "CONVERTER_IMAGE", "REVIEW_UI_IMAGE", "TRANSLATE_V2_OCR_MODEL", "TRANSLATE_V2_SPECIALIST_MODEL",
               "MULTILANG_SPECIALIST_MODEL", "TUNNEL_IMAGE", "TUNNEL_SSH_HOST", "TUNNEL_SSH_USER"):   # URL dịch có mặc định đầu tunnel
@@ -287,7 +287,7 @@ def test_env_example_has_no_secret_values_or_model_names():
     assert sections == 5
     exp = {"IAS_POOL_GPU_COUNT": "0", "COMPOSE_PROFILES": "exploit,translation,report,review", "VM_SLOTS": "12",
            "QDRANT_COLLECTION": "cve_kb_hybrid", "AIRGAP": "true", "VERIFY_ENABLED": "false", "EXEC_ENABLED": "false",
-           "RATE_LIMIT_ENABLED": "false", "QWEN_CONTEXT_WINDOW": "131072", "INPUT_CLASSIFIER_ENABLED": "true",
+           "RATE_LIMIT_ENABLED": "false", "LLM_CONTEXT_WINDOW": "131072", "INPUT_CLASSIFIER_ENABLED": "true",
            "INPUT_CLASSIFIER_BLOCK_OFFTOPIC": "false", "WEB_SEARCH_ENABLED": "false",
            "AGENT_POC_SOURCES_PATH": "/srv/secai-data/poc-sources"}
     got = {l.split("=", 1)[0]: l.split("=", 1)[1] for l in (STACK / ".env.example").read_text().splitlines()
@@ -302,6 +302,7 @@ def test_env_example_covers_compose_variables():
     declared = {l.split("=", 1)[0] for l in (STACK / ".env.example").read_text().splitlines()
                 if "=" in l and not l.startswith("#")}
     internal = {"COMPOSE_PROJECT_NAME"}   # có thể bỏ trống: compose có mặc định
+    internal |= {f"QWEN_{x}" for x in ("BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW")}   # tên cũ, chỉ là dự phòng của LLM_*
     assert names - declared - internal == set()
 
 
@@ -561,3 +562,38 @@ def test_preflight_direct_refuses_real_api_keys(tmp_path):
     assert _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY="stub-test-key-not-secret",
                    MULTILANG_SPECIALIST_API_KEY="stub-test-key-not-secret",
                    TRANSLATE_V2_OCR_API_KEY="stub-test-key-not-secret").returncode == 0
+
+
+# ---- Task 8e: LLM_* chuẩn, QWEN_* cũ (_ready dùng QWEN_* = .env kiểu prod) ----
+def test_preflight_qwen_only_still_passes(tmp_path):
+    d, extra = _ready(tmp_path)
+    assert not _get(d, "LLM_BASE_URL") and _get(d, "QWEN_BASE_URL")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0 and "WARNING: LLM_" not in r.stderr, r.stderr
+
+
+def test_preflight_llm_only(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, QWEN_BASE_URL="", QWEN_API_KEY="", QWEN_MODEL="", LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    _set(d, LLM_MODEL="")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and "LLM_MODEL" in r.stderr
+
+
+def test_preflight_both_same_no_warning(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0 and "QWEN_" not in r.stderr, r.stderr
+
+
+def test_preflight_both_different_warns_llm_wins_without_values(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, LLM_BASE_URL="http://new/v1", LLM_API_KEY="sk-new-secret-xyz", LLM_MODEL="new-m", QWEN_API_KEY="sk-old-secret-abc")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    for x in ("BASE_URL", "API_KEY", "MODEL"):
+        assert f"WARNING: LLM_{x}" in r.stderr and f"QWEN_{x}" in r.stderr, x
+    assert "sk-new-secret-xyz" not in r.stderr and "sk-old-secret-abc" not in r.stderr

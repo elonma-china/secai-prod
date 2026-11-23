@@ -1,3 +1,4 @@
+import pytest
 import yaml
 from pathlib import Path
 
@@ -99,7 +100,7 @@ def test_exploit_profile_two_vms_hardened():
         assert s["environment"]["VM_PORT_BASE"] == port
         assert s["environment"]["VM_SLOTS"] == "${VM_SLOTS:-12}"
         assert s["environment"]["OPENCODE_SERVER_PASSWORD"] == "${IAS_SERVER_PASSWORD:-}"
-        assert s["environment"]["ORCA_LOCAL_BASE_URL"] == "${QWEN_BASE_URL:-}"
+        assert s["environment"]["ORCA_LOCAL_BASE_URL"] == "${LLM_BASE_URL:-${QWEN_BASE_URL:-}}"   # LLM_* chuẩn, QWEN_* cũ
         assert set(s["networks"]) == {"secai-net", "poc-labs-internal"}
         assert "ports" not in s
         assert all(":ro" in v or v.startswith("pool-home-") for v in s["volumes"])
@@ -140,7 +141,7 @@ def test_translation_profile_on_bridge():
         e = t[n]["environment"]
         assert e["TRANSLATE_V2_CONVERTER_URL"] == "http://translation-converter:18091"
         assert e["QDRANT_URL"] == "http://qdrant:6333"
-        assert "QWEN_BASE_URL" not in e and "EMBEDDING_API_URL" not in e   # chỉ từ .env chung
+        assert not {"QWEN_BASE_URL", "LLM_BASE_URL", "EMBEDDING_API_URL"} & set(e)   # chỉ từ .env chung
         assert not [k for k in e if k.startswith(("SHOWCASE_", "REWARD_"))]
         assert e["MULTILANG_SPECIALIST_TOKENIZER_JSON"] == "/app/translation-tokenizer/tokenizer.json"
         assert e["MULTILANG_SPECIALIST_CONTEXT_TOKENS"] == "4096"
@@ -265,3 +266,23 @@ def test_specialist_tunnel_sidecar_shares_translation_netns():
     for n in ("specialist-tunnel", "translation-worker"):
         # gateway dịch bị tạo lại/khởi động lại qua compose thì netns cũ mất: compose phải khởi động lại cả hai.
         assert t[n]["depends_on"]["translation-gateway"] == {"condition": "service_started", "restart": True}, n
+
+
+@pytest.mark.parametrize("env,want", [
+    ({"QWEN_BASE_URL": "http://old/v1", "QWEN_MODEL": "old", "QWEN_API_KEY": "ko", "QWEN_CONTEXT_WINDOW": "4096"},
+     ("http://old/v1", "old", "ko", "4096")),
+    ({"LLM_BASE_URL": "http://new/v1", "LLM_MODEL": "new", "LLM_API_KEY": "kn"}, ("http://new/v1", "new", "kn", "131072")),
+    ({"LLM_BASE_URL": "http://new/v1", "QWEN_BASE_URL": "http://old/v1", "LLM_MODEL": "new", "QWEN_MODEL": "old",
+      "LLM_API_KEY": "kn", "QWEN_API_KEY": "ko", "LLM_CONTEXT_WINDOW": "65536", "QWEN_CONTEXT_WINDOW": "4096"},
+     ("http://new/v1", "new", "kn", "65536")),
+])
+def test_vm_llm_env_canonical_with_legacy_fallback(tmp_path, env, want):
+    import json, os, shutil, subprocess
+    if not shutil.which("docker") or subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0:
+        pytest.skip("docker compose not available")
+    e = {"PATH": os.environ["PATH"], "GATEWAY_IMAGE": "x:1", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x", **env}
+    r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), "--profile", "exploit", "config", "--format", "json"],
+                       env=e, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    v = json.loads(r.stdout)["services"]["vm-a"]["environment"]
+    assert (v["ORCA_LOCAL_BASE_URL"], v["ORCA_LOCAL_MODEL_ID"], v["ORCA_LOCAL_API_KEY"], v["ORCA_LOCAL_CONTEXT"]) == want

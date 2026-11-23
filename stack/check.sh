@@ -6,7 +6,8 @@
 #           network_mode chỉ được là service:translation-gateway và chỉ ở specialist-tunnel/translation-worker
 #           (chung netns để thấy đầu tunnel 127.0.0.1:18868/18083); host/none/container:/service khác đều cấm.
 #           Biến `:?` thiếu thì dùng giá trị giả; giá trị thật trong .env luôn thắng giá trị giả. Không in giá trị render.
-#   models  LLM: GET $QWEN_BASE_URL/models. Embedding/rerank: gateway KHÔNG liệt kê model, nên probe y như gateway
+#   models  LLM: GET $LLM_BASE_URL/models (tên chuẩn LLM_*; .env cũ QWEN_* vẫn nhận, LLM_* thắng; thông báo nêu tên
+#           đang dùng). Embedding/rerank: gateway KHÔNG liệt kê model, nên probe y như gateway
 #           (retrieval/embedding.py): POST $EMBEDDING_API_URL/v1/embeddings, POST $RERANKER_API_URL/v1/rerank, Bearer key.
 #           404/model-not-found = tên model sai (RAG rơi về BM25-only dù health xanh).
 #   health  GET $GATEWAY_URL/health (khối serving/databases do health_deep_checks) + MỘT truy vấn RAG thật qua
@@ -44,6 +45,8 @@ val() {
     printf '%s' "$v"
 }
 get() { local v="${!1:-}"; [ -n "$v" ] || v="$(val "$1")"; printf '%s' "$v"; }
+# llm_var X: LLM_X (chuẩn) nếu có, không thì QWEN_X (tên cũ) nếu có, không thì LLM_X (để báo thiếu đúng tên chuẩn).
+llm_var() { if [ -n "$(get "LLM_$1")" ] || [ -z "$(get "QWEN_$1")" ]; then printf 'LLM_%s' "$1"; else printf 'QWEN_%s' "$1"; fi; }
 
 profiles() { get COMPOSE_PROFILES | tr ',' '\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -v '^$' || true; }
 
@@ -203,24 +206,25 @@ probe_post() {
 
 cmd_models() {
     require_tools python3 curl
-    local url key model served shown
+    local url key model served shown U K M
+    U="$(llm_var BASE_URL)"; K="$(llm_var API_KEY)"; M="$(llm_var MODEL)"
     # LLM: gateway gọi GET {base}/models với Bearer (api/routes.py /health).
-    if need_vars QWEN_BASE_URL QWEN_API_KEY QWEN_MODEL; then
-        url="$(get QWEN_BASE_URL)"; url="${url%/}"; key="$(get QWEN_API_KEY)"; model="$(get QWEN_MODEL)"; shown="$(safe_url "$url")"
+    if need_vars "$U" "$K" "$M"; then
+        url="$(get "$U")"; url="${url%/}"; key="$(get "$K")"; model="$(get "$M")"; shown="$(safe_url "$url")"
         http GET "$url/models" 15 "$key"
-        if timed_out || [ "$HTTP_CODE" = "000" ]; then fail "models: QWEN_BASE_URL ($shown) không kết nối được/quá thời gian 15 s"
-        elif [ "$HTTP_CODE" = 401 ] || [ "$HTTP_CODE" = 403 ]; then fail "models: QWEN_API_KEY bị từ chối (HTTP $HTTP_CODE) tại QWEN_BASE_URL"
-        elif ! is2xx; then fail "models: GET QWEN_BASE_URL/models trả HTTP ${HTTP_CODE:-?}"
+        if timed_out || [ "$HTTP_CODE" = "000" ]; then fail "models: $U ($shown) không kết nối được/quá thời gian 15 s"
+        elif [ "$HTTP_CODE" = 401 ] || [ "$HTTP_CODE" = 403 ]; then fail "models: $K bị từ chối (HTTP $HTTP_CODE) tại $U"
+        elif ! is2xx; then fail "models: GET $U/models trả HTTP ${HTTP_CODE:-?}"
         else
             PY_IN="$HTTP_BODY"
-            if py_run "models: LLM (QWEN_BASE_URL)" 'import json,sys
+            if py_run "models: LLM ($U)" 'import json,sys
 j = json.load(sys.stdin)
 if not isinstance(j, dict) or not isinstance(j.get("data"), list): raise ValueError("thiếu mảng data")
 print(",".join(str(m.get("id")) for m in j["data"] if isinstance(m, dict)))
 print("__OK__")'; then
                 served="$PY_OUT"
                 if [[ ",$served," == *",$model,"* ]]; then pass "models: LLM '$model' có trong danh sách serving"
-                else fail "models: QWEN_MODEL: mong đợi '$model' nhưng serving công bố: ${served:-<danh sách rỗng>}"; fi
+                else fail "models: $M: mong đợi '$model' nhưng serving công bố: ${served:-<danh sách rỗng>}"; fi
             fi
         fi
     fi
