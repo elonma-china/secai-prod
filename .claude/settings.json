@@ -1,7 +1,4 @@
 {
-  "enabledPlugins": {
-    "mattpocock-skills@claude-plugins-official": true
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -14,5 +11,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "mattpocock-skills@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
   }
 }
