@@ -40,7 +40,7 @@ def test_gateway_wiring():
 
 def test_only_gateway_and_report_publish_ports():
     for name, s in load_compose()["services"].items():
-        if name not in {"gateway", "report-backend"}:
+        if name not in {"gateway", "report-backend", "review-frontend"}:
             assert "ports" not in s, name
 
 
@@ -122,6 +122,81 @@ def test_config_validates_with_and_without_exploit_profile(tmp_path):
         pytest.skip("docker compose not available")
     env = {"PATH": os.environ["PATH"], "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x"}
     for extra in ([], ["--profile", "exploit"]):
+        r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), *extra, "config", "-q"],
+                           env=env, capture_output=True, text=True)
+        assert r.returncode == 0, (extra, r.stderr)
+
+
+def test_translation_profile_on_bridge():
+    t = services("translation")
+    assert set(t) == {"translation-gateway", "translation-worker", "translation-converter"}
+    for n in ("translation-gateway", "translation-worker"):
+        assert t[n]["image"] == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}"
+        e = t[n]["environment"]
+        assert e["TRANSLATE_V2_CONVERTER_URL"] == "http://translation-converter:18091"
+        assert e["QDRANT_URL"] == "http://qdrant:6333"
+        assert "QWEN_BASE_URL" not in e and "EMBEDDING_API_URL" not in e   # chỉ từ .env chung
+        assert not [k for k in e if k.startswith(("SHOWCASE_", "REWARD_"))]
+        assert e["MULTILANG_SPECIALIST_TOKENIZER_JSON"] == "/app/translation-tokenizer/tokenizer.json"
+        assert e["MULTILANG_SPECIALIST_CONTEXT_TOKENS"] == "4096"
+        assert e["TRANSLATE_V2_CONVERTER_TOKEN"] == "${TRANSLATE_V2_CONVERTER_TOKEN:-}"
+        assert any(v.endswith(":/app/translation-tokenizer:ro") for v in t[n]["volumes"])
+        assert "translation-data:/app/data" in t[n]["volumes"]
+    assert t["translation-gateway"]["command"][:2] == ["uvicorn", "secai_gateway.multilang_app:app"]
+    assert t["translation-gateway"]["command"][-1] == "18185"
+    assert "18185" in t["translation-gateway"]["healthcheck"]["test"][1]
+    assert "8131" not in t["translation-gateway"]["healthcheck"]["test"][1]
+    assert t["translation-worker"]["command"] == ["python", "-m", "secai_gateway.translation.worker"]
+    c = t["translation-converter"]
+    assert c["image"] == "${CONVERTER_IMAGE:-secai-doc-convert:MISSING-set-CONVERTER_IMAGE}"
+    assert c["environment"]["CONVERTER_TOKEN"] == "${TRANSLATE_V2_CONVERTER_TOKEN:-}"
+    assert c["environment"]["CONVERTER_PORT"] == "18091" and c["environment"]["CONVERTER_HOST"] == "0.0.0.0"
+    assert c["cap_drop"] == ["ALL"] and "ports" not in c
+    g = services()["gateway"]["environment"]
+    assert g["TRANSLATION_UPSTREAM_URL"] == "${TRANSLATION_UPSTREAM_URL:-}"
+    assert g["REVIEW_ENABLED"] == "${REVIEW_ENABLED:-false}"
+    assert g["REVIEW_CREDENTIALS_FILE"] == "/app/review-credentials.json"
+    assert g["REVIEW_DB_PATH"] == "/app/review-data/reviews.db"
+    gv = services()["gateway"]["volumes"]
+    assert "./secrets/review-credentials.json:/app/review-credentials.json:ro" in gv
+    assert "review-data:/app/review-data" in gv
+
+
+def test_no_plain_depends_on_profiled_services():
+    c = load_compose()["services"]
+    profiled = {n for n, s in c.items() if "profiles" in s}
+    for n, s in c.items():
+        if "profiles" in s:
+            continue
+        assert not profiled & set(s.get("depends_on", {})), n
+
+
+def test_report_and_review_profiles():
+    r = services("report")["report-backend"]
+    assert r["image"] == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}"
+    assert r["environment"]["REPORT_FEATURE_ENABLED"] == "true"
+    assert r["environment"]["REPORT_DB_PATH"] == "/srv/reports/reports.db"
+    assert r["environment"]["REPORT_API_KEY"] == "${REPORT_API_KEY:-}"
+    assert "report-data:/srv/reports" in r["volumes"]
+    assert r["ports"] == ["${REPORT_BIND:-127.0.0.1}:${REPORT_HOST_PORT:-18183}:8131"]
+    assert r["command"] == ["uvicorn", "secai_gateway.app:app", "--host", "0.0.0.0", "--port", "8131"]
+    v = services("review")["review-frontend"]
+    assert v["environment"]["VITE_GATEWAY_PROXY"] == "http://gateway:8131"
+    assert v["command"] == ["python", "/app/review-ui/serve_static.py"]
+    assert v["image"] == "${REVIEW_UI_IMAGE:-secai-review-ui:MISSING-set-REVIEW_UI_IMAGE}"
+    assert v["ports"] == ["${REVIEW_BIND:-127.0.0.1}:${REVIEW_HOST_PORT:-5174}:5174"]
+    assert {"translation-data", "report-data", "review-data"} <= set(load_compose()["volumes"])
+
+
+def test_config_validates_every_profile_combination(tmp_path):
+    import os, shutil, subprocess
+    import pytest
+    if not shutil.which("docker") or subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0:
+        pytest.skip("docker compose not available")
+    env = {"PATH": os.environ["PATH"], "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path), "NEO4J_PASSWORD": "x"}
+    combos = [[], *[["--profile", p] for p in ("exploit", "translation", "report", "review")],
+              ["--profile", "exploit", "--profile", "translation", "--profile", "report", "--profile", "review"]]
+    for extra in combos:
         r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), *extra, "config", "-q"],
                            env=env, capture_output=True, text=True)
         assert r.returncode == 0, (extra, r.stderr)
