@@ -1,0 +1,125 @@
+# SecAI stack - core (gateway + qdrant + neo4j + redis + es). Các profile exploit, translation, report, review do task sau thêm.
+# Tên project lấy từ COMPOSE_PROJECT_NAME (mặc định secai-stack); `-p` ghi đè.
+name: ${COMPOSE_PROJECT_NAME:-secai-stack}
+
+services:
+  gateway:
+    image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
+    restart: unless-stopped
+    command: ["uvicorn", "secai_gateway.unified_app:app", "--host", "0.0.0.0", "--port", "8131"]
+    env_file: .env
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://es:9200
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      SESSION_STORE_BACKEND: sqlite
+      SESSION_DB_PATH: /app/data/sessions.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      POC_CATALOG_DB: /srv/poc/catalog.db
+      POC_ARTIFACT_STORE: /srv/poc-store
+      POC_SOURCES_ROOT: /srv/poc-sources
+      REWARD_SERVICE_URL: ""
+      SHOWCASE_RETRAINING_UPSTREAM: ""
+      SHOWCASE_TENSORBOARD_UPSTREAM: ""
+      REVIEW_ENABLED: ${REVIEW_ENABLED:-false}
+    ports:
+      - "${GATEWAY_BIND:-0.0.0.0}:${GATEWAY_HOST_PORT:-8131}:8131"
+    volumes:
+      - gw-data:/app/data
+      - ${DATA_ROOT}/exploitdb:/srv/exploitdb:ro
+      - ${DATA_ROOT}/poc:/srv/poc
+      - ${DATA_ROOT}/poc/store:/srv/poc-store
+      - ${DATA_ROOT}/poc-sources:/srv/poc-sources:ro
+    depends_on:
+      qdrant: { condition: service_healthy }
+      neo4j: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [secai-net, poc-labs-internal]
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    restart: unless-stopped
+    ulimits:                               # collection lớn mở nhiều file RocksDB .sst
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - ${DATA_ROOT}/_state/qdrant_storage:/qdrant/storage
+      - ${DATA_ROOT}/qdrant:/qdrant/snapshots
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  neo4j:
+    image: neo4j:5.20-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-secai2026}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 2g
+    volumes:
+      - ${DATA_ROOT}/_state/neo4j_data:/data
+      - ${DATA_ROOT}/_state/neo4j_logs:/logs
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"       # chỉ nội bộ secai-net, không publish cổng
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+      bootstrap.memory_lock: "true"
+      cluster.routing.allocation.disk.watermark.low: "92%"
+      cluster.routing.allocation.disk.watermark.high: "95%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "97%"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+networks:
+  secai-net:
+    driver: bridge
+  poc-labs-internal:
+    name: ${POC_LABS_NETWORK:-poc-labs-internal}
+    external: ${POC_LABS_EXTERNAL:-false}
+
+volumes:
+  gw-data:
+  redis-data:
+  es-data:
