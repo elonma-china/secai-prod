@@ -43,15 +43,47 @@ for kv in sys.argv[2:]:
 t = p + ".tmp"; open(t, "w").write(json.dumps(d)); os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
-# vlist -> JSON danh sách instance; rc != 0 nếu vastai lỗi/DEPRECATED/không phải JSON danh sách (không đoán).
-vlist() { vastai show instances-v1 --raw 2>/dev/null | python3 -I -c '
+# find_by_label LABEL -> in ID các instance mang đúng label, đi hết các trang next_token; rc != 0 nếu không đọc được
+# (vastai lỗi/DEPRECATED/không phải JSON). id chuỗi/float được chuẩn hoá. Chỉ dùng để tìm instance mồ côi theo label.
+find_by_label() { python3 -I - "$1" <<'PY'
+import json, subprocess, sys
+def sid(x): return str(int(x)) if isinstance(x, float) and x.is_integer() else str(x)
+out, tok = [], None
+try:
+    for _ in range(200):
+        cmd = ["vastai", "show", "instances-v1", "--raw", "-l", "25"] + (["--next-token", tok] if tok else [])
+        r = subprocess.run(cmd, capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=120)
+        d = json.loads(r.stdout)
+        if isinstance(d, list): out += d; break
+        assert r.returncode == 0 and isinstance(d, dict) and isinstance(d.get("instances"), list)
+        out += d["instances"]; tok = d.get("next_token")
+        if not tok: break
+    else:
+        raise RuntimeError("too many pages")
+except Exception:
+    sys.exit(2)
+for i in out:
+    if isinstance(i, dict) and i.get("label") == sys.argv[1]: print(sid(i.get("id"))); break
+PY
+}
+# vshow ID -> in "GONE" hoặc "FIELDS<TAB>label<TAB>price<TAB>status<TAB>ssh_host<TAB>ssh_port" (tra theo ID); rc 2 nếu không đọc được.
+vshow() { vastai show instance "$1" --raw </dev/null 2>/dev/null | python3 -I -c '
 import json, sys
-d = json.load(sys.stdin)
-if isinstance(d, dict): d = d.get("instances")
-assert isinstance(d, list)
-print(json.dumps(d))' 2>/dev/null; }
+try:
+    d = json.load(sys.stdin); row = d
+    if isinstance(d, dict) and "instances" in d:
+        row = d["instances"]
+        if row is None: print("GONE"); sys.exit(0)
+    if isinstance(row, list) and len(row) == 1: row = row[0]
+    assert isinstance(row, dict) and str(int(row["id"])) == sys.argv[1]
+except Exception:
+    sys.exit(2)
+g = lambda k: str(row.get(k, "") if row.get(k) is not None else "").replace("\t", " ")
+print("\t".join(["FIELDS", g("label"), g("dph_total"), g("actual_status"), g("ssh_host") or g("public_ipaddr"), g("ssh_port") or "22"]))' "$1"; }
 
 ssh_opts() { SSHO=(-i "$KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=30); }
+# Chuỗi cho `rsync -e`: rsync tách theo khoảng trắng và hiểu nháy kép, nên đường dẫn khoá có dấu cách vẫn đúng.
+rsh_cmd() { printf 'ssh -i "%s" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes -o ServerAliveInterval=30 -p %s' "$KEY" "$PORT"; }
 load_conn() {
     [ -f "$SD/state.json" ] || die "chưa có state ($SD/state.json); chạy 'up' trước"
     HOST="$(sget ssh_host)"; PORT="$(sget ssh_port)"
@@ -61,6 +93,17 @@ load_conn() {
 rssh() { ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" "$@"; }
 
 # ---------------------------------------------------------------------------------------------------- up
+# Khoá API tài khoản Vast không bao giờ được lên máy thuê: EVAL_CONTAINER_API_KEY phải là khoá khác (khoá giới hạn theo instance).
+refuse_if_account_key() {
+    local k="$1" f v
+    for v in "${VAST_API_KEY:-}"; do [ -z "$v" ] || [ "$v" != "$k" ] || die "EVAL_CONTAINER_API_KEY trùng khoá tài khoản Vast (VAST_API_KEY); dùng khoá giới hạn theo instance"; done
+    for f in "${XDG_CONFIG_HOME:-$HOME/.config}/vastai/vast_api_key" "$HOME/.vast_api_key"; do
+        [ -f "$f" ] || continue
+        v="$(tr -d '[:space:]' <"$f")"
+        [ -z "$v" ] || [ "$v" != "$k" ] || die "EVAL_CONTAINER_API_KEY trùng khoá tài khoản Vast ($f); dùng khoá giới hạn theo instance"
+    done
+}
+
 cmd_up() {
     local dry=0 higher=0 a
     for a in "$@"; do case "$a" in --dry-run) dry=1 ;; --i-accept-higher) higher=1 ;; *) die "tham số lạ: $a" ;; esac; done
@@ -75,9 +118,10 @@ cmd_up() {
     need_cmds vastai python3
 
     # Offer rẻ nhất thoả điều kiện; lọc LẠI ở phía client nên giá > cap bị chặn dù vastai trả gì.
-    local query="dph_total<=$cap cpu_ram>=$((ram * 1024)) disk_space>=100 inet_down>=200 reliability>=0.98 rentable=true verified=true"
+    # cpu_ram trong truy vấn CLI tính bằng GB (CLI nhân 1000); --storage 100 để dph_total gồm cả đĩa 100GB; vms_enabled=true cho VM.
+    local query="dph_total<=$cap cpu_ram>=$ram disk_space>=100 inet_down>=200 reliability>=0.98 rentable=true verified=true vms_enabled=true"
     local offers pick OFFER PRICE
-    offers="$(vastai search offers "$query" -o dph_total --raw 2>/dev/null)" || die "vastai search lỗi"
+    offers="$(vastai search offers "$query" --storage 100 -o dph_total --raw 2>/dev/null)" || die "vastai search lỗi"
     pick="$(printf '%s' "$offers" | python3 -I -c '
 import json, sys
 cap, ram = float(sys.argv[1]), float(sys.argv[2])
@@ -102,16 +146,38 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
     [ -f "${EVAL_ENV_FILE:-}" ] || die "đặt EVAL_ENV_FILE = tệp .env cho instance (script không tự đọc .env prod)"
     [ -d "${EVAL_DATA_PKG:-}" ] && [ -f "$EVAL_DATA_PKG/SHA256SUMS" ] || die "đặt EVAL_DATA_PKG = thư mục gói dữ liệu (pack.sh data) có SHA256SUMS"
     [ -f "$KEY" ] || die "không thấy khoá ssh $KEY (EVAL_SSH_KEY)"
-    need_cmds ssh scp rsync systemd-run git
+    [ -z "${EVAL_CONTAINER_API_KEY:-}" ] || refuse_if_account_key "$EVAL_CONTAINER_API_KEY"
+    need_cmds ssh scp rsync systemd-run git flock
     mkdir -p "$SD"; chmod 700 "$SD"
+    exec 9>"$SD/.lock"; flock -n 9 || die "đang có một 'up' khác chạy ($SD/.lock)"
     if [ -f "$SD/state.json" ]; then
-        [ -n "$(sget destroyed_at)" ] || die "state.json cũ chưa huỷ (id $(sget id)); chạy 'down' hoặc 'status' trước"
+        [ -n "$(sget destroyed_at)" ] || die "state.json cũ chưa huỷ (id '$(sget id)', label $(sget label)); chạy 'down' hoặc 'status' trước"
         mv "$SD/state.json" "$SD/state-$(date +%s).json"; rm -f "$SD/instance.id"
     fi
     [ -f "$SD/protected-instances" ] || (umask 077; echo "$HARD_DENY" >"$SD/protected-instances")
     echo "CẢNH BÁO: $EVAL_ENV_FILE (chứa API key) sẽ được CHUYỂN sang máy thuê ngoài của Vast. Xoay các khoá đó sau khi eval xong."
 
+    # --- Chuẩn bị TRƯỚC khi thuê: trap, state "pending" (có label, chưa có ID) và timer deadline. Nếu create thành công mà ID không rõ,
+    # timer/trap vẫn huỷ được qua destroy-eval.sh (tra theo label). Không có deadline thì không thuê.
+    DONE=0; CREATING=0; trap 'on_exit_up' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
+    local now; now="$(date +%s)"
+    sset 'id=""' "label=\"$label\"" "created_at=$now" "deadline=$((now + hours * 3600))" "price=$PRICE" \
+         "max_dph=$cap" "max_hours=$hours" "timers=[]" "pending=true" || die "không ghi được state.json"
+    local tag unit timers=() secs
+    for tag in B D; do
+        secs=$((hours * 3600)); [ "$tag" = D ] && secs=$((secs + 600))
+        unit="secai-eval-destroy-$tag-$(date +%Y%m%d)-$(head -c3 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+        local envs=(--setenv=STACK_EVAL_DIR="$SD" --setenv=PATH="$PATH")
+        [ -z "${STACK_EVAL_PROTECTED:-}" ] || envs+=(--setenv=STACK_EVAL_PROTECTED="$STACK_EVAL_PROTECTED")
+        # --on-unit-active: lặp lại mỗi 10 phút (huỷ thất bại/chưa chứng minh được thì thử lại); destroy-eval.sh tự dừng timer khi thành công.
+        systemd-run --user --unit="$unit" --on-active="$secs" --on-unit-active=600 "${envs[@]}" "$HERE/destroy-eval.sh" --force-deadline >/dev/null 2>&1 \
+            || die "không đặt được timer deadline $tag (không có deadline thì không thuê)"
+        timers+=("\"$unit\""); sset "timers=[$(IFS=,; echo "${timers[*]}")]" || die "không ghi được state.json"
+    done
+    say "deadline cứng $(date -d "@$((now + hours * 3600))" '+%F %T') (lớp B) và +10 phút (lớp D), lặp mỗi 10 phút tới khi huỷ được chứng minh; timers: ${timers[*]//\"/}"
+
     # --- thuê. Từ đây mọi lỗi phải huỷ instance (trap EXIT).
+    CREATING=1
     local out ID="" t
     out="$("${create[@]}" 2>&1)"; local rc=$?
     ID="$(printf '%s' "$out" | python3 -I -c 'import json,sys
@@ -121,58 +187,35 @@ except Exception: pass' 2>/dev/null)"
         ID=""
         say "create trả lỗi/không rõ (rc=$rc); tìm instance mồ côi theo label $label"
         for t in 1 2 3; do
-            ID="$(vlist | python3 -I -c 'import json,sys
-for i in json.load(sys.stdin):
-    if i.get("label") == sys.argv[1]: print(i["id"]); break' "$label")" || die "create lỗi và danh sách vastai không đọc được: KIỂM TAY console Vast, tìm label $label"
+            ID="$(find_by_label "$label")" || die "create lỗi và danh sách vastai không đọc được: timer sẽ tra theo label $label; KIỂM TAY console Vast"
             [ -z "$ID" ] || break
             nap
         done
-        [ -n "$ID" ] || die "create lỗi và không có instance nào mang label $label (không thuê gì)"
+        [ -n "$ID" ] || die "create lỗi và chưa thấy instance nào mang label $label (timer vẫn tra theo label tới deadline)"
     fi
-    [[ "$ID" =~ ^[1-9][0-9]*$ ]] && [ "$ID" != "$HARD_DENY" ] || die "ID lạ sau create: '$ID'; kiểm tay console, label $label"
+    [[ "$ID" =~ ^[1-9][0-9]*$ ]] && [ "$ID" != "$HARD_DENY" ] || die "ID lạ sau create: '$ID' (không huỷ gì); kiểm tay console, label $label"
     # GHI ID NGAY, trước mọi bước khác.
-    (umask 077; printf '%s\n' "$ID" >"$SD/instance.id")
-    local now; now="$(date +%s)"
-    sset "id=\"$ID\"" "label=\"$label\"" "created_at=$now" "deadline=$((now + hours * 3600))" "price=$PRICE" \
-         "max_dph=$cap" "max_hours=$hours" "timers=[]"
-    chmod 600 "$SD/state.json"
-    DONE=0; CREATED=1; trap 'on_exit_up' EXIT
+    (umask 077; printf '%s\n' "$ID" >"$SD/instance.id") || die "không ghi được instance.id"
+    sset "id=\"$ID\"" "pending=false" || die "không ghi được state.json"
     say "đã thuê instance $ID ($label); ID ghi vào $SD/instance.id"
-
-    # --- deadline: lớp B và D (bắt buộc), rồi lớp A nếu có khoá instance.
-    local tag unit timers=() secs
-    for tag in B D; do
-        secs=$((hours * 3600)); [ "$tag" = D ] && secs=$((secs + 600))
-        unit="secai-eval-destroy-$tag-$ID-$(head -c3 /dev/urandom | od -An -tx1 | tr -d ' \n')"
-        local envs=(--setenv=STACK_EVAL_DIR="$SD" --setenv=PATH="$PATH")
-        [ -z "${STACK_EVAL_PROTECTED:-}" ] || envs+=(--setenv=STACK_EVAL_PROTECTED="$STACK_EVAL_PROTECTED")
-        systemd-run --user --unit="$unit" --on-active="$secs" "${envs[@]}" "$HERE/destroy-eval.sh" --force-deadline >/dev/null 2>&1 \
-            || die "không đặt được timer deadline $tag (không có deadline thì không để máy chạy)"
-        timers+=("\"$unit\""); sset "timers=[$(IFS=,; echo "${timers[*]}")]"
-    done
-    say "deadline cứng $(date -d "@$((now + hours * 3600))" '+%F %T') (lớp B) và +10 phút (lớp D); timers: ${timers[*]//\"/}"
 
     # --- chờ máy chạy + ssh
     local host="" port="" n info
     for n in $(seq 1 60); do
-        info="$(vlist | python3 -I -c 'import json,sys
-for i in json.load(sys.stdin):
-    if str(i.get("id")) == sys.argv[1] and i.get("actual_status") == "running":
-        h = i.get("ssh_host") or i.get("public_ipaddr"); p = i.get("ssh_port") or 22
-        if h: print(h, p)' "$ID")" || info=""
+        info="$(vshow "$ID" | awk -F'\t' '$1 == "FIELDS" && $4 == "running" && $5 != "" { print $5, $6 }')" || info=""
         [ -z "$info" ] || break
         nap
     done
     read -r host port <<<"$info"
     [ -n "$host" ] || die "instance $ID chưa running/chưa có ssh sau khi chờ"
-    sset "ssh_host=\"$host\"" "ssh_port=$port"
+    sset "ssh_host=\"$host\"" "ssh_port=$port" || die "không ghi được state.json"
     HOST="$host"; PORT="$port"; ssh_opts
     for n in $(seq 1 40); do rssh true 2>/dev/null && break; nap; [ "$n" != 40 ] || die "ssh vào $host:$port không được"; done
 
     if [ -n "${EVAL_CONTAINER_API_KEY:-}" ]; then
-        # Lớp A: khoá giới hạn THEO INSTANCE đi qua stdin vào tệp 0600; instance tự DELETE chính nó khi hết hạn.
-        printf '%s' "$EVAL_CONTAINER_API_KEY" | rssh "umask 077; cat > /root/.vast-instance-key; \
-(setsid nohup sh -c 'sleep $((hours * 3600 + 300)); curl -fsS -X DELETE -H \"Authorization: Bearer \$(cat /root/.vast-instance-key)\" https://console.vast.ai/api/v0/instances/$ID/' >/dev/null 2>&1 &)" \
+        # Lớp A: khoá giới hạn THEO INSTANCE đi qua stdin vào tệp header 0600 (curl -H @tệp, không lên argv); instance tự DELETE chính nó.
+        printf '%s' "$EVAL_CONTAINER_API_KEY" | rssh "umask 077; { printf 'Authorization: %s ' Bearer; cat; echo; } > /root/.vast-instance-hdr; \
+(setsid nohup sh -c 'sleep $((hours * 3600 + 300)); curl -fsS -X DELETE -H @/root/.vast-instance-hdr https://console.vast.ai/api/v0/instances/$ID/' >/dev/null 2>&1 &)" \
             || die "không cài được lớp A"
         say "Layer A (tự huỷ trên instance): BẬT (+5 phút sau deadline B)"
     else
@@ -186,7 +229,7 @@ for i in json.load(sys.stdin):
     scp "${SSHO[@]}" -P "$port" "$tgz" "root@$host:/root/secai-src.tgz" >/dev/null || { rm -f "$tgz"; die "scp tarball lỗi"; }
     rm -f "$tgz"
     rssh "mkdir -p $REMOTE && tar -xzf /root/secai-src.tgz -C $REMOTE && mkdir -p $REMOTE/pkg" || die "giải nén mã lỗi"
-    rsync -a -e "ssh ${SSHO[*]} -p $port" "$EVAL_DATA_PKG"/ "root@$host:$REMOTE/pkg/" || die "rsync gói dữ liệu lỗi"
+    rsync -a --no-links -e "$(rsh_cmd)" "$EVAL_DATA_PKG"/ "root@$host:$REMOTE/pkg/" || die "rsync gói dữ liệu lỗi"
     rssh "umask 077; cat > $REMOTE/stack/.env" <"$EVAL_ENV_FILE" || die "đẩy .env lỗi"
     rssh "SHA=$sha EXPLOIT=${EVAL_EXPLOIT:-0} bash -s" <<'REMOTE_PROVISION' || die "provision lỗi"
 set -euo pipefail
@@ -220,9 +263,14 @@ REMOTE_PROVISION
 on_exit_up() {
     local rc=$?
     trap - EXIT
-    if [ "${CREATED:-0}" = 1 ] && [ "${DONE:-0}" != 1 ]; then
-        echo "!!!!!! up THẤT BẠI sau khi đã thuê instance: HUỶ NGAY !!!!!!" >&2
-        STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes || echo "!!!!!! HUỶ THẤT BẠI: kiểm console Vast ngay (instance $(sget id)); timer deadline vẫn chạy !!!!!!" >&2
+    if [ "${CREATING:-0}" = 1 ] && [ "${DONE:-0}" != 1 ]; then
+        echo "!!!!!! up THẤT BẠI sau khi (có thể) đã thuê instance: HUỶ NGAY !!!!!!" >&2
+        STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; local d=$?
+        case "$d" in
+            0) ;;
+            4) echo "eval-vast: chưa thấy instance nào theo label; timer lặp vẫn tra tới deadline." >&2 ;;
+            *) echo "!!!!!! HUỶ CHƯA XONG (rc=$d): kiểm console Vast ngay (instance '$(sget id)', label $(sget label)); timer lặp vẫn chạy !!!!!!" >&2 ;;
+        esac
     fi
     exit "$rc"
 }
@@ -260,7 +308,8 @@ cmd_collect() {
     local dest="$SD/results-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$dest"
     # Chỉ thư mục results (log + JSON); loại .env/khoá phòng khi lọt vào.
-    rsync -a --exclude '.env*' --exclude '*.key' -e "ssh ${SSHO[*]} -p $PORT" "root@$HOST:$REMOTE/results/" "$dest/" || die "kéo kết quả lỗi"
+    rsync -a --no-links --exclude '.env*' --exclude '*.key' -e "$(rsh_cmd)" "root@$HOST:$REMOTE/results/" "$dest/" || die "kéo kết quả lỗi"
+    [ -z "$(find "$dest" -type l -print -quit)" ] || die "kết quả chứa symlink ($dest); từ chối (không kiểm sha256 qua symlink)"
     [ -s "$dest/SHA256SUMS" ] || die "thiếu/rỗng SHA256SUMS trong kết quả ($dest)"
     (cd "$dest" && sha256sum -c --strict --quiet SHA256SUMS) || die "SHA256 kết quả KHÔNG khớp ($dest)"
     say "kết quả đã kiểm sha256: $dest"
@@ -271,16 +320,15 @@ cmd_down() { exec env STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; }
 cmd_status() {
     need_cmds vastai python3
     [ -f "$SD/state.json" ] || die "chưa có state ($SD/state.json)"
-    local id label price deadline now list found
+    local id label price deadline now row
     id="$(sget id)"; label="$(sget label)"; price="$(sget price)"; deadline="$(sget deadline)"; now="$(date +%s)"
-    list="$(vlist)" || die "danh sách vastai không đọc được (DEPRECATED/lỗi); không đoán trạng thái, kiểm tay console"
+    [[ "$id" =~ ^[1-9][0-9]*$ ]] || die "state chưa có ID (pending, label $label); chạy destroy-eval.sh hoặc kiểm tay console"
+    row="$(vshow "$id")" || die "tra instance $id bằng vastai không đọc được (DEPRECATED/lỗi); không đoán trạng thái, kiểm tay console"
     echo "id=$id label=$label price=\$$price/h giờ còn lại=$(awk -v d="$deadline" -v n="$now" 'BEGIN{printf "%.2f", (d-n)/3600}')"
-    found="$(printf '%s' "$list" | python3 -I -c 'import json,sys
-for i in json.load(sys.stdin):
-    if str(i.get("id")) == sys.argv[1]: print(i.get("label",""), i.get("dph_total",""), i.get("actual_status","")); break' "$id")"
-    if [ -z "$found" ]; then echo "vastai: instance $id KHÔNG còn (đã huỷ)"; return 0; fi
-    echo "vastai: $found"
-    case "$found" in "$label "*) ;; *) die "label thật khác state: CẢNH BÁO, không dùng 'down' trước khi kiểm tay" ;; esac
+    if [ "$row" = GONE ]; then echo "vastai: instance $id KHÔNG còn (tra theo ID)"; return 0; fi
+    IFS=$'\t' read -r _ rlabel rprice rstatus _ <<<"$row"
+    echo "vastai: label=$rlabel price=\$$rprice/h status=$rstatus"
+    [ "$rlabel" = "$label" ] || die "label thật khác state: CẢNH BÁO, không dùng 'down' trước khi kiểm tay"
 }
 
 case "${1:-}" in

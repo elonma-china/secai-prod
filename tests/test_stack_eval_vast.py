@@ -496,6 +496,7 @@ def test_up_full_flow_records_id_state_timers_and_is_secret_safe(box):
     assert st["deadline"] - st["created_at"] <= 3 * 3600
     runs = log(box, "systemd-run")
     assert len(runs) == 2 and all("destroy-eval.sh --force-deadline" in x for x in runs)
+    assert all("--on-unit-active=600" in x for x in runs)  # lap lai moi 10 phut cho toi khi chung minh da huy
     assert "--on-active=10800" in runs[0] and "--on-active=11400" in runs[1]  # B = 3h, D = B + 10 phut
     assert len(st["timers"]) == 2
     assert "ABORT" not in r.stdout and "layer a" in r.stdout.lower()  # lop A bi bo vi khong co khoa instance, noi ro
@@ -515,6 +516,59 @@ def test_up_layer_a_only_with_instance_key_and_via_stdin(box):
     assert "INSTKEY_MARK_5" not in "\n".join(log(box, "ssh") + log(box, "systemd-run") + log(box, "scp") + log(box, "rsync"))
     assert "INSTKEY_MARK_5" in (box.fake / "ssh.stdin").read_text()
     assert "INSTKEY_MARK_5" not in r.stdout + r.stderr
+    layer_a = [x for x in log(box, "ssh") if ".vast-instance" in x][0]
+    assert "-H @" in layer_a and "INSTKEY_MARK_5" not in layer_a  # khoa khong len argv cua curl tren instance
+
+
+def test_up_refuses_container_key_equal_to_account_key(box):
+    r = sh(EVAL, "up", b=box, extra={"EVAL_CONTAINER_API_KEY": VASTKEY})  # = noi dung ~/.config/vastai/vast_api_key
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+    assert VASTKEY not in r.stdout + r.stderr
+    r = sh(EVAL, "up", b=box, extra={"EVAL_CONTAINER_API_KEY": "ENVKEY_MARK_1", "VAST_API_KEY": "ENVKEY_MARK_1"})
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+
+
+def test_up_query_uses_gb_vms_and_storage(box):
+    assert sh(EVAL, "up", "--dry-run", b=box).returncode == 0
+    q = lines_with(box, "vastai", "search")[0]
+    assert "cpu_ram>=32 " in q and "vms_enabled=true" in q and "dph_total<=0.30" in q and "disk_space>=100" in q
+    assert "--storage 100" in q
+    assert sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_EXPLOIT": "1"}).returncode == 0
+    assert "cpu_ram>=48 " in lines_with(box, "vastai", "search")[1]
+
+
+def test_up_trap_and_pending_state_set_before_create_with_label_fallback(box):
+    set_mode(box, "create_mode", "ambiguous")  # instance duoc tao nhung vastai bao loi
+    set_mode(box, "list_mode", "garbage")      # va khong tra cuu duoc bang label
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and destroys(box) == []
+    st = json.loads((box.sdir / "state.json").read_text())
+    assert st["pending"] is True and st["id"] == "" and st["label"].startswith("secai-stack-eval-") and len(st["timers"]) == 2
+    assert len(log(box, "systemd-run")) == 2  # timers da dat TRUOC create
+    set_mode(box, "list_mode", "ok")  # den deadline: timer tra theo label va huy
+    r = sh(DESTROY, "--force-deadline", b=box)
+    assert r.returncode == 0, r.stderr
+    assert destroys(box) == [D777]
+    assert_prod_alive(box)
+
+
+def test_up_create_returning_prod_id_is_refused_without_destroy(box):
+    set_mode(box, "create_mode", "prod")
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0
+    assert destroys(box) == [] and not (box.sdir / "instance.id").exists()
+    assert_prod_alive(box)
+
+
+def test_up_second_concurrent_up_is_refused_by_lock(box):
+    box.sdir.mkdir(parents=True)
+    holder = subprocess.Popen(["flock", "-n", str(box.sdir / ".lock"), "sleep", "20"])
+    try:
+        time.sleep(0.5)
+        r = sh(EVAL, "up", b=box)
+        assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+    finally:
+        holder.kill()
 
 
 def test_up_records_id_immediately_even_if_later_step_fails_then_destroys_via_exit_trap(box):
@@ -527,12 +581,12 @@ def test_up_records_id_immediately_even_if_later_step_fails_then_destroys_via_ex
     assert_prod_alive(box)
 
 
-def test_up_id_recorded_before_timer_step_failure(box):
+def test_up_timer_failure_aborts_before_any_rental(box):
     set_mode(box, "systemd-run_rc", "1")
     r = sh(EVAL, "up", b=box)
     assert r.returncode != 0
-    assert (box.sdir / "instance.id").read_text().strip() == "777"
-    assert destroys(box) == [D777]  # khong co deadline thi khong duoc de may chay
+    assert not lines_with(box, "vastai", "create")  # khong co deadline thi khong thue
+    assert not (box.sdir / "instance.id").exists() and destroys(box) == []
 
 
 def test_up_create_error_finds_orphan_by_label(box):
@@ -573,7 +627,7 @@ def test_status_cross_checks_and_fails_safe_on_deprecated(box):
     r = sh(EVAL, "status", b=box)
     assert r.returncode == 0, r.stderr
     assert "777" in r.stdout and "secai-stack-eval-20261123-ab12" in r.stdout and "0.25" in r.stdout
-    set_mode(box, "list_mode", "deprecated")
+    set_mode(box, "show_mode", "deprecated")
     r = sh(EVAL, "status", b=box)
     assert r.returncode != 0
 
@@ -626,6 +680,23 @@ def test_collect_pulls_results_only_and_verifies_sha256(box):
     (box.fake / "tamper").write_text("1")
     r = sh(EVAL, "collect", b=box)
     assert r.returncode != 0 and "sha256" in r.stderr.lower()
+
+
+def test_collect_rejects_symlinks_and_uses_no_links(box):
+    write_state(box, ssh_host="1.2.3.4", ssh_port=2222)
+    (box.tmp / "bin" / "rsync").write_text(FAKE_RSYNC_PULL + "")
+    (box.tmp / "bin" / "rsync").write_text(FAKE_RSYNC_PULL.replace("exit 0", 'ln -s /etc/passwd "$dest/evil"\nexit 0'))
+    r = sh(EVAL, "collect", b=box)
+    assert any("--no-links" in x for x in log(box, "rsync"))
+    assert r.returncode != 0 and "symlink" in r.stderr.lower()
+
+
+def test_rsync_e_quotes_ssh_key_path_with_spaces(box):
+    key = box.tmp / "my key"
+    key.write_text("k")
+    r = sh(EVAL, "up", b=box, extra={"EVAL_SSH_KEY": str(key)})
+    assert r.returncode == 0, r.stderr
+    assert any(f'-i "{key}"' in x for x in log(box, "rsync"))
 
 
 def test_scripts_pass_bash_syntax_check():
