@@ -115,3 +115,134 @@ def test_pack_image_never_pushes(tmp_path):
 def test_pack_bad_args_print_usage(tmp_path):
     r = run("bash", str(STACK / "pack.sh"), "bogus")
     assert r.returncode != 0 and "usage" in r.stderr.lower()
+
+
+def test_restore_rejects_garbage_sums_line(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    lines = (pkg / "SHA256SUMS").read_text().splitlines()
+    lines = ["zzzz  poc.tar.zst" if l.endswith("  poc.tar.zst") else l for l in lines]
+    (pkg / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+    (pkg / "poc.tar.zst").write_bytes(b"corrupt")
+    data = tmp_path / "data"
+    env, log = stub_docker(tmp_path)
+    r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
+    assert r.returncode != 0 and "SHA256" in r.stderr and "poc.tar.zst" in r.stderr
+    assert not data.exists() and not log.exists()
+
+
+def test_restore_rejects_package_missing_sums_entry(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    lines = [l for l in (pkg / "SHA256SUMS").read_text().splitlines() if not l.endswith("  poc.tar.zst")]
+    (pkg / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+    r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**os.environ, "DATA_ROOT": str(tmp_path / "d")})
+    assert r.returncode != 0 and "poc.tar.zst" in r.stderr and "SHA256" in r.stderr
+    assert not (tmp_path / "d").exists()
+
+
+def test_restore_nonroot_prints_gateway_chown_instruction(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    data = tmp_path / "data"
+    env, _ = stub_docker(tmp_path, creates_store=True)
+    r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
+    assert r.returncode == 0, r.stderr
+    d = data / "poc"
+    assert f"sudo chown -R 10001:10100 {d} && sudo chmod -R g+rwX {d}" in r.stderr
+    assert (d.stat().st_mode & 0o020) and (d / "store").stat().st_mode & 0o020      # g+w da duoc dat
+
+
+def test_restore_root_chowns_poc_to_gateway(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    data = tmp_path / "data"
+    env, _ = stub_docker(tmp_path, creates_store=True)
+    chown_log = tmp_path / "chown.log"
+    (tmp_path / "bin" / "id").write_text("#!/bin/sh\necho 0\n")
+    (tmp_path / "bin" / "chown").write_text(f'#!/bin/sh\necho "$@" >> {chown_log}\n')
+    for n in ("id", "chown"):
+        (tmp_path / "bin" / n).chmod(0o755)
+    r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data), "VM_SHARED_GID": "10200"})
+    assert r.returncode == 0, r.stderr
+    assert f"-R 10001:10200 {data}/poc" in chown_log.read_text()
+    assert str(data / "exploitdb") not in chown_log.read_text()
+    # tar khong giu owner nguon: chay lai khong chown them (poc da co)
+    chown_log.unlink()
+    assert run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)}).returncode == 0
+    assert not chown_log.exists()
+
+
+def test_restore_warns_on_empty_existing_dir(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    data = tmp_path / "data"; (data / "poc-sources").mkdir(parents=True)
+    env, _ = stub_docker(tmp_path, creates_store=True)
+    r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
+    assert r.returncode == 0 and "poc-sources is empty" in r.stderr
+
+
+def _fake_src(tmp_path):
+    src = tmp_path / "src"
+    for d in ("exploitdb", "poc/store", "poc-sources"):
+        (src / d).mkdir(parents=True)
+    (src / "poc" / "catalog.db").write_text("x")
+    (tmp_path / "exploitdb-mcp-server").mkdir()
+    (tmp_path / "neo4j.dump").write_text("d")
+    return src
+
+
+def test_pack_data_deletes_server_snapshot_and_partial_out_on_failure(tmp_path):
+    src = _fake_src(tmp_path)
+    binp = tmp_path / "bin"; binp.mkdir(); log = tmp_path / "curl.log"
+    (binp / "curl").write_text(
+        f'#!/bin/sh\necho "$@" >> {log}\n'
+        'case "$*" in\n'
+        '  *"-X POST"*) echo \'{"result":{"name":"snap1"}}\' ;;\n'
+        '  *"-X DELETE"*) ;;\n'
+        '  *) exit 22 ;;      # tai snapshot that bai\n'
+        'esac\n')
+    (binp / "curl").chmod(0o755)
+    out = tmp_path / "out"
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+            env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
+    assert r.returncode != 0
+    calls = log.read_text()
+    assert "-X DELETE" in calls and "/collections/cve_kb_hybrid/snapshots/snap1" in calls.split("-X DELETE")[1]
+    assert not out.exists()                                           # khong de goi do dang
+
+
+def test_pack_data_unparsable_snapshot_response_lists_snapshots(tmp_path):
+    src = _fake_src(tmp_path)
+    binp = tmp_path / "bin"; binp.mkdir()
+    (binp / "curl").write_text('#!/bin/sh\ncase "$*" in *"-X POST"*) echo oops ;; *) echo LISTING-OF-SNAPSHOTS ;; esac\n')
+    (binp / "curl").chmod(0o755)
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(tmp_path / "out"),
+            env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
+    assert r.returncode != 0 and "LISTING-OF-SNAPSHOTS" in (r.stdout + r.stderr) and "orphan" in r.stderr.lower()
+
+
+def test_pack_data_excludes_secrets_and_git_from_mcp_tarball(tmp_path):
+    src = _fake_src(tmp_path)
+    mcp = tmp_path / "exploitdb-mcp-server"
+    (mcp / ".git").mkdir(); (mcp / ".git" / "config").write_text("g")
+    (mcp / "node_modules" / "pkg").mkdir(parents=True); (mcp / "node_modules" / "pkg" / "index.js").write_text("j")
+    (mcp / "build").mkdir(); (mcp / "build" / "a.js").write_text("b")
+    (mcp / ".env").write_text("SECRET=1"); (mcp / "tls.pem").write_text("p"); (mcp / "build" / "k.key").write_text("k")
+    binp = tmp_path / "bin"; binp.mkdir(); log = tmp_path / "curl.log"
+    (binp / "curl").write_text(
+        f'#!/bin/sh\necho "$@" >> {log}\n'
+        'case "$*" in\n'
+        '  *"-X POST"*) echo \'{"result":{"name":"snap1"}}\' ;;\n'
+        '  *"-X DELETE"*) ;;\n'
+        '  *"-o "*) while [ $# -gt 0 ]; do [ "$1" = -o ] && echo snap > "$2"; shift; done ;;\n'
+        '  *) echo \'{"result":{"points_count":7}}\' ;;\n'
+        'esac\n')
+    (binp / "curl").chmod(0o755)
+    (binp / "docker").write_text("#!/bin/sh\nexit 1\n"); (binp / "docker").chmod(0o755)   # khong duoc goi khi dung --neo4j-dump
+    out = tmp_path / "out"
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+            env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
+    assert r.returncode == 0, r.stderr
+    assert ".env" in r.stderr and "tls.pem" in r.stderr and "k.key" in r.stderr
+    names = subprocess.run(f"zstd -dc {out}/exploitdb-mcp-server.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
+    assert "exploitdb-mcp-server/node_modules/pkg/index.js" in names and "exploitdb-mcp-server/build/a.js" in names
+    assert ".git" not in names and ".env" not in names and ".pem" not in names and ".key" not in names
+    assert "7 points" in (out / "MANIFEST.md").read_text()
+    assert subprocess.run(["sha256sum", "-c", "--quiet", "SHA256SUMS"], cwd=out).returncode == 0
+    assert "-X DELETE" in log.read_text()

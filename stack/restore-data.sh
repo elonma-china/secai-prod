@@ -28,10 +28,15 @@ ARCHIVES=(exploitdb poc poc-sources exploitdb-mcp-server)   # mỗi tarball ch�
 
 command -v zstd >/dev/null || die "zstd is required (apt install zstd)"
 
-# 1) Kiểm chứng trước khi đụng bất cứ thứ gì.
+# 1) Kiểm chứng trước khi đụng bất cứ thứ gì. Dòng SHA256SUMS phải đúng dạng `<64 hex>  <tệp>`; mỗi tệp cần có đúng một dòng như vậy.
 [ -f "$PKG/SHA256SUMS" ] || die "missing SHA256SUMS in $PKG"
+# awk: $1 dài 64 và toàn hex, tiếp theo đúng hai dấu cách, rồi tên tệp.
+sums_ok='length($1)==64 && $1 !~ /[^0-9a-f]/ && substr($0,65,2)=="  " && length($0)>66'
 if [ -s "$PKG/SHA256SUMS" ]; then
-  out=$(cd "$PKG" && sha256sum -c SHA256SUMS 2>&1) || die "SHA256 verification failed, nothing restored:
+  bad=$(awk "!($sums_ok)" "$PKG/SHA256SUMS")
+  [ -z "$bad" ] || die "SHA256SUMS has malformed line(s), nothing restored:
+$bad"
+  out=$(cd "$PKG" && sha256sum -c --strict SHA256SUMS 2>&1) || die "SHA256 verification failed, nothing restored:
 $(printf '%s\n' "$out" | grep -v ': OK$')"
 fi
 shopt -s nullglob
@@ -43,22 +48,54 @@ missing=()
 for s in "${snaps[@]}"; do need+=("qdrant/$(basename "$s")"); done
 for f in "${need[@]}"; do
   [ -f "$PKG/$f" ] || { missing+=("$f"); continue; }
-  grep -qF "  $f" "$PKG/SHA256SUMS" || missing+=("$f (not listed in SHA256SUMS)")
+  # -c --strict đã xác nhận mọi dòng đúng dạng và khớp (OK); ở đây chỉ cần tệp có dòng trong SHA256SUMS.
+  awk -v f="$f" "($sums_ok) && substr(\$0,67)==f { ok=1 } END { exit !ok }" "$PKG/SHA256SUMS" || missing+=("$f (no valid SHA256 entry in SHA256SUMS)")
 done
 [ ${#missing[@]} -eq 0 ] || die "package incomplete, missing: ${missing[*]}"
 
 # 2) Giải nén vào thư mục tạm cùng filesystem rồi mv: dở dang không để lại thư mục nửa vời; thư mục có sẵn thì giữ nguyên.
 mkdir -p "$DATA_ROOT/_state/qdrant_storage" "$DATA_ROOT/_state/neo4j_data" "$DATA_ROOT/_state/neo4j_logs" "$DATA_ROOT/qdrant"
+fresh=()
 for a in "${ARCHIVES[@]}"; do
-  if [ -e "$DATA_ROOT/$a" ]; then echo "==> $a: already present, skip"; continue; fi
+  if [ -e "$DATA_ROOT/$a" ]; then
+    echo "==> $a: already present, skip"
+    [ -n "$(ls -A "$DATA_ROOT/$a" 2>/dev/null)" ] || echo "WARNING: $DATA_ROOT/$a is empty (Docker may have auto-created it root-owned); remove it and rerun to restore $a" >&2
+    continue
+  fi
   tmp="$DATA_ROOT/.incoming.$a"
   rm -rf "$tmp"; mkdir "$tmp"
   echo "==> $a: extracting"
-  zstd -dc "$PKG/$a.tar.zst" | tar -x -C "$tmp"
+  zstd -dc "$PKG/$a.tar.zst" | tar -x --no-same-owner -C "$tmp"   # không giữ uid/gid của máy nguồn (kể cả khi chạy root)
   [ -d "$tmp/$a" ] || { rm -rf "$tmp"; die "$a.tar.zst has no top-level '$a/' directory"; }
   mv "$tmp/$a" "$DATA_ROOT/$a"; rmdir "$tmp"
+  fresh+=("$a")
 done
-mkdir -p "$DATA_ROOT/poc/store"
+[ -d "$DATA_ROOT/poc/store" ] || { mkdir -p "$DATA_ROOT/poc/store"; fresh+=(poc-store-only); }
+
+# Gateway (uid 10001, gid 999 + nhóm chung VM_SHARED_GID) ghi vào poc và poc/store; khớp quy tắc preflight của bootstrap.sh.
+GW_UID=10001; GW_GID=999; SHARED_GID=${VM_SHARED_GID:-10100}
+gateway_can_write() {  # đúng: chủ 10001, hoặc nhóm 999/shared có g+w, hoặc other-writable
+  local uid gid mode
+  read -r uid gid mode <<<"$(stat -L -c '%u %g %a' "$1")"
+  [ "$uid" = "$GW_UID" ] && return 0
+  { [ "$gid" = "$GW_GID" ] || [ "$gid" = "$SHARED_GID" ]; } && [ $(( 0$mode & 020 )) -ne 0 ] && return 0
+  [ $(( 0$mode & 002 )) -ne 0 ]
+}
+fix_dirs=()   # chỉ sửa quyền thư mục do lần chạy này tạo; dữ liệu có sẵn không bị đổi chủ
+for f in ${fresh[@]+"${fresh[@]}"}; do
+  case "$f" in poc) fix_dirs=("$DATA_ROOT/poc") ;; poc-store-only) [ ${#fix_dirs[@]} -gt 0 ] || fix_dirs=("$DATA_ROOT/poc/store") ;; esac
+done
+for d in ${fix_dirs[@]+"${fix_dirs[@]}"}; do
+  if [ "$(id -u)" = 0 ]; then
+    chown -R "$GW_UID:$SHARED_GID" "$d"
+    chmod -R u+rwX,g+rwX "$d"
+  else
+    chmod -R g+rwX "$d" 2>/dev/null || true
+  fi
+done
+for d in "$DATA_ROOT/poc" "$DATA_ROOT/poc/store"; do
+  gateway_can_write "$d" || echo "WARNING: $d is not writable by the gateway (uid $GW_UID); run: sudo chown -R $GW_UID:$SHARED_GID $d && sudo chmod -R g+rwX $d" >&2
+done
 
 # 3) Neo4j: chỉ nạp khi store chưa có (nạp đè sẽ mất dữ liệu).
 if [ -f "$DATA_ROOT/_state/neo4j_data/databases/neo4j/neostore" ]; then

@@ -3,7 +3,7 @@
 #   pack.sh image [git-ref]                       build image gateway từ `git archive` (mặc định HEAD)
 #   pack.sh data [--mcp-dir D] [--neo4j-dir D | --neo4j-dump F] <src_root> <out_dir>
 # Biến môi trường (data): QDRANT_URL (mặc định http://127.0.0.1:6333), QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY,
-#   NEO4J_STORE_DIR (= --neo4j-dir), NEO4J_IMAGE (neo4j:5.20-community).
+#   TMPDIR (nơi chép store Neo4j), NEO4J_STORE_DIR (= --neo4j-dir), NEO4J_IMAGE (neo4j:5.20-community).
 # Nén bằng zstd -T0 (bắt buộc; restore-data.sh cũng cần zstd).
 # Neo4j: --neo4j-dir là thư mục /data của Neo4j (có databases/, transactions/); script chép bản sao rồi dump trong container tạm,
 #   không dừng/đụng Neo4j đang chạy. Chép từ store đang ghi có thể không nhất quán: dùng bản sao tĩnh hoặc store đã dừng.
@@ -26,6 +26,25 @@ pack_image() {
   echo "$tag"
   echo "Chưa push. Khi chủ dự án đồng ý, chạy tay: docker push $tag"
 }
+
+# Xoá snapshot tạo trên máy Qdrant (có thể nhiều GB, có thể là PROD): chạy cả khi lỗi/INT/TERM. Cố gắng hết sức, cảnh báo nếu hỏng.
+delete_snapshot() {
+  [ -n "$SNAP_NAME" ] || return 0
+  curl -fsS -X DELETE ${QHDR[@]+"${QHDR[@]}"} -o /dev/null "$QBASE/snapshots/$SNAP_NAME" \
+    || echo "WARNING: could not delete server-side snapshot $SNAP_NAME; remove it manually: curl -X DELETE $QBASE/snapshots/$SNAP_NAME" >&2
+  SNAP_NAME=""
+}
+on_exit() {
+  local rc=$?
+  trap - EXIT
+  delete_snapshot
+  rm -rf "$WORK"
+  if [ "$rc" -ne 0 ] && [ -n "${OUT:-}" ]; then   # không để gói dở làm lần sau chết vì "out_dir not empty"
+    if [ "$OUT_NEW" = 1 ]; then rm -rf "$OUT"; else find "$OUT" -mindepth 1 -delete; fi
+  fi
+  exit "$rc"
+}
+SNAP_NAME=""; OUT=""; OUT_NEW=0; WORK=""; QHDR=(); QBASE=""
 
 pack_data() {
   local mcp="" ndir=${NEO4J_STORE_DIR:-} ndump="" args=()
@@ -52,19 +71,31 @@ pack_data() {
   if [ -n "$ndir" ]; then [ -d "$ndir/databases" ] || missing+=("$ndir/databases"); else [ -f "$ndump" ] || missing+=("$ndump"); fi
   [ ${#missing[@]} -eq 0 ] || die "missing source: ${missing[*]}"
   if [ -e "$out" ] && [ -n "$(ls -A "$out")" ]; then die "out_dir not empty: $out"; fi
-  mkdir -p "$out/qdrant" "$out/neo4j"; out=$(cd "$out" && pwd)
-  work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
-  local hdr=(); [ -z "${QDRANT_API_KEY:-}" ] || hdr=(-H "api-key: $QDRANT_API_KEY")
+  [ ! -e "$out" ] && OUT_NEW=1 || OUT_NEW=0
+  mkdir -p "$out/qdrant" "$out/neo4j"; OUT=$(cd "$out" && pwd); out=$OUT
+  WORK=$(mktemp -d); work=$WORK     # mktemp theo TMPDIR; bản sao store Neo4j nằm ở đây
+  QHDR=(); [ -z "${QDRANT_API_KEY:-}" ] || QHDR=(-H "api-key: $QDRANT_API_KEY")
+  QBASE="$url/collections/$coll"; SNAP_NAME=""
+  trap on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
 
   echo "==> qdrant: snapshot $coll via API ($url)"
-  local name points
-  name=$(curl -fsS -X POST "${hdr[@]}" "$url/collections/$coll/snapshots" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["name"])')
-  curl -fsS "${hdr[@]}" -o "$out/qdrant/$coll.snapshot" "$url/collections/$coll/snapshots/$name"
-  curl -fsS -X DELETE "${hdr[@]}" -o /dev/null "$url/collections/$coll/snapshots/$name" || echo "warning: could not delete server-side snapshot $name" >&2
-  points=$(curl -fsS "${hdr[@]}" "$url/collections/$coll" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["points_count"])' || echo "?")
+  local name points resp
+  resp=$(curl -fsS -X POST ${QHDR[@]+"${QHDR[@]}"} "$QBASE/snapshots") || die "qdrant: creating snapshot failed (a server-side snapshot may be orphaned; list: curl $QBASE/snapshots)"
+  if ! name=$(printf '%s' "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["name"])' 2>/dev/null); then
+    echo "qdrant: unexpected create-snapshot response; a snapshot may be an orphan on the server. Existing snapshots:" >&2
+    curl -fsS ${QHDR[@]+"${QHDR[@]}"} "$QBASE/snapshots" >&2 || true
+    die "remove the orphan with: curl -X DELETE $QBASE/snapshots/<name>"
+  fi
+  SNAP_NAME=$name
+  curl -fsS ${QHDR[@]+"${QHDR[@]}"} -o "$out/qdrant/$coll.snapshot" "$QBASE/snapshots/$name"
+  delete_snapshot      # giải phóng đĩa máy Qdrant ngay khi tải xong
+  points=$(curl -fsS ${QHDR[@]+"${QHDR[@]}"} "$QBASE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["points_count"])' || echo "?")
 
   echo "==> neo4j: dump"
   if [ -n "$ndir" ]; then
+    echo "WARNING: copying Neo4j store $ndir; if Neo4j is running on it the copy may be inconsistent (use a stopped copy or --neo4j-dump). Copy goes to \${TMPDIR:-/tmp}." >&2
     mkdir -p "$work/data"; cp -r "$ndir/databases" "$work/data/"; [ ! -d "$ndir/transactions" ] || cp -r "$ndir/transactions" "$work/data/"
     # --entrypoint bash: chạy root thật (entrypoint mặc định hạ quyền xuống neo4j); chown về user hiện tại để dọn được tạm.
     docker run --rm --entrypoint bash -v "$work/data:/data" -v "$out/neo4j:/dump" "$image" \
@@ -77,7 +108,12 @@ pack_data() {
   echo "==> tar.zst"
   tar -C "$src" -cf - exploitdb | zstd -q -T0 -o "$out/exploitdb.tar.zst"
   tar -C "$src" -cf - poc-sources | zstd -q -T0 -o "$out/poc-sources.tar.zst"
-  tar -C "$(dirname "$mcp")" --transform "s,^$(basename "$mcp"),exploitdb-mcp-server," -cf - "$(basename "$mcp")" | zstd -q -T0 -o "$out/exploitdb-mcp-server.tar.zst"
+  local skipped; skipped=$(find "$mcp" -name .git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -print)
+  if [ -n "$skipped" ]; then
+    echo "WARNING: excluded from exploitdb-mcp-server.tar.zst (.env*/*.pem/*.key; .git is always excluded) - $(printf '%s\n' "$skipped" | wc -l) file(s):" >&2
+    printf '%s\n' "$skipped" | head -20 >&2
+  fi
+  tar -C "$(dirname "$mcp")" --exclude=.git --exclude='.env*' --exclude='*.pem' --exclude='*.key' --transform "s,^$(basename "$mcp"),exploitdb-mcp-server," -cf - "$(basename "$mcp")" | zstd -q -T0 -o "$out/exploitdb-mcp-server.tar.zst"
   # catalog.db đang được ghi (WAL): lấy bản nhất quán bằng sqlite backup API, không chép tệp thô.
   mkdir -p "$work/poc"
   python3 -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
