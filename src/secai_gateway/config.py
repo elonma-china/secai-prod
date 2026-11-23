@@ -299,6 +299,10 @@ class Settings(BaseSettings):
     report_feature_enabled: bool = False
     report_api_key: str = ""
     report_db_path: str = "./data/reports.db"
+    # Report generation/edit: output budget and per-call timeout. ~136 tok/s on the 2xPRO6000/Vast vLLM,
+    # so 6000 tokens fit in ~45 s; keep the timeout above that and below proxy limits.
+    report_max_tokens: int = Field(default=6000, ge=256, le=32768)
+    report_llm_timeout_s: float = Field(default=90.0, ge=5, le=600)
     report_upstream_url: str = ""
     translation_upstream_url: str = ""
     gateway_db_path: str = "./data/gateway.db"
