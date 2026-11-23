@@ -275,6 +275,7 @@ except Exception: pass' 2>/dev/null)"
     done
     [ "$sshok" = 1 ] || die "ssh vào $host:$port (và ${dhost:--}:${dport:--}) không được sau 60 lần; lỗi cuối: $(tail -c 300 "$sshlog" 2>/dev/null | tr '\n' ' ')"
     sset "ssh_host=\"$HOST\"" "ssh_port=$PORT" || die "không ghi được state.json"
+    host="$HOST"; port="$PORT"   # các bước scp/rsync/ssh bên dưới dùng đúng đường đã vào được (proxy hoặc trực tiếp)
 
     if [ -n "${EVAL_CONTAINER_API_KEY:-}" ]; then
         # Lớp A: khoá giới hạn THEO INSTANCE đi qua stdin vào tệp header 0600 (curl -H @tệp, không lên argv); instance tự DELETE chính nó.
