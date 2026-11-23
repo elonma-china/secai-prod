@@ -95,7 +95,7 @@ def scope_verdict(target: str, messages: list[dict[str, Any]], *, proof_re: re.P
             if state.get("status") != "completed" or not proof_re.search(str(state.get("output") or "")):
                 continue
             cmd = str((state.get("input") or {}).get("command") or "")
-            if _is_read_only(cmd):
+            if is_read_only(cmd):
                 continue
             text = cmd
             for name in _SCRIPT_RE.findall(cmd):
@@ -107,9 +107,9 @@ def scope_verdict(target: str, messages: list[dict[str, Any]], *, proof_re: re.P
     return ("mismatch", seen[0]) if seen else ("unknown", None)
 
 
-def _is_read_only(cmd: str) -> bool:
+def is_read_only(cmd: str) -> bool:
     """Mọi đoạn lệnh (tách theo && || ; | xuống dòng) đều là lệnh đọc/in và không ghi file (không `>`/heredoc)."""
-    if ">" in cmd or "<<" in cmd:
+    if ">" in cmd or "<<" in cmd or "$(" in cmd or "`" in cmd:   # ghi file / thay thế lệnh có thể thực thi
         return False
     segs = [x.split() for x in re.split(r"&&|\|\||;|\||\n", cmd.strip()) if x.strip()]
     return bool(segs) and all(sg[0].rsplit("/", 1)[-1] in _READ_ONLY for sg in segs)
