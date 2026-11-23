@@ -98,8 +98,8 @@ def _ready(tmp_path, profiles="exploit,translation,report,review"):
          GATEWAY_IMAGE="secai-agent-gateway:main-abc12345", VM_IMAGE="secai-pentestcode-vm:abc",
          CONVERTER_IMAGE="secai-doc-convert:abc", REVIEW_UI_IMAGE="secai-review-ui:abc",
          TRANSLATE_V2_OCR_BASE_URL="http://o", TRANSLATE_V2_OCR_MODEL="m",
-         TRANSLATE_V2_SPECIALIST_BASE_URL="http://s", TRANSLATE_V2_SPECIALIST_MODEL="m",
-         MULTILANG_SPECIALIST_BASE_URL="http://s", MULTILANG_SPECIALIST_MODEL="m")
+         TRANSLATE_V2_SPECIALIST_BASE_URL="http://127.0.0.1:18868", TRANSLATE_V2_SPECIALIST_MODEL="m",
+         MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_MODEL="m")
     return d, {"MAX_MAP_COUNT_FILE": str(mm)}
 
 
@@ -382,3 +382,13 @@ def test_preflight_owner_class_only(tmp_path):
         d, extra = _ready(tmp_path)
         r = _bs(d, "preflight", STAT_FAKE=fake, **extra)
         assert (r.returncode == 0) == ok, (fake, r.stderr)
+
+
+def test_preflight_specialist_url_shape(tmp_path):
+    # Gateway (translation/specialist.py, multilang/provider.py) chỉ nhận http loopback hoặc https IP private, có cổng;
+    # khác đi thì translation-gateway/worker chết lúc khởi động (smoke 2026-11-23 với http://172.17.0.1:18868).
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        for bad in ("http://172.17.0.1:18868", "https://example.com:443", "http://127.0.0.1", "http://u:p@127.0.0.1:1",
+                    "http://127.0.0.1:18868/v1"):
+            r = _fails(tmp_path, k, **{k: bad})
+            assert "u:p" not in r.stderr

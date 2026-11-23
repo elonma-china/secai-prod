@@ -130,6 +130,29 @@ check_gateway_writable() {
     err "$label: $dir (uid $uid gid $gid mode $mode) gateway (uid $GATEWAY_UID, gid $GATEWAY_GID, nhóm $shared) không ghi được; chạy: sudo chown -R $GATEWAY_UID:$shared $dir && sudo chmod -R g+w $dir  (hoặc sudo chmod -R o+w $dir)"
 }
 
+# URL dịch vụ dịch chuyên dụng: gateway (translation/specialist.py, multilang/provider.py) chỉ nhận http tới loopback hoặc
+# https tới IP private, có cổng, không path/user/query; sai thì translation-gateway/worker chết lúc khởi động.
+check_specialist_url() {
+    local v; v="$(val "$1")"; [ -n "$v" ] || return 0
+    python3 -I - "$v" <<'PY' && return 0
+import ipaddress, sys
+from urllib.parse import urlsplit
+u = urlsplit(sys.argv[1].rstrip("/"))
+try:
+    a = ipaddress.ip_address(u.hostname or ""); loop = a.is_loopback; priv = loop or a.is_private
+except ValueError:
+    loop = priv = u.hostname == "localhost"
+try:
+    port = u.port
+except ValueError:
+    port = None
+ok = priv and (u.scheme == "https" or (u.scheme == "http" and loop)) and port is not None \
+    and not (u.username or u.password or u.query or u.fragment) and u.path in ("", "/")
+sys.exit(0 if ok else 1)
+PY
+    err "$1: gateway chỉ nhận http://127.0.0.1:<cổng> hoặc https://<IP private>:<cổng> (không path/user/query); trên mạng bridge 127.0.0.1 là chính container, nên cần tunnel/sidecar chung network namespace với translation-gateway/worker hoặc https"
+}
+
 preflight() {
     [ -f "$ENV_FILE" ] || die "chưa có $ENV_FILE: chạy '$0 init' trước"
     local k
@@ -169,6 +192,8 @@ preflight() {
                  TRANSLATE_V2_SPECIALIST_MODEL MULTILANG_SPECIALIST_BASE_URL MULTILANG_SPECIALIST_MODEL; do
             need "$k" "nhập tay"
         done
+        check_specialist_url TRANSLATE_V2_SPECIALIST_BASE_URL
+        check_specialist_url MULTILANG_SPECIALIST_BASE_URL
         local tok; tok="$(abs_path "$(val TOKENIZER_DIR)")"
         [ -n "$(val TOKENIZER_DIR)" ] || tok="$STACK_DIR/tokenizer"
         for k in tokenizer.json tokenizer_config.json; do
