@@ -201,6 +201,7 @@ for c in CASES:
             judged = notes.pop("judge", True)  # exploit: kiểm trực tiếp trên SSE (fails), không dùng chuỗi hiển thị của UI
             why = (judge(c, text, extra) if judged else []) + fails
             rec.update(pass_=not why, reason="; ".join(why) or "đạt", output_head=text[:600], endpoints=eps, notes=notes)
+            open(f"{OUT}/{c['id']}.txt", "w", encoding="utf-8").write(text)  # toàn văn trả lời, để kiểm lại dấu hiệu sau này
         except Exception as e:  # ca lỗi là dữ liệu, không dừng cả bộ
             rec.update(pass_=False, reason=f"lỗi chạy: {type(e).__name__}: {str(e)[:200]}")
     rec["duration_s"] = round(time.time() - t0)

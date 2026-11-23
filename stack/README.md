@@ -187,9 +187,10 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
   (CVE-2022-22963) đạt. UI-POC-2 chưa có baseline prod hợp lệ.
 - **Gói dữ liệu thật ~49 GB**: `pack.sh`/`restore-data.sh` chỉ kiểm trên tập con; chưa chạy ở kích thước thật (thời gian,
   dung lượng đĩa tạm, nhất quán khi chép store Neo4j đang ghi).
-- **Khởi động lại máy chủ**: thứ tự khởi động sau reboot chưa kiểm.
-- **Máy 2/4 GPU và máy đích sạch hoàn toàn**: smoke chạy trên một máy dev, đã phải override dải địa chỉ Docker. Việc dựng
-  trên máy đích khác (Docker Hub bị chặn, không internet, registry nội bộ) chưa kiểm.
+- **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
+- **Máy 2/4 GPU và máy đích sạch hoàn toàn**: đã dựng trên một VM Vast mới (image build tại chỗ từ `git archive`, nạp gói dữ liệu nhỏ,
+  `check.sh all` + 4/9 ca đạt, 5 ca bỏ qua có lý do; xem `docs/archive/test-results/stack-package-vast-eval-20261124.md`). Chưa kiểm: máy
+  2/4 GPU, Docker Hub bị chặn / không internet / registry nội bộ.
 - **Bộ kiểm trên UI sản phẩm**: chỉ làm được khi frontend IAS trỏ sang gateway mới; mới chạy qua API.
 - Giới hạn khác đã ghi ở `docs/archive/test-results/stack-package-smoke-20261123.md`: tệp bàn giao lab ghi ở `/tmp/ias`
   trong container gateway chưa được kiểm quyền đọc; bản dựng VM còn `gyp ERR` của `tree-sitter-powershell` (đã biết, không
