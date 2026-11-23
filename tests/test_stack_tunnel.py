@@ -2,6 +2,7 @@
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -88,3 +89,37 @@ def test_off_mode_idles_and_bad_mode_fails(tmp_path):
     assert p.returncode == 0 and not (tmp_path / "log").exists()
     r = subprocess.run(["sh", str(ENTRY)], env=_env(tmp_path, TUNNEL_MODE="vpn"), capture_output=True, text=True, timeout=10)
     assert r.returncode != 0 and "TUNNEL_MODE" in r.stderr
+
+
+def test_exits_when_translation_gateway_netns_is_gone(tmp_path):
+    # Docker khởi động lại translation-gateway -> netns cũ chỉ còn lo; sidecar phải thoát (!= 0) để restart policy
+    # cho nó nhập netns mới (thấy ở smoke 8d: không thoát thì tunnel chết lặng lẽ).
+    net = tmp_path / "net"
+    (net / "lo").mkdir(parents=True)
+    for kv in ({"TUNNEL_MODE": "direct", "TUNNEL_DIRECT_SPECIALIST": "s:1"}, SSH):
+        r = subprocess.run(["sh", str(ENTRY)], env=_env(tmp_path, TUNNEL_NET_DIR=str(net), **kv), capture_output=True, text=True, timeout=20)
+        assert r.returncode != 0 and "netns" in r.stderr, kv
+
+
+WATCH = Path(__file__).resolve().parents[1] / "stack/lib/netns_watch.py"
+
+
+def _watch(tmp_path, ifaces, *cmd, **kw):
+    net = tmp_path / "net"
+    for i in ifaces:
+        (net / i).mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "NETNS_WATCH_DIR": str(net), "NETNS_WATCH_INTERVAL": "0.2"}
+    return subprocess.Popen([sys.executable, "-I", str(WATCH), *cmd], env=env, stderr=subprocess.PIPE, text=True, **kw)
+
+
+def test_worker_watch_exits_when_netns_lost(tmp_path):
+    p = _watch(tmp_path, ["lo"], "sleep", "30")
+    assert p.wait(10) == 1 and "netns" in p.stderr.read()
+
+
+def test_worker_watch_passes_exit_code_and_forwards_term(tmp_path):
+    assert _watch(tmp_path, ["lo", "eth0"], "sh", "-c", "exit 3").wait(10) == 3
+    p = _watch(tmp_path, ["lo", "eth0"], "sh", "-c", "trap 'exit 7' TERM; while :; do sleep 0.1; done")
+    time.sleep(1)
+    p.send_signal(signal.SIGTERM)
+    assert p.wait(10) == 7

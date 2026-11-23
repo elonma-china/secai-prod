@@ -288,7 +288,8 @@ services:
     image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
     profiles: [translation]
     restart: unless-stopped
-    command: ["python", "-m", "secai_gateway.translation.worker"]
+    # netns_watch: translation-gateway khởi động lại thì netns chung mất; worker thoát để Docker cho nó nhập netns mới.
+    command: ["python", "-I", "/opt/stack/netns_watch.py", "python", "-m", "secai_gateway.translation.worker"]
     env_file:
       - { path: .env, required: false }
     environment:
@@ -302,6 +303,7 @@ services:
     volumes:
       - translation-data:/app/data
       - *translation-tokenizer
+      - ./lib/netns_watch.py:/opt/stack/netns_watch.py:ro
     # Chung netns với translation-gateway: thấy cùng đầu tunnel 127.0.0.1:18868/18083 (specialist-tunnel), vẫn gọi
     # translation-converter qua DNS secai-net. Worker không mở cổng nên không đụng cổng của gateway dịch.
     network_mode: service:translation-gateway
@@ -316,7 +318,8 @@ services:
   #   TUNNEL_MODE=ssh    ssh -L tới loopback máy model (khoá + known_hosts trong TUNNEL_SECRETS_DIR, tự nối lại)
   #   TUNNEL_MODE=off    không làm gì (URL dịch là https://<IP private> trực tiếp)
   #   TUNNEL_MODE=direct CHỈ ĐỂ TEST: socat tới host:port trong secai-net (stub, acceptance/stubs/compose.stubs.yml)
-  # Docker tự khởi động lại translation-gateway (crash) thì netns cũ mất: chạy `docker compose up -d` (check.sh health bắt được).
+  # Docker tự khởi động lại translation-gateway thì netns cũ chỉ còn lo: sidecar và worker (netns_watch) tự thoát để restart
+  # policy cho chúng nhập netns mới; check.sh health bắt được nếu chưa hồi phục.
   specialist-tunnel:
     # Không dùng :? (compose nội suy cả khi profile tắt); bootstrap.sh kiểm TUNNEL_IMAGE khi bật translation.
     image: ${TUNNEL_IMAGE:-secai-specialist-tunnel:MISSING-set-TUNNEL_IMAGE}

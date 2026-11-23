@@ -151,7 +151,10 @@ def test_translation_profile_on_bridge():
     assert t["translation-gateway"]["command"][-1] == "18185"
     assert "18185" in t["translation-gateway"]["healthcheck"]["test"][1]
     assert "8131" not in t["translation-gateway"]["healthcheck"]["test"][1]
-    assert t["translation-worker"]["command"] == ["python", "-m", "secai_gateway.translation.worker"]
+    # Bọc bởi netns_watch: translation-gateway khởi động lại thì netns cũ chỉ còn lo -> worker thoát để Docker nối lại.
+    assert t["translation-worker"]["command"] == ["python", "-I", "/opt/stack/netns_watch.py",
+                                                   "python", "-m", "secai_gateway.translation.worker"]
+    assert "./lib/netns_watch.py:/opt/stack/netns_watch.py:ro" in t["translation-worker"]["volumes"]
     c = t["translation-converter"]
     assert c["image"] == "${CONVERTER_IMAGE:-secai-doc-convert:MISSING-set-CONVERTER_IMAGE}"
     assert c["environment"]["CONVERTER_TOKEN"] == "${TRANSLATE_V2_CONVERTER_TOKEN:-}"
