@@ -85,13 +85,26 @@ def next_steps(code: str, stage: str | None, has_code: bool) -> list[str]:
         else:
             steps.append(_stage_step(stage))
     if has_code:
-        steps.append("Chạy code nháp bên dưới với target và đối chiếu output; sửa theo kết quả quan sát được.")
+        steps.append("Chạy code nháp với target và đối chiếu output; sửa theo kết quả quan sát được.")
     return steps
 
 
 def _clip(text: str, n: int) -> str:
     one = " ".join(text.split())
     return one if len(one) <= n else one[: n - 1] + "…"
+
+
+def short_cve(c: dict, max_desc: int = 200) -> str:
+    """Một dòng: 'CVE-… · CVSS x — <câu đầu của mô tả>' (cắt ở ranh giới câu/từ)."""
+    head = " · ".join(x for x in (c["id"], f"CVSS {c['cvss']}" if c.get("cvss") is not None else "") if x)
+    desc = " ".join((c.get("description") or "").split())
+    if not desc:
+        return head
+    m = re.match(r"(.+?[.!?])(\s|$)", desc)
+    first = m.group(1) if m and len(m.group(1)) >= 20 else desc
+    if len(first) > max_desc:
+        first = first[:max_desc].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return f"{head} — {first}"
 
 
 def _fmt_cve(c: dict) -> list[str]:
@@ -134,9 +147,26 @@ def build_handoff(*, cve: dict, target: str, stage: str | None, stage_label: str
     return text
 
 
-def one_line_reason(cve: str, target: str, failure_code: str) -> str:
-    return (f"Chưa khai thác được {cve} trên {target}: {FAILURE_LABELS.get(failure_code, failure_code)}. "
-            "Xem mục BÀN GIAO trong Terminal để làm tiếp.")
+_REASON_MAX = 900
+
+
+def compact_reason(*, cve: dict, target: str, stage: str | None, stage_label: str, failure_code: str,
+                   fingerprint: str | None, has_code: bool) -> str:
+    """Ô Reason của FE hiện tại (khối kết quả bên dưới Terminal) là MỘT đoạn chữ thường, không xuống dòng và không có
+    khối CVE riêng khi thất bại. Nên gói vào đó: CVE là gì + mức đạt + lý do dừng + dấu vết target + việc nên làm tiếp.
+    Bản đầy đủ có cấu trúc nằm ở trường `handoff` (Terminal chỉ dành cho log hệ thống)."""
+    what = short_cve(cve).rstrip(".")
+    parts = [f"{what}.",
+             f"Chưa khai thác được trên {target} (đạt STAGE {stage or '1'}: {stage_label}): "
+             f"{FAILURE_LABELS.get(failure_code, failure_code)}."]
+    if fingerprint:
+        parts.append(f"Dấu vết target: {fingerprint} — đối chiếu với sản phẩm của CVE.")
+    steps = next_steps(failure_code, stage, has_code)
+    parts.append("Việc nên làm tiếp: " + " ".join(f"({i}) {x}" for i, x in enumerate(steps, 1)))
+    if has_code:
+        parts.append("Code nháp (CHƯA chạy ra bằng chứng) ở ô Code.")
+    text = " ".join(" ".join(parts).split())
+    return text if len(text) <= _REASON_MAX else text[: _REASON_MAX - 1].rstrip() + "…"
 
 
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
