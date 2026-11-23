@@ -11,9 +11,9 @@ _SRC = pathlib.Path(__file__).resolve().parent.parent / "stack/images/pentestcod
 
 def _load(monkeypatch, gid=None):
     if gid is None:
-        monkeypatch.delenv("VM_GATEWAY_GID", raising=False)
+        monkeypatch.delenv("VM_SHARED_GID", raising=False)
     else:
-        monkeypatch.setenv("VM_GATEWAY_GID", str(gid))
+        monkeypatch.setenv("VM_SHARED_GID", str(gid))
     spec = importlib.util.spec_from_file_location("vm_supervisor_perms", _SRC)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -30,15 +30,15 @@ def _ensure(monkeypatch, tmp_path, gid=None):
     return sup, calls
 
 
-def test_home_group_is_gateway_gid_mode_2770(monkeypatch, tmp_path):
+def test_home_group_is_shared_gid_mode_2770(monkeypatch, tmp_path):
     sup, calls = _ensure(monkeypatch, tmp_path)
     uid, home = sup.ensure_user(3)
     assert (uid, home) == (20003, f"{tmp_path}/slot3")
-    assert calls["chown"] == [(home, 20003, 999)]
+    assert calls["chown"] == [(home, 20003, 10100)]
     assert calls["chmod"] == [(home, 0o2770)]
 
 
-def test_gateway_gid_from_env(monkeypatch, tmp_path):
+def test_shared_gid_from_env(monkeypatch, tmp_path):
     sup, calls = _ensure(monkeypatch, tmp_path, gid=12345)
     _, home = sup.ensure_user(1)
     assert calls["chown"][0] == (home, 20001, 12345)
@@ -192,4 +192,4 @@ def test_sweeper_loop_sweeps_every_slot(monkeypatch):
     waits = iter([False, True])
     monkeypatch.setattr(sup.stop, "wait", lambda t: next(waits))
     sup.sweeper()
-    assert seen == [(f"/r/slot{i}", 20000 + i, 999) for i in (1, 2, 3)]
+    assert seen == [(f"/r/slot{i}", 20000 + i, 10100) for i in (1, 2, 3)]

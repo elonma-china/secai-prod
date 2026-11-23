@@ -24,6 +24,7 @@ x-vm: &vm
   environment: &vmenv
     VM_SLOTS: ${VM_SLOTS:-12}
     VM_HOME_ROOT: /ias-pool-home
+    VM_SHARED_GID: ${VM_SHARED_GID:-10100}
     OPENCODE_AUTO_UPDATE: "false"
     OPENCODE_ENABLE_QUESTION_TOOL: "true"
     OPENCODE_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
@@ -121,6 +122,7 @@ services:
   gateway:
     image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
     restart: unless-stopped
+    group_add: ["${VM_SHARED_GID:-10100}"]   # nhóm chung với VM để dọn HOME slot; không phụ thuộc gid chính của user app trong image
     command: ["uvicorn", "secai_gateway.unified_app:app", "--host", "0.0.0.0", "--port", "8131"]
     env_file:
       - { path: .env, required: false }
@@ -155,7 +157,7 @@ services:
       - ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/poc
       - ${DATA_ROOT:?set DATA_ROOT}/poc/store:/srv/poc-store
       - ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/poc-sources:ro
-      # HOME slot: supervisor đặt nhóm = gid của user app (VM_GATEWAY_GID, mặc định 999 = gid thật trong image), mode 2770, và quét .ias mỗi 2 s, để gateway dọn được engagements.
+      # HOME slot: supervisor đặt nhóm VM_SHARED_GID (gateway có nhóm này qua group_add), mode 2770, quét .ias mỗi 2 s, để gateway dọn được engagements.
       - pool-home-a:/ias-pool-home-a
       - pool-home-b:/ias-pool-home-b
       # Bind mount tệp thiếu làm Docker tạo THƯ MỤC và gateway không khởi động: `bootstrap.sh init` luôn tạo tệp này trước `up`.

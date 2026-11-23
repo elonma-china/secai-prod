@@ -209,3 +209,9 @@ def test_vm_healthcheck_uses_ias_user_and_has_no_password_branch():
         assert 'curl -fsS -u "ias:$$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:$$VM_PORT_BASE/global/health' in auth
         assert "-u" not in plain and plain.startswith("curl -fsS http://127.0.0.1:$$VM_PORT_BASE/global/health")
         assert "opencode:" not in cmd
+
+
+def test_shared_gid_for_gateway_and_vms():
+    assert "${VM_SHARED_GID:-10100}" in services()["gateway"]["group_add"]
+    for s in services("exploit").values():
+        assert s["environment"]["VM_SHARED_GID"] == "${VM_SHARED_GID:-10100}"
