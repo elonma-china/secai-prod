@@ -163,6 +163,12 @@ b = min(ok, key=lambda o: o["dph_total"]); print(b["id"], b["dph_total"])' "$cap
     if [ -n "${VAST_API_KEY:-}" ] && [ "$VAST_API_KEY" != "$(tr -d '[:space:]' <"$KEYFILE")" ]; then
         die "VAST_API_KEY trong môi trường khác khoá trong $KEYFILE: timer sẽ dùng khoá ở tệp (có thể là tài khoản khác). Bỏ VAST_API_KEY hoặc đồng bộ tệp"
     fi
+    # Khoá 2FA (vast_tfa_key): một số bản CLI ưu tiên nó hơn tệp khoá/env, và timer (không có env) dùng tệp: nếu khác thì up và timer
+    # có thể là hai tài khoản khác nhau. Bắt buộc mọi cách phân giải (env, tfa, tệp khoá) ra cùng một khoá; show user bên dưới dùng đúng nó.
+    local tfa="$(dirname "$KEYFILE")/vast_tfa_key"
+    if [ -s "$tfa" ] && [ "$(tr -d '[:space:]' <"$tfa")" != "$(tr -d '[:space:]' <"$KEYFILE")" ]; then
+        die "$tfa khác $KEYFILE: CLI vastai có thể ưu tiên khoá 2FA nên up và timer có thể thành hai tài khoản khác nhau. Đồng bộ hoặc gỡ vast_tfa_key"
+    fi
     # .env sẽ rời máy này: không được chứa khoá tài khoản Vast (khoá đọc trong python qua tệp/môi trường, không qua argv, không in).
     python3 -I - "$EVAL_ENV_FILE" "$KEYFILE" "$(dirname "$KEYFILE")/vast_tfa_key" "$HOME/.vast_api_key" <<'PY' || die "$EVAL_ENV_FILE chứa khoá API tài khoản Vast: từ chối đẩy sang máy thuê (gỡ nó khỏi tệp)"
 import os, sys

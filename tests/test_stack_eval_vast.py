@@ -417,12 +417,31 @@ def _pending(box, **kw):
     write_state(box, id_="", label="secai-stack-eval-20261123-ab12", pending=True, deadline=int(time.time()) - 5, **kw)
 
 
+def test_abandon_needs_explicit_console_confirmation_and_prints_instruction_first(box):
+    _pending(box)
+    r = sh(DESTROY, "--abandon-pending", b=box)
+    assert r.returncode == 2 and log(box, "systemctl") == []
+    assert "console" in r.stderr.lower() and "secai-stack-eval-20261123-ab12" in r.stderr and "--confirm-console-checked" in r.stderr
+    assert "trễ" in r.stderr  # danh sach co the tre ngay sau create
+    assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
+
+
+def test_abandon_refused_with_other_account_even_if_list_is_empty(box):
+    _pending(box)
+    set_mode(box, "account_id", "9999")  # khoa khac tai khoan: danh sach rong hop le nhung vo nghia
+    r = sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box)
+    assert r.returncode == 5 and log(box, "systemctl") == []
+    assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
+    write_state(box, id_="", label="secai-stack-eval-20261123-ab12", pending=True, deadline=1, account_id="")
+    assert sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box).returncode == 3  # khong co danh tinh
+
+
 def test_abandon_refused_while_up_holds_lock(box):  # (A) up con dang cho create
     _pending(box)
     holder = subprocess.Popen(["flock", "-n", str(box.sdir / ".lock"), "sleep", "20"])
     try:
         time.sleep(0.5)
-        r = sh(DESTROY, "--abandon-pending", b=box)
+        r = sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box)
         assert r.returncode == 3 and log(box, "systemctl") == []
         assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
     finally:
@@ -432,7 +451,7 @@ def test_abandon_refused_while_up_holds_lock(box):  # (A) up con dang cho create
 def test_abandon_refused_when_instance_id_already_recorded(box):  # (B) ID da ghi nhung state chua cap nhat / danh sach tre
     _pending(box)
     (box.sdir / "instance.id").write_text("777\n")
-    r = sh(DESTROY, "--abandon-pending", b=box)
+    r = sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box)
     assert r.returncode == 3 and log(box, "systemctl") == []
     assert "abandoned_at" not in json.loads((box.sdir / "state.json").read_text())
 
@@ -440,10 +459,10 @@ def test_abandon_refused_when_instance_id_already_recorded(box):  # (B) ID da gh
 def test_abandon_refused_when_label_found_or_list_unreadable(box):
     _pending(box)
     add_instance(box, 777, "secai-stack-eval-20261123-ab12", 0.25)
-    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+    assert sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box).returncode == 3
     box.fake.joinpath("instances.json").write_text(json.dumps([PRODROW]))
     set_mode(box, "list_mode", "garbage")
-    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+    assert sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box).returncode == 3
     assert log(box, "systemctl") == [] and destroys(box) == []
 
 
@@ -497,14 +516,14 @@ def test_destroy_fallback_without_state_honors_expected_label(box):
 def test_destroy_abandon_pending_requires_flag_stops_timers_and_unblocks_next_up(box):
     lab = "secai-stack-eval-20261123-ab12"
     write_state(box, id_="", label=lab, pending=True, deadline=int(time.time()) - 5)
-    r = sh(DESTROY, "--abandon-pending", b=box)
+    r = sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box)
     assert r.returncode == 0 and destroys(box) == []
     assert any("tB.timer" in x for x in log(box, "systemctl"))
     assert "abandoned_at" in json.loads((box.sdir / "state.json").read_text())
     assert sh(EVAL, "up", b=box).returncode == 0  # state da bo => cho phep up moi
     # khong dung cho state da co ID
     write_state(box)
-    assert sh(DESTROY, "--abandon-pending", b=box).returncode == 3
+    assert sh(DESTROY, "--abandon-pending", "--confirm-console-checked", b=box).returncode == 3
 
 
 @pytest.mark.parametrize("what", ["other_account", "user_fails", "no_account_in_state"])
@@ -684,8 +703,8 @@ def test_up_refuses_when_env_key_differs_from_key_file_or_file_missing(box):
     assert sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY}).returncode != 0  # van thieu tep khoa cho timer
 
 
-@pytest.mark.parametrize("fname", ["vast_tfa_key", "../../.vast_api_key"])
-def test_up_refuses_env_file_with_tfa_or_legacy_key_and_container_key_equal_to_them(box, fname):
+@pytest.mark.parametrize("fname", ["../../.vast_api_key"])
+def test_up_refuses_env_file_with_legacy_key_and_container_key_equal_to_it(box, fname):
     kf = box.tmp / "home/.config/vastai" / fname
     kf.write_text("OTHERKEY_MARK_88")
     Path(box.env["EVAL_ENV_FILE"]).write_text("X=OTHERKEY_MARK_88\n")
@@ -694,6 +713,17 @@ def test_up_refuses_env_file_with_tfa_or_legacy_key_and_container_key_equal_to_t
     Path(box.env["EVAL_ENV_FILE"]).write_text(f"QWEN_API_KEY={SECRET}\n")
     r = sh(EVAL, "up", b=box, extra={"EVAL_CONTAINER_API_KEY": "OTHERKEY_MARK_88"})
     assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+
+
+def test_up_refuses_tfa_key_differing_from_key_file_or_env(box):
+    tfa = box.tmp / "home/.config/vastai/vast_tfa_key"
+    tfa.write_text("TFAOTHER_MARK_3")  # CLI co the uu tien tfa => up va timer co the thanh hai tai khoan khac nhau
+    r = sh(EVAL, "up", b=box)
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create") and "TFAOTHER_MARK_3" not in r.stdout + r.stderr
+    r = sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY})  # env khop tep khoa nhung tfa khac
+    assert r.returncode != 0 and not lines_with(box, "vastai", "create")
+    tfa.write_text(VASTKEY)  # tfa trung tep khoa => moi cach phan giai ra cung mot khoa
+    assert sh(EVAL, "up", b=box, extra={"VAST_API_KEY": VASTKEY}).returncode == 0
 
 
 def test_up_requires_linger_and_sets_runtime_max_on_timers(box):

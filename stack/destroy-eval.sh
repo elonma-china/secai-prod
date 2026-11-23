@@ -29,9 +29,10 @@ WAIT="${STACK_EVAL_DESTROY_WAIT:-10}"
 
 alert() { [ -d "$SD" ] && printf '%s destroy-eval: %s\n' "$(date '+%F %T')" "$*" >>"$SD/ALERT.txt" || true; }
 refuse() { alert "REFUSED: $*"; echo "!!!!!! DESTROY-EVAL REFUSED (không huỷ gì): $* !!!!!!" >&2; exit 3; }
-[ "$#" -eq 1 ] && { [ "$1" = "--yes" ] || [ "$1" = "--force-deadline" ] || [ "$1" = "--abandon-pending" ]; } \
-    || { echo "usage: destroy-eval.sh --yes|--force-deadline|--abandon-pending (không nhận ID; ID lấy từ state.json)" >&2; exit 2; }
-MODE="$1"
+{ [ "$#" -eq 1 ] && { [ "$1" = "--yes" ] || [ "$1" = "--force-deadline" ] || [ "$1" = "--abandon-pending" ]; }; } \
+    || { [ "$#" -eq 2 ] && [ "$1" = "--abandon-pending" ] && [ "$2" = "--confirm-console-checked" ]; } \
+    || { echo "usage: destroy-eval.sh --yes|--force-deadline|--abandon-pending [--confirm-console-checked] (không nhận ID; ID lấy từ state.json)" >&2; exit 2; }
+MODE="$1"; CONFIRM="${2:-}"
 [[ "$RETRIES" =~ ^[1-9][0-9]*$ ]] || refuse "STACK_EVAL_DESTROY_RETRIES không hợp lệ"
 
 ID=""; LABEL=""; CAP=0.30; TIMERS=""; PENDING=0; DEADLINE=0; ACCOUNT=""
@@ -111,6 +112,19 @@ os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
 
+# Danh tính tài khoản (xem đầu tệp). IDENT=ok chỉ khi state có account_id và khớp tài khoản hiện tại.
+IDENT=unknown
+if [ -n "$ACCOUNT" ]; then
+    cur="$(vastai show user --raw </dev/null 2>/dev/null | python3 -I -c 'import json,sys
+d = json.load(sys.stdin); print(int(d["id"]))' 2>/dev/null)" || cur=""
+    if [ -z "$cur" ] || [ "$cur" != "$ACCOUNT" ]; then
+        alert "ACCOUNT MISMATCH/UNKNOWN: state account_id=$ACCOUNT, hiện tại='$cur'. Khoá vastai của timer khác tài khoản đã thuê: KHÔNG chứng minh được gì. Kiểm console Vast, instance ${ID:-<pending $LABEL>}."
+        echo "!!!!!! destroy-eval: danh tính tài khoản vastai KHÔNG khớp state (state=$ACCOUNT, hiện tại='${cur:-không đọc được}'); không huỷ, không kết luận 'đã biến mất'; giữ timer. Kiểm ~/.config/vastai/vast_api_key và console Vast (instance ${ID:-label $LABEL}). !!!!!!" >&2
+        exit 5
+    fi
+    IDENT=ok
+fi
+
 # check_id: ID phải là một số nguyên đơn, không phải prod (cứng), không nằm trong danh sách bảo vệ.
 check_id() {
     [[ "$ID" =~ ^[1-9][0-9]*$ ]] || refuse "ID '$ID' không phải một số nguyên đơn (rỗng/glob/nhiều ID/sai kiểu)"
@@ -127,6 +141,11 @@ check_id() {
 
 if [ "$MODE" = "--abandon-pending" ]; then
     [ "$PENDING" = 1 ] && [ -z "$ID" ] || refuse "--abandon-pending chỉ dùng cho state pending chưa có ID"
+    if [ "$CONFIRM" != "--confirm-console-checked" ]; then
+        echo "destroy-eval: KHÔNG bỏ state pending khi chưa xác nhận. Mở console Vast (https://console.vast.ai/instances/) và tìm label '$LABEL'; danh sách API có thể trễ vài phút ngay sau create nên 'không thấy' qua API KHÔNG đủ. Nếu console không có instance nào mang label đó, chạy lại: destroy-eval.sh --abandon-pending --confirm-console-checked" >&2
+        exit 2
+    fi
+    [ "$IDENT" = ok ] || refuse "không xác nhận được danh tính tài khoản (state thiếu account_id): danh sách có thể thuộc tài khoản khác, không bỏ"
     # Không được tranh với `up` đang chờ create (nó sẽ ghi ID sau khi ta dừng timer): cần giữ được khoá của up.
     exec 7>"$SD/.lock"
     flock -n 7 || refuse "'up' đang chạy (giữ $SD/.lock); chờ nó kết thúc rồi thử lại"
@@ -138,19 +157,6 @@ if [ "$MODE" = "--abandon-pending" ]; then
     echo "destroy-eval: đã bỏ state pending (label $LABEL) theo yêu cầu của operator; timer đã dừng. Bạn đã kiểm console Vast xem label đó có instance nào không?"
     exit 0
 fi
-# Danh tính tài khoản (xem đầu tệp). IDENT=ok chỉ khi state có account_id và khớp tài khoản hiện tại.
-IDENT=unknown
-if [ -n "$ACCOUNT" ]; then
-    cur="$(vastai show user --raw </dev/null 2>/dev/null | python3 -I -c 'import json,sys
-d = json.load(sys.stdin); print(int(d["id"]))' 2>/dev/null)" || cur=""
-    if [ -z "$cur" ] || [ "$cur" != "$ACCOUNT" ]; then
-        alert "ACCOUNT MISMATCH/UNKNOWN: state account_id=$ACCOUNT, hiện tại='$cur'. Khoá vastai của timer khác tài khoản đã thuê: KHÔNG chứng minh được gì. Kiểm console Vast, instance ${ID:-<pending $LABEL>}."
-        echo "!!!!!! destroy-eval: danh tính tài khoản vastai KHÔNG khớp state (state=$ACCOUNT, hiện tại='${cur:-không đọc được}'); không huỷ, không kết luận 'đã biến mất'; giữ timer. Kiểm ~/.config/vastai/vast_api_key và console Vast (instance ${ID:-label $LABEL}). !!!!!!" >&2
-        exit 5
-    fi
-    IDENT=ok
-fi
-
 if [ "$PENDING" = 1 ] && [ -z "$ID" ]; then
     case "$LABEL" in secai-stack-eval-?*) ;; *) refuse "state pending nhưng label '$LABEL' không bắt đầu secai-stack-eval-" ;; esac
     if [ -s "$SD/instance.id" ]; then
