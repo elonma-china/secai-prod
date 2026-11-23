@@ -6,7 +6,7 @@ Chat tiếp tục dùng `REVIEW_LIVE_SAMPLE_RATE=0.1`, `REVIEW_LIVE_COOLDOWN_SEC
 
 Pipeline không tự huấn luyện khi đạt số lượng lượt hỏi. Một đợt huấn luyện được operator khởi chạy; không tự đổi model và không tự sửa đáp án đang trả khách. Chưa có expert dataset thật: chưa có artifact Qwen3 đủ điều kiện chạy sản phẩm.
 
-Devspace hiện có nút khởi chạy **job QA thật trên Vast**, với trạng thái và kết quả lưu riêng. API này chỉ nhận campaign QA/demo, không thay luồng production bên dưới và không kích hoạt artifact cho chatbot. Xem [deployment job](../deploy/reward-training/README.md) và [kiểm thử 1.000 cặp trên Vast](test-results/reward-vast-devspace-training-20261006.md).
+Devspace hiện có nút khởi chạy **job QA thật trên Vast**, với trạng thái và kết quả lưu riêng. API này chỉ nhận campaign QA/demo, không thay luồng production bên dưới và không kích hoạt artifact cho chatbot. Xem [deployment job](../../deploy/reward-training/README.md) và [kiểm thử 1.000 cặp trên Vast](../archive/test-results/reward-vast-devspace-training-20261006.md).
 
 ## 1. Thu thập và duyệt
 

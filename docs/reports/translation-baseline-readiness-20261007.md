@@ -2,7 +2,7 @@
 
 Trạng thái: **chưa có baseline live mới**. Tài liệu này xác định công cụ dùng lại và bằng chứng còn thiếu; test synthetic không chứng minh bản dịch đúng nghĩa.
 
-Sau khi người dùng yêu cầu đo thực, đã hoàn tất [chẩn đoán live ngày 2026-10-07](../test-results/translation-live-diagnostic-20261007.md): v3 có 16 response 503 và 20 mẫu chưa chạy; probe specialist trả `POISONED`. Luồng legacy vi↔en riêng trả đủ bốn bản dịch, không phát hiện lỗi nghĩa trọng yếu theo rubric đã cố định. Đây là mẫu chẩn đoán nhỏ, chưa thay thế baseline đủ 18 hướng hay nghiệm thu model.
+Sau khi người dùng yêu cầu đo thực, đã hoàn tất [chẩn đoán live ngày 2026-10-07](../archive/test-results/translation-live-diagnostic-20261007.md): v3 có 16 response 503 và 20 mẫu chưa chạy; probe specialist trả `POISONED`. Luồng legacy vi↔en riêng trả đủ bốn bản dịch, không phát hiện lỗi nghĩa trọng yếu theo rubric đã cố định. Đây là mẫu chẩn đoán nhỏ, chưa thay thế baseline đủ 18 hướng hay nghiệm thu model.
 
 Đã bổ sung [lệnh diễn tập offline đầy đủ](translation-offline-rehearsal-20261007.md), gồm tạo fixture và kiểm kết quả, không cần chuẩn bị corpus thật. Luna chạy hai lượt trên thư mục mới: cả hai exit 0, hash của bảy artifact giống nhau; chạy lại cùng thư mục bị từ chối trước khi ghi đè. Ba lượt có tổng lịch 6 mẫu: một output dựng sẵn chưa chấm, một timeout và bốn output thiếu; quality/release đều `BLOCKED`. Đây là kiểm tra tính tái lập của harness, chưa phải baseline ngôn ngữ. Evidence: `/tmp/secai-quality-followup-20261007/rehearsal-verification.md`.
 

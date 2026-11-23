@@ -17,7 +17,7 @@ Kết quả: `results/<function>_<ts>.jsonl` (raw response + grade từng sample
 
 ## Bộ `chat_history/` — lịch sử chat (multi-conversation)
 
-Eval riêng cho tính năng `/ai/conversations/*` (xem `docs/chat-history-api-guide.md`), chấm
+Eval riêng cho tính năng `/ai/conversations/*` (xem `docs/api/chat-history-api-guide.md`), chấm
 **3 tiêu chí thang 0–100**: `do_chinh_xac` (độ chính xác), `on_dinh` (ổn định), `nho_ngu_canh`
 (nhớ ngữ cảnh). Hai chế độ:
 

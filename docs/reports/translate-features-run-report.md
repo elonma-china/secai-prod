@@ -10,7 +10,7 @@ Backend trên base `main` tại `ce9cd47ee1273018fec1c5cbab944a86d68d6ed5`; khô
 
 Warden áp dụng đúng quy tắc người dùng: “Nếu số lỗi không giảm sau 2 vòng liên tiếp, dừng task đó, ghi nguyên nhân và các lựa chọn, chuyển sang task khác nếu độc lập được.” Review import vòng 1 có 2 lỗi High; vòng 2 vẫn còn 2 lỗi High thuộc cùng nhóm hợp đồng. Các ca tái hiện cũ đã được sửa nhưng chưa xử lý hết nhóm lỗi. Không tiếp tục sửa import hoặc helper dùng chung để đi vòng điều kiện dừng. Đánh giá model OCR độc lập được tiếp tục trong giới hạn đã duyệt.
 
-Bằng chứng: [review vòng 1](../reviews/import-file-translate-round-1.md), [review vòng 2](../reviews/import-file-translate-round-2.md), [quyết định warden](../loop/warden-review-round-2.md).
+Bằng chứng: [review vòng 1](../archive/reviews/import-file-translate-round-1.md), [review vòng 2](../archive/reviews/import-file-translate-round-2.md), [quyết định warden](../loop/warden-review-round-2.md).
 
 ## Nhánh và checkpoint
 
@@ -101,7 +101,7 @@ Cần quyết định mở lại sau điều kiện dừng, với cách tiếp c
 - [Hợp đồng API mới](../api/translate-v2-contract.md) — chưa phải tài liệu bàn giao đã nghiệm thu
 - [STATE](../loop/STATE.md), [LOG](../loop/LOG.md)
 - [Kiểm thử import](/home/ict/secai-translate-import-wt/secai/secai-agent-gateway/docs/test-results/translate-v2-r1-code-evidence.md), [kiểm thử OCR](/home/ict/secai-translate-ocr-wt/secai/secai-agent-gateway/docs/test-results/translate-ocr-final.md)
-- [Lệnh baseline chính xác](../test-results/translate-baseline-command.md)
+- [Lệnh baseline chính xác](../archive/test-results/translate-baseline-command.md)
 - Tài liệu API bàn giao cuối `docs/api/translate-import-ocr.md` và báo cáo Vanguard chưa được tạo vì các cổng trước chưa đạt.
 
 Bằng chứng pytest OCR nguyên bản được lưu bền tại `/home/ict/secai-ocr-evidence/final-pytest-349df3c/`; SHA-256 JUnit `48895e2487a1a4cea8fee6c53d32afe0dea5b0f16b84cf76ac2d76c969e163e0`, stdout `d17f39e3d8aa8ee013836e529c5954a5627bde077c0a1932121817093de0c9d5`. Final OCR checkpoint `ff311c12f97a1dd453495b0ff2b9ca269a49aba2`; tracked worktree sạch, chỉ còn AGENTS.md do điều phối cung cấp chưa theo dõi.

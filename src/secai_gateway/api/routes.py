@@ -1326,7 +1326,7 @@ def register_routes(app: FastAPI, state: Any) -> None:
     # source_lang="xx", target_lang="zz") silently produced an unrecognizable instruction
     # instead of failing — reproduced live as HTTP 200 with a silently-ignored code instead
     # of an error. Validate against the real ISO 639-1 two-letter codes — a superset that
-    # covers everything the gateway documents/tests (vi, en — see docs/api-guide.md §3 and
+    # covers everything the gateway documents/tests (vi, en — see docs/api/api-guide.md §3 and
     # tests/test_translate_mask.py) while keeping any other language already reachable
     # through this same permissive field (e.g. "fr") working, unchanged. `None`/omitted
     # (→ the documented bidirectional vi/en auto-detect default) and the explicit sentinel

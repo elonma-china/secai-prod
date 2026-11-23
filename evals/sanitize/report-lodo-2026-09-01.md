@@ -1,7 +1,7 @@
 # Ư3 — Leave-one-hard-negative-family-out robustness check (2026-09-01)
 
 `metrics.json`'s in-distribution numbers can't answer whether the MOF hard-negative fix (round
-1–2, `docs/input-classifier-improvement-plan.md`) actually **generalizes** across phrasing
+1–2, `docs/design/input-classifier-improvement-plan.md`) actually **generalizes** across phrasing
 families, or whether the model just memorized each family's specific templates. This runs a
 genuine Leave-One-(family)-Out check: exclude an entire hard-negative family from training —
 not just some skeletons within it — retrain, and measure the false-positive rate on that

@@ -1,6 +1,6 @@
 # Báo cáo thông minh — sửa template + backend
 
-Đi kèm file phía FE: `secai-fe-devspace/BAO-CAO-THONG-MINH-YEU-CAU-FE.md`. File này mô tả phần
+Đi kèm file phía FE: `docs/frontend/BAO-CAO-THONG-MINH-YEU-CAU-FE.md`. File này mô tả phần
 backend cần sửa để nhận dữ liệu có cấu trúc và sinh report đúng yêu cầu khách hàng (số máy đã
 quét, tổng lỗ hổng theo mức độ, danh sách chi tiết).
 

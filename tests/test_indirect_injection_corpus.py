@@ -16,7 +16,7 @@ just not obey it), and the trusted system framing around it stays outside the ta
 This proves the WRAPPING MECHANISM is correct across a broad attack surface. It does NOT prove
 a live LLM actually respects <untrusted_content_policy> and refuses to comply with what's
 inside the wrapper — that requires a live judge/model call (out of reach offline; see
-docs/input-classifier-improvement-plan.md's Ư2 section for the same caveat on the cascade).
+docs/design/input-classifier-improvement-plan.md's Ư2 section for the same caveat on the cascade).
 """
 from __future__ import annotations
 

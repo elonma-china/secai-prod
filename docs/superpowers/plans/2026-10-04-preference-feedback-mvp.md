@@ -120,7 +120,7 @@ Export snapshot nhất quán trong transaction đọc, thứ tự item ID ổn �
 - Tạo `secai-fe-devspace/src/reviewApi.ts`, `reviewTypes.ts`, `screens/ReviewScreen.tsx`, `screens/review/ReviewPair.tsx`, `screens/review/ReviewAdmin.tsx`.
 - Sửa `secai-fe-devspace/src/App.tsx`, `types.ts`, `styles.css`: navigation và style cần thiết.
 - Tạo `tests/test_review_store.py`, `test_review_auth.py`, `test_review_api.py`, `test_review_export.py`.
-- Tạo `docs/api/review-mvp.md`, `docs/review-operator-guide.md` và fixture giả `tests/fixtures/review_pairs.jsonl`.
+- Tạo `docs/api/review-mvp.md`, `docs/operations/review-operator-guide.md` và fixture giả `tests/fixtures/review_pairs.jsonl`.
 
 ## Task 1 — Schema và lưu dữ liệu (2–3 ngày)
 

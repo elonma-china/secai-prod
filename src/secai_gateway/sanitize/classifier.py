@@ -329,7 +329,7 @@ def decode(vec: Any, head: _Head, settings: Any | None = None) -> InputVerdict:
     p_pii = _sigmoid(pii_logit)
     intent_idx = int(np.argmax(p_intent))
 
-    # Ư2 cascade (docs/input-classifier-improvement-plan.md): compute a SEPARATE, Platt-
+    # Ư2 cascade (docs/design/input-classifier-improvement-plan.md): compute a SEPARATE, Platt-
     # calibrated injection score (on the RAW LOGIT, not the already-sigmoided score) purely to
     # decide whether this falls in the shipped uncertain band — it does NOT feed the primary
     # ``injection`` threshold decision below, which stays on the raw sigmoid exactly as before.

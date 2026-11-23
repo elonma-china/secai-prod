@@ -54,7 +54,7 @@ Baseline đã đo offline ngày 2026-10-06 (reviewer độc lập):
 
 ## E. Kết quả sau khi triển khai (2026-10-07)
 
-Số đo, bảng điểm 100 câu và các tiêu chí chưa đạt: [kb-knowledge-grounding-2026-10-07.md](../test-results/kb-knowledge-grounding-2026-10-07.md). Tóm tắt trạng thái theo tiêu chí gốc:
+Số đo, bảng điểm 100 câu và các tiêu chí chưa đạt: [kb-knowledge-grounding-2026-10-07.md](../archive/test-results/kb-knowledge-grounding-2026-10-07.md). Tóm tắt trạng thái theo tiêu chí gốc:
 
 - **Đạt (số đo tự động hoặc đo trực tiếp):** G1 (prod, sau khi nạp tri thức, giống hệt baseline), G2 (chỉ còn 2 fail có sẵn), G4, G5 (theo cấu trúc), G6 (kể cả hybrid 114/114 sau khi thêm mở rộng Việt→Anh), S1, S2, S5 (9/10).
 - **Đạt có điều kiện:** G3 (rollback đã diễn tập trên lab; trên prod mới dry-run theo batch thật, cờ tắt ≡ HEAD ở routing/ngữ cảnh/prompt).

@@ -119,7 +119,7 @@ async def test_ias_simplified_chinese_code_is_accepted(field):
 @pytest.mark.parametrize("target_lang", ["en", "vi"])
 @pytest.mark.asyncio
 async def test_prod_used_target_langs_are_never_rejected(target_lang):
-    # The only two codes the FE (TranslateScreen.tsx) and docs/api-guide.md actually send —
+    # The only two codes the FE (TranslateScreen.tsx) and docs/api/api-guide.md actually send —
     # must keep working, unchanged, after the allow-list fix.
     runner = ScriptedRunner(response="translated")
     resp = await _post(runner, {"text": "Lỗ hổng bảo mật nghiêm trọng.", "target_lang": target_lang})

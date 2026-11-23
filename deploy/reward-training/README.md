@@ -1,6 +1,6 @@
 # Reward training QA trên Vast
 
-Dịch vụ này huấn luyện thật Qwen3-1.7B bằng LoRA và scalar head, nhưng chỉ nhận campaign có nhãn QA/demo. Artifact luôn `purpose=demo`; không có API kích hoạt model hoặc sửa cấu hình chatbot. Luồng production với danh tính chuyên gia và release policy vẫn dùng [operator CLI](../../docs/reward-qwen-operator.md).
+Dịch vụ này huấn luyện thật Qwen3-1.7B bằng LoRA và scalar head, nhưng chỉ nhận campaign có nhãn QA/demo. Artifact luôn `purpose=demo`; không có API kích hoạt model hoặc sửa cấu hình chatbot. Luồng production với danh tính chuyên gia và release policy vẫn dùng [operator CLI](../../docs/operations/reward-qwen-operator.md).
 
 ## Chuẩn bị riêng trên VPS
 
@@ -44,7 +44,7 @@ VPS xác minh export SHA-256, approval, campaign và chia theo prompt/source gro
 
 Có thể bật routes trong gateway hiện có, hoặc dùng `secai_gateway.reward.training_gateway:app` trên listener loopback riêng với cùng review DB/credentials. Lần Devspace dùng container relay riêng và giữ gateway chính. Static proxy đọc `.reward-training-upstream` hoặc `REWARD_TRAINING_GATEWAY_PROXY` để định tuyến riêng các path training; giữ chính sách kết nối và ánh xạ Bearer đang có. File env/token/upstream private không đưa vào Git.
 
-Đọc [bằng chứng chạy thật](../../docs/test-results/reward-vast-devspace-training-20261006.md) và kiểm unit/test auth trước rollout. Không dùng dữ liệu QA hoặc accuracy QA làm tiêu chí phát hành model.
+Đọc [bằng chứng chạy thật](../../docs/archive/test-results/reward-vast-devspace-training-20261006.md) và kiểm unit/test auth trước rollout. Không dùng dữ liệu QA hoặc accuracy QA làm tiêu chí phát hành model.
 
 ## Batch và tiến trình admin
 

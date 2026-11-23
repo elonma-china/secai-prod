@@ -1,6 +1,6 @@
 # API — Showcase hồ sơ nghiệm thu AI (Stage 1, đã triển khai)
 
-> Base URL demo hiện tại `http://127.0.0.1:8199` (production: `http://<gateway>:8131`). JSON, **không cần header xác thực** (đồng bộ các endpoint `/ai/*` hiện có — xem `docs/api-guide.md`). GET là chính, chỉ §L dùng POST.
+> Base URL demo hiện tại `http://127.0.0.1:8199` (production: `http://<gateway>:8131`). JSON, **không cần header xác thực** (đồng bộ các endpoint `/ai/*` hiện có — xem `docs/api/api-guide.md`). GET là chính, chỉ §L dùng POST.
 >
 > **Mọi số liệu đọc từ HỒ SƠ GỐC** `HO-SO-GOC-NGHIEM-THU-AI/` (mirror Drive `17Qq9hXVl...`, đã tải đủ 394 file) — không tính lại, không lấy từ bản làm việc cục bộ `FINETUNE/` hay `KPI-VA-GEN-TEST/`. Kiểm tra bằng `python3 scripts/audit_hosogoc.py --api <base>`.
 

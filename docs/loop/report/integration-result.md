@@ -18,7 +18,7 @@ Implementation integration **PASS** on `integration/report-feature`; live genera
 - Integrated FE `npm run build`: **PASS**, exit 0, temporary source copy with symlink to FE worker's existing node_modules; no dependency installation. Existing Vite chunk-size warning remains.
 - `git diff --check`: PASS. Root's prior real-router/SQLite browser smoke used a mocked model and was not repeated.
 - Full regression **NOT PASS / INCOMPLETE**: Warden baseline has 303 passed, 6 legacy dependency/fixture failures, 1 skipped; one interrupted test and 614 without results. No broad suite rerun.
-- Handoff evidence: [independent review](../../reviews/report-mvp-review.md), including historical FAIL and final PASS; [Warden baseline](../../test-results/report-mvp-baseline.md).
+- Handoff evidence: [independent review](../../archive/reviews/report-mvp-review.md), including historical FAIL and final PASS; [Warden baseline](../../archive/test-results/report-mvp-baseline.md).
 
 ## Future WIP coordination (simulation only)
 
