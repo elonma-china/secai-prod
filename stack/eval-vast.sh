@@ -395,7 +395,17 @@ if [ "$ABORT" = 0 ]; then
     QIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q qdrant)")
     abort_on_fail step restore_qdrant ./restore-data.sh --qdrant-url "http://$QIP:6333" ../pkg
 fi
-step up docker compose up -d --wait
+# Không dùng `up --wait`: translation-worker cố ý không có healthcheck (kế thừa healthcheck 8131 luôn hỏng trên bridge) nên --wait báo lỗi.
+up_and_wait() {
+    docker compose up -d || return 1
+    local i
+    for i in $(seq 1 60); do
+        [ -z "$(docker ps -q --filter health=starting)" ] && [ -z "$(docker ps -q --filter health=unhealthy)" ] && return 0
+        sleep 5
+    done
+    docker compose ps -a; return 1
+}
+step up up_and_wait
 step check ./check.sh all
 step acceptance env ACCEPT_OUT="$R/acceptance" ./acceptance/run-api.sh http://127.0.0.1:8131
 # summary.json: rc từng bước + kết quả ca của LẦN NÀY; acceptance=null nghĩa là bộ ca không chạy.
