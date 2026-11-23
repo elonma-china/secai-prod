@@ -16,6 +16,7 @@ FAILURE_LABELS: dict[str, str] = {
     "TIMEOUT": "hết thời gian cho phép",
     "ENGINE_ERROR": "lỗi engine/kết nối giữa chừng",
     "AGENT_STUCK": "agent không có tiến triển",
+    "TARGET_MISMATCH": "bằng chứng đến từ cổng khác, không phải target đã nhập",
     "NO_IMPACT": "chưa chứng minh được tác động của lỗ hổng",
 }
 _CODE_MAX_LINES = 60
@@ -28,11 +29,14 @@ _TEXT_MAX = 16000
 
 
 def classify_failure(*, stage: str | None, invalid_input: bool = False, unreachable: bool = False,
-                     watchdog: str | None = None, session_error: str | None = None) -> str:
+                     target_mismatch: int | None = None, watchdog: str | None = None,
+                     session_error: str | None = None) -> str:
     if invalid_input:
         return "INVALID_INPUT"
     if unreachable:
         return "TARGET_UNREACHABLE"
+    if target_mismatch:
+        return "TARGET_MISMATCH"
     if watchdog:
         return "TIMEOUT" if "vượt quá" in watchdog else "AGENT_STUCK"
     if session_error:
@@ -66,9 +70,13 @@ def _stage_step(stage: str | None) -> str:
     return "Đã có tiến triển một phần: hoàn tất bước tạo tác động (RCE/đọc file/bypass xác thực) và lưu output làm bằng chứng."
 
 
-def next_steps(code: str, stage: str | None, has_code: bool) -> list[str]:
+def next_steps(code: str, stage: str | None, has_code: bool, mismatch_port: int | None = None) -> list[str]:
     steps: list[str] = []
-    if code == "INVALID_INPUT":
+    if code == "TARGET_MISMATCH":
+        steps.append(f"Bằng chứng đến từ cổng {mismatch_port}, không phải cổng bạn nhập: agent đã thấy sản phẩm của CVE ở đó. "
+                     f"Nếu đó là target bạn muốn, chạy lại với cổng {mismatch_port}.")
+        steps.append("Nếu cổng bạn nhập mới là target đúng, kiểm tra lại sản phẩm và phiên bản đang chạy ở cổng đó.")
+    elif code == "INVALID_INPUT":
         steps.append("Sửa CVE (dạng CVE-YYYY-NNNNN) và target (host:port hoặc http(s)://host:port) rồi chạy lại.")
     elif code == "TARGET_UNREACHABLE":
         steps.append("Kiểm tra địa chỉ và port của target, lab đã khởi động chưa, và gateway có route tới target không.")
@@ -117,7 +125,8 @@ def _fmt_cve(c: dict) -> list[str]:
 
 
 def build_handoff(*, cve: dict, target: str, stage: str | None, stage_label: str, failure_code: str,
-                  detail: str | None, fingerprint: str | None, attempted: list[str], code: str | None) -> str:
+                  detail: str | None, fingerprint: str | None, attempted: list[str], code: str | None,
+                  mismatch_port: int | None = None) -> str:
     L: list[str] = ["══════════ BÀN GIAO (chưa khai thác được) ══════════"]
     L += _fmt_cve(cve)
     L.append("")
@@ -138,11 +147,11 @@ def build_handoff(*, cve: dict, target: str, stage: str | None, stage_label: str
             L.append(f"  … (cắt {len(lines) - _CODE_MAX_LINES} dòng; đầy đủ ở trường code)")
     else:
         L.append("Chưa có code nháp.")
-    L += ["", "Việc nên làm tiếp:"] + [f"  {i}. {s}" for i, s in enumerate(next_steps(failure_code, stage, bool(body)), 1)]
+    L += ["", "Việc nên làm tiếp:"] + [f"  {i}. {s}" for i, s in enumerate(next_steps(failure_code, stage, bool(body), mismatch_port), 1)]
     L.append("══════════════════════════════════════════════════")
     text = "\n".join(L)
     if len(text) > _TEXT_MAX:   # chặn tổng (mỗi lệnh/dòng code dài); phần cuối (việc nên làm tiếp) luôn giữ
-        tail = "\n".join(L[-(len(next_steps(failure_code, stage, bool(body))) + 3):])
+        tail = "\n".join(L[-(len(next_steps(failure_code, stage, bool(body), mismatch_port)) + 3):])
         text = text[: _TEXT_MAX - len(tail) - 40].rstrip() + "\n  … (cắt bớt)\n\n" + tail
     return text
 
@@ -151,7 +160,7 @@ _REASON_MAX = 900
 
 
 def compact_reason(*, cve: dict, target: str, stage: str | None, stage_label: str, failure_code: str,
-                   fingerprint: str | None, has_code: bool) -> str:
+                   fingerprint: str | None, has_code: bool, mismatch_port: int | None = None) -> str:
     """Ô Reason của FE hiện tại (khối kết quả bên dưới Terminal) là MỘT đoạn chữ thường, không xuống dòng và không có
     khối CVE riêng khi thất bại. Nên gói vào đó: CVE là gì + mức đạt + lý do dừng + dấu vết target + việc nên làm tiếp.
     Bản đầy đủ có cấu trúc nằm ở trường `handoff` (Terminal chỉ dành cho log hệ thống)."""
@@ -161,7 +170,7 @@ def compact_reason(*, cve: dict, target: str, stage: str | None, stage_label: st
              f"{FAILURE_LABELS.get(failure_code, failure_code)}."]
     if fingerprint:
         parts.append(f"Dấu vết target: {fingerprint} — đối chiếu với sản phẩm của CVE.")
-    steps = next_steps(failure_code, stage, has_code)
+    steps = next_steps(failure_code, stage, has_code, mismatch_port)
     parts.append("Việc nên làm tiếp: " + " ".join(f"({i}) {x}" for i, x in enumerate(steps, 1)))
     if has_code:
         parts.append("Code nháp (CHƯA chạy ra bằng chứng) ở ô Code.")
