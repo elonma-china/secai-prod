@@ -32,6 +32,46 @@
 
 ---
 
+### Task 0: File tiêu chí nghiệm thu + data test + số gốc của prod
+
+**Điều kiện bắt đầu cả plan:** thread T3 `adafef05-7370-4dee-8779-8286cc6b4c52` đã mở PR cho nhánh `fix/ev2-target-scope` (chủ dự án yêu cầu chờ). Kiểm bằng `gh pr list --head fix/ev2-target-scope`.
+
+**Files:**
+- Create: `stack/ACCEPTANCE.md`, `stack/acceptance/cases.json`, `stack/acceptance/ui.spec.ts`, `stack/acceptance/run-api.sh`
+- Output (không commit, `local/`): `local/stack-acceptance/<ngày>-<prod|stack>/`
+
+**Bối cảnh đã kiểm trên https://ias.id.vn (2026-11-23, tài khoản do chủ dự án cấp — đọc từ env `IAS_UI_USER`/`IAS_UI_PASS`, không ghi vào repo):**
+- Giao diện production là frontend của sản phẩm IAS (ngoài repo này), gọi gateway :8131. Menu "Nền tảng AI" có 4 trang dùng gateway: `/ai/chat-bot`, `/ai/translate`, `/ai/exploit`, `/ai/report`. Trang `/ai/evidences` (showcase) ngoài phạm vi gói.
+- **Không còn exploit v1**: `/ai/exploit*` đã gỡ khỏi gateway ngày 2026-11-20. Trang "Sinh mã khai thác" chính là **PoC v2** (`POST /ai/exploit-v2/stream`). Bộ `test/ai-ui-tests/` cũ (viết cho Devspace, có ca v1) **không dùng làm tiêu chí**.
+
+**Bảng ca kiểm (`cases.json` chứa đúng các input này; `ACCEPTANCE.md` in bảng này):**
+
+| ID | Trang / ô nhập | Input | Bấm | Đầu ra phải có | Hạn |
+|---|---|---|---|---|---|
+| UI-CHAT-1 | `/ai/chat-bot`, ô `Nhập nội dung...` | `CVE-2021-44228 là lỗ hổng gì? Nêu sản phẩm bị ảnh hưởng, điểm CVSS và cách khắc phục.` | `Gửi` | Chứa `Log4Shell` hoặc `Log4j`, `10.0` (CVSS), `2.16.0` hoặc `2.15.0` (bản vá); không có `ProviderError`/`Connection error`; ≥ 500 ký tự | 90 s |
+| UI-CHAT-2 | như trên | `CVE-2099-99999 là lỗ hổng gì?` (không tồn tại) | `Gửi` | Nói rõ không có dữ liệu; **không** bịa CVSS/sản phẩm | 90 s |
+| UI-TR-1 | `/ai/translate` tab `Dịch trực tiếp`, nguồn `English` → đích `Việt Nam`, ô `Nội dung cần dịch` | `A remote code execution vulnerability in Apache Log4j2 allows an unauthenticated attacker to run arbitrary code on the server. Default credentials are admin / P@ssw0rd123.` | `Dịch` | Ô `Kết quả dịch` không rỗng, là tiếng Việt (có `lỗ hổng`, `máy chủ`), **giữ nguyên** `Apache Log4j2` và `admin / P@ssw0rd123` | 60 s |
+| UI-TR-2 | `/ai/translate` tab `Dịch tệp và hình ảnh`, `English` → `Việt Nam`, `Chọn tệp` | `stack/acceptance/fixtures/sample-en.docx` (1 trang, sinh trong task này) | tải lên | Job hoàn tất, có nút `Xem trước`, tệp tải về mở được, chứa tiếng Việt | 5 phút |
+| UI-TR-3 | như UI-TR-2 | `stack/acceptance/fixtures/sample-en.png` (ảnh chữ, cần OCR) | tải lên | Như UI-TR-2. **Chỉ áp dụng khi `.env` có `TRANSLATE_V2_OCR_BASE_URL`**; nếu không: ghi "bỏ qua, chưa cấu hình OCR" | 5 phút |
+| UI-RPT-1 | `/ai/report`: `Từ ngày`/`Đến ngày` mặc định (30 ngày), chọn `Thiết bị`, template `1. Tổng quan, 2. Chi tiết`, định dạng `docx` | — | `Phân tích thông minh` | Khối `Kết quả phân tích` có tiêu đề `BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN`, mục `1. Tổng quan` và `2. Chi tiết`, khoảng ngày đúng; `Tải báo cáo` trả tệp .docx mở được | 120 s |
+| UI-POC-1 | `/ai/exploit`: ô `Nhập CVE...` = `CVE-2022-22963`, ô `Nhập target...` = `192.168.96.7:8080` | — | `Sinh PoC` | Terminal lần lượt có `[check_cve]… tìm thấy`, `[check_target]… reachable ✓`, `[pool]Khởi tạo engine`, `[init]session ses_…`; kết thúc có khối `Kết quả phiên chạy` gồm **trạng thái**, `Run ID`, `Code`, `Reason` | 30 phút |
+| UI-POC-2 | như trên, CVE `CVE-2026-27944`, target `192.168.96.21:80` | — | `Sinh PoC` | như UI-POC-1 | 30 phút |
+| UI-POC-3 | như trên, target `192.168.96.250:9` (không có máy) | — | `Sinh PoC` | Dừng ở `[check_target]` với thông báo không kết nối được; **không** chiếm slot, không treo | 60 s |
+
+**Quy tắc đạt:**
+- Chat, dịch, báo cáo: mọi ca đạt đúng cột "Đầu ra phải có".
+- PoC v2 **không** tính đạt theo 1 lần chạy (lần thử ngày 2026-11-23 trên prod cho `FAILED`, watchdog 90 s ở STAGE 2 — kết quả dao động theo tải LLM). Ca UI-POC-1/2 chỉ kiểm **luồng và cấu trúc đầu ra**; chất lượng tính bằng N=24 ×3 ở Task 8: exploit ok ≥ 71/72 và PoC chạy lại ra bằng chứng ≥ 27/72.
+- **So với prod:** mỗi ca chạy trên prod trước (số gốc), rồi trên stack; stack đạt khi không ca nào prod đạt mà stack trượt.
+- Thêm RAG: `evals/core_eval/run_core_eval.py` với `core_eval_set.jsonl` (100 câu) — điểm stack ≥ điểm prod cùng ngày.
+
+- [ ] **Step 1:** Viết `cases.json` (id, page, fields, input, expect_all[], expect_none[], timeout_s) và `ACCEPTANCE.md` (bảng trên + quy tắc đạt + cách chạy + nơi ghi kết quả). Sinh 2 fixture bằng script trong task (docx 1 trang, png chữ tiếng Anh).
+- [ ] **Step 2:** Viết `ui.spec.ts` (Playwright) đọc `cases.json`, đăng nhập bằng `IAS_UI_USER`/`IAS_UI_PASS`, `PLAYWRIGHT_BASE_URL` mặc định `https://ias.id.vn`; mỗi ca ghi `<id>.json` (pass, lý do, 600 ký tự đầu ra) + ảnh chụp. Selector theo placeholder/nhãn ở bảng trên; nút PoC là `button.poc-button` (bị disabled trong lúc chạy).
+- [ ] **Step 3:** Ghi lại endpoint mà mỗi trang gọi (Playwright `page.on('request')`, lọc `/ai/`), điền vào `ACCEPTANCE.md`. Viết `run-api.sh <base_url>` gọi **đúng các endpoint đó** với cùng input và cùng kiểm tra — dùng cho stack smoke, nơi frontend sản phẩm chưa trỏ tới.
+- [ ] **Step 4: Lấy số gốc prod.** Chạy `ui.spec.ts` trên prod (bỏ UI-POC-2 nếu prod đang bận; không chạy song song các ca PoC) và `run-api.sh http://127.0.0.1:8131`; chạy `run_core_eval.py` trên prod. Lưu vào `local/stack-acceptance/<ngày>-prod/`, tóm tắt vào `ACCEPTANCE.md` mục "Số gốc".
+- [ ] **Step 5:** Commit `docs(stack): tiêu chí nghiệm thu, data test, số gốc prod`.
+
+---
+
 ### Task 1: Đưa image VM của PR #57 về `stack/images/pentestcode-vm`, build tái lập
 
 **Files:**
@@ -410,7 +450,7 @@ def test_models_check_fails_on_name_mismatch(tmp_path):
 ```
 
 - [ ] **Step 2:** Run → FAIL. **Step 3:** Viết `check.sh`. **Step 4:** Run test → PASS; `stack/check.sh config` → PASS.
-- [ ] **Step 5: Smoke core + dịch + báo cáo + review** trên project `secai-stack-smoke`: `.env` riêng (`GATEWAY_HOST_PORT` và `REPORT_HOST_PORT` lấy cổng trống ≥ 21000, bind IP LAN), `DATA_ROOT` = thư mục tạm `~/secai-stack-smoke-data`: `exploitdb`, `poc-sources`, `exploitdb-mcp-server` là **symlink** tới bản trong `/home/ict/AIEngines/secai/` (compose mount chúng `:ro` nên không ghi được vào dữ liệu prod); `poc` là **bản copy** (1,7 GB, vì mount ghi được cho `catalog.db` WAL); `_state` riêng và trống, Qdrant nạp tập con (Task 7). Tuyệt đối không trỏ `DATA_ROOT` thẳng vào `secai-data` của prod. Chạy `bootstrap.sh init && preflight`, `docker compose up -d`, `check.sh models && check.sh health`, một lần dịch văn bản synthetic, một lần tạo báo cáo synthetic. Ghi kết quả. `docker compose -p secai-stack-smoke down` (giữ volume tới khi xong Step 6).
+- [ ] **Step 5: Smoke core + dịch + báo cáo + review** trên project `secai-stack-smoke`: `.env` riêng (`GATEWAY_HOST_PORT` và `REPORT_HOST_PORT` lấy cổng trống ≥ 21000, bind IP LAN), `DATA_ROOT` = thư mục tạm `~/secai-stack-smoke-data`: `exploitdb`, `poc-sources`, `exploitdb-mcp-server` là **symlink** tới bản trong `/home/ict/AIEngines/secai/` (compose mount chúng `:ro` nên không ghi được vào dữ liệu prod); `poc` là **bản copy** (1,7 GB, vì mount ghi được cho `catalog.db` WAL); `_state` riêng và trống, Qdrant nạp tập con (Task 7). Tuyệt đối không trỏ `DATA_ROOT` thẳng vào `secai-data` của prod. Chạy `bootstrap.sh init && preflight`, `docker compose up -d`, `check.sh models && check.sh health`, rồi `stack/acceptance/run-api.sh http://<ip>:<cổng smoke>` (toàn bộ ca chat/dịch/báo cáo/UI-POC-3 của Task 0) và `run_core_eval.py`; so với số gốc prod theo quy tắc trong `ACCEPTANCE.md`. Ghi kết quả. Kiểm bằng giao diện production thật chỉ làm được khi frontend sản phẩm trỏ sang gateway mới — ghi vào README là bước nghiệm thu trên máy đích (`PLAYWRIGHT_BASE_URL=<url máy đích> npx playwright test stack/acceptance/ui.spec.ts`). `docker compose -p secai-stack-smoke down` (giữ volume tới khi xong Step 6).
 - [ ] **Step 6: Smoke exploit-v2 N=24 — CHỜ CHỦ DỰ ÁN CHỌN KHUNG ~40 PHÚT VẮNG.** Bật profile `exploit` trong project smoke (`POC_LABS_EXTERNAL=true`, `POC_LABS_NETWORK=poc-labs-internal`), dừng tạm cặp `secai-ev2-vm-eval-a/b` nếu chủ dự án đồng ý (RAM). Chạy `local/loadtest-results/20261123-N24-vm-r3/prod_ramp.py` trỏ gateway smoke, lab nginx-ui 192.168.96.21, N=24 × 3, nghỉ 60 s; rồi chạy lại PoC trả về theo đúng cách đo cũ. **Đạt:** exploit ok ≥ 71/72 **và** PoC chạy lại ra bằng chứng ≥ 27/72. **Không đạt:** không sửa ngưỡng; ghi số, quay về phương án host-network theo spec mục 7 và hỏi chủ dự án.
 - [ ] **Step 7:** `docker compose -p secai-stack-smoke down -v`; xác nhận `docker ps -a | grep smoke` rỗng và 30 container prod vẫn healthy. Commit báo cáo smoke.
 
