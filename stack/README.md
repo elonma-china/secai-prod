@@ -182,9 +182,10 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
 - **ssh thật tới máy model**: chưa kiểm (mới thử với sshd dựng tạm).
 - **TUNNEL_MODE=off**: preflight và `check.sh` không thăm dò URL dịch chuyên dụng/OCR (chỉ kiểm dạng URL), nên xanh dù đầu xa
   chết; và `ocr_client.py` chỉ nhận OCR `http://` (IP private), không nhận `https://`.
-- **N=24 exploit-v2 và hiệu năng/chất lượng trên mạng bridge**: ngưỡng nghiệm thu (exploit ok >= 71/72, PoC chạy lại ra
-  bằng chứng >= 27/72) nằm ở `ACCEPTANCE.md`; không coi là đã đạt trừ khi tệp đó ghi kết quả. Smoke mới chạy một PoC thật
-  (CVE-2022-22963) đạt. UI-POC-2 chưa có baseline prod hợp lệ.
+- **N=24 exploit-v2 trên mạng bridge**: đã đo 2026-11-24 (`docs/archive/test-results/stack-package-n24-20261124.md`): stack 72/72 exploit ok,
+  PoC chạy lại ra bằng chứng 31/72 (ngưỡng 71/72 và 27/72) — đạt. Lưu ý: prod luôn chạy trước stack trong mỗi vòng, LLM dùng chung, vòng prod r2/r3
+  phải chạy lại do chat 503 (lỗi phía gateway prod), stack có `VERIFY_ENABLED=false` và Qdrant tập con; vòng stack r3 chạy không có guard
+  tự dừng (không có phút nào > 50% lỗi). UI-POC-2: prod chỉ qua 3/71 nên baseline không ổn định.
 - **Gói dữ liệu thật ~49 GB**: `pack.sh`/`restore-data.sh` chỉ kiểm trên tập con; chưa chạy ở kích thước thật (thời gian,
   dung lượng đĩa tạm, nhất quán khi chép store Neo4j đang ghi).
 - **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
