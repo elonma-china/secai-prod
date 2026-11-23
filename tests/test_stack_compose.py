@@ -50,3 +50,23 @@ def test_networks_and_volumes_declared():
     assert {"gw-data", "redis-data", "es-data"} <= set(c["volumes"])
     for s in c["services"].values():
         assert "secai-net" in s["networks"]
+
+
+def test_env_files_not_required():
+    for name, s in load_compose()["services"].items():
+        for e in s.get("env_file", []):
+            assert isinstance(e, dict) and e.get("required") is False, name
+
+
+def test_config_validates_without_dotenv(tmp_path):
+    import os, shutil, subprocess
+    import pytest
+    if not shutil.which("docker"):
+        pytest.skip("docker CLI not available")
+    if subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0:
+        pytest.skip("docker compose plugin not available")
+    assert not (COMPOSE.parent / ".env").exists(), "stack/.env must not exist for this test"
+    env = {**os.environ, "GATEWAY_IMAGE": "x", "DATA_ROOT": str(tmp_path)}
+    r = subprocess.run(["docker", "compose", "-f", str(COMPOSE), "config", "-q"],
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
