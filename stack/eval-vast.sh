@@ -293,7 +293,7 @@ if [ "$EXPLOIT" = 1 ]; then
     P="exploit,$P"
 fi
 # Profile translation luôn cần image sidecar (cả TUNNEL_MODE=off). init chạy bằng root sẽ đặt TUNNEL_UID=0 (preflight từ chối): ghim uid khác 0.
-TU=$(grep -E '^TUNNEL_UID=' stack/.env | tail -n1 | cut -d= -f2-)
+TU=$(grep -E '^TUNNEL_UID=' stack/.env | tail -n1 | cut -d= -f2- || true)   # set -e + pipefail: thiếu dòng không được làm chết provision
 [[ "$TU" =~ ^[1-9][0-9]*$ ]] || TU=10002
 docker build --build-arg TUNNEL_UID="$TU" -t "secai-specialist-tunnel:eval-$SHA" stack/images/tunnel
 mkdir -p /srv/secai-data
@@ -347,22 +347,28 @@ cmd_run() {
     # Chạy trên instance; mọi bước ghi log vào $REMOTE/results, kết thúc bằng SHA256SUMS. Không có secret trong script.
     rssh "SKIP_CASES='$skip' STACK_HAS_OCR=$ocr bash -s" <<'REMOTE_RUN'
 set -uo pipefail
-# Lý do cho từng ca bỏ qua, ghi vào <id>.json và summary.json: ca bỏ qua không bao giờ được đọc là đạt.
+cd /opt/secai-stack/stack
+# Mỗi lần run một thư mục kết quả mới: kết quả lần trước (kể cả ca đạt) không được lẫn vào lần này.
+R=/opt/secai-stack/results; [ ! -e "$R" ] || mv "$R" "$R.prev-$(date +%Y%m%d-%H%M%S)-$$"; mkdir -p "$R"; rc=0; ABORT=0
+envv() { grep -E "^$1=" .env | tail -n1 | cut -d= -f2- || true; }
+# Lý do cho từng ca bỏ qua (theo cấu hình thật trong .env), ghi vào <id>.json và summary.json: ca bỏ qua không bao giờ là đạt.
 SKIP_REASONS=$(python3 -c '
 import json, sys
+ids, tunnel, profiles = sys.argv[1].split(), sys.argv[2] or "ssh", [p.strip() for p in sys.argv[3].split(",")]
 r = {}
-for i in sys.argv[1].split():
-    if i in ("UI-TR-2", "UI-TR-3"): r[i] = "không chạy: không có Hy-MT2/OCR trên máy thuê (TUNNEL_MODE=off)"
-    elif i.startswith("UI-POC-"): r[i] = "không chạy: profile exploit tắt; lab 192.168.96.x không tới được từ máy thuê"
-    else: r[i] = "không chạy: bỏ qua theo EVAL_SKIP_CASES"
-print(json.dumps(r, ensure_ascii=False))' "$SKIP_CASES")
+for i in ids:
+    if i in ("UI-TR-2", "UI-TR-3") and tunnel == "off":
+        r[i] = "không chạy: không có Hy-MT2/OCR (TUNNEL_MODE=off)"
+    elif i.startswith("UI-POC-") and "exploit" not in profiles:
+        r[i] = "không chạy: profile exploit tắt (COMPOSE_PROFILES=%s)" % sys.argv[3]
+    else:
+        r[i] = "không chạy: bỏ qua theo EVAL_SKIP_CASES (TUNNEL_MODE=%s, COMPOSE_PROFILES=%s)" % (tunnel, sys.argv[3])
+print(json.dumps(r, ensure_ascii=False))' "$SKIP_CASES" "$(envv TUNNEL_MODE)" "$(envv COMPOSE_PROFILES)")
 export SKIP_CASES STACK_HAS_OCR SKIP_REASONS
-cd /opt/secai-stack/stack
-R=/opt/secai-stack/results; mkdir -p "$R"; rc=0; ABORT=0
 step() { local name=$1; shift; [ "$ABORT" = 0 ] || { echo "$name skipped" >>"$R/steps.txt"; return 0; }
          "$@" >"$R/$name.log" 2>&1; local r=$?; echo "$name rc=$r" | tee -a "$R/steps.txt"; [ "$r" = 0 ] || rc=1; return "$r"; }
 abort_on_fail() { "$@" || ABORT=1; }
-DATA_ROOT=$(grep -E '^DATA_ROOT=' .env | tail -n1 | cut -d= -f2-); export DATA_ROOT
+DATA_ROOT=$(envv DATA_ROOT); export DATA_ROOT
 abort_on_fail step init ./bootstrap.sh init
 abort_on_fail step preflight ./bootstrap.sh preflight
 abort_on_fail step restore_files ./restore-data.sh ../pkg
@@ -374,16 +380,27 @@ fi
 step up docker compose up -d --wait
 step check ./check.sh all
 step acceptance env ACCEPT_OUT="$R/acceptance" ./acceptance/run-api.sh http://127.0.0.1:8131
-# summary.json: rc từng bước + kết quả ca (pass/fail/skipped kèm lý do); acceptance=null nghĩa là bộ ca không chạy.
+# summary.json: rc từng bước + kết quả ca của LẦN NÀY; acceptance=null nghĩa là bộ ca không chạy.
+# verdict: pass chỉ khi mọi bước rc=0, bộ ca chạy, có ca đạt và không ca nào trượt; trượt/bước lỗi -> fail; còn lại -> incomplete.
 python3 -c '
 import json, os, sys
-R = sys.argv[1]; steps = {}
+R, rc = sys.argv[1], int(sys.argv[2]); steps = {}
 for l in open(R + "/steps.txt"):
     n, _, v = l.strip().partition(" ")
     steps[n] = v
 a = R + "/acceptance/summary.json"
-json.dump({"steps": steps, "skip_cases": os.environ["SKIP_CASES"].split(), "stack_has_ocr": os.environ["STACK_HAS_OCR"],
-           "acceptance": json.load(open(a)) if os.path.exists(a) else None}, open(R + "/summary.json", "w"), ensure_ascii=False, indent=1)' "$R"
+acc = json.load(open(a)) if steps.get("acceptance", "").startswith("rc=") and os.path.exists(a) else None
+if rc != 0 or any(v not in ("rc=0", "skipped") for v in steps.values()) or (acc and acc["fail"]):
+    verdict = "fail"
+elif acc is None or not acc["pass"]:
+    verdict = "incomplete"
+else:
+    verdict = "pass"
+json.dump({"verdict": verdict, "steps": steps, "skip_cases": os.environ["SKIP_CASES"].split(),
+           "stack_has_ocr": os.environ["STACK_HAS_OCR"], "acceptance": acc},
+          open(R + "/summary.json", "w"), ensure_ascii=False, indent=1)' "$R" "$rc"
+# init in token review admin một lần ra stdout; không mang token/khoá nào về máy điều khiển.
+sed -i -E 's/([A-Za-z0-9_]*(TOKEN|KEY|SECRET|PASSWORD)[A-Za-z0-9_]*)=[^[:space:]]+/\1=<redacted>/g' "$R"/*.log
 (cd "$R" && find . -type f ! -name SHA256SUMS -exec sha256sum {} + >SHA256SUMS)
 exit "$rc"
 REMOTE_RUN

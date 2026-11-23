@@ -938,7 +938,7 @@ def test_run_passes_eval_skip_defaults_and_writes_summary(box):
     # mac dinh eval tren may thue: khong co lab/exploit, khong co Hy-MT2/OCR
     assert "SKIP_CASES='UI-POC-1 UI-POC-2 UI-POC-3 UI-TR-2 UI-TR-3'" in argv and "STACK_HAS_OCR=0" in argv
     script = (box.fake / "ssh.stdin").read_text()
-    assert "SKIP_REASONS" in script and "không có Hy-MT2/OCR" in script and "summary.json" in script
+    assert "SKIP_REASONS" in script and "TUNNEL_MODE" in script and "summary.json" in script
 
 
 def test_run_custom_skip_cases_and_ocr(box):
@@ -1028,3 +1028,110 @@ def test_run_api_records_skipped_cases_with_reason_and_summary(tmp_path):
     assert s["pass"] == [] and s["fail"] == [] and sorted(s["skipped"]) == sorted(ids)
     assert s["skipped"]["UI-TR-2"] == reasons["UI-TR-2"]
     assert all(line.startswith("SKIP") for line in r.stdout.splitlines() if line.strip())
+
+
+# ------------------------------------------------------------------ chay THAT cac heredoc tu xa (thay /opt, /srv bang thu muc tam)
+
+def remote_script(marker: str, root: Path) -> Path:
+    lines = EVAL.read_text().splitlines()
+    start = next(i for i, x in enumerate(lines) if f"<<'{marker}'" in x)
+    end = next(i for i in range(start + 1, len(lines)) if lines[i] == marker)
+    body = "\n".join(lines[start + 1:end]).replace("/opt/secai-stack", str(root)).replace("/srv/secai-data", str(root / "srv"))
+    p = root / f"{marker}.sh"
+    p.write_text(body + "\n")
+    return p
+
+
+def stub(path: Path, body: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\n" + body + "\n")
+    path.chmod(0o755)
+
+
+@pytest.mark.parametrize("line,want", [("", "10002"), ("TUNNEL_UID=\n", "10002"), ("TUNNEL_UID=0\n", "10002"),
+                                       ("TUNNEL_UID=1234\n", "1234")])
+def test_provision_fragment_runs_with_or_without_tunnel_uid(tmp_path, line, want):
+    root = tmp_path / "opt"
+    (root / "stack").mkdir(parents=True)
+    (root / "stack/.env").write_text("COMPOSE_PROFILES=translation\n" + line)
+    binp = tmp_path / "bin"
+    for c in ("docker", "sysctl", "zstd"):
+        stub(binp / c, f'echo "$*" >> "{tmp_path}/{c}.log"')
+    r = subprocess.run(["bash", str(remote_script("REMOTE_PROVISION", root))], text=True, capture_output=True, timeout=60,
+                       env={"PATH": f"{binp}:/usr/bin:/bin", "SHA": "abcd1234", "EXPLOIT": "0"})
+    assert r.returncode == 0, r.stderr
+    env = (root / "stack/.env").read_text().splitlines()
+    assert [x for x in env if x.startswith("TUNNEL_UID=")][-1] == f"TUNNEL_UID={want}"
+    assert env[-3:] == ["TUNNEL_UID=" + want, "GATEWAY_BIND=127.0.0.1", "COMPOSE_PROFILES=translation,report,review"]
+    assert f"--build-arg TUNNEL_UID={want} -t secai-specialist-tunnel:eval-abcd1234" in (tmp_path / "docker.log").read_text()
+
+
+TOKEN = "deadbeef" * 8
+
+
+def run_remote(tmp_path, acc=None, fail_step="", skip="UI-TR-2 UI-POC-1", env_lines="TUNNEL_MODE=off\nCOMPOSE_PROFILES=translation,report,review\n"):
+    """Chay REMOTE_RUN voi stub; acc = summary.json ma run-api.sh gia ghi (None: run-api.sh gia loi truoc khi ghi)."""
+    root = tmp_path / "opt"
+    st = root / "stack"
+    st.mkdir(parents=True, exist_ok=True)
+    (st / ".env").write_text("DATA_ROOT=/x\n" + env_lines)
+    fails = f'[ "$1" = "{fail_step}" ] && exit 1' if fail_step else ":"
+    stub(st / "bootstrap.sh", f'echo "REVIEW_ADMIN_TOKEN={TOKEN}"\n{fails}\nexit 0')
+    stub(st / "restore-data.sh", "exit 0")
+    stub(st / "check.sh", f'[ "{fail_step}" = check ] && exit 1\nexit 0')
+    accw = ("" if acc is None else f"mkdir -p \"$ACCEPT_OUT\"; printf '%s' '{json.dumps(acc)}' > \"$ACCEPT_OUT/summary.json\"\n"
+            "echo \"$SKIP_REASONS\" > \"$ACCEPT_OUT/reasons.json\"")
+    stub(st / "acceptance/run-api.sh", accw + f'\n[ "{fail_step}" = acceptance ] && exit 1\nexit 0')
+    stub(tmp_path / "bin/docker", 'echo cid')
+    return subprocess.run(["bash", str(remote_script("REMOTE_RUN", root))], text=True, capture_output=True, timeout=60,
+                          env={"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "SKIP_CASES": skip, "STACK_HAS_OCR": "0"}), root / "results"
+
+
+OK_ACC = {"pass": ["UI-CHAT-1"], "fail": [], "skipped": {"UI-TR-2": "x"}}
+
+
+@pytest.mark.parametrize("acc,fail_step,verdict", [
+    (OK_ACC, "", "pass"),
+    ({"pass": ["UI-CHAT-1"], "fail": ["UI-RPT-1"], "skipped": {}}, "acceptance", "fail"),
+    (OK_ACC, "check", "fail"),                                   # ca dat nhung buoc check loi
+    (OK_ACC, "preflight", "fail"),                               # abort: bo ca khong chay
+    ({"pass": [], "fail": [], "skipped": {"UI-CHAT-1": "x"}}, "", "incomplete"),   # bo qua het khong phai dat
+])
+def test_remote_run_verdict(tmp_path, acc, fail_step, verdict):
+    r, R = run_remote(tmp_path, acc, fail_step)
+    s = json.loads((R / "summary.json").read_text())
+    assert s["verdict"] == verdict, (s, r.stderr)
+    assert (r.returncode == 0) == (verdict != "fail")
+    if fail_step == "preflight":
+        assert s["acceptance"] is None and s["steps"]["acceptance"] == "skipped"
+
+
+def test_remote_run_rerun_moves_old_results_and_does_not_reuse_old_acceptance(tmp_path):
+    run_remote(tmp_path, OK_ACC)
+    r, R = run_remote(tmp_path, OK_ACC, fail_step="init")   # lan 2 abort som: khong duoc thay ca dat cua lan 1
+    s = json.loads((R / "summary.json").read_text())
+    assert s["acceptance"] is None and s["verdict"] == "fail"
+    assert not (R / "acceptance").exists() and (R / "steps.txt").read_text().splitlines()[0] == "init rc=1"
+    prev = list(R.parent.glob("results.prev-*"))
+    assert len(prev) == 1 and json.loads((prev[0] / "summary.json").read_text())["verdict"] == "pass"
+
+
+def test_remote_run_scrubs_tokens_before_sha256(tmp_path):
+    r, R = run_remote(tmp_path, OK_ACC)
+    for f in R.rglob("*"):
+        if f.is_file():
+            assert TOKEN not in f.read_text(), f
+    assert "REVIEW_ADMIN_TOKEN=<redacted>" in (R / "init.log").read_text()
+    assert subprocess.run(["sha256sum", "-c", "--strict", "--quiet", "SHA256SUMS"], cwd=R).returncode == 0
+
+
+@pytest.mark.parametrize("env_lines,tr,poc", [
+    ("TUNNEL_MODE=off\nCOMPOSE_PROFILES=translation,report,review\n", "không có Hy-MT2/OCR (TUNNEL_MODE=off)", "profile exploit tắt"),
+    ("TUNNEL_MODE=ssh\nCOMPOSE_PROFILES=exploit,translation\n", "EVAL_SKIP_CASES (TUNNEL_MODE=ssh", "EVAL_SKIP_CASES"),
+])
+def test_remote_run_skip_reasons_follow_real_config(tmp_path, env_lines, tr, poc):
+    r, R = run_remote(tmp_path, OK_ACC, env_lines=env_lines)
+    reasons = json.loads((R / "acceptance/reasons.json").read_text())
+    assert tr in reasons["UI-TR-2"] and poc in reasons["UI-POC-1"]
+    if "ssh" in env_lines:
+        assert "Hy-MT2" not in reasons["UI-TR-2"] and "tắt" not in reasons["UI-POC-1"]

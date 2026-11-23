@@ -180,6 +180,8 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
 - **Hy-MT2 và OCR thật**: UI-TR-2/TR-3 chỉ đạt với **stub** (`direct` và `ssh` tới sshd thử). Pipeline được chứng minh,
   chất lượng dịch/OCR thật thì chưa. Dịch vụ chuyên dụng trên prod lúc đo đang từ chối kết nối.
 - **ssh thật tới máy model**: chưa kiểm (mới thử với sshd dựng tạm).
+- **TUNNEL_MODE=off**: preflight và `check.sh` không thăm dò URL dịch chuyên dụng/OCR (chỉ kiểm dạng URL), nên xanh dù đầu xa
+  chết; và `ocr_client.py` chỉ nhận OCR `http://` (IP private), không nhận `https://`.
 - **N=24 exploit-v2 và hiệu năng/chất lượng trên mạng bridge**: ngưỡng nghiệm thu (exploit ok >= 71/72, PoC chạy lại ra
   bằng chứng >= 27/72) nằm ở `ACCEPTANCE.md`; không coi là đã đạt trừ khi tệp đó ghi kết quả. Smoke mới chạy một PoC thật
   (CVE-2022-22963) đạt. UI-POC-2 chưa có baseline prod hợp lệ.
