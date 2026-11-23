@@ -45,3 +45,12 @@ def test_build_script_tags_by_sha():
 def test_pip_installs_are_constrained():
     assert "-c" in (VM / "install-tools.sh").read_text() and "pip-constraints.txt" in (VM / "install-tools.sh").read_text()
     assert (VM / "pip-constraints.txt").read_text().count("==") > 5
+
+
+def test_bun_install_failure_is_not_swallowed():
+    df = (VM / "Dockerfile").read_text()
+    line = next(l for l in df.splitlines() if "bun install --frozen-lockfile" in l and not l.lstrip().startswith("#"))
+    assert "| tail" not in line and "|| {" not in line.split("bun install")[0]
+    assert ">/tmp/bun.log" in df and "|| {" in df                     # lỗi chỉ được bỏ qua có điều kiện
+    assert "tree-sitter-powershell" in df                            # đúng 1 lỗi đã biết
+    assert "bun -e 'import \"effect\"'" in df                       # kiểm sau cài: engine import được dependency
