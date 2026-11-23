@@ -91,7 +91,7 @@ Cũ cần dọn khi hoàn tất: `deploy/docker-compose.yml`, `deploy/up.sh` (đ
 Không chạy `up`/`down` trên project `secai-docker`, `secai-translation-release`; không đặt tên container trùng prod. Kiểm trên **project `secai-stack-smoke`**, cổng LAN riêng, tên `*-smoke-<ngày>`:
 1. `docker compose config` cho từng tổ hợp profile; kiểm không còn `/home/ict` và `docker.sock` trong kết quả.
 2. `check.sh`: đúng tên model embedding/rerank so với endpoint (đã lường ở "phản mục tiêu"); health từng service; truy vấn RAG thật có hit từ Qdrant (không BM25-only).
-3. **Smoke exploit-v2 theo tiêu chí N=24 (chủ dự án chốt)**: chạy lại đúng quy trình trong `docs/archive/test-results/exploit-v2-vm-20261123.md` (N=24 × 3 lần, cùng bộ lab/câu hỏi) trên mạng bridge. Đạt khi **không kém** bản VM host-network đã đo: exploit ok ≥ 71/72 và PoC trả về chạy lại ra bằng chứng ≥ 27/72. LLM = `QWEN_*` của prod (Vast, đã áp dụng cho gateway và pool hiện tại). Việc này chiếm LLM prod nhiều giờ nên **chỉ chạy khi chủ dự án cho phép giờ chạy**. Smoke dịch + báo cáo dùng dữ liệu synthetic.
+3. **Smoke exploit-v2 theo tiêu chí N=24 (chủ dự án chốt)**: chạy lại đúng quy trình trong `docs/archive/test-results/exploit-v2-vm-20261123.md` (N=24 = 24 phiên exploit + 24 luồng chat song song, × 3 lần, nghỉ 60 s, tổng ~30 phút; script `prod_ramp.py`; lab nginx-ui CVE-2026-27944 tại 192.168.96.21 trên `poc-labs-internal`) trên mạng bridge. Đạt khi **không kém** bản VM host-network đã đo: exploit ok ≥ 71/72 và PoC trả về chạy lại ra bằng chứng ≥ 27/72. LLM = `QWEN_*` của prod (Vast, đã áp dụng cho gateway và pool hiện tại). Smoke dùng chung LLM với prod (nút thắt là LLM) nên **chỉ chạy trong khung ~40 phút vắng do chủ dự án chọn**. Smoke dịch + báo cáo dùng dữ liệu synthetic.
 4. **Nơi chạy: máy prod này**, project `secai-stack-smoke`: mount **chỉ đọc** `secai-data` dùng chung (exploitdb/poc/poc-sources), qdrant/neo4j trống hoặc tập con nhỏ, nên không nhân đôi 49 GB (đĩa còn 69 GB, 93%). `restore-data.sh` vì vậy chỉ được kiểm với tập con nhỏ, **không** kiểm với gói đầy đủ; ghi rõ trong README.
 5. Máy đích thật **chưa kiểm được** ở đây: ghi rõ trong README.
 
@@ -107,6 +107,13 @@ Tên biến phụ, thứ tự khởi động/`depends_on`, healthcheck chi tiế
 4. **Mã pentestcode nướng vào image VM** tại `/opt/pentestcode`, `bun install --frozen-lockfile` lúc build; không mount nguồn.
 5. **Registry**: `ghcr.io/elonma-china/secai-agent-gateway:main-<sha8>-<ngày>` (suy ra từ remote `origin`); mỗi lần `docker push` là bước thủ công có xác nhận, `pack.sh` mặc định chỉ build.
 6. **Thứ tự dựng**: `bootstrap.sh` → `restore-data.sh` → `docker compose up` (credentials review phải có trước khi gateway khởi động).
+
+**Đính chính khi lập plan (2026-11-23, đã kiểm trên máy)**
+
+- Image gateway `main-*` **không chứa** `/app/review-ui`; mã frontend review không nằm trong git (chỉ có trong image `review-mvp-20261004`). → vendor bản tĩnh từ image đó vào `stack/images/review-ui/`, build image nhỏ riêng.
+- Converter đang chạy dùng `/opt/server.py` (62 dòng, HTTP :18091) **không có trong repo** (repo chỉ có `convert.sh`). → lấy `server.py` từ container vào `stack/images/converter/`.
+- `pentestcode/.ias/ias.jsonc` trỏ `exploitdb-mcp-server` (thư mục anh em ngoài repo, 113 MB). → đưa vào gói dữ liệu, mount `${DATA_ROOT}/exploitdb-mcp-server`.
+- Báo cáo: prod chạy container riêng (`secai_gateway.app:app`, `REPORT_FEATURE_ENABLED=true`) và Devspace làm bộ chia đường. Gói không có Devspace nên `report-backend` publish cổng riêng `REPORT_HOST_PORT` (mặc định 18183).
 
 ## 7. Rủi ro đã biết
 
