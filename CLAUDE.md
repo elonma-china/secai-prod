@@ -81,6 +81,15 @@ Prod (`secai-docker-gateway` :8131 + `secai-translation-gateway` + `secai-transl
 - **Lưu giữ 3 ngày**: image cũ (`main-*`, `smoke-*`) và container `*-rollback-*`/`*-smoke-*` đã dừng chỉ giữ tối đa 3 ngày rồi xoá (`release-prod.sh gc [--yes]`, timer `wt-prune` chạy hằng giờ); image của lần release liền trước luôn được giữ để rollback. Lưu ý: `docker compose up` **nhận nuôi và xoá** container cũ đã đổi tên (đã thử), nên "rollback" ở đây là image + compose sao lưu, không phải container đổi tên.
 - Merge PR bằng web GitHub không kích hoạt hook; làm tay bước 1–4.
 
+## Plugin skill dùng chung (project scope)
+
+`.claude/settings.json` bật `mattpocock-skills` và `superpowers` (cả hai từ `claude-plugins-official`, nạp lúc **khởi động phiên** — phiên đang mở phải mở lại). Dùng cho: brainstorming → `writing-plans` → `executing-plans`/`subagent-driven-development`, `test-driven-development`, `systematic-debugging`, `requesting-code-review`, `verification-before-completion`. Spec/plan do superpowers sinh nằm ở `docs/superpowers/specs/` và `docs/superpowers/plans/` (đúng chỗ trong `docs/README.md`).
+
+Khi skill plugin mâu thuẫn quy tắc của repo này, **quy tắc repo thắng**:
+- Worktree/nhánh: dùng `scripts/wt-new.sh` hoặc worktree T3, **không** `using-git-worktrees` (tự tạo thư mục worktree riêng, lệch `dev.sh`/`wt-prune`). Chạy/test chỉ qua `scripts/dev.sh`.
+- Kết thúc nhánh: `finishing-a-development-branch` chỉ để chọn PR; merge và dọn theo mục "Dọn nhánh/worktree sau merge", rồi review & release theo mục "Sau khi merge PR". Không merge/push nhánh chung/release prod nếu user chưa cho phép.
+- TDD/debug: superpowers và mattpocock trùng chức năng; dùng cái phù hợp, không chạy cả hai cho cùng một việc.
+
 Đọc [deploy/all-features/README.md](deploy/all-features/README.md) trước cập nhật full-feature image. Gateway/worker/report chạy CPU; giữ entrypoint, private env và volume theo từng service. Nhiều agent có thể triển khai chung: dùng lock hiện có, kiểm ownership và immutable image ngay trước switch/rollback; chỉ cập nhật service thuộc phạm vi.
 
 Devspace staticserver tách report `/ai/v2/reports` sang 18183, file/image và text v3 sang 18185, còn legacychat/report và `/review-api` sang 8131. Dùng `REPORT_GATEWAY_PROXY`/`TRANSLATION_GATEWAY_PROXY` hoặc `.report-upstream`/`.translation-upstream`; không chứa key trong URL. Build bật ba cờ report/file/image đã ghi trong README. Report phải persist nội dung và revision trong `REPORT_DB_PATH`; giữ DB khi rollback.
