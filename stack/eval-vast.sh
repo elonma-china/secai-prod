@@ -388,8 +388,8 @@ step() { local name=$1; shift; [ "$ABORT" = 0 ] || { echo "$name skipped" >>"$R/
 abort_on_fail() { "$@" || ABORT=1; }
 DATA_ROOT=$(envv DATA_ROOT); export DATA_ROOT
 abort_on_fail step init ./bootstrap.sh init
+abort_on_fail step restore_files ./restore-data.sh ../pkg   # trước preflight: preflight đòi các thư mục dữ liệu do gói cung cấp
 abort_on_fail step preflight ./bootstrap.sh preflight
-abort_on_fail step restore_files ./restore-data.sh ../pkg
 abort_on_fail step qdrant_up docker compose up -d --wait qdrant
 if [ "$ABORT" = 0 ]; then
     QIP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$(docker compose ps -q qdrant)")
