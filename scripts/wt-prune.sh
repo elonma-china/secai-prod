@@ -9,6 +9,9 @@
 #   1. a PR with this head branch is MERGED (asked from GitHub via `gh`, since the repo allows
 #      squash/rebase merges that `git branch --merged` cannot see) AND the local branch tip is
 #      exactly that PR's head commit (=> no commit made after the merge is ever lost);
+#      OR the branch is EMPTY (tip is an ancestor of origin/main: nothing unique to lose, e.g. a
+#      T3 thread that only chatted) and the worktree is older than $WT_PRUNE_EMPTY_HOURS
+#      (default 24) so a thread that was just opened is not yanked away;
 #   2. no uncommitted/untracked changes, and no gitignored files beyond regenerable ones
 #      (.env copies, caches) — `git worktree remove` would silently delete data/, results, …;
 #   3. no process has its cwd inside the worktree (T3 session / agent / shell still open);
@@ -23,7 +26,7 @@ for a in "$@"; do
     case $a in
         --yes) YES=1 ;;
         --remote) REMOTE=1 ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
         *) echo "wt-prune: unknown option $a (see --help)" >&2; exit 2 ;;
     esac
 done
@@ -55,6 +58,15 @@ gh pr list --state merged --limit 300 --json headRefName,headRefOid \
 
 # 0 when a merged PR exists for <branch> whose head commit is exactly <sha>.
 merged_at() { grep -qxF "$1 $2" "$MERGED"; }
+
+# 0 when commit $1 is already in origin/main (empty branch) and worktree $2 is older than
+# WT_PRUNE_EMPTY_HOURS. Age = mtime of the worktree's `.git` file, written once by `worktree add`.
+EMPTY_HOURS=${WT_PRUNE_EMPTY_HOURS:-24}
+empty_and_old() {
+    git merge-base --is-ancestor "$1" origin/main 2>/dev/null || return 1
+    local born; born=$(stat -c %Y "$2/.git" 2>/dev/null) || return 1
+    [ $(( $(date +%s) - born )) -ge $(( EMPTY_HOURS * 3600 )) ]
+}
 
 # 0 when some process (other than this script) has its cwd inside directory $1. One `find`
 # per call instead of a readlink fork per /proc entry (that cost ~5 s per worktree on a busy
@@ -108,7 +120,14 @@ while IFS=$'\t' read -r path ref; do
     [ -n "$br" ] || { skip "$path" "detached worktree"; continue; }
 
     sha=$(git -C "$path" rev-parse HEAD 2>/dev/null) || { skip "$path" "cannot read HEAD"; continue; }
-    merged_at "$br" "$sha" || { skip "$path ($br)" "no merged PR at this exact commit (open, never PR'd, or commits after merge)"; continue; }
+    if ! merged_at "$br" "$sha" && ! empty_and_old "$sha" "$path"; then
+        if git merge-base --is-ancestor "$sha" origin/main 2>/dev/null; then
+            skip "$path ($br)" "empty branch but younger than ${EMPTY_HOURS}h"
+        else
+            skip "$path ($br)" "no merged PR at this exact commit (open, never PR'd, or commits after merge)"
+        fi
+        continue
+    fi
     [ -z "$(git -C "$path" status --porcelain)" ] || { skip "$path ($br)" "uncommitted or untracked changes"; continue; }
     kept=$(ignored_content "$path" | awk 'NR<=3' | tr '\n' ' ')
     [ -z "$kept" ] || { skip "$path ($br)" "ignored files would be deleted: ${kept}(move or delete them first)"; continue; }
