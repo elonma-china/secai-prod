@@ -7,11 +7,19 @@ from __future__ import annotations
 import os
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
-_URL_RE = re.compile(r"https?://[^\s/'\"<>:@?#]+(?::(\d+))?", re.I)
-_HOSTPORT_RE = re.compile(r"(?<![\w./-])(?:(?:\d{1,3}\.){3}\d{1,3}|localhost):(\d+)\b", re.I)
+# Cổng chỉ được suy ra từ chuỗi GHI RÕ cổng: URL `http(s)://host:port` (host có thể là [IPv6]) hoặc cặp
+# `IPv4|localhost|[IPv6]:port`. URL không ghi cổng, mẫu/biến (`http://$1:$2`, `{host}`) KHÔNG sinh cổng 80/443 — nếu
+# suy mặc định thì script dựng URL từ argv hay link tham khảo trong comment sẽ bị hạ nhầm thành "lệch cổng".
+_HOST = r"(?:\[[0-9a-f:.]+\]|[^\s/'\"<>:@?#$%{}\[\]]+)"
+_URL_PORT_RE = re.compile(rf"https?://(?:[^\s/@'\"<>]*@)?{_HOST}:(\d+)", re.I)
+_HOSTPORT_RE = re.compile(r"(?<![\w./-])(?:(?:\d{1,3}\.){3}\d{1,3}|localhost|\[[0-9a-f:.]+\]):(\d+)\b", re.I)
 _SCRIPT_RE = re.compile(r"[\w./-]+\.(?:py|js|sh|php|rb|pl)\b")
 _HEREDOC_RE = re.compile(r"cat\s+>\s*([^\s;|&]+)\s*<<\s*['\"]?(\w+)['\"]?\s*\n(.*?)\n\2\b", re.S)
+# Lệnh chỉ đọc/in: output có thể chứa chuỗi giống bằng chứng (vd `cat exploit.py` in dòng "RCE SUCCESS") nhưng chưa
+# chạy gì vào target → không tính là lần chạy ra bằng chứng.
+_READ_ONLY = frozenset({"cat", "head", "tail", "less", "more", "grep", "egrep", "sed", "awk", "echo", "printf", "ls", "wc", "file"})
 
 
 def _valid(p: int) -> bool:
@@ -19,32 +27,35 @@ def _valid(p: int) -> bool:
 
 
 def target_port(target: str) -> int | None:
-    """Cổng của target: `h:19999`/`http://h:19999/x` → 19999; `https://h` → 443; `http://h` → 80; không có → None."""
+    """Cổng của target: `h:19999`/`http://h:19999/x`/`http://[::1]:8080` → số cổng; `https://h` → 443; `http://h` → 80;
+    không có cổng/không hợp lệ → None."""
     t = (target or "").strip()
     if not t:
         return None
-    m = _URL_RE.match(t)
-    if m:
-        if m.group(1):
-            return int(m.group(1)) if _valid(int(m.group(1))) else None
-        return 443 if t.lower().startswith("https") else 80
-    m = re.match(r"^[^\s/:]+:(\d+)(?:/|$)", t)
-    return int(m.group(1)) if m and _valid(int(m.group(1))) else None
+    try:
+        u = urlsplit(t if "://" in t else f"//{t}")
+        if u.port is not None:
+            return u.port if _valid(u.port) else None
+    except ValueError:
+        return None
+    if u.scheme.lower() == "https":
+        return 443
+    return 80 if u.scheme.lower() == "http" else None
 
 
 def ports_in(text: str) -> set[int]:
-    """Cổng của mọi URL `http(s)://host[:port]` (mặc định 80/443) và cặp `IPv4|localhost:port` trong text."""
+    """Cổng được GHI RÕ trong text (URL có `:port` hoặc cặp `IPv4|localhost|[IPv6]:port`); cổng không hợp lệ bị bỏ."""
     out: set[int] = set()
-    for m in _URL_RE.finditer(text or ""):
-        if m.group(1):
+    for rx in (_URL_PORT_RE, _HOSTPORT_RE):
+        for m in rx.finditer(text or ""):
             if _valid(int(m.group(1))):
                 out.add(int(m.group(1)))
-        else:
-            out.add(443 if m.group(0).lower().startswith("https") else 80)
-    for m in _HOSTPORT_RE.finditer(text or ""):
-        if _valid(int(m.group(1))):
-            out.add(int(m.group(1)))
     return out
+
+
+def _mentions_port(text: str, port: int) -> bool:
+    """Số cổng xuất hiện như một token độc lập (`-p 19999`, `--rport 19999`, `host 19999`, `host:19999`)."""
+    return re.search(rf"(?<![\d.]){port}(?![\d])", text or "") is not None
 
 
 def _written_bodies(messages: list[dict[str, Any]]) -> dict[str, str]:
@@ -68,8 +79,9 @@ def _written_bodies(messages: list[dict[str, Any]]) -> dict[str, str]:
 
 def scope_verdict(target: str, messages: list[dict[str, Any]], *, proof_re: re.Pattern) -> tuple[str, int | None]:
     """("ok"|"mismatch"|"unknown", cổng_lệch). Chỉ xét lệnh bash đã xong có output khớp `proof_re`; endpoint của lệnh =
-    cổng trong dòng lệnh ∪ cổng trong thân script mà lệnh chạy. ok: có lệnh bằng chứng nhắm cổng target; mismatch: có
-    lệnh bằng chứng nhưng chỉ nhắm cổng khác; còn lại unknown (không hạ nhầm khi không xác định được)."""
+    cổng GHI RÕ trong dòng lệnh ∪ trong thân script mà lệnh chạy. ok: lệnh bằng chứng nhắc cổng target (kể cả dạng cờ
+    `-p 19999`); mismatch: có lệnh bằng chứng ghi rõ cổng khác và KHÔNG nhắc cổng target ở đâu; còn lại unknown. Thận trọng
+    có chủ đích: hạ nhầm một ca đúng đắt hơn bỏ sót. Giới hạn đã biết: redirect sang cổng khác không phát hiện được."""
     tport = target_port(target)
     if tport is None:
         return "unknown", None
@@ -83,10 +95,21 @@ def scope_verdict(target: str, messages: list[dict[str, Any]], *, proof_re: re.P
             if state.get("status") != "completed" or not proof_re.search(str(state.get("output") or "")):
                 continue
             cmd = str((state.get("input") or {}).get("command") or "")
-            ports = ports_in(cmd)
+            if _is_read_only(cmd):
+                continue
+            text = cmd
             for name in _SCRIPT_RE.findall(cmd):
-                ports |= ports_in(bodies.get(os.path.basename(name), ""))
-            if tport in ports:
+                text += "\n" + bodies.get(os.path.basename(name), "")
+            ports = ports_in(text)
+            if tport in ports or _mentions_port(text, tport):   # có nhắc cổng target ở đâu đó trong lệnh/script → giữ ok
                 return "ok", None
             seen.extend(sorted(ports))
     return ("mismatch", seen[0]) if seen else ("unknown", None)
+
+
+def _is_read_only(cmd: str) -> bool:
+    """Mọi đoạn lệnh (tách theo && || ; | xuống dòng) đều là lệnh đọc/in và không ghi file (không `>`/heredoc)."""
+    if ">" in cmd or "<<" in cmd:
+        return False
+    segs = [x.split() for x in re.split(r"&&|\|\||;|\||\n", cmd.strip()) if x.strip()]
+    return bool(segs) and all(sg[0].rsplit("/", 1)[-1] in _READ_ONLY for sg in segs)
