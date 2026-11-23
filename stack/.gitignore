@@ -3,3 +3,4 @@ acceptance/node_modules
 secrets/
 acceptance/test-results/
 acceptance/playwright-report/
+tokenizer/
