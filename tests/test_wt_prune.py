@@ -113,12 +113,34 @@ def test_squash_merged_branch_is_detected_without_being_an_ancestor(sb: Sandbox)
     assert not wt.exists() and "feat/squashed" not in sb.branches()
 
 
-def test_fresh_empty_worktree_is_never_pruned(sb: Sandbox) -> None:
-    """A brand-new branch equals main (an ancestor of it) but has no merged PR: must survive."""
+def test_fresh_empty_worktree_is_kept_until_old_enough(sb: Sandbox) -> None:
+    """Empty branch (== main), no PR: kept while young, pruned once older than WT_PRUNE_EMPTY_HOURS."""
     wt = sb.worktree("fresh", commit=False, merged=False)
     out = sb.prune("--yes")
     assert wt.exists() and "feat/fresh" in sb.branches()
-    assert "no merged PR" in out
+    assert "younger than" in out
+    old = time.time() - 25 * 3600
+    os.utime(wt / ".git", (old, old))
+    sb.prune("--yes")
+    assert not wt.exists() and "feat/fresh" not in sb.branches()
+
+
+def test_old_empty_worktree_with_unpushed_commit_is_kept(sb: Sandbox) -> None:
+    """Age alone never justifies pruning: a commit not in origin/main means real work."""
+    wt = sb.worktree("work", merged=False)
+    old = time.time() - 48 * 3600
+    os.utime(wt / ".git", (old, old))
+    out = sb.prune("--yes")
+    assert wt.exists() and "feat/work" in sb.branches() and "no merged PR" in out
+
+
+def test_old_empty_worktree_with_uncommitted_changes_is_kept(sb: Sandbox) -> None:
+    wt = sb.worktree("wip", commit=False, merged=False)
+    (wt / "scratch.txt").write_text("not committed")
+    old = time.time() - 48 * 3600
+    os.utime(wt / ".git", (old, old))
+    out = sb.prune("--yes")
+    assert wt.exists() and "uncommitted or untracked" in out
 
 
 def test_commit_after_merge_is_kept(sb: Sandbox) -> None:
