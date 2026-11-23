@@ -43,6 +43,10 @@ Script thuê probe authenticated inference LLM/embedding/rerank từng replica v
 
 Chi tiết artifact, flags, installer và matrix: `secai-serving-vast/vast/gpu_specialists/README.md` trong repo serving riêng.
 
+## Kết quả đo tải
+
+Mỗi lần đo tải (N=16/24/28... chat + exploit-v2) lưu **toàn bộ** kết quả (`chat.tsv`, `exploits.tsv`, `resources.tsv`, transcript, log gateway) vào `loadtest-results/<yyyymmdd>-N<số>/` ở gốc repo; thư mục này đã nằm trong `.gitignore`, **không commit** (nếu cần chia sẻ chỉ ghi bảng tóm tắt vào docs). Lưu trước khi recreate container, vì log container mất khi recreate. Đo với 1 lab nhanh nên ghi rõ lab và máy LLM đang dùng.
+
 ## Nhiều agent Claude Code cùng làm việc (git + deploy)
 
 Nhiều agent có thể chạy đồng thời trên cùng máy, cùng repo. Dưới đây là quy tắc bắt buộc, rút từ sự cố thật (main bị `reset --hard` mất 5 commit chưa push; worktree khác bị lệch index khi ai đó đổi `main` dùng chung; container dịch bị `docker run` tay đè tên không qua compose, `release.json` hỏng giữa đường không ai biết):
