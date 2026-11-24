@@ -222,10 +222,11 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
   PoC chạy lại ra bằng chứng 31/72 (ngưỡng 71/72 và 27/72) — đạt. Lưu ý: prod luôn chạy trước stack trong mỗi vòng, LLM dùng chung, vòng prod r2/r3
   phải chạy lại do chat 503 (lỗi phía gateway prod), stack có `VERIFY_ENABLED=false` và Qdrant tập con; vòng stack r3 chạy không có guard
   tự dừng (không có phút nào > 50% lỗi). UI-POC-2: prod chỉ qua 3/71 nên baseline không ổn định.
-- **Gói dữ liệu thật (~37 GB nguồn)**: `pack.sh`/`restore-data.sh` mới kiểm trên tập con. `eval-vast.sh packtest` (mục dưới)
-  **sẽ** chứng minh trên VM: pack đủ (snapshot Qdrant qua API, dump Neo4j có sẵn), restore vào `DATA_ROOT` trống, số điểm/cấu
-  hình/payload Qdrant khớp prod, số tệp và byte từng cây khớp nguồn, SHA256SUMS, quyền, cùng thời gian và đỉnh đĩa. **Chưa chạy**,
-  nên chưa tuyên bố đạt. Không chứng minh: dump store Neo4j đang ghi (`--neo4j-dir`), symlink trong nguồn (rsync `--no-links`).
+- **Gói dữ liệu thật (~37 GB nguồn)**: đã đóng gói và khôi phục thử trên VM Vast 2026-11-24 bằng `eval-vast.sh packtest`
+  (`docs/archive/test-results/stack-package-packtest-20261124.md`): gói 13,7 GB, pack 18,5 phút, restore 2,6 phút, Qdrant 842.928/842.928
+  điểm khớp prod (cấu hình vector, payload index, 20 điểm mẫu), số tệp/byte từng cây khớp nguồn, SHA256SUMS và quyền đạt. Chưa kiểm:
+  số node Neo4j so với kỳ vọng (gói dùng `neo4j.dump` ngày 2026-06-30), mô hình BM25 chạy offline (`bm25.py` hard-code đường dẫn
+  `/home/ict/...`), dump store Neo4j đang ghi (`--neo4j-dir`), symlink trong nguồn (rsync `--no-links`). Lưu ý: `poc-sources` mang cả `.git`.
 - **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
 - **Máy 2/4 GPU và máy đích sạch hoàn toàn**: đã dựng trên một VM Vast mới (image build tại chỗ từ `git archive`, nạp gói dữ liệu nhỏ,
   `check.sh all` + 4/9 ca đạt, 5 ca bỏ qua có lý do; xem `docs/archive/test-results/stack-package-vast-eval-20261124.md`). Chưa kiểm: máy
