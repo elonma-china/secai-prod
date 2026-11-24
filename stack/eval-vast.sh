@@ -478,7 +478,7 @@ cmd_collect() {
 #   PACKTEST_QDRANT_URL (http://127.0.0.1:6333), PACKTEST_QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY hoặc
 #   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_NODES (số node mong đợi; không có thì neo4j = not_verified),
 #   PACKTEST_VM_MIN_FREE_GB (60), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (300; 30..400).
-PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=8 PT_SNAP_DEFAULT=$((5 << 30))
+PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=${PACKTEST_MIN_MBPS:-8} PT_SNAP_DEFAULT=$((5 << 30))
 qcurl() {   # khoá Qdrant qua cấu hình curl trên stdin (-K -), không lên argv. Chỉ đọc + xoá snapshot đã ghi tên.
     if [ -n "$QKEY" ]; then printf 'header = "api-key: %s"\n' "$QKEY" | curl -K - -fsS --max-time 60 "$@"
     else curl -fsS --max-time 60 "$@"; fi
