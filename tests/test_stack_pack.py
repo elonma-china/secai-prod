@@ -1,30 +1,69 @@
 """stack/pack.sh va stack/restore-data.sh: goi du lieu co checksum, khong dung 49 GB that, docker la stub."""
 from __future__ import annotations
 
+import gzip
 import hashlib
 import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 STACK = Path(__file__).resolve().parents[1] / "stack"
-EXPECTED = ["qdrant/cve_kb_hybrid.snapshot", "neo4j/neo4j.dump", "exploitdb.tar.zst", "poc.tar.zst",
+NEO4J_FILES = ["neo4j/counts.json", "neo4j/schema.cypher", "neo4j/nodes-CVE.header.csv", "neo4j/nodes-CVE.csv.gz",
+               "neo4j/rels-AFFECTS.header.csv", "neo4j/rels-AFFECTS.csv.gz"]
+EXPECTED = ["qdrant/cve_kb_hybrid.snapshot", *NEO4J_FILES, "exploitdb.tar.zst", "poc.tar.zst",
             "poc-sources.tar.zst", "exploitdb-mcp-server.tar.zst"]
+PW = "pw-SECRET-123"
 
 
 def run(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, env=env, text=True, capture_output=True)
 
 
-def stub_docker(tmp: Path, creates_store: bool = False) -> tuple[dict[str, str], Path]:
+def base_env() -> dict[str, str]:
+    return {k: v for k, v in os.environ.items() if not k.startswith("NEO4J_")}
+
+
+def stub_docker(tmp: Path, nodes: str = "CVE", rels: str = "AFFECTS") -> tuple[dict[str, str], Path]:
+    """docker gia: ghi argv + ten bien env (khong ghi gia tri). `import full` tao store; `exec cypher-shell` tra so dem
+    tu tmp/fake/{nodes,rels}.out (mac dinh khop make_pkg: CVE=2, AFFECTS=1)."""
     binp = tmp / "bin"
     binp.mkdir(exist_ok=True)
+    fake = tmp / "fake"
+    fake.mkdir(exist_ok=True)
+    (fake / "nodes.out").write_text(f'k, c\n"{nodes}", 2\n')
+    (fake / "rels.out").write_text(f'k, c\n"{rels}", 1\n')
     log = tmp / "docker.log"
-    body = f'#!/bin/sh\necho "$@" >> {log}\n'
-    if creates_store:  # gia lap `docker run ... neo4j-admin database load`
-        body += 'if [ "$1" = run ]; then mkdir -p "$DATA_ROOT/_state/neo4j_data/databases/neo4j" && touch "$DATA_ROOT/_state/neo4j_data/databases/neo4j/neostore"; fi\n'
-    (binp / "docker").write_text(body)
+    (binp / "docker").write_text(f"""#!/bin/sh
+echo "ARGV: $*" >> {log}
+echo "ENV: NEO4J_AUTH=${{NEO4J_AUTH:+set}} NEO4J_PASSWORD=${{NEO4J_PASSWORD:+set}} auth_ok=$([ "$NEO4J_AUTH" = "neo4j/{PW}" ] && echo y)" >> {log}
+nd="$DATA_ROOT/_state/neo4j_data"
+case "$*" in
+  *"database import full"*) mkdir -p "$nd/databases/neo4j" && touch "$nd/databases/neo4j/neostore" ;;
+  *"State.Running"*) cat {fake}/running 2>/dev/null || echo true ;;
+  *"RETURN 1"*) [ ! -e {fake}/running ] ;;
+  *"labels(n)"*) cat {fake}/nodes.out ;;
+  *"type(r)"*) cat {fake}/rels.out ;;
+  *"touch /data/.secai-restore-complete"*) touch "$nd/.secai-restore-complete" ;;
+esac
+""")
     (binp / "docker").chmod(0o755)
-    return {**os.environ, "PATH": f"{binp}:{os.environ['PATH']}"}, log
+    return {**base_env(), "PATH": f"{binp}:{os.environ['PATH']}", "NEO4J_PASSWORD": PW}, log
+
+
+def make_neo4j_export(d: Path) -> None:
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "counts.json").write_text('{"exported_at": "2026-11-24T00:00:00+00:00", "nodes": {"CVE": 2}, "relationships": {"AFFECTS": 1}}\n')
+    (d / "schema.cypher").write_text("CREATE CONSTRAINT `cve_id` FOR (n:`CVE`) REQUIRE (n.`id`) IS UNIQUE;\n")
+    (d / "nodes-CVE.header.csv").write_text(":ID,id:string,:LABEL\n")
+    (d / "nodes-CVE.csv.gz").write_bytes(gzip.compress(b'0,"CVE-1",CVE\n1,"CVE-2",CVE\n'))
+    (d / "rels-AFFECTS.header.csv").write_text(":START_ID,:END_ID,:TYPE\n")
+    (d / "rels-AFFECTS.csv.gz").write_bytes(gzip.compress(b"0,1,AFFECTS\n"))
+
+
+def write_sums(pkg: Path, files: list[str]) -> None:
+    (pkg / "SHA256SUMS").write_text("".join(f"{hashlib.sha256((pkg / f).read_bytes()).hexdigest()}  {f}\n" for f in files))
 
 
 def make_pkg(pkg: Path) -> None:
@@ -38,9 +77,8 @@ def make_pkg(pkg: Path) -> None:
     for name, d in (("exploitdb", "exploitdb"), ("poc", "poc"), ("poc-sources", "poc-sources"), ("exploitdb-mcp-server", "exploitdb-mcp-server")):
         subprocess.run(f"tar -C {src} -cf - {d} | zstd -q -o {pkg}/{name}.tar.zst", shell=True, check=True)
     (pkg / "qdrant").mkdir(); (pkg / "qdrant" / "cve_kb_hybrid.snapshot").write_text("snap")
-    (pkg / "neo4j").mkdir(); (pkg / "neo4j" / "neo4j.dump").write_text("dump")
-    sums = "".join(f"{hashlib.sha256((pkg / f).read_bytes()).hexdigest()}  {f}\n" for f in EXPECTED)
-    (pkg / "SHA256SUMS").write_text(sums)
+    make_neo4j_export(pkg / "neo4j")
+    write_sums(pkg, EXPECTED)
 
 
 def test_restore_refuses_corrupt_package(tmp_path):
@@ -72,7 +110,7 @@ def test_restore_refuses_corrupt_valid_listed_file_among_good(tmp_path):
 def test_restore_success_and_idempotent(tmp_path):
     pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
     data = tmp_path / "data"
-    env, log = stub_docker(tmp_path, creates_store=True)
+    env, log = stub_docker(tmp_path)
     env["DATA_ROOT"] = str(data)
     r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env=env)
     assert r.returncode == 0, r.stderr
@@ -82,7 +120,7 @@ def test_restore_success_and_idempotent(tmp_path):
     assert (data / "exploitdb-mcp-server" / "package.json").read_text() == "exploitdb-mcp-server"
     assert (data / "qdrant" / "cve_kb_hybrid.snapshot").read_text() == "snap"
     assert (data / "_state" / "qdrant_storage").is_dir() and (data / "_state" / "neo4j_logs").is_dir()
-    assert "neo4j-admin database load" in log.read_text()
+    assert "neo4j-admin database import full" in log.read_text()
     assert "PUT" in r.stdout and "cve_kb_hybrid" in r.stdout          # in lenh qdrant, khong tu goi khi thieu --qdrant-url
     # du lieu co san khong bi ghi de; chay lai khong lam gi
     (data / "exploitdb" / "a.txt").write_text("local-edit")
@@ -142,7 +180,7 @@ def test_restore_rejects_package_missing_sums_entry(tmp_path):
 def test_restore_nonroot_prints_gateway_chown_instruction(tmp_path):
     pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
     data = tmp_path / "data"
-    env, _ = stub_docker(tmp_path, creates_store=True)
+    env, _ = stub_docker(tmp_path)
     r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
     assert r.returncode == 0, r.stderr
     d = data / "poc"
@@ -153,7 +191,7 @@ def test_restore_nonroot_prints_gateway_chown_instruction(tmp_path):
 def test_restore_root_chowns_poc_to_gateway(tmp_path):
     pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
     data = tmp_path / "data"
-    env, _ = stub_docker(tmp_path, creates_store=True)
+    env, _ = stub_docker(tmp_path)
     chown_log = tmp_path / "chown.log"
     (tmp_path / "bin" / "id").write_text("#!/bin/sh\necho 0\n")
     (tmp_path / "bin" / "chown").write_text(f'#!/bin/sh\necho "$@" >> {chown_log}\n')
@@ -172,7 +210,7 @@ def test_restore_root_chowns_poc_to_gateway(tmp_path):
 def test_restore_warns_on_empty_existing_dir(tmp_path):
     pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
     data = tmp_path / "data"; (data / "poc-sources").mkdir(parents=True)
-    env, _ = stub_docker(tmp_path, creates_store=True)
+    env, _ = stub_docker(tmp_path)
     r = run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
     assert r.returncode == 0 and "poc-sources is empty" in r.stderr
 
@@ -183,7 +221,7 @@ def _fake_src(tmp_path):
         (src / d).mkdir(parents=True)
     (src / "poc" / "catalog.db").write_text("x")
     (tmp_path / "exploitdb-mcp-server").mkdir()
-    (tmp_path / "neo4j.dump").write_text("d")
+    make_neo4j_export(tmp_path / "neo4j-export")
     return src
 
 
@@ -199,7 +237,7 @@ def test_pack_data_deletes_server_snapshot_and_partial_out_on_failure(tmp_path):
         'esac\n')
     (binp / "curl").chmod(0o755)
     out = tmp_path / "out"
-    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(out),
             env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode != 0
     calls = log.read_text()
@@ -212,7 +250,7 @@ def test_pack_data_unparsable_snapshot_response_lists_snapshots(tmp_path):
     binp = tmp_path / "bin"; binp.mkdir()
     (binp / "curl").write_text('#!/bin/sh\ncase "$*" in *"-X POST"*) echo oops ;; *) echo LISTING-OF-SNAPSHOTS ;; esac\n')
     (binp / "curl").chmod(0o755)
-    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(tmp_path / "out"),
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(tmp_path / "out"),
             env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode != 0 and "LISTING-OF-SNAPSHOTS" in (r.stdout + r.stderr) and "orphan" in r.stderr.lower()
 
@@ -234,9 +272,9 @@ def test_pack_data_excludes_secrets_and_git_from_mcp_tarball(tmp_path):
         '  *) echo \'{"result":{"points_count":7}}\' ;;\n'
         'esac\n')
     (binp / "curl").chmod(0o755)
-    (binp / "docker").write_text("#!/bin/sh\nexit 1\n"); (binp / "docker").chmod(0o755)   # khong duoc goi khi dung --neo4j-dump
+    (binp / "docker").write_text("#!/bin/sh\nexit 1\n"); (binp / "docker").chmod(0o755)   # khong duoc goi khi dung --neo4j-export
     out = tmp_path / "out"
-    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(out),
             env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode == 0, r.stderr
     assert ".env" in r.stderr and "tls.pem" in r.stderr and "k.key" in r.stderr
@@ -261,7 +299,7 @@ def test_pack_data_accepts_relative_src_root(tmp_path):
         '  *) echo \'{"result":{"points_count":7}}\' ;;\n'
         'esac\n')
     (binp / "curl").chmod(0o755)
-    r = subprocess.run(["bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", "neo4j.dump", "--mcp-dir", "exploitdb-mcp-server",
+    r = subprocess.run(["bash", str(STACK / "pack.sh"), "data", "--neo4j-export", "neo4j-export", "--mcp-dir", "exploitdb-mcp-server",
                         "src", "out"], cwd=tmp_path, text=True, capture_output=True,
                        env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode == 0, r.stderr
@@ -284,7 +322,7 @@ def _pack_poc_sources(tmp_path):
     for p in ("exploitdb/.git/HEAD", "exploitdb/e.txt", "poc/store/.git/HEAD"):
         (src / p).parent.mkdir(parents=True, exist_ok=True); (src / p).write_text("x")
     out = tmp_path / "out"
-    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(out),
             env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode == 0, r.stderr
     return out
@@ -309,3 +347,215 @@ def test_pack_manifest_lists_skipped_sources(tmp_path):
     m = (_pack_poc_sources(tmp_path) / "MANIFEST.md").read_text()
     for n in (".git", "trickest-cve", "PoC-in-GitHub", "_manual-untracked-backup-*"):
         assert n in m
+
+
+# ---- Neo4j: export CSV trong goi (pack) va import + schema + so dem (restore) ----
+
+CURL_OK = ('#!/bin/sh\ncase "$*" in\n  *"-X POST"*) echo \'{"result":{"name":"s"}}\' ;;\n  *"-X DELETE"*) ;;\n'
+           '  *"-o "*) while [ $# -gt 0 ]; do [ "$1" = -o ] && echo snap > "$2"; shift; done ;;\n'
+           '  *) echo \'{"result":{"points_count":7}}\' ;;\nesac\n')
+
+
+def pack_env(tmp_path: Path) -> dict[str, str]:
+    binp = tmp_path / "bin"; binp.mkdir(exist_ok=True)
+    (binp / "curl").write_text(CURL_OK); (binp / "curl").chmod(0o755)
+    (binp / "docker").write_text("#!/bin/sh\nexit 1\n"); (binp / "docker").chmod(0o755)   # pack data khong goi docker
+    return {**base_env(), "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"}
+
+
+def test_pack_neo4j_export_dir_copied_and_summed(tmp_path):
+    src = _fake_src(tmp_path)
+    out = tmp_path / "out"
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(out),
+            env=pack_env(tmp_path))
+    assert r.returncode == 0, r.stderr
+    exp = tmp_path / "neo4j-export"
+    assert sorted(p.name for p in (out / "neo4j").iterdir()) == sorted(p.name for p in exp.iterdir())
+    for p in exp.iterdir():
+        assert (out / "neo4j" / p.name).read_bytes() == p.read_bytes()
+    sums = (out / "SHA256SUMS").read_text()
+    for f in NEO4J_FILES:
+        assert f"  {f}\n" in sums
+    assert "neo4j.dump" not in sums
+    assert "2 nodes, 1 relationships" in (out / "MANIFEST.md").read_text()
+    assert subprocess.run(["sha256sum", "-c", "--quiet", "SHA256SUMS"], cwd=out).returncode == 0
+
+
+@pytest.mark.parametrize("drop", ["counts.json", "schema.cypher", "nodes-CVE.header.csv"])
+def test_pack_neo4j_export_dir_incomplete_refused(tmp_path, drop):
+    src = _fake_src(tmp_path)
+    (tmp_path / "neo4j-export" / drop).unlink()
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-export", str(tmp_path / "neo4j-export"), str(src), str(tmp_path / "out"),
+            env=pack_env(tmp_path))
+    assert r.returncode != 0 and drop.split("-")[0] in r.stderr
+    assert not (tmp_path / "out").exists()
+
+
+def _pack_with_exporter(tmp_path, graph):
+    from test_stack_neo4j_export import fake_neo4j
+    src = _fake_src(tmp_path)
+    env = pack_env(tmp_path)
+    argv_log = tmp_path / "python3.argv"
+    real = subprocess.run(["sh", "-c", "command -v python3"], text=True, capture_output=True, env=env).stdout.strip()
+    (tmp_path / "bin" / "python3").write_text(f'#!/bin/sh\necho "$@" >> {argv_log}\nexec {real} "$@"\n')
+    (tmp_path / "bin" / "python3").chmod(0o755)
+    out = tmp_path / "out"
+    with fake_neo4j(graph) as (url, st):
+        r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-url", url, str(src), str(out), env={**env, "NEO4J_PASSWORD": PW})
+    return r, out, st, argv_log.read_text()
+
+
+def test_pack_neo4j_url_runs_exporter(tmp_path):
+    """Exporter that (stack/neo4j-export.py) chay voi Neo4j gia cua test_stack_neo4j_export; mat khau chi qua env."""
+    from test_stack_neo4j_export import sample_graph
+    r, out, st, argv = _pack_with_exporter(tmp_path, sample_graph())
+    assert r.returncode == 0, r.stderr
+    assert "neo4j-export.py" in argv and PW not in argv
+    assert st["reqs"] and all(a and a.startswith("Basic ") for a, _ in st["reqs"])     # NEO4J_PASSWORD den exporter qua env
+    assert PW not in r.stdout + r.stderr
+    names = sorted(p.name for p in (out / "neo4j").iterdir())
+    assert "counts.json" in names and "nodes-CVE.csv.gz" in names and "rels-HAS_CWE.header.csv" in names
+    sums = (out / "SHA256SUMS").read_text()
+    assert all(f"  neo4j/{n}\n" in sums for n in names)
+    assert "5 nodes, 4 relationships" in (out / "MANIFEST.md").read_text()
+
+
+def test_pack_neo4j_export_drift_fails_and_removes_out(tmp_path):
+    from test_stack_neo4j_export import sample_graph
+    g = sample_graph(); g["drift"] = {"CVE": 1}
+    r, out, _, _ = _pack_with_exporter(tmp_path, g)
+    assert r.returncode != 0 and "neo4j" in r.stderr
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("flag", ["--neo4j-dump", "--neo4j-dir"])
+def test_pack_rejects_old_neo4j_flags(tmp_path, flag):
+    src = _fake_src(tmp_path)
+    r = run("bash", str(STACK / "pack.sh"), "data", flag, str(tmp_path / "x"), str(src), str(tmp_path / "out"), env=pack_env(tmp_path))
+    assert r.returncode == 2 and "usage" in r.stderr.lower() and "--neo4j-export" in r.stderr
+    assert not (tmp_path / "out").exists()
+
+
+def restore(tmp_path, pkg, env, data=None):
+    return run("bash", str(STACK / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data or tmp_path / "data")})
+
+
+def test_restore_builds_import_args_from_files(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path)
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode == 0, r.stderr
+    imp = next(l for l in log.read_text().splitlines() if "database import full" in l)
+    assert "--nodes=CVE=/import/nodes-CVE.header.csv,/import/nodes-CVE.csv.gz" in imp
+    assert "--relationships=AFFECTS=/import/rels-AFFECTS.header.csv,/import/rels-AFFECTS.csv.gz" in imp
+    assert "--id-type=integer" in imp and "--multiline-fields=true" in imp and f"{pkg}/neo4j:/import:ro" in imp
+
+
+def test_restore_counts_match_writes_complete_marker(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path)
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode == 0, r.stderr
+    assert "==> neo4j: counts match (2 nodes, 1 relationships)" in r.stdout
+    nd = tmp_path / "data" / "_state" / "neo4j_data"
+    assert (nd / ".secai-restore-started").exists() and (nd / ".secai-restore-complete").exists()
+    calls = [l for l in log.read_text().splitlines() if l.startswith("ARGV:")]
+    order = ["database import full", "run -d", "RETURN 1", "-f /schema.cypher", "db.awaitIndexes(900)", "labels(n)", "type(r)",
+             "touch /data/.secai-restore-complete", "rm -f secai-restore-neo4j-"]
+    idx = [next(i for i, l in enumerate(calls) if o in l) for o in order]
+    assert idx == sorted(idx), calls
+    assert f"{pkg}/neo4j/schema.cypher:/schema.cypher:ro" in calls[idx[1]]
+
+
+def test_restore_counts_mismatch_dies(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path, nodes="CWE")
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode != 0
+    assert "CVE" in r.stderr and "CWE" in r.stderr and "counts match" not in r.stdout
+    assert not (tmp_path / "data" / "_state" / "neo4j_data" / ".secai-restore-complete").exists()
+    assert "rm -f secai-restore-neo4j-" in log.read_text()                 # trap luon xoa container tam
+
+
+def test_restore_incomplete_marker_refuses_rerun(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path, nodes="CWE")
+    assert restore(tmp_path, pkg, env).returncode != 0                     # chet sau import, truoc khi so dem khop
+    env, log = stub_docker(tmp_path)
+    log.unlink()
+    r = restore(tmp_path, pkg, env)
+    nd = tmp_path / "data" / "_state" / "neo4j_data"
+    assert r.returncode != 0
+    assert f"incomplete previous Neo4j restore: remove {nd} and rerun" in r.stderr
+    assert not log.exists()
+
+
+def test_restore_existing_store_without_markers_skips(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path)
+    store = tmp_path / "data" / "_state" / "neo4j_data" / "databases" / "neo4j"
+    store.mkdir(parents=True); (store / "neostore").write_text("")
+    del env["NEO4J_PASSWORD"]                                              # khong nap Neo4j thi khong can mat khau
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode == 0, r.stderr
+    assert "store already exists" in r.stdout and not log.exists()
+
+
+def _isolated_restore(tmp_path) -> Path:
+    """Ban sao restore-data.sh trong thu muc rieng de kiem soat $(dirname $0)/.env."""
+    st = tmp_path / "stack"; st.mkdir()
+    (st / "restore-data.sh").write_bytes((STACK / "restore-data.sh").read_bytes())
+    return st
+
+
+def test_restore_without_password_dies_before_touching_data_root(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    st = _isolated_restore(tmp_path)
+    (st / ".env").write_text("NEO4J_PASSWORD=old\nNEO4J_PASSWORD=\n")      # dong cuoi rong
+    env, log = stub_docker(tmp_path)
+    del env["NEO4J_PASSWORD"]
+    data = tmp_path / "data"
+    r = run("bash", str(st / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(data)})
+    assert r.returncode != 0 and "NEO4J_PASSWORD" in r.stderr
+    assert not data.exists() and not log.exists()
+
+
+def test_restore_password_from_dotenv(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    st = _isolated_restore(tmp_path)
+    (st / ".env").write_text(f"NEO4J_PASSWORD=old\nNEO4J_PASSWORD={PW}\n")
+    env, log = stub_docker(tmp_path)
+    del env["NEO4J_PASSWORD"]
+    r = run("bash", str(st / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(tmp_path / "data")})
+    assert r.returncode == 0, r.stderr
+    run_d = log.read_text().split("ARGV: run -d", 1)[1].splitlines()
+    assert "auth_ok=y" in run_d[1]
+
+
+def test_restore_password_not_in_argv(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path)
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode == 0, r.stderr
+    text = log.read_text()
+    assert PW not in text and PW not in r.stdout + r.stderr
+    lines = text.splitlines()
+    i = next(i for i, l in enumerate(lines) if l.startswith("ARGV: run -d"))
+    argv = lines[i].split()
+    assert "NEO4J_AUTH" in argv and argv[argv.index("NEO4J_AUTH") - 1] == "-e"
+    assert not any(a.startswith("NEO4J_AUTH=") for a in argv)
+    assert "auth_ok=y" in lines[i + 1]                                     # gia tri neo4j/<pw> chi nam trong env
+    for l, nxt in zip(lines, lines[1:]):
+        if l.startswith("ARGV: exec") and "cypher-shell" in l:
+            assert " -e NEO4J_PASSWORD " in l and "NEO4J_PASSWORD=set" in nxt
+            assert " -e LANG=C.UTF-8 " in l                                 # schema.cypher doc dung UTF-8
+
+
+def test_restore_dead_neo4j_container_fails_fast(tmp_path):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    env, log = stub_docker(tmp_path)
+    (tmp_path / "fake" / "running").write_text("false\n")                  # container tam da thoat
+    r = restore(tmp_path, pkg, env)
+    assert r.returncode != 0 and "not ready (running=false" in r.stderr
+    assert "ARGV: logs --tail 30 secai-restore-neo4j-" in log.read_text()
+    assert "rm -f secai-restore-neo4j-" in log.read_text()
