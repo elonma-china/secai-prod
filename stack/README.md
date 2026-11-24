@@ -129,6 +129,26 @@ phải **gateway ghi được** (WAL của `catalog.db`, kho PoC); preflight bá
 `sudo chown -R 10001:10100 $DATA_ROOT/poc && sudo chmod -R g+w $DATA_ROOT/poc`. `exploitdb`, `poc-sources`,
 `exploitdb-mcp-server` mount `:ro`. Thư mục thiếu mà Docker tự tạo sẽ thuộc root và gateway không ghi được, nên tạo trước.
 
+### Thử gói thật trên VM thuê (`packtest`)
+
+Máy nguồn ít đĩa nên pack và restore đều chạy **trên VM**; máy nguồn chỉ rsync nguồn (chỉ đọc) và mở tunnel ngược tới Qdrant.
+
+```sh
+EVAL_MODE=packtest EVAL_DISK_GB=150 stack/eval-vast.sh up   # không cần EVAL_ENV_FILE/EVAL_DATA_PKG; không build image
+stack/eval-vast.sh packtest      # kiểm cục bộ -> đo băng thông -> rsync nguồn -> tunnel -> pack + restore + kiểm trên VM
+stack/eval-vast.sh collect       # kéo results/ (có packtest-summary.json) về local/stack-eval/
+stack/eval-vast.sh down
+```
+
+`packtest` từ chối (chưa tạo gì) khi `/` cục bộ còn < 45 GB (snapshot ghi lên đĩa máy Qdrant), Qdrant không đọc được hoặc
+thiếu nguồn; dừng trước khi chuyển dữ liệu nếu băng thông < 8 MB/s (ghi `ALERT.txt`, rồi `down`). Mọi lệnh bị giới hạn tới
+deadline - 10 phút. Trên Qdrant nguồn chỉ có thêm snapshot do `pack.sh` tạo; lúc thoát script xoá snapshot **mới, đúng
+collection, tạo sau lúc bắt đầu**, không bao giờ xoá snapshot có sẵn, rồi kiểm `/` đã về trong 1 GB so với lúc đầu. Khoá
+Qdrant (`QDRANT_API_KEY` hoặc `PACKTEST_QDRANT_KEY_FILE` 0600) đi qua stdin, không lên argv. Biến khác: `PACKTEST_SRC_ROOT`,
+`PACKTEST_MCP_DIR`, `PACKTEST_QDRANT_URL` (chỉ `http://127.0.0.1:<cổng>`), `PACKTEST_QDRANT_COLLECTION`,
+`PACKTEST_NEO4J_NODES` (không đặt thì chỉ ghi số node), `PACKTEST_VM_MIN_FREE_GB` (60). Nguồn trên VM bị xoá sau khi đo để
+restore vừa đĩa; `restore-data.sh` chép snapshot thêm một bản nên cần đĩa ~150 GB.
+
 ## Dịch tệp/ảnh: tunnel tới model chuyên dụng và OCR
 
 Gateway dịch chỉ chấp nhận Hy-MT2/OCR ở `http://127.0.0.1:<cổng>` hoặc `https://<IP private>` (chặn SSRF, không đổi).
@@ -186,8 +206,10 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
   PoC chạy lại ra bằng chứng 31/72 (ngưỡng 71/72 và 27/72) — đạt. Lưu ý: prod luôn chạy trước stack trong mỗi vòng, LLM dùng chung, vòng prod r2/r3
   phải chạy lại do chat 503 (lỗi phía gateway prod), stack có `VERIFY_ENABLED=false` và Qdrant tập con; vòng stack r3 chạy không có guard
   tự dừng (không có phút nào > 50% lỗi). UI-POC-2: prod chỉ qua 3/71 nên baseline không ổn định.
-- **Gói dữ liệu thật ~49 GB**: `pack.sh`/`restore-data.sh` chỉ kiểm trên tập con; chưa chạy ở kích thước thật (thời gian,
-  dung lượng đĩa tạm, nhất quán khi chép store Neo4j đang ghi).
+- **Gói dữ liệu thật (~37 GB nguồn)**: `pack.sh`/`restore-data.sh` mới kiểm trên tập con. `eval-vast.sh packtest` (mục dưới)
+  **sẽ** chứng minh trên VM: pack đủ (snapshot Qdrant qua API, dump Neo4j có sẵn), restore vào `DATA_ROOT` trống, số điểm/cấu
+  hình/payload Qdrant khớp prod, số tệp và byte từng cây khớp nguồn, SHA256SUMS, quyền, cùng thời gian và đỉnh đĩa. **Chưa chạy**,
+  nên chưa tuyên bố đạt. Không chứng minh: dump store Neo4j đang ghi (`--neo4j-dir`), symlink trong nguồn (rsync `--no-links`).
 - **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
 - **Máy 2/4 GPU và máy đích sạch hoàn toàn**: đã dựng trên một VM Vast mới (image build tại chỗ từ `git archive`, nạp gói dữ liệu nhỏ,
   `check.sh all` + 4/9 ca đạt, 5 ca bỏ qua có lý do; xem `docs/archive/test-results/stack-package-vast-eval-20261124.md`). Chưa kiểm: máy
