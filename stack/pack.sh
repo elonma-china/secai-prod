@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Đóng gói SecAI để mang sang máy khác. Không bao giờ `docker push` (in lệnh để chủ dự án chạy tay).
 #   pack.sh image [git-ref]                       build image gateway từ `git archive` (mặc định HEAD)
+#   pack.sh images <env_file> <out_dir>           docker save mọi image mà .env (COMPOSE_PROFILES) trỏ tới -> <out_dir>/images/{images.tar.zst,images.txt,SHA256SUMS}
 #   pack.sh data [--mcp-dir D] [--neo4j-url URL | --neo4j-export DIR] <src_root> <out_dir>
 # Biến môi trường (data): QDRANT_URL (mặc định http://127.0.0.1:6333), QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY,
 #   NEO4J_URL (= --neo4j-url, mặc định http://127.0.0.1:7474), NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE (chỉ qua env).
@@ -10,7 +11,7 @@
 #   bản export có sẵn (cần counts.json, schema.cypher, ≥1 nodes-*.header.csv).
 set -euo pipefail
 
-usage() { echo "usage: $0 image [git-ref] | $0 data [--mcp-dir D] [--neo4j-url URL | --neo4j-export DIR] <src_root> <out_dir>" >&2; exit 2; }
+usage() { echo "usage: $0 image [git-ref] | $0 images <env_file> <out_dir> | $0 data [--mcp-dir D] [--neo4j-url URL | --neo4j-export DIR] <src_root> <out_dir>" >&2; exit 2; }
 die() { echo "pack: $*" >&2; exit 1; }
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 . "$REPO/stack/lib/poc-sources-excludes.sh"
@@ -152,8 +153,33 @@ pack_data() {
   echo "package ready: $out"
 }
 
+# Đóng mọi image compose cần (theo env file) thành một tarball; thất bại trước khi ghi nếu ref thiếu/placeholder.
+pack_images() {
+  [ $# -eq 2 ] || usage
+  local env_file=$1 out=$2 cfg ref id bad="" refs=() ids=() i
+  [ -f "$env_file" ] || die "env file không tồn tại: $env_file"
+  [ ! -e "$out/images" ] || die "$out/images đã tồn tại; xoá hoặc chọn out_dir khác"
+  cfg=$(docker compose --env-file "$env_file" -f "$REPO/stack/compose.yml" config --images 2>&1) \
+    || die "docker compose config thất bại (thiếu biến trong env file?): $cfg"
+  mapfile -t refs < <(printf '%s\n' "$cfg" | sort -u | grep -v '^$')
+  [ "${#refs[@]}" -gt 0 ] || die "compose không liệt kê image nào"
+  for ref in "${refs[@]}"; do
+    if [[ "$ref" == *MISSING* ]] || ! id=$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null); then bad="$bad $ref"; continue; fi
+    ids+=("$id")
+  done
+  [ -z "$bad" ] || die "image thiếu trên máy này hoặc placeholder MISSING:$bad"
+  mkdir -p "$out/images"
+  trap 'rc=$?; [ $rc -eq 0 ] || rm -rf "$out/images"' EXIT   # không để lại thư mục dở
+  trap 'exit 130' INT; trap 'exit 143' TERM
+  docker save "${refs[@]}" | zstd -T0 -q -o "$out/images/images.tar.zst"
+  for i in "${!refs[@]}"; do printf '%s %s\n' "${refs[$i]}" "${ids[$i]}"; done > "$out/images/images.txt"
+  (cd "$out/images" && sha256sum images.tar.zst images.txt > SHA256SUMS && sha256sum -c --quiet SHA256SUMS)
+  echo "images ready: $out/images (${#refs[@]} images)"
+}
+
 case "$mode" in
   image) pack_image "$@" ;;
+  images) pack_images "$@" ;;
   data) pack_data "$@" ;;
   *) usage ;;
 esac

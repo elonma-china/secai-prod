@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# bootstrap.sh init|preflight - chuẩn bị và kiểm tra stack trước `docker compose up`. Chỉ gọi docker để đọc
-# (`docker image inspect` của TUNNEL_IMAGE), không bao giờ đổi gì.
+# bootstrap.sh init|preflight|load-images - chuẩn bị và kiểm tra stack trước `docker compose up`. init/preflight chỉ gọi
+# docker để đọc (`docker image inspect` của TUNNEL_IMAGE), không đổi gì; load-images chỉ chạy `docker load` (và inspect).
 #   init       tạo .env từ .env.example (0600), sinh secret còn trống, pool, secrets/review-credentials.json.
 #              Chạy lại an toàn: chỉ điền giá trị còn trống, không bao giờ ghi đè.
 #   preflight  kiểm .env/đường dẫn/máy chủ; mỗi vấn đề một dòng trên stderr (tên biến + cách sửa), thoát != 0 nếu có.
+#   load-images <dir>  kiểm SHA256SUMS của gói image (pack.sh images), nạp images.tar.zst nếu thiếu ref/id, rồi kiểm lại từng ref.
 # STACK_DIR đổi thư mục stack (dùng cho test); MAX_MAP_COUNT_FILE đổi nguồn vm.max_map_count (test).
 set -euo pipefail
 
@@ -357,8 +358,30 @@ preflight() {
     echo "preflight: OK" >&2
 }
 
+# Liệt kê ref trong images.txt chưa có hoặc lệch id (mỗi dòng "<ref> <id>").
+missing_images() {
+    local ref id cur
+    while read -r ref id; do
+        [ -n "$ref" ] || continue
+        cur="$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null)" || cur=""
+        [ "$cur" = "$id" ] || printf '%s ' "$ref"
+    done <"$1/images.txt"
+}
+
+load_images() {
+    local dir="${1:-}" bad
+    [ -n "$dir" ] && [ -f "$dir/images.txt" ] || die "usage: $0 load-images <images_dir> (thiếu images.txt)"
+    (cd "$dir" && sha256sum -c --strict --quiet SHA256SUMS) >&2 || die "SHA256SUMS không khớp trong $dir; không nạp"
+    if [ -z "$(missing_images "$dir")" ]; then echo "all images present"; return 0; fi
+    zstd -dc "$dir/images.tar.zst" | docker load >&2 || die "docker load thất bại"
+    bad="$(missing_images "$dir")"
+    [ -z "$bad" ] || die "sau khi nạp vẫn thiếu hoặc lệch id: $bad"
+    echo "images loaded"
+}
+
 case "${1:-}" in
     init) init ;;
     preflight) preflight ;;
-    *) echo "usage: bootstrap.sh init|preflight" >&2; exit 2 ;;
+    load-images) shift; load_images "$@" ;;
+    *) echo "usage: bootstrap.sh init|preflight|load-images <dir>" >&2; exit 2 ;;
 esac
