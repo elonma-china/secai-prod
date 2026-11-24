@@ -131,7 +131,8 @@ phải **gateway ghi được** (WAL của `catalog.db`, kho PoC); preflight bá
 
 ### Thử gói thật trên VM thuê (`packtest`)
 
-Máy nguồn ít đĩa nên pack và restore đều chạy **trên VM**; máy nguồn chỉ rsync nguồn (chỉ đọc) và mở tunnel ngược tới Qdrant.
+Máy nguồn ít đĩa nên pack và restore đều chạy **trên VM**; máy nguồn chỉ rsync nguồn (chỉ đọc) và mở tunnel ngược tới Qdrant
+qua `qdrant-guard-proxy.py` (proxy chặn ghi), chỉ trong pha pack.
 
 ```sh
 EVAL_MODE=packtest EVAL_DISK_GB=150 stack/eval-vast.sh up   # không cần EVAL_ENV_FILE/EVAL_DATA_PKG; không build image
@@ -140,14 +141,26 @@ stack/eval-vast.sh collect       # kéo results/ (có packtest-summary.json) v�
 stack/eval-vast.sh down
 ```
 
-`packtest` từ chối (chưa tạo gì) khi `/` cục bộ còn < 45 GB (snapshot ghi lên đĩa máy Qdrant), Qdrant không đọc được hoặc
-thiếu nguồn; dừng trước khi chuyển dữ liệu nếu băng thông < 8 MB/s (ghi `ALERT.txt`, rồi `down`). Mọi lệnh bị giới hạn tới
-deadline - 10 phút. Trên Qdrant nguồn chỉ có thêm snapshot do `pack.sh` tạo; lúc thoát script xoá snapshot **mới, đúng
-collection, tạo sau lúc bắt đầu**, không bao giờ xoá snapshot có sẵn, rồi kiểm `/` đã về trong 1 GB so với lúc đầu. Khoá
-Qdrant (`QDRANT_API_KEY` hoặc `PACKTEST_QDRANT_KEY_FILE` 0600) đi qua stdin, không lên argv. Biến khác: `PACKTEST_SRC_ROOT`,
-`PACKTEST_MCP_DIR`, `PACKTEST_QDRANT_URL` (chỉ `http://127.0.0.1:<cổng>`), `PACKTEST_QDRANT_COLLECTION`,
-`PACKTEST_NEO4J_NODES` (không đặt thì chỉ ghi số node), `PACKTEST_VM_MIN_FREE_GB` (60). Nguồn trên VM bị xoá sau khi đo để
-restore vừa đĩa; `restore-data.sh` chép snapshot thêm một bản nên cần đĩa ~150 GB.
+`packtest` từ chối (chưa tạo gì) khi `/` cục bộ còn < 45 GB (snapshot ghi lên đĩa máy Qdrant), Qdrant không đọc được, thiếu
+nguồn, hoặc còn < 10 phút tới deadline. Sau khi đo băng thông, nó dừng trước khi chuyển dữ liệu (ghi `ALERT.txt`, rồi `down`)
+nếu tốc độ < 8 MB/s hoặc (nguồn + snapshot ước tính) / tốc độ + `PACKTEST_PACK_RESTORE_MIN` (45 phút) vượt thời gian còn tới
+deadline - 10 phút. Mọi lệnh bị giới hạn tới deadline - 10 phút.
+
+Tunnel VM `127.0.0.1:16333` trỏ vào proxy, không vào Qdrant. Proxy chỉ cho collection đã chọn: đọc (info, danh sách/tải
+snapshot, scroll, lấy điểm theo id, count), tạo snapshot, và xoá **đúng** snapshot mà chính proxy thấy được tạo trong lần
+chạy; mọi thứ khác (recover, upload, PUT/PATCH, collection khác, query string) trả 403, ghi `ALERT.txt` và làm lần chạy
+trượt. Lệnh tạo vẫn chạy tới hết dù tunnel chết, tên được ghi lại. Xong `pack.sh` là đóng tunnel, chờ proxy hết yêu cầu
+đang chạy (`PACKTEST_DRAIN_SECS`, 600), rồi xoá đúng các tên đã ghi (snapshot có sẵn và snapshot người khác tạo không bao
+giờ bị đụng). Khoá Qdrant (`QDRANT_API_KEY` hoặc `PACKTEST_QDRANT_KEY_FILE` 0600) chỉ đi vào stdin của proxy; không lên
+argv, không lên VM. Số liệu tham chiếu (số điểm, cấu hình, 20 điểm ngẫu nhiên trên toàn bộ id kèm vector/payload) lấy trước
+khi đóng tunnel; số điểm khôi phục được so với số điểm proxy đếm ngay trước/sau lúc tạo snapshot, không so với số lúc bắt đầu.
+`catalog.db` được chép nhất quán bằng sqlite backup trước khi rsync. `/` cục bộ không về trong 1 GB chỉ là cảnh báo.
+
+Biến khác: `PACKTEST_SRC_ROOT`, `PACKTEST_MCP_DIR`, `PACKTEST_QDRANT_URL` (chỉ `http://127.0.0.1:<cổng>`),
+`PACKTEST_QDRANT_COLLECTION`, `PACKTEST_NEO4J_NODES` (không đặt thì Neo4j là `not_verified`: dump không cho đếm node mà không
+nạp), `PACKTEST_VM_MIN_FREE_GB` (60). Nguồn trên VM bị xoá sau khi đo để restore vừa đĩa; `restore-data.sh` chép snapshot
+thêm một bản nên dùng đĩa ~150 GB. Giới hạn đã biết: rsync `--no-links` bỏ symlink trong nguồn, nên symlink không nằm trong
+phần được chứng minh.
 
 ## Dịch tệp/ảnh: tunnel tới model chuyên dụng và OCR
 
