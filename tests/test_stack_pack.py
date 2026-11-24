@@ -267,3 +267,35 @@ def test_pack_data_accepts_relative_src_root(tmp_path):
     assert r.returncode == 0, r.stderr
     names = subprocess.run(f"zstd -dc {tmp_path}/out/poc.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
     assert "poc/catalog.db" in names and "poc/store/a" in names
+
+
+def _pack_poc_sources(tmp_path):
+    src = _fake_src(tmp_path)
+    for p in ("nuclei-templates/a.yaml", "nuclei-templates/.git/HEAD", "trickest-cve/x.md", "PoC-in-GitHub/y.json",
+              "_manual-untracked-backup-2026-09-02/z", "priority/Nginx-Rift/poc.py"):
+        (src / "poc-sources" / p).parent.mkdir(parents=True, exist_ok=True)
+        (src / "poc-sources" / p).write_text("x")
+    binp = tmp_path / "bin"; binp.mkdir()
+    (binp / "curl").write_text(
+        '#!/bin/sh\ncase "$*" in\n  *"-X POST"*) echo \'{"result":{"name":"s"}}\' ;;\n  *"-X DELETE"*) ;;\n'
+        '  *"-o "*) while [ $# -gt 0 ]; do [ "$1" = -o ] && echo snap > "$2"; shift; done ;;\n'
+        '  *) echo \'{"result":{"points_count":7}}\' ;;\nesac\n')
+    (binp / "curl").chmod(0o755)
+    out = tmp_path / "out"
+    r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
+            env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
+    assert r.returncode == 0, r.stderr
+    return out
+
+
+def test_pack_data_excludes_poc_sources_skip(tmp_path):
+    out = _pack_poc_sources(tmp_path)
+    names = subprocess.run(f"zstd -dc {out}/poc-sources.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
+    files = sorted(n for n in names.split() if not n.endswith("/"))
+    assert files == ["poc-sources/nuclei-templates/a.yaml", "poc-sources/priority/Nginx-Rift/poc.py"]
+
+
+def test_pack_manifest_lists_skipped_sources(tmp_path):
+    m = (_pack_poc_sources(tmp_path) / "MANIFEST.md").read_text()
+    for n in (".git", "trickest-cve", "PoC-in-GitHub", "_manual-untracked-backup-*"):
+        assert n in m

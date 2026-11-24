@@ -13,6 +13,7 @@ set -euo pipefail
 usage() { echo "usage: $0 image [git-ref] | $0 data [--mcp-dir D] [--neo4j-dir D | --neo4j-dump F] <src_root> <out_dir>" >&2; exit 2; }
 die() { echo "pack: $*" >&2; exit 1; }
 REPO=$(cd "$(dirname "$0")/.." && pwd)
+. "$REPO/stack/lib/poc-sources-excludes.sh"
 [ $# -ge 1 ] || usage
 mode=$1; shift
 
@@ -108,7 +109,9 @@ pack_data() {
 
   echo "==> tar.zst"
   tar -C "$src" -cf - exploitdb | zstd -q -T0 -o "$out/exploitdb.tar.zst"
-  tar -C "$src" -cf - poc-sources | zstd -q -T0 -o "$out/poc-sources.tar.zst"
+  local poc_x=(--no-anchored --exclude=.git --anchored) n
+  for n in "${POC_SOURCES_SKIP[@]}"; do poc_x+=("--exclude=poc-sources/$n"); done
+  tar -C "$src" "${poc_x[@]}" -cf - poc-sources | zstd -q -T0 -o "$out/poc-sources.tar.zst"
   local skipped; skipped=$(find "$mcp" -name .git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -print)
   if [ -n "$skipped" ]; then
     echo "WARNING: excluded from exploitdb-mcp-server.tar.zst (.env*/*.pem/*.key; .git is always excluded) - $(printf '%s\n' "$skipped" | wc -l) file(s):" >&2
@@ -138,6 +141,8 @@ pack_data() {
              "exploitdb-mcp-server.tar.zst:exploitdb-mcp-server tree (restored to \$DATA_ROOT/exploitdb-mcp-server)"; do
       echo "| ${f%%:*} | ${f#*:} | $(du -h "$out/${f%%:*}" | cut -f1) |"
     done
+    echo
+    echo "poc-sources.tar.zst omits (not read at runtime): .git at every depth; top-level ${POC_SOURCES_SKIP[*]}"
   } > "$out/MANIFEST.md"
   (cd "$out" && sha256sum qdrant/*.snapshot neo4j/neo4j.dump ./*.tar.zst MANIFEST.md | sed 's,  \./,  ,' > SHA256SUMS && sha256sum -c --quiet SHA256SUMS)
   echo "package ready: $out"

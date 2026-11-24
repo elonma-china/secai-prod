@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime as dt
 import http.client
 import json
+import re
 import os
 import sqlite3
 import subprocess
@@ -965,3 +966,17 @@ def test_packtest_caps_proxy_drain_to_reserve(pt, env, want):
     assert r.returncode == 0, r.stderr
     cfg = json.loads((pt.sdir / "packtest/proxy/config.json").read_text())
     assert cfg["drain_secs"] == want and cfg["protected"] == len(PRE)
+
+
+def test_packtest_poc_sources_excludes_match_pack_and_du(pt):
+    big = "x" * (1 << 20)
+    for p in ("nuclei-templates/.git/pack", "trickest-cve/x", "PoC-in-GitHub/y", "_manual-untracked-backup-1/z"):
+        (pt.src / "poc-sources" / p).parent.mkdir(parents=True, exist_ok=True)
+        (pt.src / "poc-sources" / p).write_text(big)
+    r = sh(EVAL, "packtest", b=pt)
+    assert r.returncode == 0, r.stderr + r.stdout
+    poc = next(x for x in log(pt, "rsync") if "poc-sources" in x and "/srv/src-root/" in x)
+    for ex in (".git", "/poc-sources/trickest-cve", "/poc-sources/PoC-in-GitHub", "/poc-sources/_manual-untracked-backup-*"):
+        assert f"--exclude {ex}" in poc
+    nb = int(re.search(r"nguồn (\d+) B", r.stdout).group(1))
+    assert nb < 1 << 20  # 4 MB excluded trees are not counted

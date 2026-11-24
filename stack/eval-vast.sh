@@ -22,6 +22,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${EVAL_REPO_ROOT:-$(cd "$HERE/.." && pwd)}"
+. "$HERE/lib/poc-sources-excludes.sh"
 SD="${STACK_EVAL_DIR:-$REPO/local/stack-eval}"
 KEY="${EVAL_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 POLL="${EVAL_POLL_SLEEP:-15}"
@@ -599,8 +600,9 @@ json.dump([x["name"] for x in s], open(sys.argv[1], "w"))
 print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snapshots-before.json" "$PT_SNAP_DEFAULT")" \
         || { rm -f "$PT/snapshots-before.json"; die "không liệt kê được snapshot Qdrant nguồn"; }
     say "Qdrant nguồn: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["points_count"])' "$PT/prod-collection.json") điểm; snapshot có sẵn (KHÔNG bao giờ xoá): $(tr -d '[]"' <"$PT/snapshots-before.json")"
-    local srcb
-    srcb="$(du -scb --exclude=.git --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$src/neo4j/neo4j.dump" "$mcp" | tail -n1 | cut -f1)"
+    local srcb n poc_du=() poc_rs=(--exclude .git)   # cùng danh sách với pack.sh: rsync và pack phải loại giống nhau
+    for n in "${POC_SOURCES_SKIP[@]}"; do poc_du+=("--exclude=$src/poc-sources/$n"); poc_rs+=(--exclude "/poc-sources/$n"); done
+    srcb="$(du -scb --exclude=.git "${poc_du[@]}" --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$src/neo4j/neo4j.dump" "$mcp" | tail -n1 | cut -f1)"
     TUN=""; PROXY=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 
     # --- b. băng thông: (nguồn + snapshot ước tính) / tốc độ + thời gian pack/restore phải vừa trước deadline - 10 phút
@@ -622,7 +624,7 @@ print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snap
     python3 -I -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
         "$src/poc/catalog.db" "$PT/catalog.db" || die "sao lưu catalog.db lỗi"
     vssh 'mkdir -p /srv/src-root/neo4j /srv/src-root/poc /srv/packtest' </dev/null || die "tạo thư mục trên VM lỗi"
-    tmo rsync -a --no-links --stats --exclude '/poc/catalog.db*' -e "$rsh" "$src/exploitdb" "$src/poc" "$src/poc-sources" "root@$HOST:/srv/src-root/" >"$PT/rsync-src.log" || die "rsync nguồn lỗi"
+    tmo rsync -a --no-links --stats --exclude '/poc/catalog.db*' "${poc_rs[@]}" -e "$rsh" "$src/exploitdb" "$src/poc" "$src/poc-sources" "root@$HOST:/srv/src-root/" >"$PT/rsync-src.log" || die "rsync nguồn lỗi"
     tmo rsync -a --no-links --stats -e "$rsh" "$PT/catalog.db" "root@$HOST:/srv/src-root/poc/" >"$PT/rsync-catalog.log" || die "rsync catalog.db lỗi"
     rm -f "$PT/catalog.db"
     tmo rsync -a --no-links --stats -e "$rsh" "$src/neo4j/neo4j.dump" "root@$HOST:/srv/src-root/neo4j/" >"$PT/rsync-neo4j.log" || die "rsync neo4j.dump lỗi"
