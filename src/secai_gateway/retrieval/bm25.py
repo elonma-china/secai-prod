@@ -24,8 +24,9 @@ BM25_FANOUT = 50
 
 # Qdrant/bm25 is just stopword lists (no real ONNX weights); when huggingface.co is
 # unreachable (e.g. IP-level rate limit) point fastembed at a local copy instead of
-# retrying a doomed download on every single query.
-_LOCAL_BM25_MODEL_DIR = "/home/ict/AIEngines/secai/secai-data/_state/bm25_local_model"
+# retrying a doomed download on every single query. The copy ships in bm25_model/;
+# BM25_LOCAL_MODEL_DIR overrides it.
+_BUNDLED_BM25_MODEL_DIR = os.path.join(os.path.dirname(__file__), "bm25_model")
 
 _bm25_lock = threading.Lock()
 _bm25_state: dict[str, Any] = {"sparse_model": None}
@@ -40,8 +41,9 @@ def _load_sparse_model() -> Any:
         from fastembed import SparseTextEmbedding
 
         kwargs: dict[str, Any] = {}
-        if os.path.isdir(_LOCAL_BM25_MODEL_DIR):
-            kwargs["specific_model_path"] = _LOCAL_BM25_MODEL_DIR
+        model_dir = get_settings().bm25_local_model_dir or _BUNDLED_BM25_MODEL_DIR
+        if os.path.isdir(model_dir):
+            kwargs["specific_model_path"] = model_dir
         model = SparseTextEmbedding(model_name=BM25_MODEL, **kwargs)
         _bm25_state["sparse_model"] = model
         return model

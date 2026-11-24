@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     qdrant_howto_collection: str = "ias_howto_kb"
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
+    # Empty = stopwords dir bundled in retrieval/bm25_model (env BM25_LOCAL_MODEL_DIR).
+    bm25_local_model_dir: str = ""
     # Knowledge KB (cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations): docs/plans/kb-knowledge-grounding.md.
     # Off by default: chat then routes exactly as before. knowledge_min_rerank 0 = no cut-off (sec-rerank scores saturate near 1: relevant hits >=0.97, measured 2026-10-06).
     chat_knowledge_grounding_enabled: bool = False
