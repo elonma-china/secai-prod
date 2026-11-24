@@ -108,8 +108,8 @@ pack_data() {
   [ -s "$out/neo4j/neo4j.dump" ] || die "neo4j.dump was not produced"
 
   echo "==> tar.zst"
-  tar -C "$src" -cf - exploitdb | zstd -q -T0 -o "$out/exploitdb.tar.zst"
-  local poc_x=(--no-anchored --exclude=.git --anchored) n
+  tar -C "$src" --exclude=.git -cf - exploitdb | zstd -q -T0 -o "$out/exploitdb.tar.zst"
+  local poc_x=(--exclude=.git --anchored) n   # tar: opcode order matters; .git unanchored (any depth) first, then skip names anchored to poc-sources/
   for n in "${POC_SOURCES_SKIP[@]}"; do poc_x+=("--exclude=poc-sources/$n"); done
   tar -C "$src" "${poc_x[@]}" -cf - poc-sources | zstd -q -T0 -o "$out/poc-sources.tar.zst"
   local skipped; skipped=$(find "$mcp" -name .git -prune -o -type f \( -name '.env*' -o -name '*.pem' -o -name '*.key' \) -print)
@@ -122,7 +122,7 @@ pack_data() {
   mkdir -p "$work/poc"
   python3 -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
     "$src/poc/catalog.db" "$work/poc/catalog.db"
-  tar -cf - -C "$work" poc/catalog.db -C "$src" poc/store | zstd -q -T0 -o "$out/poc.tar.zst"
+  tar --exclude=.git -cf - -C "$work" poc/catalog.db -C "$src" poc/store | zstd -q -T0 -o "$out/poc.tar.zst"
 
   echo "==> MANIFEST.md + SHA256SUMS"
   {
@@ -142,7 +142,7 @@ pack_data() {
       echo "| ${f%%:*} | ${f#*:} | $(du -h "$out/${f%%:*}" | cut -f1) |"
     done
     echo
-    echo "poc-sources.tar.zst omits (not read at runtime): .git at every depth; top-level ${POC_SOURCES_SKIP[*]}"
+    echo "all trees omit .git at every depth; poc-sources.tar.zst also omits top-level (not read at runtime) ${POC_SOURCES_SKIP[*]}"
   } > "$out/MANIFEST.md"
   (cd "$out" && sha256sum qdrant/*.snapshot neo4j/neo4j.dump ./*.tar.zst MANIFEST.md | sed 's,  \./,  ,' > SHA256SUMS && sha256sum -c --quiet SHA256SUMS)
   echo "package ready: $out"

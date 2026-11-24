@@ -281,11 +281,21 @@ def _pack_poc_sources(tmp_path):
         '  *"-o "*) while [ $# -gt 0 ]; do [ "$1" = -o ] && echo snap > "$2"; shift; done ;;\n'
         '  *) echo \'{"result":{"points_count":7}}\' ;;\nesac\n')
     (binp / "curl").chmod(0o755)
+    for p in ("exploitdb/.git/HEAD", "exploitdb/e.txt", "poc/store/.git/HEAD"):
+        (src / p).parent.mkdir(parents=True, exist_ok=True); (src / p).write_text("x")
     out = tmp_path / "out"
     r = run("bash", str(STACK / "pack.sh"), "data", "--neo4j-dump", str(tmp_path / "neo4j.dump"), str(src), str(out),
             env={**os.environ, "PATH": f"{binp}:{os.environ['PATH']}", "QDRANT_URL": "http://q:6333"})
     assert r.returncode == 0, r.stderr
     return out
+
+
+def test_pack_data_excludes_git_from_every_tree(tmp_path):
+    out = _pack_poc_sources(tmp_path)
+    for t in ("exploitdb", "poc"):
+        names = subprocess.run(f"zstd -dc {out}/{t}.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
+        assert ".git" not in names
+    assert "exploitdb/e.txt" in subprocess.run(f"zstd -dc {out}/exploitdb.tar.zst | tar -t", shell=True, text=True, capture_output=True).stdout
 
 
 def test_pack_data_excludes_poc_sources_skip(tmp_path):

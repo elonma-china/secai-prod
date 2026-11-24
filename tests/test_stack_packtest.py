@@ -8,8 +8,8 @@ from __future__ import annotations
 import datetime as dt
 import http.client
 import json
-import re
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -970,6 +970,7 @@ def test_packtest_caps_proxy_drain_to_reserve(pt, env, want):
 
 def test_packtest_poc_sources_excludes_match_pack_and_du(pt):
     big = "x" * (1 << 20)
+    (pt.src / "exploitdb/.git").mkdir(); (pt.src / "exploitdb/.git/pack").write_text(big)  # .git of any tree: rsync, du and pack all drop it
     for p in ("nuclei-templates/.git/pack", "trickest-cve/x", "PoC-in-GitHub/y", "_manual-untracked-backup-1/z"):
         (pt.src / "poc-sources" / p).parent.mkdir(parents=True, exist_ok=True)
         (pt.src / "poc-sources" / p).write_text(big)
@@ -978,5 +979,6 @@ def test_packtest_poc_sources_excludes_match_pack_and_du(pt):
     poc = next(x for x in log(pt, "rsync") if "poc-sources" in x and "/srv/src-root/" in x)
     for ex in (".git", "/poc-sources/trickest-cve", "/poc-sources/PoC-in-GitHub", "/poc-sources/_manual-untracked-backup-*"):
         assert f"--exclude {ex}" in poc
+    assert any("--exclude .git" in x and "/poc-sources/" not in x.split("--exclude .git")[0] for x in log(pt, "rsync") if "exploitdb" in x)
     nb = int(re.search(r"nguồn (\d+) B", r.stdout).group(1))
-    assert nb < 1 << 20  # 4 MB excluded trees are not counted
+    assert nb < 1 << 20  # 5 MB excluded trees are not counted
