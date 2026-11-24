@@ -49,6 +49,10 @@ docker build --build-arg TUNNEL_UID=$(id -u) -t secai-specialist-tunnel:<ngày> 
 docker build -t secai-review-ui:<ngày> stack/images/review-ui            # profile review
 ```
 
+Máy đích không có registry/internet: trên máy nguồn `stack/pack.sh images <env_file> <out_dir>` đóng mọi image mà `.env` trỏ
+tới vào `<out_dir>/images/` (thiếu image cục bộ hoặc là placeholder `MISSING` thì lỗi trước khi ghi gì, liệt kê hết ref hỏng);
+trên máy đích `stack/bootstrap.sh load-images <thư mục gói>/images` rồi mới `docker compose up`.
+
 Gateway có thể kéo từ GHCR (private: `docker login ghcr.io` bằng token đọc) thay vì dựng. VM, converter, review-ui, tunnel
 dựng trên máy đích. Mọi tag phải cố định (không `:latest`). **`docker push` là việc làm tay của chủ dự án**; không script
 nào trong gói push image.
@@ -116,13 +120,24 @@ Playwright (`PLAYWRIGHT_BASE_URL=<url frontend>`) khi frontend sản phẩm đã
 ## Gói dữ liệu
 
 ```sh
-stack/pack.sh data [--mcp-dir D] [--neo4j-dir D | --neo4j-dump F] <src_root> <out_dir>
+stack/pack.sh data [--mcp-dir D] [--neo4j-url URL | --neo4j-export DIR] <src_root> <out_dir>
 ```
 
 Tạo `exploitdb`, `poc` (kèm `catalog.db` và `store`), `poc-sources`, `exploitdb-mcp-server` (tar.zst), snapshot Qdrant,
-dump Neo4j, `MANIFEST.md`, `SHA256SUMS`. Không dừng hay đụng Neo4j/Qdrant đang chạy (Qdrant tạo snapshot rồi xoá ngay
-trên máy nguồn). `restore-data.sh` kiểm `SHA256SUMS` trước khi đụng `DATA_ROOT`, bỏ qua thư mục đã có, chỉ nạp Neo4j khi
-store chưa có, và không bao giờ xoá dữ liệu.
+export Neo4j (CSV), `MANIFEST.md`, `SHA256SUMS`. Không dừng hay đụng Neo4j/Qdrant đang chạy (Qdrant tạo snapshot rồi xoá ngay
+trên máy nguồn). `restore-data.sh` kiểm `SHA256SUMS` trước khi đụng `DATA_ROOT`, bỏ qua thư mục đã có và không bao giờ xoá dữ liệu.
+
+**Không có `.git`, không có nguồn PoC lặp.** Gói bỏ `.git` ở mọi cây và bỏ `poc-sources/{trickest-cve,PoC-in-GitHub,_manual-untracked-backup-*}`
+(danh sách ở `stack/lib/poc-sources-excludes.sh`), giữ `poc-sources/priority/`. Máy đích là bản chép chỉ đọc, được làm mới bằng cách
+đóng gói lại, không `git pull` tại chỗ.
+
+**Neo4j cùng ngày.** `pack.sh data --neo4j-url URL` (mặc định `http://127.0.0.1:7474`, mật khẩu qua env `NEO4J_PASSWORD`) chạy
+`stack/neo4j-export.py`: đọc online, chỉ đọc, theo trang, ra CSV; đếm node/quan hệ trước và sau, lệch thì lỗi (exit 3, không
+ghi `counts.json`). Hoặc dùng export có sẵn bằng `--neo4j-export DIR`. Tránh 03:00-05:00 (autoscan ghi vào đồ thị nên số đếm dễ lệch).
+`restore-data.sh` nạp bằng `neo4j-admin import`, áp `schema.cypher`, so số đếm (in `==> neo4j: counts match (...)`), cần
+`NEO4J_PASSWORD` (env hoặc `stack/.env`). Restore dở (import xong mà chưa qua schema/số đếm) thì chạy lại sẽ từ chối:
+`remove $DATA_ROOT/_state/neo4j_data and rerun`. Đo cục bộ trên dữ liệu cỡ prod: export 111 s / 23 MB, phần Neo4j của restore 56 s
+(`neo4j-admin import` 17 s), số đếm khớp 587.393 node / 5.414.825 quan hệ.
 
 Quyền: gateway chạy uid 10001 (gid 999, thêm nhóm chung `VM_SHARED_GID`=10100). `DATA_ROOT/poc` và `DATA_ROOT/poc/store`
 phải **gateway ghi được** (WAL của `catalog.db`, kho PoC); preflight báo lỗi nếu không, và in lệnh sửa:
@@ -160,8 +175,9 @@ khi đóng tunnel; số điểm khôi phục được so với số điểm prox
 `catalog.db` được chép nhất quán bằng sqlite backup trước khi rsync. `/` cục bộ không về trong 1 GB chỉ là cảnh báo.
 
 Biến khác: `PACKTEST_SRC_ROOT`, `PACKTEST_MCP_DIR`, `PACKTEST_QDRANT_URL` (chỉ `http://127.0.0.1:<cổng>`),
-`PACKTEST_QDRANT_COLLECTION`, `PACKTEST_NEO4J_NODES` (không đặt thì Neo4j là `not_verified`: dump không cho đếm node mà không
-nạp), `PACKTEST_VM_MIN_FREE_GB` (60). Nguồn trên VM bị xoá sau khi đo để restore vừa đĩa; `restore-data.sh` chép snapshot
+`PACKTEST_QDRANT_COLLECTION`, `PACKTEST_NEO4J_URL` (export Neo4j cục bộ ngay trước khi rsync),
+`PACKTEST_NEO4J_PASSWORD_FILE` (tệp 0600, không lên argv), `PACKTEST_IMAGES_ENV` (đóng và nạp image theo `.env` này),
+`PACKTEST_VM_MIN_FREE_GB` (100, nên thuê `EVAL_DISK_GB` >= 150). Nguồn trên VM bị xoá sau khi đo để restore vừa đĩa; `restore-data.sh` chép snapshot
 thêm một bản nên dùng đĩa ~150 GB. Giới hạn đã biết: rsync `--no-links` bỏ symlink trong nguồn, nên symlink không nằm trong
 phần được chứng minh.
 
@@ -224,9 +240,10 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
   tự dừng (không có phút nào > 50% lỗi). UI-POC-2: prod chỉ qua 3/71 nên baseline không ổn định.
 - **Gói dữ liệu thật (~37 GB nguồn)**: đã đóng gói và khôi phục thử trên VM Vast 2026-11-24 bằng `eval-vast.sh packtest`
   (`docs/archive/test-results/stack-package-packtest-20261124.md`): gói 13,7 GB, pack 18,5 phút, restore 2,6 phút, Qdrant 842.928/842.928
-  điểm khớp prod (cấu hình vector, payload index, 20 điểm mẫu), số tệp/byte từng cây khớp nguồn, SHA256SUMS và quyền đạt. Chưa kiểm:
-  số node Neo4j so với kỳ vọng (gói dùng `neo4j.dump` ngày 2026-06-30), mô hình BM25 chạy offline (`bm25.py` hard-code đường dẫn
-  thư mục của máy dev), dump store Neo4j đang ghi (`--neo4j-dir`), symlink trong nguồn (rsync `--no-links`). Lưu ý: `poc-sources` mang cả `.git`.
+  điểm khớp prod (cấu hình vector, payload index, 20 điểm mẫu), số tệp/byte từng cây khớp nguồn, SHA256SUMS và quyền đạt. Lần đó gói
+  còn dùng `neo4j.dump` cũ và mang `.git`; nay đã đổi (export CSV cùng ngày, bỏ `.git`, BM25 stopwords đóng trong `src`, image đóng
+  được) và export/import Neo4j đã chứng minh cục bộ ở cỡ prod, nhưng cả gói mới chưa chạy lại trên VM. Chưa kiểm: symlink trong
+  nguồn (rsync `--no-links`).
 - **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
 - **Máy 2/4 GPU và máy đích sạch hoàn toàn**: đã dựng trên một VM Vast mới (image build tại chỗ từ `git archive`, nạp gói dữ liệu nhỏ,
   `check.sh all` + 4/9 ca đạt, 5 ca bỏ qua có lý do; xem `docs/archive/test-results/stack-package-vast-eval-20261124.md`). Chưa kiểm: máy
