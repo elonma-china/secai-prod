@@ -147,9 +147,12 @@ nếu tốc độ < 8 MB/s hoặc (nguồn + snapshot ước tính) / tốc đ�
 deadline - 10 phút. Mọi lệnh bị giới hạn tới deadline - 10 phút.
 
 Tunnel VM `127.0.0.1:16333` trỏ vào proxy, không vào Qdrant. Proxy chỉ cho collection đã chọn: đọc (info, danh sách/tải
-snapshot, scroll, lấy điểm theo id, count), tạo snapshot, và xoá **đúng** snapshot mà chính proxy thấy được tạo trong lần
-chạy; mọi thứ khác (recover, upload, PUT/PATCH, collection khác, query string) trả 403, ghi `ALERT.txt` và làm lần chạy
-trượt. Lệnh tạo vẫn chạy tới hết dù tunnel chết, tên được ghi lại. Xong `pack.sh` là đóng tunnel, chờ proxy hết yêu cầu
+snapshot, scroll <= 10000 điểm (<= 1000 nếu kèm vector), lấy <= 1000 điểm theo id, count), tạo snapshot **một lần**, và xoá
+**đúng** snapshot mà chính proxy thấy được tạo; mọi thứ khác (recover, upload, PUT/PATCH/TRACE/CONNECT, collection khác,
+query string, Content-Length lạ hoặc > 1 MiB) trả 403, ghi `ALERT.txt` và làm lần chạy trượt. Tối đa 16 kết nối, client treo
+bị cắt sau 120 s. Lệnh tạo vẫn chạy tới hết dù tunnel chết, tên được ghi lại. Proxy tự thoát khi script chết (kể cả
+`kill -9`), khi hết thời gian còn lại hoặc khi nhận SIGTERM: chờ yêu cầu đang chạy rồi tự xoá snapshot nó đã ghi tên.
+Snapshot mới không do lần chạy tạo chỉ được báo trong `ALERT.txt`, không bị xoá. Xong `pack.sh` là đóng tunnel, chờ proxy hết yêu cầu
 đang chạy (`PACKTEST_DRAIN_SECS`, 600), rồi xoá đúng các tên đã ghi (snapshot có sẵn và snapshot người khác tạo không bao
 giờ bị đụng). Khoá Qdrant (`QDRANT_API_KEY` hoặc `PACKTEST_QDRANT_KEY_FILE` 0600) chỉ đi vào stdin của proxy; không lên
 argv, không lên VM. Số liệu tham chiếu (số điểm, cấu hình, 20 điểm ngẫu nhiên trên toàn bộ id kèm vector/payload) lấy trước
