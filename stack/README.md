@@ -243,10 +243,12 @@ Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
   tự dừng (không có phút nào > 50% lỗi). UI-POC-2: prod chỉ qua 3/71 nên baseline không ổn định.
 - **Gói dữ liệu thật (~37 GB nguồn)**: đã đóng gói và khôi phục thử trên VM Vast 2026-11-24 bằng `eval-vast.sh packtest`
   (`docs/archive/test-results/stack-package-packtest-20261124.md`): gói 13,7 GB, pack 18,5 phút, restore 2,6 phút, Qdrant 842.928/842.928
-  điểm khớp prod (cấu hình vector, payload index, 20 điểm mẫu), số tệp/byte từng cây khớp nguồn, SHA256SUMS và quyền đạt. Lần đó gói
-  còn dùng `neo4j.dump` cũ và mang `.git`; nay đã đổi (export CSV cùng ngày, bỏ `.git`, BM25 stopwords đóng trong `src`, image đóng
-  được) và export/import Neo4j đã chứng minh cục bộ ở cỡ prod, nhưng cả gói mới chưa chạy lại trên VM. Chưa kiểm: symlink trong
-  nguồn (rsync `--no-links`).
+  điểm khớp prod (cấu hình vector, payload index, 20 điểm mẫu), số tệp/byte từng cây khớp nguồn, SHA256SUMS và quyền đạt. Gói mới
+  (bỏ `.git` và nguồn chỉ bộ dựng catalog dùng, Neo4j export CSV cùng ngày, 9 image, BM25 stopwords đóng trong `src`) đã chạy lại
+  trên VM cùng ngày (`docs/archive/test-results/stack-package-followups-packtest-20261124.md`): mọi kiểm `pass`. Gói dữ liệu còn 5,50 GB,
+  Neo4j khôi phục 587.393 node / 5.414.825 quan hệ đúng số đã xuất, 9 image nạp đúng id theo layer, BM25 mã hoá được trong image
+  gateway khi không có mạng. Chưa kiểm: `compose up` cả stack từ image nạp từ gói; máy dùng kho image overlay2; symlink trong nguồn
+  (rsync `--no-links`).
 - **Khởi động lại máy chủ**: đã thử khởi động lại Docker daemon trên VM thuê (11 dịch vụ tự lên healthy trong ~100 s, `check.sh health` đạt); reboot cả máy chưa kiểm.
 - **Máy 2/4 GPU và máy đích sạch hoàn toàn**: đã dựng trên một VM Vast mới (image build tại chỗ từ `git archive`, nạp gói dữ liệu nhỏ,
   `check.sh all` + 4/9 ca đạt, 5 ca bỏ qua có lý do; xem `docs/archive/test-results/stack-package-vast-eval-20261124.md`). Chưa kiểm: máy
