@@ -477,7 +477,7 @@ cmd_collect() {
 # Biến: PACKTEST_SRC_ROOT (/home/ict/AIEngines/secai/secai-data), PACKTEST_MCP_DIR (<src>/../exploitdb-mcp-server),
 #   PACKTEST_QDRANT_URL (http://127.0.0.1:6333), PACKTEST_QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY hoặc
 #   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_NODES (số node mong đợi; không có thì neo4j = not_verified),
-#   PACKTEST_VM_MIN_FREE_GB (60), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (600).
+#   PACKTEST_VM_MIN_FREE_GB (60), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (300; 30..400).
 PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=8 PT_SNAP_DEFAULT=$((5 << 30))
 qcurl() {   # khoá Qdrant qua cấu hình curl trên stdin (-K -), không lên argv. Chỉ đọc + xoá snapshot đã ghi tên.
     if [ -n "$QKEY" ]; then printf 'header = "api-key: %s"\n' "$QKEY" | curl -K - -fsS --max-time 60 "$@"
@@ -496,17 +496,17 @@ close_tunnel() { [ -n "${TUN:-}" ] || return 0; kill "$TUN" 2>/dev/null; wait "$
 # Không có proxy (chưa từng chạy) thì không đụng Qdrant nguồn. Idempotent.
 finish_prod() {
     [ -n "${PROXY:-}" ] || return 0
-    local rc=0 i n gone drain="${PACKTEST_DRAIN_SECS:-600}" pd="$PT/proxy"
-    for ((i = 0; i < drain; i += 2)); do
-        [ "$(cat "$pd/inflight" 2>/dev/null)" = 0 ] && break
-        kill -0 "$PROXY" 2>/dev/null || break
-        sleep 2
-    done
+    local rc=0 i n gone pd="$PT/proxy"
+    # SIGTERM: proxy ngừng nhận, tự chờ yêu cầu đang chạy (<= PT_DRAIN), tự xoá đúng tên nó ghi rồi thoát. Script không chờ
+    # thêm lần nữa: tổng chờ <= PT_DRAIN + ~3 phút dọn, trong dự trữ 10 phút trước deadline.
+    kill "$PROXY" 2>/dev/null
+    for ((i = 0; i < PT_DRAIN + 200; i++)); do kill -0 "$PROXY" 2>/dev/null || break; sleep 1; done
+    if kill -0 "$PROXY" 2>/dev/null; then kill -9 "$PROXY" 2>/dev/null; alert "proxy không tự thoát kịp: đã kill -9"; rc=1; fi
+    wait "$PROXY" 2>/dev/null; PROXY=""
     if [ "$(cat "$pd/inflight" 2>/dev/null)" != 0 ]; then
-        echo "!!!!!! proxy còn yêu cầu đang chạy tới Qdrant nguồn sau ${drain}s: KIỂM snapshot Qdrant prod bằng tay !!!!!!" >&2
-        alert "proxy còn yêu cầu đang chạy sau ${drain}s: check prod snapshots ($QURL/collections/$COLL/snapshots)"; rc=1
+        echo "!!!!!! proxy còn yêu cầu đang chạy tới Qdrant nguồn sau ${PT_DRAIN}s: KIỂM snapshot Qdrant prod bằng tay !!!!!!" >&2
+        alert "proxy còn yêu cầu đang chạy sau ${PT_DRAIN}s: check prod snapshots ($QURL/collections/$COLL/snapshots)"; rc=1
     fi
-    kill "$PROXY" 2>/dev/null; wait "$PROXY" 2>/dev/null; PROXY=""   # SIGTERM: proxy cũng tự xoá đúng tên nó ghi rồi thoát
     if [ -s "$pd/denied.log" ]; then alert "proxy ghi $(wc -l <"$pd/denied.log") cảnh báo/từ chối với Qdrant nguồn ($pd/denied.log)"; rc=1; fi
     # danh sách trước phải đọc được và đúng dạng (list tên); không thì không xoá gì
     python3 -I -c 'import json,sys; l=json.load(open(sys.argv[1])); assert isinstance(l, list) and all(isinstance(x, str) for x in l)' \
@@ -561,6 +561,10 @@ cmd_packtest() {
     [ "$(left)" -gt 0 ] || die "packtest: còn < 10 phút tới deadline; không bắt đầu"
     local src="${PACKTEST_SRC_ROOT:-/home/ict/AIEngines/secai/secai-data}" mcp ne="${PACKTEST_NEO4J_NODES:-}" vmfree="${PACKTEST_VM_MIN_FREE_GB:-60}"
     local bw="${PACKTEST_BW_MB:-200}" allow="${PACKTEST_PACK_RESTORE_MIN:-45}"
+    PT_DRAIN="${PACKTEST_DRAIN_SECS:-300}"
+    [[ "$PT_DRAIN" =~ ^[0-9]+$ ]] || die "PACKTEST_DRAIN_SECS phải là số"
+    # chờ proxy + dọn (~3 phút) phải nằm trong dự trữ 10 phút trước deadline
+    [ "$PT_DRAIN" -ge 30 ] || PT_DRAIN=30; [ "$PT_DRAIN" -le 400 ] || PT_DRAIN=400
     mcp="${PACKTEST_MCP_DIR:-$src/../exploitdb-mcp-server}"
     QURL="${PACKTEST_QDRANT_URL:-http://127.0.0.1:6333}"; QURL="${QURL%/}"; COLL="${PACKTEST_QDRANT_COLLECTION:-cve_kb_hybrid}"
     [[ "$QURL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$ ]] || die "PACKTEST_QDRANT_URL phải là http://127.0.0.1:<cổng> (Qdrant nguồn trên máy này): $QURL"
@@ -634,7 +638,7 @@ print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snap
     local l; l="$(left)"; [ "$l" -gt 0 ] || die "packtest: đã sát deadline, không mở proxy/tunnel"
     # proxy tự thoát (và tự xoá snapshot nó ghi) khi script này chết, kể cả kill -9, hoặc hết thời gian còn lại
     python3 -I "$HERE/qdrant-guard-proxy.py" --upstream "$QURL" --collection "$COLL" --state "$PT/proxy" --alert "$SD/ALERT.txt" \
-        --parent-pid "$$" --max-secs "$l" --drain-secs "${PACKTEST_DRAIN_SECS:-600}" \
+        --parent-pid "$$" --max-secs "$l" --drain-secs "$PT_DRAIN" --protect "$PT/snapshots-before.json" \
         < <(printf '%s\n' "$QKEY") >"$PT/proxy/proxy.log" 2>&1 &
     PROXY=$!
     local n pport=""

@@ -2,7 +2,7 @@
 """Proxy chặn ghi đứng giữa tunnel packtest và Qdrant NGUỒN (prod). Chỉ stdlib.
 
     qdrant-guard-proxy.py --upstream http://127.0.0.1:6333 --collection C --state DIR --alert FILE \
-        --parent-pid PID --max-secs N [--drain-secs 600] [--client-timeout 120] [--max-resp-bytes 268435456]   (khoá: stdin)
+        --parent-pid PID --max-secs N --protect BEFORE.json [--drain-secs 600] [--client-timeout 120] [--max-resp-bytes 268435456]   (khoá: stdin)
 
 Nghe 127.0.0.1:<cổng ngẫu nhiên> (ghi vào DIR/port). Chỉ cho đúng collection C, không query string:
   GET  /, /collections/C, /collections/C/snapshots, /collections/C/snapshots/<tên>   (đọc; tải snapshot được stream)
@@ -49,6 +49,11 @@ DRAIN, CLIENT_TIMEOUT = int(arg("--drain-secs", "600")), float(arg("--client-tim
 MAX_RESP = int(arg("--max-resp-bytes", str(256 << 20)))   # trừ tải snapshot (stream)
 if UP.scheme != "http" or not UP.hostname or not re.fullmatch(r"[A-Za-z0-9_-]+", COLL) or MAX_SECS <= 0:
     sys.exit("qdrant-guard: upstream phải là http://host:port, collection chỉ gồm [A-Za-z0-9_-], --max-secs > 0")
+try:   # snapshot có sẵn trước khi chạy: không bao giờ ghi tên (nên không bao giờ xoá). Không đọc được thì không chạy.
+    PROTECT = set(json.load(open(arg("--protect"))))
+    assert all(isinstance(x, str) for x in PROTECT)
+except Exception:
+    sys.exit("qdrant-guard: --protect phải là tệp JSON danh sách tên snapshot có sẵn; không chạy")
 KEY = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.readline().strip()
 BASE = f"/collections/{COLL}"
 LOCK = threading.Lock()
@@ -90,7 +95,8 @@ def body_ok(path: str, body: bytes) -> bool:
         return False
     if path.endswith("/points/scroll"):
         lim = d.get("limit", 10)
-        return isinstance(lim, int) and 0 < lim <= 10000 and not (d.get("with_vector") and lim > 1000)
+        vec = any(d.get(k) not in (None, False) for k in ("with_vector", "with_vectors"))   # mọi giá trị khác false = có vector
+        return isinstance(lim, int) and 0 < lim <= 10000 and not (vec and lim > 1000)
     if path.endswith("/points"):
         ids = d.get("ids")
         return isinstance(ids, list) and 0 < len(ids) <= 1000
@@ -201,14 +207,16 @@ class Guard(BaseHTTPRequestHandler):
             if len(data) > MAX_RESP:
                 return self._reply(502, b'{"status":{"error":"upstream response too large"}}')
             if kind == "create" and r.status == 200:
-                name = str((json.loads(data).get("result") or {}).get("name"))
-                if re.fullmatch(NAME, name):
+                name = (json.loads(data).get("result") or {}).get("name")
+                if isinstance(name, str) and name in PROTECT:
+                    alert(f"tạo snapshot trả về tên TRÙNG snapshot có sẵn {name[:100]!r}: không ghi, không bao giờ xoá; KIỂM TAY")
+                elif isinstance(name, str) and re.fullmatch(NAME, name):
                     with LOCK:
                         CREATED.append(name)
                         with open(os.path.join(STATE, "created.jsonl"), "a") as f:
                             f.write(json.dumps({"name": name, "points_before": before, "points_after": points_count()}) + "\n")
                 else:
-                    alert(f"snapshot tạo ra có tên lạ {name[:100]!r}: không ghi, không tự xoá được; KIỂM TAY Qdrant nguồn")
+                    alert(f"snapshot tạo ra có tên lạ {str(name)[:100]!r}: không ghi, không tự xoá được; KIỂM TAY Qdrant nguồn")
             self._reply(r.status, data, r.getheader("Content-Type") or "application/json")
         except Exception as e:  # upstream lỗi: báo 502, không đoán
             self._reply(502, json.dumps({"status": {"error": type(e).__name__}}).encode())
@@ -254,6 +262,13 @@ def parent_alive() -> bool:
 
 
 def watcher() -> None:
+    try:
+        shutdown_logic()
+    finally:   # dù logic dọn lỗi thế nào, proxy không bao giờ phục vụ tiếp
+        os._exit(0)
+
+
+def shutdown_logic() -> None:
     ppid0, t_end = os.getppid(), time.monotonic() + MAX_SECS
     while not STOP.is_set():
         if os.getppid() != ppid0 or not parent_alive():
@@ -281,10 +296,10 @@ def watcher() -> None:
         gone = False
         for _ in range(3):
             try:
-                c, r = upstream("DELETE", f"{BASE}/snapshots/{name}", None)
+                c, r = upstream("DELETE", f"{BASE}/snapshots/{name}", None, 30)   # 3 x 2 x 30 s: dọn gọn trong dự trữ 10 phút
                 r.read(MAX_BODY)
                 c.close()
-                c, r = upstream("GET", f"{BASE}/snapshots", None)
+                c, r = upstream("GET", f"{BASE}/snapshots", None, 30)
                 listed = {s.get("name") for s in json.loads(r.read(MAX_RESP))["result"]}
                 c.close()
                 if name not in listed:
@@ -297,7 +312,6 @@ def watcher() -> None:
         if not gone:
             alert(f"không xoá được snapshot {name} khi thoát ({reason}): curl -X DELETE <qdrant>{BASE}/snapshots/{name}")
     log.close()
-    os._exit(0)
 
 
 def main() -> None:
@@ -307,6 +321,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, lambda *_: STOP.set())
     signal.signal(signal.SIGINT, lambda *_: STOP.set())
     threading.Thread(target=watcher, daemon=True).start()
+    write_atomic(os.path.join(STATE, "config.json"), json.dumps({"drain_secs": DRAIN, "max_secs": MAX_SECS, "protected": len(PROTECT)}))
     write_atomic(os.path.join(STATE, "port"), str(srv.server_address[1]))
     srv.serve_forever()
 

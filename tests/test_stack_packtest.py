@@ -31,7 +31,7 @@ def now_iso() -> str:
 
 # ------------------------------------------------------------------ Qdrant gia (prod hoac VM), moi server mot trang thai rieng
 
-def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payload_tweak=False, bad_name=False):
+def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payload_tweak=False, bad_name=False, create_name="-"):
     st = {"n": n_points, "snaps": [dict(x) for x in snaps or []], "reqs": [], "seq": 0, "lock": threading.Lock()}
 
     def point(i):
@@ -68,7 +68,10 @@ def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payloa
                 with st["lock"]:
                     st["seq"] += 1
                     name = f"c-own{st['seq']}-{time.strftime('%Y-%m-%d-%H-%M-%S')}.snapshot" if not bad_name else "../evil name"
-                    st["snaps"].append({"name": name, "creation_time": now_iso(), "size": 4})
+                    if create_name != "-":
+                        name = create_name   # vd. None hoac ten snapshot co san
+                    if isinstance(name, str) and name not in {x["name"] for x in st["snaps"]}:
+                        st["snaps"].append({"name": name, "creation_time": now_iso(), "size": 4})
                 return self._send({"result": {"name": name}})
             if p.startswith("/collections/c/snapshots/") and m == "GET":
                 return self._send(None, raw=b"SNAPDATA" * 1000)
@@ -123,15 +126,21 @@ def prod():
 # ------------------------------------------------------------------ guard proxy (don vi)
 
 class Proxy:
-    def __init__(self, tmp: Path, upstream: int, key: str = "", parent: int | None = None, max_secs: int = 300, extra=()):
+    def __init__(self, tmp: Path, upstream: int, key: str = "", parent: int | None = None, max_secs: int = 300, extra=(),
+                 protect=None, wait_port=True):
         self.dir = tmp / "proxy"
         self.alert = tmp / "ALERT.txt"
+        self.protect = tmp / "before.json"
+        if protect is not False:
+            self.protect.write_text(json.dumps(sorted(PRE) if protect is None else protect))
         self.p = subprocess.Popen([sys.executable, "-I", str(PROXY), "--upstream", f"http://127.0.0.1:{upstream}",
                                    "--collection", "c", "--state", str(self.dir), "--alert", str(self.alert),
-                                   "--parent-pid", str(parent or os.getpid()), "--max-secs", str(max_secs), "--drain-secs", "20", *extra],
+                                   "--parent-pid", str(parent or os.getpid()), "--max-secs", str(max_secs), "--drain-secs", "20", "--protect", str(self.protect), *extra],
                                   stdin=subprocess.PIPE, text=True)
         self.p.stdin.write(key + "\n")
         self.p.stdin.close()
+        if not wait_port:
+            return
         for _ in range(100):
             if (self.dir / "port").exists():
                 break
@@ -190,6 +199,10 @@ def proxy(tmp_path, prod):
     ("CONNECT", "/collections/c", None),
     ("POST", "/collections/c/points/scroll", {"limit": 10001}),
     ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vector": True}),
+    ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vectors": True}),
+    ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vector": ["dense"]}),
+    ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vector": {"x": 1}}),
+    ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vector": "dense"}),
     ("POST", "/collections/c/points/scroll", [1]),
     ("POST", "/collections/c/points", {"ids": list(range(1001))}),
     ("POST", "/collections/c/points", {"ids": []}),
@@ -891,3 +904,64 @@ def test_proxy_caps_buffered_responses_but_streams_snapshot_download(tmp_path, p
         assert code == 200 and len(data) == 8000   # tai snapshot khong bi gioi han, duoc stream
     finally:
         px.stop()
+
+
+# ------------------------------------------------------------------ vong cuoi: --protect, ten None, shutdown luon thoat, drain <= du tru
+
+def test_proxy_refuses_to_start_without_readable_protect_list(tmp_path, prod):
+    for bad in (False, "x"):   # thieu tep / khong phai danh sach
+        if bad == "x":
+            (tmp_path / "before.json").write_text("{not json")
+        px = Proxy(tmp_path, prod["port"], protect=False, wait_port=False)
+        assert px.p.wait(10) != 0 and not (px.dir / "port").exists()
+
+
+def test_proxy_never_records_a_protected_name(tmp_path):
+    clash = make_qdrant(snaps=OLD, create_name=OLD[0]["name"])
+    px = Proxy(tmp_path, clash["port"])
+    try:
+        assert px.req("POST", "/collections/c/snapshots")[0] == 200
+        assert px.created() == [] and "TRÙNG snapshot có sẵn" in px.alert.read_text()
+        assert px.req("DELETE", f"/collections/c/snapshots/{OLD[0]['name']}")[0] == 403
+        px.p.terminate()
+        assert _wait_exit(px)
+        assert {s["name"] for s in OLD} <= snap_names(clash) and mutations(clash) == []
+    finally:
+        px.stop()
+        clash["srv"].shutdown()
+
+
+def test_proxy_never_records_null_name(tmp_path):
+    q = make_qdrant(create_name=None)
+    px = Proxy(tmp_path, q["port"])
+    try:
+        assert px.req("POST", "/collections/c/snapshots")[0] == 200
+        assert px.created() == [] and "tên lạ" in px.alert.read_text()
+        assert px.req("DELETE", "/collections/c/snapshots/None")[0] == 403
+    finally:
+        px.stop()
+        q["srv"].shutdown()
+
+
+def test_proxy_scroll_without_vectors_allows_full_page(proxy, prod):
+    assert proxy.req("POST", "/collections/c/points/scroll", {"limit": 10000, "with_vector": False, "with_payload": False})[0] == 200
+
+
+def test_proxy_exits_even_if_shutdown_logic_raises(tmp_path, prod):
+    (tmp_path / "proxy").mkdir()
+    (tmp_path / "proxy/selfclean.log").mkdir()   # open(..., "a") se loi trong logic don
+    px = Proxy(tmp_path, prod["port"])
+    try:
+        assert px.req("POST", "/collections/c/snapshots")[0] == 200
+        px.p.terminate()
+        assert _wait_exit(px, 15)
+    finally:
+        px.stop()
+
+
+@pytest.mark.parametrize("env,want", [("5000", 400), ("1", 30), ("120", 120)])
+def test_packtest_caps_proxy_drain_to_reserve(pt, env, want):
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_DRAIN_SECS": env})
+    assert r.returncode == 0, r.stderr
+    cfg = json.loads((pt.sdir / "packtest/proxy/config.json").read_text())
+    assert cfg["drain_secs"] == want and cfg["protected"] == len(PRE)
