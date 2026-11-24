@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import datetime as dt
+import hashlib
 import http.client
 import json
 import os
@@ -468,11 +469,18 @@ def test_packtest_neo4j_url_must_be_local(pt):
     assert r.returncode != 0 and "PACKTEST_NEO4J_URL" in r.stderr and pt.neo["reqs"] == [] and log(pt, "ssh") == []
 
 
+# rsync gia chep lai thu muc export/image da gui (ban cuc bo bi xoa khi packtest ket thuc)
+SHIP_RSYNC = """printf '%s\\n' "$*" >> "$FAKE_DIR/rsync.log"
+for a; do case "$a" in /*/neo4j-export/) cp -r "$a" "$FAKE_DIR/shipped-neo4j" ;; /*/images-pkg/images/) cp -r "$a" "$FAKE_DIR/shipped-images" ;; esac; done"""
+
+
 def test_packtest_exports_neo4j_locally_with_password_in_env_only(pt):
+    stub(pt.tmp / "bin/rsync", SHIP_RSYNC)
     r = sh(EVAL, "packtest", b=pt)
     assert r.returncode == 0, r.stderr + r.stdout
     exp = pt.sdir / "packtest/neo4j-export"
-    assert json.loads((exp / "counts.json").read_text())["nodes"] == {"CVE": 3, "CWE": 2}
+    assert json.loads((pt.fake / "shipped-neo4j/counts.json").read_text())["nodes"] == {"CVE": 3, "CWE": 2}
+    assert not exp.exists()   # do lieu prod khong nam lai tren dia may dev
     # password reached the exporter (Basic auth), through env only
     want = "Basic " + base64.b64encode(f"neo4j:{PW}".encode()).decode()
     assert pt.neo["reqs"] and {a for a, _ in pt.neo["reqs"]} == {want}
@@ -502,33 +510,64 @@ def test_packtest_neo4j_export_drift_stops_before_transfer(box, prod):  # noqa: 
         r = sh(EVAL, "packtest", b=b)
     assert r.returncode != 0 and "neo4j-export" in r.stderr and PW not in r.stderr
     assert not any("cat >/dev/null" in x for x in log(b, "ssh")) and log(b, "rsync") == []
-    assert not (b.sdir / "packtest/neo4j-export/counts.json").exists()
+    assert not (b.sdir / "packtest/neo4j-export").exists()
 
 
 FAKE_DOCKER_IMAGES = """echo "$*" >> "$FAKE_DIR/docker.log"
 case "$*" in
   *"config --images"*) echo reg/gw:1 ;;
-  "image inspect"*) echo sha256:id0 ;;
+  "image inspect --format {{json .RootFS.Layers}} reg/gw:1") echo '["sha256:l0"]' ;;
+  "image inspect"*) exit 1 ;;
   save*) head -c 3000000 /dev/urandom ;;
 esac"""
 
 
 def test_packtest_images_env_packs_ships_and_counts_in_estimate(pt):
     stub(pt.tmp / "bin/docker", FAKE_DOCKER_IMAGES)
+    stub(pt.tmp / "bin/rsync", SHIP_RSYNC)
     ienv = pt.tmp / "img.env"
     ienv.write_text("GATEWAY_IMAGE=old:0\nGATEWAY_IMAGE='reg/gw:1'\n")
     r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_IMAGES_ENV": str(ienv)})
     assert r.returncode == 0, r.stderr + r.stdout
     imgs = pt.sdir / "packtest/images-pkg/images"
-    assert (imgs / "images.txt").read_text() == "reg/gw:1 sha256:id0\n"
+    assert not (pt.sdir / "packtest/images-pkg").exists() and not (pt.sdir / "packtest/neo4j-export").exists()
+    shipped = pt.fake / "shipped-images"
+    assert (shipped / "images.txt").read_text() == "reg/gw:1 layers-sha256:" + hashlib.sha256(b'["sha256:l0"]').hexdigest() + "\n"
     rs = log(pt, "rsync")
     assert len(rs) == 5 and any(f"{imgs}/ " in x and x.endswith(":/srv/images-pkg/images/") for x in rs)
     assert any("mkdir -p" in x and "/srv/images-pkg" in x for x in log(pt, "ssh"))
     rest = next(x for x in log(pt, "ssh") if "PHASE=restore" in x)
     assert "GATEWAY_IMAGE='reg/gw:1'" in rest
     nb = int(re.search(r"nguồn (\d+) B", r.stdout).group(1))
-    exp = sum(f.stat().st_size for f in (pt.sdir / "packtest/neo4j-export").rglob("*") if f.is_file())
-    assert nb >= (imgs / "images.tar.zst").stat().st_size + exp and nb > 3_000_000
+    exp = sum(f.stat().st_size for f in (pt.fake / "shipped-neo4j").rglob("*") if f.is_file())
+    assert nb >= (shipped / "images.tar.zst").stat().st_size + exp and nb > 3_000_000
+    # image dong truoc export Neo4j: ref hong dung truoc khi doc Neo4j nguon
+    py = (pt.fake / "python3.log").read_text()
+    assert (pt.fake / "docker.log").exists() and "neo4j-export.py" in py
+
+
+def test_packtest_bad_images_env_fails_before_neo4j_export_and_transfer(pt):
+    stub(pt.tmp / "bin/docker", FAKE_DOCKER_IMAGES.replace("echo reg/gw:1 ;;", "echo reg/gw:1; echo reg/gone:9 ;;"))
+    ienv = pt.tmp / "img.env"
+    ienv.write_text("GATEWAY_IMAGE=reg/gw:1\n")
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_IMAGES_ENV": str(ienv)})
+    assert r.returncode != 0 and "pack.sh images" in r.stderr, r.stderr
+    assert "reg/gone:9" in (pt.sdir / "packtest/pack-images.log").read_text()
+    assert pt.neo["reqs"] == [] and log(pt, "ssh") == [] and log(pt, "rsync") == []
+    assert not (pt.sdir / "packtest/images-pkg").exists()
+
+
+def test_packtest_images_env_needs_docker_and_zstd(pt):
+    sysbin = pt.tmp / "sysbin"
+    sysbin.mkdir()
+    for f in Path("/usr/bin").iterdir():
+        if f.name not in ("docker", "zstd"):
+            (sysbin / f.name).symlink_to(f)
+    ienv = pt.tmp / "img.env"
+    ienv.write_text("GATEWAY_IMAGE=reg/gw:1\n")
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_IMAGES_ENV": str(ienv), "PATH": f"{pt.tmp / 'bin'}:{sysbin}"})
+    assert r.returncode != 0 and "'docker'" in r.stderr, r.stderr
+    assert pt.neo["reqs"] == [] and log(pt, "ssh") == []
 
 
 @pytest.mark.parametrize("line", ["GATEWAY_IMAGE=", "GATEWAY_IMAGE=a b;rm", "X=1"])
@@ -556,6 +595,7 @@ def test_packtest_bandwidth_floor_refuses_before_transfer(pt):
     assert r.returncode != 0 and "BĂNG THÔNG" in r.stderr
     assert log(pt, "rsync") == [] and not (pt.fake / "tunnel.pid").exists()
     assert "băng thông" in (pt.sdir / "ALERT.txt").read_text()
+    assert not (pt.sdir / "packtest/neo4j-export").exists()   # don ca khi loi
     assert mutations(pt.prod) == []
 
 
@@ -741,7 +781,7 @@ def run_remote(tmp_path: Path, prod_st, vm_st, *, snap_points=(50, 50), neo4j_re
          + ('\nrm "$DATA_ROOT/poc/store/x"' if drop_file else "")
          + (f'\necho "==> neo4j: counts match ({neo4j_restored[0]} nodes, {neo4j_restored[1]} relationships)"' if neo4j_restored else ""))
     stub(st / "bootstrap.sh", f'echo "$*" >> "{seen}/bootstrap.log"; echo all images present; exit {images_rc}')
-    stub(binp / "docker", f'echo "$*" >> "{seen}/docker.log"; case "$*" in "run --rm --network none"*) echo "{bm25_out}" ;; *) echo cid ;; esac')
+    stub(binp / "docker", f'echo "$*" >> "{seen}/docker.log"; case "$*" in *"--network none"*) echo "{bm25_out}" ;; *) echo cid ;; esac')
     stub(binp / "time", 'shift 2; f=$1; shift; printf "\\tMaximum resident set size (kbytes): 1234\\n\\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:01.00\\n" > "$f"; exec "$@"')
     # chay khong root: gia lap quyen restore-data.sh dat (chown can root); ghi thoi diem goi de kiem thu tu so voi docker
     stub(binp / "stat", f'echo "stat $*" >> "{seen}/docker.log"\n'
@@ -842,7 +882,7 @@ def test_remote_packtest_tolerates_tiny_float_noise_and_ingest_within_snapshot_r
         assert s["checks"]["images_load"]["status"] == s["checks"]["bm25_offline"]["status"] == "pass"
         assert (seen / "bootstrap.log").read_text() == f"load-images {srv}/images-pkg/images\n"
         bm = [x for x in (seen / "docker.log").read_text().splitlines() if "--network none" in x]
-        assert len(bm) == 1 and bm[0].startswith("run --rm --network none -e HF_HUB_OFFLINE=1 --entrypoint python reg/gw:1 -c ")
+        assert len(bm) == 1 and bm[0].startswith("run --rm --pull never --network none -e HF_HUB_OFFLINE=1 --entrypoint python reg/gw:1 -c ")
         assert "bm25._load_sparse_model()" in bm[0]
     finally:
         prod_st["srv"].shutdown()

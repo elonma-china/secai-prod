@@ -71,7 +71,8 @@ if [ ! -f "$ND/databases/neo4j/neostore" ]; then
   NEO4J_LOAD=1
   if [ -z "${NEO4J_PASSWORD:-}" ] && [ -f "$(dirname "$0")/.env" ]; then
     NEO4J_PASSWORD=$(sed -n 's/^NEO4J_PASSWORD=//p' "$(dirname "$0")/.env" | tail -1)
-    NEO4J_PASSWORD=${NEO4J_PASSWORD%[\"\']}; NEO4J_PASSWORD=${NEO4J_PASSWORD#[\"\']}   # compose bỏ nháy bao ngoài
+    NEO4J_PASSWORD=${NEO4J_PASSWORD%$'\r'}
+    case $NEO4J_PASSWORD in \"*\"|\'*\') NEO4J_PASSWORD=${NEO4J_PASSWORD:1:-1} ;; esac   # compose chỉ bỏ cặp nháy bao ngoài
   fi
   [ -n "${NEO4J_PASSWORD:-}" ] || die "NEO4J_PASSWORD is empty (set it in env or in $(dirname "$0")/.env); needed to restore Neo4j"
   export NEO4J_PASSWORD

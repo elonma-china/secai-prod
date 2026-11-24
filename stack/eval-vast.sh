@@ -548,7 +548,7 @@ on_exit_packtest() {
     trap - EXIT
     close_tunnel
     finish_prod || rc=1
-    rm -f "$PT/catalog.db"
+    rm -rf "$PT/catalog.db" "$PT/neo4j-export" "$PT/images-pkg"   # đồ thị prod + gói image nhiều GB không nằm lại trên máy dev
     f="$(local_free)"
     if [[ "$f" =~ ^[0-9]+$ ]] && [ $(( PT_FREE0 - f )) -gt $((1 << 30)) ]; then   # chỉ cảnh báo: máy nguồn bận cũng ghi đĩa
         echo "eval-vast: CẢNH BÁO: / cục bộ còn $((f >> 20)) MiB, thấp hơn lúc đầu $((PT_FREE0 >> 20)) MiB quá 1 GB (danh sách snapshot ở trên là tín hiệu chính)" >&2
@@ -594,6 +594,7 @@ cmd_packtest() {
         [ -f "$ienv" ] || die "PACKTEST_IMAGES_ENV không tồn tại: $ienv"
         gimg="$(sed -n 's/^GATEWAY_IMAGE=//p' "$ienv" | tail -n1 | tr -d '\r')"; gimg="${gimg%[\"\']}"; gimg="${gimg#[\"\']}"
         [[ "$gimg" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]] || die "PACKTEST_IMAGES_ENV: GATEWAY_IMAGE trống hoặc lạ: '$gimg'"
+        need_cmds docker zstd
     fi
 
     # --- a. kiểm cục bộ (fail closed, chưa tạo gì)
@@ -615,20 +616,22 @@ json.dump([x["name"] for x in s], open(sys.argv[1], "w"))
 print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snapshots-before.json" "$PT_SNAP_DEFAULT")" \
         || { rm -f "$PT/snapshots-before.json"; die "không liệt kê được snapshot Qdrant nguồn"; }
     say "Qdrant nguồn: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["points_count"])' "$PT/prod-collection.json") điểm; snapshot có sẵn (KHÔNG bao giờ xoá): $(tr -d '[]"' <"$PT/snapshots-before.json")"
-    # --- a2. Neo4j nguồn: export CSV chỉ đọc ngay trên máy này (mật khẩu chỉ trong env của tiến trình con); image nếu có
+    TUN=""; PROXY=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM   # từ đây mọi lối ra đều dọn
+    # --- a2. image (nếu có) trước, để ref hỏng dừng trước khi đọc Neo4j nguồn; rồi export Neo4j CSV chỉ đọc ngay trên máy này
+    # (mật khẩu chỉ trong env của tiến trình con)
     rm -rf "$PT/neo4j-export" "$PT/images-pkg"
+    local staged=("$PT/neo4j-export")
+    if [ -n "$ienv" ]; then
+        tmo "$HERE/pack.sh" images "$ienv" "$PT/images-pkg" >"$PT/pack-images.log" 2>&1 \
+            || die "pack.sh images lỗi (xem $PT/pack-images.log): $(tail -n3 "$PT/pack-images.log")"
+        staged+=("$PT/images-pkg/images")
+    fi
     say "export Neo4j nguồn $NURL -> $PT/neo4j-export"
     ( export NEO4J_PASSWORD="$npw" NEO4J_URL="$NURL"; tmo python3 -I "$HERE/neo4j-export.py" "$PT/neo4j-export" ) >"$PT/neo4j-export.log" 2>&1 \
         || die "neo4j-export lỗi rc=$? (3 = đồ thị bị ghi trong lúc xuất; xem $PT/neo4j-export.log): $(tail -n3 "$PT/neo4j-export.log")"
-    local staged=("$PT/neo4j-export")
-    if [ -n "$ienv" ]; then
-        tmo "$HERE/pack.sh" images "$ienv" "$PT/images-pkg" >"$PT/pack-images.log" 2>&1 || die "pack.sh images lỗi (xem $PT/pack-images.log)"
-        staged+=("$PT/images-pkg/images")
-    fi
     local srcb n poc_du=() poc_rs=(--exclude .git)   # cùng danh sách với pack.sh: rsync và pack phải loại giống nhau
     for n in "${POC_SOURCES_SKIP[@]}"; do poc_du+=("--exclude=$src/poc-sources/$n"); poc_rs+=(--exclude "/poc-sources/$n"); done
     srcb="$(du -scb --exclude=.git "${poc_du[@]}" --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$mcp" "${staged[@]}" | tail -n1 | cut -f1)"
-    TUN=""; PROXY=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 
     # --- b. băng thông: (nguồn + snapshot ước tính) / tốc độ + thời gian pack/restore phải vừa trước deadline - 10 phút
     local t0 t1 mbps need
@@ -856,7 +859,7 @@ if [ -z "$GATEWAY_IMAGE" ]; then
 else
     if "$ST/bootstrap.sh" load-images /srv/images-pkg/images >"$R/images-load.log" 2>&1; then chk images_load pass "$(tail -n1 "$R/images-load.log")"
     else chk images_load fail "xem images-load.log"; fi
-    n=$(docker run --rm --network none -e HF_HUB_OFFLINE=1 --entrypoint python "$GATEWAY_IMAGE" -c \
+    n=$(docker run --rm --pull never --network none -e HF_HUB_OFFLINE=1 --entrypoint python "$GATEWAY_IMAGE" -c \
         "from secai_gateway.retrieval import bm25; m = bm25._load_sparse_model(); print(len(list(m.query_embed(['apache struts rce']))[0].indices))" \
         2>"$R/bm25-offline.log" | tail -n1)
     if [[ "$n" =~ ^[1-9][0-9]*$ ]]; then chk bm25_offline pass "indices=$n"; else chk bm25_offline fail "xem bm25-offline.log"; fi

@@ -4,10 +4,11 @@
     python3 -I stack/neo4j-export.py [--node-page 20000] [--rel-page 5000] OUT_DIR
 
 Env: NEO4J_URL (mặc định http://127.0.0.1:7474), NEO4J_USER (neo4j), NEO4J_PASSWORD (không đặt: không gửi auth),
-NEO4J_DATABASE (neo4j). Gọi POST {NEO4J_URL}/db/{NEO4J_DATABASE}/tx/commit, chỉ MATCH/RETURN/SHOW/UNWIND.
+NEO4J_DATABASE (neo4j). Gọi POST {NEO4J_URL}/db/{NEO4J_DATABASE}/tx/commit, chỉ MATCH/WITH/RETURN/SHOW/UNWIND.
 OUT_DIR phải chưa có hoặc rỗng. Ghi nodes-<Label>.header.csv + .csv.gz, rels-<TYPE>.header.csv + .csv.gz,
 schema.cypher và cuối cùng counts.json (chỉ khi thành công).
-Thoát 0 ok; 2 dữ liệu không hỗ trợ (nhiều nhãn, list/map, tên nhãn/kiểu lạ, kiểu thuộc tính xung đột);
+Thoát 0 ok; 2 dữ liệu không hỗ trợ (nhiều nhãn, kiểu thuộc tính ngoài string/integer/float/boolean hoặc NaN/Infinity
+theo `valueType` kiểm trước khi ghi, tên nhãn/kiểu lạ, kiểu thuộc tính xung đột);
 3 số đếm lệch (đồ thị bị ghi trong lúc xuất); 1 lỗi HTTP/khác. Không in mật khẩu.
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ from pathlib import Path
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 BAD_KEY = re.compile(r'[,:"\r\n]')  # ký tự làm vỡ dòng header của neo4j-admin import
 TYPES = {bool: "boolean", int: "long", float: "double", str: "string"}
+VALUE_TYPES = {"STRING", "INTEGER", "FLOAT", "BOOLEAN"}  # valueType() của Cypher, bỏ hậu tố " NOT NULL"
 
 
 class Fail(Exception):
@@ -74,6 +76,17 @@ def counts(db: Neo4j) -> tuple[dict, dict]:
             raise Fail(2, f"kiểu quan hệ không hỗ trợ: {t!r}")
         rels[t] = n
     return nodes, rels
+
+
+def check_value_types(db: Neo4j) -> None:
+    """HTTP JSON biến date/point/... thành chuỗi và NaN/Infinity thành "NaN"/"Infinity": phải hỏi kiểu thật trước khi xuất."""
+    for kind, pat, v in (("nút", "(n)", "n"), ("quan hệ", "()-[r]->()", "r")):
+        for t, nonfinite in db.rows(f"MATCH {pat} UNWIND keys({v}) AS k WITH {v}[k] AS v, valueType({v}[k]) AS t "
+                                    "RETURN DISTINCT t, t STARTS WITH 'FLOAT' AND (isNaN(v) OR abs(v) = 1.0/0.0)"):
+            if t.removesuffix(" NOT NULL") not in VALUE_TYPES:
+                raise Fail(2, f"thuộc tính {kind} kiểu {t} không hỗ trợ (chỉ STRING/INTEGER/FLOAT/BOOLEAN)")
+            if nonfinite:
+                raise Fail(2, f"thuộc tính {kind} FLOAT có NaN/Infinity: không hỗ trợ")
 
 
 def cell(v) -> str:
@@ -129,6 +142,7 @@ def progress(phase: str, lo: int, top: int, state: dict) -> None:
 
 def export(db: Neo4j, out: Path, node_page: int, rel_page: int) -> dict:
     n_before, r_before = counts(db)
+    check_value_types(db)
     schema = [r[0] for r in db.rows("SHOW CONSTRAINTS YIELD createStatement")]
     schema += [r[0] for r in db.rows("SHOW INDEXES YIELD createStatement, owningConstraint, type "
                                      "WHERE owningConstraint IS NULL AND type <> 'LOOKUP'")]
@@ -165,9 +179,9 @@ def export(db: Neo4j, out: Path, node_page: int, rel_page: int) -> dict:
     for o in [*nouts.values(), *routs.values()]:
         o.f.close()
     for lab, o in nouts.items():
-        (out / f"nodes-{lab}.header.csv").write_text(",".join([":ID", *o.header(), ":LABEL"]) + "\n")
+        (out / f"nodes-{lab}.header.csv").write_text(",".join([":ID", *o.header(), ":LABEL"]) + "\n", encoding="utf-8")
     for t, o in routs.items():
-        (out / f"rels-{t}.header.csv").write_text(",".join([":START_ID", ":END_ID", ":TYPE", *o.header()]) + "\n")
+        (out / f"rels-{t}.header.csv").write_text(",".join([":START_ID", ":END_ID", ":TYPE", *o.header()]) + "\n", encoding="utf-8")
 
     n_after, r_after = counts(db)
     diff = []
@@ -203,7 +217,7 @@ def main() -> int:
         print(f"neo4j-export: {e}", file=sys.stderr)
         return 1
     tmp = out / "counts.json.tmp"
-    tmp.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    tmp.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     tmp.rename(out / "counts.json")
     print(f"neo4j-export: xong {sum(result['nodes'].values())} nút, {sum(result['relationships'].values())} quan hệ -> {out}",
           file=sys.stderr)

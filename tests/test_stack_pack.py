@@ -25,7 +25,7 @@ def base_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if not k.startswith("NEO4J_")}
 
 
-def stub_docker(tmp: Path, nodes: str = "CVE", rels: str = "AFFECTS") -> tuple[dict[str, str], Path]:
+def stub_docker(tmp: Path, nodes: str = "CVE", rels: str = "AFFECTS", pw: str = PW) -> tuple[dict[str, str], Path]:
     """docker gia: ghi argv + ten bien env (khong ghi gia tri). `import full` tao store; `exec cypher-shell` tra so dem
     tu tmp/fake/{nodes,rels}.out (mac dinh khop make_pkg: CVE=2, AFFECTS=1)."""
     binp = tmp / "bin"
@@ -37,7 +37,7 @@ def stub_docker(tmp: Path, nodes: str = "CVE", rels: str = "AFFECTS") -> tuple[d
     log = tmp / "docker.log"
     (binp / "docker").write_text(f"""#!/bin/sh
 echo "ARGV: $*" >> {log}
-echo "ENV: NEO4J_AUTH=${{NEO4J_AUTH:+set}} NEO4J_PASSWORD=${{NEO4J_PASSWORD:+set}} auth_ok=$([ "$NEO4J_AUTH" = "neo4j/{PW}" ] && echo y)" >> {log}
+echo "ENV: NEO4J_AUTH=${{NEO4J_AUTH:+set}} NEO4J_PASSWORD=${{NEO4J_PASSWORD:+set}} auth_ok=$([ "$NEO4J_AUTH" = "neo4j/{pw.replace('"', chr(92) + '"')}" ] && echo y)" >> {log}
 nd="$DATA_ROOT/_state/neo4j_data"
 case "$*" in
   *"database import full"*) mkdir -p "$nd/databases/neo4j" && touch "$nd/databases/neo4j/neostore" ;;
@@ -532,6 +532,23 @@ def test_restore_password_from_dotenv(tmp_path):
     assert "auth_ok=y" in run_d[1]
 
 
+@pytest.mark.parametrize("line,want", [
+    (f'"{PW}"\r', PW),          # cap nhay + CRLF: bo ca hai
+    (f"'{PW}'", PW),
+    (f"{PW}'", f"{PW}'"),        # nhay le: giu nguyen
+    (f'"{PW}', f'"{PW}'),
+])
+def test_restore_dotenv_password_strips_only_matched_quotes(tmp_path, line, want):
+    pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
+    st = _isolated_restore(tmp_path)
+    (st / ".env").write_text(f"NEO4J_PASSWORD={line}\n")
+    env, log = stub_docker(tmp_path, pw=want)
+    del env["NEO4J_PASSWORD"]
+    r = run("bash", str(st / "restore-data.sh"), str(pkg), env={**env, "DATA_ROOT": str(tmp_path / "data")})
+    assert r.returncode == 0, r.stderr
+    assert "auth_ok=y" in log.read_text().split("ARGV: run -d", 1)[1].splitlines()[1]
+
+
 def test_restore_password_not_in_argv(tmp_path):
     pkg = tmp_path / "pkg"; pkg.mkdir(); make_pkg(pkg)
     env, log = stub_docker(tmp_path)
@@ -563,19 +580,27 @@ def test_restore_dead_neo4j_container_fails_fast(tmp_path):
 
 # ---- pack.sh images ----
 IMG_A, IMG_B = "reg/a:1", "reg/b:2"
+LAYERS = ('["sha256:a0","sha256:a1"]', '["sha256:b0"]')   # docker image inspect --format '{{json .RootFS.Layers}}'
+
+
+def lid(layers_json: str) -> str:
+    """Dinh danh image doc lap image store: sha256 cua danh sach diff_id layer."""
+    return "layers-sha256:" + hashlib.sha256(layers_json.encode()).hexdigest()
 
 
 def images_env(tmp_path: Path, refs=(IMG_A, IMG_B), have=None):
-    """docker gia: compose config --images in refs; image inspect doc tmp/fake/ids ("ref id"); save in byte gia."""
+    """docker gia: compose config --images in refs (stderr: fake/compose_err, rc: fake/compose_rc); image inspect
+    {{json .RootFS.Layers}} doc tmp/fake/ids ("ref layers_json"); .Id tra id phu thuoc store (khong duoc dung); save in byte gia."""
     fake = tmp_path / "fake"; fake.mkdir(exist_ok=True)
     (fake / "refs").write_text("\n".join(refs) + "\n")
-    (fake / "ids").write_text("".join(f"{r} sha256:id{i}\n" for i, r in enumerate(refs if have is None else have)))
+    (fake / "ids").write_text("".join(f"{r} {LAYERS[i % 2]}\n" for i, r in enumerate(refs if have is None else have)))
     binp = tmp_path / "bin"; binp.mkdir(exist_ok=True)
     (binp / "docker").write_text(f'''#!/bin/bash
 echo "$*" >> {fake}/calls
 case "$*" in
-  *"config --images"*) cat {fake}/refs ;;
-  "image inspect"*) while read -r r i; do [ "$r" = "${{@: -1}}" ] && echo "$i" && exit 0; done < {fake}/ids; exit 1 ;;
+  *"config --images"*) cat {fake}/refs; cat {fake}/compose_err >&2 2>/dev/null; exit "$(cat {fake}/compose_rc 2>/dev/null || echo 0)" ;;
+  "image inspect --format {{{{json .RootFS.Layers}}}} "*) while read -r r i; do [ "$r" = "${{@: -1}}" ] && echo "$i" && exit 0; done < {fake}/ids; exit 1 ;;
+  "image inspect"*) echo sha256:store-dependent-id ;;
   save*) echo fake-image-bytes ;;
   load*) cat > {fake}/loaded; [ -e {fake}/loadok ] && cat {fake}/loadok >> {fake}/ids; exit 0 ;;
 esac
@@ -590,10 +615,27 @@ def test_pack_images_writes_tar_list_sums(tmp_path):
     r = run("bash", str(STACK / "pack.sh"), "images", str(ef), str(tmp_path / "out"), env=env)
     assert r.returncode == 0, r.stderr
     d = tmp_path / "out/images"
-    assert (d / "images.txt").read_text() == f"{IMG_A} sha256:id0\n{IMG_B} sha256:id1\n"
+    assert (d / "images.txt").read_text() == f"{IMG_A} {lid(LAYERS[0])}\n{IMG_B} {lid(LAYERS[1])}\n"
     assert subprocess.run(["zstd", "-dc", str(d / "images.tar.zst")], capture_output=True).stdout == b"fake-image-bytes\n"
     assert subprocess.run(["sha256sum", "-c", "--quiet", "SHA256SUMS"], cwd=d).returncode == 0
     assert "save reg/a:1 reg/b:2" in (fake / "calls").read_text() and "push" not in (fake / "calls").read_text()
+
+
+def test_pack_images_ignores_compose_warnings_on_stderr(tmp_path):
+    env, ef, fake = images_env(tmp_path)
+    (fake / "compose_err").write_text('time="x" level=warning msg="The \\"FOO\\" variable is not set. Defaulting to a blank string."\n')
+    r = run("bash", str(STACK / "pack.sh"), "images", str(ef), str(tmp_path / "out"), env=env)
+    assert r.returncode == 0, r.stderr
+    assert (tmp_path / "out/images/images.txt").read_text().split()[::2] == [IMG_A, IMG_B]
+
+
+def test_pack_images_compose_failure_shows_stderr_and_writes_nothing(tmp_path):
+    env, ef, fake = images_env(tmp_path)
+    (fake / "compose_err").write_text("required variable GATEWAY_IMAGE is missing a value\n")
+    (fake / "compose_rc").write_text("1")
+    r = run("bash", str(STACK / "pack.sh"), "images", str(ef), str(tmp_path / "out"), env=env)
+    assert r.returncode != 0 and "GATEWAY_IMAGE is missing" in r.stderr
+    assert not (tmp_path / "out/images").exists()
 
 
 def test_pack_images_missing_or_placeholder_fails_before_writing(tmp_path):
@@ -611,14 +653,18 @@ def test_pack_images_refuses_existing_out(tmp_path):
 
 
 # ---- bootstrap.sh load-images ----
-def images_pkg(tmp_path, ids_before: str, ids_after: str | None = None):
+LIST = f"{IMG_A} {lid(LAYERS[0])}\n{IMG_B} {lid(LAYERS[1])}\n"
+
+
+def images_pkg(tmp_path, ids_before: str, ids_after: str | None = None, listing: str = LIST,
+               summed: str = "images.tar.zst images.txt"):
     env, _, fake = images_env(tmp_path, refs=(IMG_A, IMG_B), have=())
     (fake / "ids").write_text(ids_before)
     if ids_after is not None:
         (fake / "loadok").write_text(ids_after)
     d = tmp_path / "pkg"; d.mkdir()
-    (d / "images.txt").write_text(f"{IMG_A} sha256:id0\n{IMG_B} sha256:id1\n")
-    subprocess.run(f"zstd -q -o {d}/images.tar.zst < /dev/null; sha256sum images.tar.zst images.txt > SHA256SUMS", shell=True, cwd=d, check=True)
+    (d / "images.txt").write_text(listing)
+    subprocess.run(f"zstd -q -o {d}/images.tar.zst < /dev/null; sha256sum {summed} > SHA256SUMS", shell=True, cwd=d, check=True)
     return env, d, fake
 
 
@@ -626,32 +672,47 @@ def load(env, d):
     return run("bash", str(STACK / "bootstrap.sh"), "load-images", str(d), env=env)
 
 
-GOOD = f"{IMG_A} sha256:id0\n{IMG_B} sha256:id1\n"
+GOOD = f"{IMG_A} {LAYERS[0]}\n{IMG_B} {LAYERS[1]}\n"
 
 
 def test_load_images_skips_when_present(tmp_path):
     env, d, fake = images_pkg(tmp_path, GOOD)
     r = load(env, d)
-    assert r.returncode == 0 and "all images present" in r.stdout
+    assert r.returncode == 0 and "all images present" in r.stdout, r.stderr
     assert "load" not in [c.split()[0] for c in (fake / "calls").read_text().splitlines()]
 
 
 def test_load_images_loads_and_verifies(tmp_path):
-    env, d, fake = images_pkg(tmp_path, f"{IMG_A} sha256:id0\n", f"{IMG_B} sha256:id1\n")
+    env, d, fake = images_pkg(tmp_path, f"{IMG_A} {LAYERS[0]}\n", f"{IMG_B} {LAYERS[1]}\n")
     r = load(env, d)
     assert r.returncode == 0, r.stderr
     assert (fake / "loaded").exists()
 
 
 def test_load_images_id_mismatch_after_load_fails(tmp_path):
-    env, d, _ = images_pkg(tmp_path, f"{IMG_A} sha256:id0\n", f"{IMG_B} sha256:WRONG\n")
+    env, d, _ = images_pkg(tmp_path, f"{IMG_A} {LAYERS[0]}\n", f'{IMG_B} ["sha256:WRONG"]\n')
     r = load(env, d)
     assert r.returncode != 0 and IMG_B in r.stderr and IMG_A not in r.stderr
 
 
 def test_load_images_bad_checksum_fails_before_load(tmp_path):
     env, d, fake = images_pkg(tmp_path, "")
-    (d / "images.txt").write_text(f"{IMG_A} sha256:id0\n")   # lệch SHA256SUMS
+    (d / "images.txt").write_text(f"{IMG_A} {lid(LAYERS[0])}\n")   # lệch SHA256SUMS
     r = load(env, d)
     assert r.returncode != 0
+    assert not (fake / "loaded").exists()
+
+
+def test_load_images_rejects_empty_list(tmp_path):
+    env, d, fake = images_pkg(tmp_path, "", listing="\n")
+    r = load(env, d)
+    assert r.returncode != 0 and "images.txt" in r.stderr
+    assert not (fake / "loaded").exists()
+
+
+@pytest.mark.parametrize("summed", ["images.txt", "images.tar.zst"])
+def test_load_images_requires_both_files_in_sums(tmp_path, summed):
+    env, d, fake = images_pkg(tmp_path, "", summed=summed)
+    r = load(env, d)
+    assert r.returncode != 0 and "SHA256SUMS" in r.stderr
     assert not (fake / "loaded").exists()

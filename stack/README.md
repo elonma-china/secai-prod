@@ -28,7 +28,7 @@ deprecated).
 | `check.sh` | `env`, `config`, `models`, `health`, `all`: kiểm trước và sau `up` |
 | `eval-vast.sh`, `destroy-eval.sh` | Chạy thử gói trên một máy Vast thuê rẻ rồi huỷ đúng ID đã ghi. Chỉ cho người vận hành, cần ngân sách do chủ dự án duyệt |
 | `images/` | Dockerfile dựng trên máy đích: `pentestcode-vm`, `converter`, `review-ui`, `tunnel` |
-| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns) |
+| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`) |
 | `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả |
 
 ## Dựng trên máy mới (5 bước)
@@ -51,7 +51,8 @@ docker build -t secai-review-ui:<ngày> stack/images/review-ui            # prof
 
 Máy đích không có registry/internet: trên máy nguồn `stack/pack.sh images <env_file> <out_dir>` đóng mọi image mà `.env` trỏ
 tới vào `<out_dir>/images/` (thiếu image cục bộ hoặc là placeholder `MISSING` thì lỗi trước khi ghi gì, liệt kê hết ref hỏng);
-trên máy đích `stack/bootstrap.sh load-images <thư mục gói>/images` rồi mới `docker compose up`.
+trên máy đích `stack/bootstrap.sh load-images <thư mục gói>/images` rồi mới `docker compose up`. `images.txt` ghi mỗi ref kèm
+`layers-sha256:` (sha256 của danh sách diff_id layer), không dùng `.Id` vì `.Id` khác nhau giữa containerd store và overlay2.
 
 Gateway có thể kéo từ GHCR (private: `docker login ghcr.io` bằng token đọc) thay vì dựng. VM, converter, review-ui, tunnel
 dựng trên máy đích. Mọi tag phải cố định (không `:latest`). **`docker push` là việc làm tay của chủ dự án**; không script
@@ -132,8 +133,9 @@ trên máy nguồn). `restore-data.sh` kiểm `SHA256SUMS` trước khi đụng 
 đóng gói lại, không `git pull` tại chỗ.
 
 **Neo4j cùng ngày.** `pack.sh data --neo4j-url URL` (mặc định `http://127.0.0.1:7474`, mật khẩu qua env `NEO4J_PASSWORD`) chạy
-`stack/neo4j-export.py`: đọc online, chỉ đọc, theo trang, ra CSV; đếm node/quan hệ trước và sau, lệch thì lỗi (exit 3, không
-ghi `counts.json`). Hoặc dùng export có sẵn bằng `--neo4j-export DIR`. Tránh 03:00-05:00 (autoscan ghi vào đồ thị nên số đếm dễ lệch).
+`stack/neo4j-export.py`: đọc online, chỉ đọc, theo trang, ra CSV. Không phải snapshot: tính nhất quán chỉ được kiểm bằng số đếm
+node/quan hệ theo nhãn/kiểu trước, sau và số đã xuất; lệch thì lỗi (exit 3, không ghi `counts.json`). Thuộc tính chỉ được là
+string/integer/float/boolean (kiểm trước bằng `valueType`), NaN/Infinity và kiểu khác thì exit 2. Hoặc dùng export có sẵn bằng `--neo4j-export DIR`. Tránh 03:00-05:00 (autoscan ghi vào đồ thị nên số đếm dễ lệch).
 `restore-data.sh` nạp bằng `neo4j-admin import`, áp `schema.cypher`, so số đếm (in `==> neo4j: counts match (...)`), cần
 `NEO4J_PASSWORD` (env hoặc `stack/.env`). Restore dở (import xong mà chưa qua schema/số đếm) thì chạy lại sẽ từ chối:
 `remove $DATA_ROOT/_state/neo4j_data and rerun`. Đo cục bộ trên dữ liệu cỡ prod: export 111 s / 23 MB, phần Neo4j của restore 56 s
@@ -176,7 +178,8 @@ khi đóng tunnel; số điểm khôi phục được so với số điểm prox
 
 Biến khác: `PACKTEST_SRC_ROOT`, `PACKTEST_MCP_DIR`, `PACKTEST_QDRANT_URL` (chỉ `http://127.0.0.1:<cổng>`),
 `PACKTEST_QDRANT_COLLECTION`, `PACKTEST_NEO4J_URL` (export Neo4j cục bộ ngay trước khi rsync),
-`PACKTEST_NEO4J_PASSWORD_FILE` (tệp 0600, không lên argv), `PACKTEST_IMAGES_ENV` (đóng và nạp image theo `.env` này),
+`PACKTEST_NEO4J_PASSWORD_FILE` (**bắt buộc**, tệp 0600, không lên argv), `PACKTEST_IMAGES_ENV` (đóng và nạp image theo `.env` này; đóng trước export Neo4j nên ref hỏng dừng sớm),
+export Neo4j và gói image cục bộ bị xoá khi `packtest` kết thúc (đạt hay lỗi),
 `PACKTEST_VM_MIN_FREE_GB` (100, nên thuê `EVAL_DISK_GB` >= 150). Nguồn trên VM bị xoá sau khi đo để restore vừa đĩa; `restore-data.sh` chép snapshot
 thêm một bản nên dùng đĩa ~150 GB. Giới hạn đã biết: rsync `--no-links` bỏ symlink trong nguồn, nên symlink không nằm trong
 phần được chứng minh.

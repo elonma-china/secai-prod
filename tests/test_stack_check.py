@@ -139,7 +139,8 @@ def _stack_copy(tmp_path):
     for f in ("compose.yml", "bootstrap.sh", "check.sh", ".env.example"):
         if (STACK / f).exists():
             shutil.copy(STACK / f, d / f)
-    shutil.copy(STACK / "lib/pool.sh", d / "lib/pool.sh")
+    for f in ("pool.sh", "image-id.sh"):                                 # bootstrap.sh source lib/ dùng chung
+        shutil.copy(STACK / "lib" / f, d / "lib" / f)
     (d / "images/tunnel").mkdir(parents=True)                      # bootstrap.sh source luật direct dùng chung
     shutil.copy(STACK / "images/tunnel/direct_target.sh", d / "images/tunnel/direct_target.sh")
     return d

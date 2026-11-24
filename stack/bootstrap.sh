@@ -15,6 +15,7 @@ GATEWAY_UID=10001   # uid app trong image gateway
 GATEWAY_GID=999     # gid chính thật của user app trong image gateway (compose thêm nhóm VM_SHARED_GID qua group_add)
 
 die() { echo "bootstrap.sh: $*" >&2; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/lib/image-id.sh"
 
 # Giá trị cuối cùng của KEY trong .env (docker compose cũng lấy dòng sau cùng); bỏ cặp nháy bao ngoài.
 val() {
@@ -358,12 +359,12 @@ preflight() {
     echo "preflight: OK" >&2
 }
 
-# Liệt kê ref trong images.txt chưa có hoặc lệch id (mỗi dòng "<ref> <id>").
+# Liệt kê ref trong images.txt chưa có hoặc lệch định danh (mỗi dòng "<ref> layers-sha256:<hex>", xem lib/image-id.sh).
 missing_images() {
     local ref id cur
     while read -r ref id; do
         [ -n "$ref" ] || continue
-        cur="$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null)" || cur=""
+        cur="$(image_layers_id "$ref")" || cur=""
         [ "$cur" = "$id" ] || printf '%s ' "$ref"
     done <"$1/images.txt"
 }
@@ -371,7 +372,11 @@ missing_images() {
 load_images() {
     local dir="${1:-}" bad
     [ -n "$dir" ] && [ -f "$dir/images.txt" ] || die "usage: $0 load-images <images_dir> (thiếu images.txt)"
+    local f; for f in images.tar.zst images.txt; do
+        grep -qE "^[0-9a-f]{64}  $f\$" "$dir/SHA256SUMS" 2>/dev/null || die "SHA256SUMS trong $dir không liệt kê $f; không nạp"
+    done
     (cd "$dir" && sha256sum -c --strict --quiet SHA256SUMS) >&2 || die "SHA256SUMS không khớp trong $dir; không nạp"
+    grep -q '[^[:space:]]' "$dir/images.txt" || die "images.txt trong $dir không có ref nào; không nạp"
     if [ -z "$(missing_images "$dir")" ]; then echo "all images present"; return 0; fi
     zstd -dc "$dir/images.tar.zst" | docker load >&2 || die "docker load thất bại"
     bad="$(missing_images "$dir")"

@@ -3,7 +3,8 @@
 Tai dung (Task 4): `from test_stack_neo4j_export import fake_neo4j, sample_graph, run_export`.
 `fake_neo4j(graph)` la context manager tra ve (url, state); state["reqs"] ghi (Authorization, [statement...]).
 Graph: {"nodes": {id: (labels, props)}, "rels": [(start, end, type, props)], "constraints": [createStatement],
-        "indexes": [(createStatement, owningConstraint|None, type)], "drift": {label: +n tu lan dem thu 2}}.
+        "indexes": [(createStatement, owningConstraint|None, type)], "drift": {label: +n tu lan dem thu 2},
+        "value_types": [(valueType, khong_huu_han)] them vao ket qua kiem kieu (gia lap DATE, NaN... ma JSON khong mang duoc)}.
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ def sample_graph() -> dict:
             # id 2 la khoang trong
             3: (["CVE"], {"id": "CVE-3", "cvss_score": 7.5, "is_in_kev": False, "severity": "LOW", "title": ""}),
             4: (["CWE"], {"id": "CWE-79", "name": "XSS"}),
-            5: (["CWE"], {"id": "CWE-89", "name": "SQLi"}),
+            5: (["CWE"], {"id": "CWE-89", "name": "C:\\dir\\ SQLi\\"}),   # backslash, ke ca o cuoi chuoi
         },
         "rels": [(0, 4, "HAS_CWE", {}), (1, 5, "HAS_CWE", {}), (3, 4, "HAS_CWE", {}), (4, 5, "CHILD_OF", {"weight": 2})],
         "constraints": ["CREATE CONSTRAINT `cve_id` FOR (n:`CVE`) REQUIRE (n.`id`) IS UNIQUE"],
@@ -46,8 +47,18 @@ def sample_graph() -> dict:
     }
 
 
+VALUE_TYPES = {str: "STRING", bool: "BOOLEAN", int: "INTEGER", float: "FLOAT", list: "LIST<ANY>", dict: "MAP"}
+
+
 def _answer(g: dict, st: dict, stmt: str, p: dict) -> list:
     nodes, rels = g["nodes"], g["rels"]
+    m = re.search(r"valueType\((n|r)\[k\]\)", stmt)
+    if m:
+        props = [pr for _, pr in nodes.values()] if m.group(1) == "n" else [r[3] for r in rels]
+        seen = {(VALUE_TYPES[type(v)] + " NOT NULL", False) for pr in props for v in pr.values()}
+        if m.group(1) == "n":
+            seen |= set(g.get("value_types", []))
+        return [list(x) for x in sorted(seen)]
     if "SHOW CONSTRAINTS" in stmt:
         return [[s] for s in g.get("constraints", [])]
     if "SHOW INDEXES" in stmt:
@@ -156,7 +167,7 @@ def test_export_writes_import_files(tmp_path):
     assert (out / "nodes-CWE.header.csv").read_text() == ":ID,id:string,name:string,:LABEL\n"
     assert (out / "rels-HAS_CWE.header.csv").read_text() == ":START_ID,:END_ID,:TYPE\n"
     assert (out / "rels-CHILD_OF.header.csv").read_text() == ":START_ID,:END_ID,:TYPE,weight:long\n"
-    assert gz(out / "nodes-CWE.csv.gz") == b'4,"CWE-79","XSS",CWE\n5,"CWE-89","SQLi",CWE\n'
+    assert gz(out / "nodes-CWE.csv.gz") == b'4,"CWE-79","XSS",CWE\n5,"CWE-89","C:\\dir\\ SQLi\\",CWE\n'
     assert gz(out / "rels-HAS_CWE.csv.gz") == b"0,4,HAS_CWE\n1,5,HAS_CWE\n3,4,HAS_CWE\n"
     assert gz(out / "rels-CHILD_OF.csv.gz") == b"4,5,CHILD_OF,2\n"
     c = json.loads((out / "counts.json").read_text())
@@ -174,6 +185,8 @@ def test_csv_encoding_round_trip(tmp_path):
     rows = list(csv.reader(io.StringIO(raw.decode(), newline="")))
     assert [row[5] for row in rows] == ['a,"b"\nc', "ü", ""]
     assert rows[1][4] == ""
+    cwe = list(csv.reader(io.StringIO(gz(out / "nodes-CWE.csv.gz").decode(), newline="")))
+    assert cwe[1][2] == "C:\\dir\\ SQLi\\"    # backslash khong phai ky tu thoat cua neo4j-admin import
 
 
 def test_count_drift_exits_3(tmp_path):
@@ -200,6 +213,30 @@ def test_multilabel_and_list_property_exit_2(tmp_path, mutate):
     r, out, _ = export(tmp_path, g)
     assert r.returncode == 2 and ("không hỗ trợ" in r.stderr or "xung đột" in r.stderr), r.stderr
     assert not (out / "counts.json").exists()
+
+
+@pytest.mark.parametrize("vt", [("DATE NOT NULL", False), ("ZONED DATETIME NOT NULL", False), ("POINT NOT NULL", False),
+                                "LIST<STRING NOT NULL> NOT NULL", ("FLOAT NOT NULL", True)],
+                         ids=["date", "datetime", "point", "list", "nan-inf"])
+def test_unsupported_value_type_exits_2_before_writing(tmp_path, vt):
+    g = sample_graph()
+    if isinstance(vt, str):
+        g["nodes"][9] = (["CVE"], {"id": "CVE-9", "refs": ["a"]})
+        name = "LIST"
+    else:
+        g["value_types"] = [vt]
+        name = vt[0].split()[0] if not vt[1] else "NaN"
+    r, out, st = export(tmp_path, g)
+    assert r.returncode == 2 and name in r.stderr, r.stderr
+    assert sorted(p.name for p in out.iterdir()) == []                      # chua ghi gi
+    assert not any("SHOW" in s or "id(n)=i" in s for _, ss in st["reqs"] for s in ss)
+
+
+def test_value_type_check_covers_relationships(tmp_path):
+    g = sample_graph()
+    g["rels"].append((5, 4, "CHILD_OF", {"weight": [1]}))
+    r, out, _ = export(tmp_path, g)
+    assert r.returncode == 2 and "LIST" in r.stderr and "quan hệ" in r.stderr, r.stderr
 
 
 def test_int_and_float_mix_is_double(tmp_path):
