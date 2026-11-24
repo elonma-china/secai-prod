@@ -472,71 +472,88 @@ cmd_collect() {
 
 # ---------------------------------------------------------------------------------------------------- packtest
 # Chứng minh pack + restore gói dữ liệu THẬT trên VM (EVAL_MODE=packtest). Máy cục bộ chỉ: kiểm trước, đo băng thông, rsync nguồn
-# (chỉ đọc), mở tunnel ngược tới Qdrant prod và dọn snapshot do CHÍNH lần chạy này tạo. Mọi thứ ghi cục bộ nằm trong $SD/packtest.
+# (chỉ đọc), chạy qdrant-guard-proxy.py (chặn mọi ghi lên Qdrant nguồn trừ tạo snapshot và xoá đúng snapshot proxy thấy tạo) và
+# tunnel ngược VM:16333 -> proxy, chỉ trong pha pack. Mọi thứ ghi cục bộ nằm trong $SD/packtest. Khoá Qdrant không rời máy này.
 # Biến: PACKTEST_SRC_ROOT (/home/ict/AIEngines/secai/secai-data), PACKTEST_MCP_DIR (<src>/../exploitdb-mcp-server),
 #   PACKTEST_QDRANT_URL (http://127.0.0.1:6333), PACKTEST_QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY hoặc
-#   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_NODES (số node mong đợi, không có thì chỉ ghi lại), PACKTEST_VM_MIN_FREE_GB (60).
-PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=8
-qcurl() {   # khoá Qdrant qua cấu hình curl trên stdin (-K -), không lên argv
+#   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_NODES (số node mong đợi; không có thì neo4j = not_verified),
+#   PACKTEST_VM_MIN_FREE_GB (60), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (600).
+PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=8 PT_SNAP_DEFAULT=$((5 << 30))
+qcurl() {   # khoá Qdrant qua cấu hình curl trên stdin (-K -), không lên argv. Chỉ đọc + xoá snapshot đã ghi tên.
     if [ -n "$QKEY" ]; then printf 'header = "api-key: %s"\n' "$QKEY" | curl -K - -fsS --max-time 60 "$@"
     else curl -fsS --max-time 60 "$@"; fi
 }
 local_free() { df -B1 --output=avail / | tail -n1 | tr -d ' '; }
-# tmo CMD...: không chạy quá deadline (trừ 10 phút cho huỷ); treo thì bị giết.
-tmo() { local l=$(( DL - 600 - $(date +%s) )); [ "$l" -gt 0 ] || die "packtest: đã sát deadline, dừng"; timeout --kill-after=30 "$l" "$@"; }
-# own_snaps: snapshot KHÔNG có trong danh sách trước khi chạy, tên đúng collection, tạo sau lúc bắt đầu (lệch tối đa 120 s).
-own_snaps() { qcurl "$QURL/collections/$COLL/snapshots" | python3 -I -c '
-import json, re, sys, datetime as dt
-before, coll, start = set(json.load(open(sys.argv[1]))), sys.argv[2], int(sys.argv[3])
-for s in json.load(sys.stdin)["result"]:
-    n = s.get("name", "")
-    if n in before or not n.startswith(coll + "-") or not re.fullmatch(r"[A-Za-z0-9._-]+", n): continue
-    try: t = dt.datetime.fromisoformat(str(s["creation_time"])[:19]).replace(tzinfo=dt.timezone.utc).timestamp()
-    except Exception: print("UNPARSED " + n, file=sys.stderr); continue
-    if t >= start - 120: print(n)' "$PT/snapshots-before.json" "$COLL" "$PT_START"; }
-cleanup_snaps() {
-    [ -f "$PT/snapshots-before.json" ] || return 0
-    local i n left=""
-    for i in 1 2 3 4 5; do
-        left="$(own_snaps)" || { left="?"; nap; continue; }
-        [ -n "$left" ] || return 0
-        for n in $left; do
-            qcurl -X DELETE -o /dev/null "$QURL/collections/$COLL/snapshots/$n" && echo "$(date '+%F %T') deleted $n" >>"$PT/snapshots-deleted.log"
-        done
-        nap
+left() { echo $(( DL - 600 - $(date +%s) )); }   # giây còn lại tới deadline trừ 10 phút dành cho huỷ
+# tmo CMD...: không chạy quá deadline - 10 phút; còn <= 0 thì từ chối (timeout 0 nghĩa là KHÔNG giới hạn).
+tmo() { local l; l="$(left)"; [ "$l" -gt 0 ] || die "packtest: đã sát deadline, dừng"; timeout --kill-after=30 "$l" "$@"; }
+vssh() { tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" "$@"; }
+alert() { printf '%s eval-vast: packtest: %s\n' "$(date '+%F %T')" "$*" | tee -a "$SD/ALERT.txt" >&2; }
+snap_list() { qcurl "$QURL/collections/$COLL/snapshots" | python3 -I -c 'import json,sys
+for s in json.load(sys.stdin)["result"]: print(s["name"])'; }
+close_tunnel() { [ -n "${TUN:-}" ] || return 0; kill "$TUN" 2>/dev/null; wait "$TUN" 2>/dev/null; TUN=""; }
+# finish_prod: chờ proxy hết yêu cầu đang chạy, dừng proxy, rồi xoá ĐÚNG các tên proxy đã ghi (không đoán theo mẫu/thời gian).
+# Không có proxy (chưa từng chạy) thì không đụng Qdrant nguồn. Idempotent.
+finish_prod() {
+    [ -n "${PROXY:-}" ] || return 0
+    local rc=0 i n gone drain="${PACKTEST_DRAIN_SECS:-600}" pd="$PT/proxy"
+    for ((i = 0; i < drain; i += 2)); do
+        [ "$(cat "$pd/inflight" 2>/dev/null)" = 0 ] && break
+        kill -0 "$PROXY" 2>/dev/null || break
+        sleep 2
     done
-    printf '%s eval-vast: packtest: snapshot Qdrant prod chưa dọn được: %s (xoá tay: curl -X DELETE %s/collections/%s/snapshots/<tên>)\n' \
-        "$(date '+%F %T')" "$left" "$QURL" "$COLL" | tee -a "$SD/ALERT.txt" >&2
-    return 1
+    if [ "$(cat "$pd/inflight" 2>/dev/null)" != 0 ]; then
+        echo "!!!!!! proxy còn yêu cầu đang chạy tới Qdrant nguồn sau ${drain}s: KIỂM snapshot Qdrant prod bằng tay !!!!!!" >&2
+        alert "proxy còn yêu cầu đang chạy sau ${drain}s: check prod snapshots ($QURL/collections/$COLL/snapshots)"; rc=1
+    fi
+    kill "$PROXY" 2>/dev/null; wait "$PROXY" 2>/dev/null; PROXY=""
+    if [ -s "$pd/denied.log" ]; then alert "proxy đã TỪ CHỐI $(wc -l <"$pd/denied.log") yêu cầu tới Qdrant nguồn ($pd/denied.log)"; rc=1; fi
+    [ -f "$PT/snapshots-before.json" ] || { alert "không có danh sách snapshot trước khi chạy: không xoá gì, kiểm tay"; return 1; }
+    for n in $(python3 -I -c 'import json,sys
+for l in open(sys.argv[1]): print(json.loads(l)["name"])' "$pd/created.jsonl" 2>/dev/null); do
+        [[ "$n" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || { alert "tên snapshot lạ '$n': không xoá"; rc=1; continue; }
+        if python3 -I -c 'import json,sys; sys.exit(sys.argv[2] not in json.load(open(sys.argv[1])))' "$PT/snapshots-before.json" "$n"; then
+            alert "snapshot '$n' do proxy ghi lại TRÙNG một snapshot có sẵn: không xoá"; rc=1; continue
+        fi
+        gone=0
+        for i in 1 2 3 4 5; do
+            local lst; lst="$(snap_list)" || { nap; continue; }
+            grep -qxF -- "$n" <<<"$lst" || { gone=1; break; }
+            qcurl -X DELETE -o /dev/null "$QURL/collections/$COLL/snapshots/$n" && echo "$(date '+%F %T') deleted $n" >>"$PT/snapshots-deleted.log"
+            nap
+        done
+        [ "$gone" = 1 ] || { alert "snapshot '$n' trên Qdrant nguồn chưa xoá được: curl -X DELETE $QURL/collections/$COLL/snapshots/$n"; rc=1; }
+    done
+    return "$rc"
 }
 on_exit_packtest() {
     local rc=$? f
     trap - EXIT
-    if [ -n "${TUN:-}" ]; then kill "$TUN" 2>/dev/null; wait "$TUN" 2>/dev/null; fi   # tunnel trước: pack.sh không tạo thêm snapshot được nữa
-    cleanup_snaps || rc=1
-    timeout 60 ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'shred -u /srv/packtest/qkey 2>/dev/null; true' </dev/null >/dev/null 2>&1 || true
+    close_tunnel
+    finish_prod || rc=1
+    rm -f "$PT/catalog.db"
     f="$(local_free)"
-    if [[ "$f" =~ ^[0-9]+$ ]] && [ $(( PT_FREE0 - f )) -gt $((1 << 30)) ]; then
-        printf '%s eval-vast: packtest: / cục bộ còn %s byte, thấp hơn lúc đầu (%s) quá 1 GB: kiểm snapshot Qdrant prod\n' "$(date '+%F %T')" "$f" "$PT_FREE0" | tee -a "$SD/ALERT.txt" >&2
-        rc=1
+    if [[ "$f" =~ ^[0-9]+$ ]] && [ $(( PT_FREE0 - f )) -gt $((1 << 30)) ]; then   # chỉ cảnh báo: máy nguồn bận cũng ghi đĩa
+        echo "eval-vast: CẢNH BÁO: / cục bộ còn $((f >> 20)) MiB, thấp hơn lúc đầu $((PT_FREE0 >> 20)) MiB quá 1 GB (danh sách snapshot ở trên là tín hiệu chính)" >&2
     fi
     [ "$rc" = 0 ] && say "packtest XONG (đạt). Tiếp: collect -> down" || echo "eval-vast: packtest KHÔNG ĐẠT/lỗi (rc=$rc); vẫn chạy collect rồi down" >&2
     exit "$rc"
 }
 
 cmd_packtest() {
-    need_cmds ssh rsync curl python3 timeout df; load_conn
+    need_cmds ssh rsync curl python3 timeout df du; load_conn
     [ "$(sget mode)" = packtest ] || die "packtest cần instance dựng bằng EVAL_MODE=packtest eval-vast.sh up"
     DL="$(sget deadline)"; [[ "$DL" =~ ^[0-9]+$ ]] || die "state thiếu deadline"
-    [ $(( DL - 600 - $(date +%s) )) -gt 0 ] || die "packtest: còn < 10 phút tới deadline; không bắt đầu"
-    local src="${PACKTEST_SRC_ROOT:-/home/ict/AIEngines/secai/secai-data}" mcp ne="${PACKTEST_NEO4J_NODES:-}" vmfree="${PACKTEST_VM_MIN_FREE_GB:-60}" bw="${PACKTEST_BW_MB:-200}"
+    [ "$(left)" -gt 0 ] || die "packtest: còn < 10 phút tới deadline; không bắt đầu"
+    local src="${PACKTEST_SRC_ROOT:-/home/ict/AIEngines/secai/secai-data}" mcp ne="${PACKTEST_NEO4J_NODES:-}" vmfree="${PACKTEST_VM_MIN_FREE_GB:-60}"
+    local bw="${PACKTEST_BW_MB:-200}" allow="${PACKTEST_PACK_RESTORE_MIN:-45}"
     mcp="${PACKTEST_MCP_DIR:-$src/../exploitdb-mcp-server}"
     QURL="${PACKTEST_QDRANT_URL:-http://127.0.0.1:6333}"; QURL="${QURL%/}"; COLL="${PACKTEST_QDRANT_COLLECTION:-cve_kb_hybrid}"
-    [[ "$QURL" =~ ^http://(127\.0\.0\.1|localhost):([0-9]{1,5})$ ]] || die "PACKTEST_QDRANT_URL phải là http://127.0.0.1:<cổng> (Qdrant prod trên máy này): $QURL"
-    local qport="${BASH_REMATCH[2]}"
+    [[ "$QURL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$ ]] || die "PACKTEST_QDRANT_URL phải là http://127.0.0.1:<cổng> (Qdrant nguồn trên máy này): $QURL"
     [[ "$COLL" =~ ^[A-Za-z0-9_-]+$ ]] || die "PACKTEST_QDRANT_COLLECTION lạ: $COLL"
     [ -z "$ne" ] || [[ "$ne" =~ ^[0-9]+$ ]] || die "PACKTEST_NEO4J_NODES phải là số: $ne"
-    [[ "$vmfree" =~ ^[0-9]+$ ]] && [[ "$bw" =~ ^[1-9][0-9]*$ ]] || die "PACKTEST_VM_MIN_FREE_GB/PACKTEST_BW_MB phải là số"
+    [[ "$vmfree" =~ ^[0-9]+$ ]] && [[ "$bw" =~ ^[1-9][0-9]*$ ]] && [[ "$allow" =~ ^[0-9]+$ ]] \
+        || die "PACKTEST_VM_MIN_FREE_GB/PACKTEST_BW_MB/PACKTEST_PACK_RESTORE_MIN phải là số"
     QKEY="${QDRANT_API_KEY:-}"; unset QDRANT_API_KEY
     if [ -n "${PACKTEST_QDRANT_KEY_FILE:-}" ]; then
         [ -f "$PACKTEST_QDRANT_KEY_FILE" ] && [ "$(stat -c '%a %u' "$PACKTEST_QDRANT_KEY_FILE")" = "600 $(id -u)" ] \
@@ -551,37 +568,45 @@ cmd_packtest() {
     [ ${#missing[@]} -eq 0 ] || die "thiếu nguồn: ${missing[*]}"
     PT_FREE0="$(local_free)"; [[ "$PT_FREE0" =~ ^[0-9]+$ ]] || die "không đọc được dung lượng trống của /"
     [ "$PT_FREE0" -ge $((PT_MIN_LOCAL_FREE_GB << 30)) ] \
-        || die "/ cục bộ chỉ còn $((PT_FREE0 >> 30)) GB < $PT_MIN_LOCAL_FREE_GB GB (snapshot Qdrant ghi lên đĩa prod); không chạy"
-    PT="$SD/packtest"; mkdir -p "$PT"; chmod 700 "$PT"
-    qcurl "$QURL/collections/$COLL" >"$PT/prod-collection.raw" || die "không đọc được Qdrant prod $QURL/collections/$COLL"
-    python3 -I -c 'import json,sys
-r = json.load(open(sys.argv[1]))["result"]
-json.dump({"points_count": r["points_count"], "params": r["config"]["params"], "payload_schema_keys": sorted(r.get("payload_schema") or {})}, open(sys.argv[2], "w"))' \
-        "$PT/prod-collection.raw" "$PT/prod-collection.json" || die "collection info Qdrant prod không đúng dạng"
-    rm -f "$PT/prod-collection.raw"
-    PT_START="$(date +%s)"
-    qcurl "$QURL/collections/$COLL/snapshots" | python3 -I -c 'import json,sys; json.dump([s["name"] for s in json.load(sys.stdin)["result"]], open(sys.argv[1], "w"))' \
-        "$PT/snapshots-before.json" || die "không liệt kê được snapshot Qdrant prod"
-    say "Qdrant prod: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["points_count"])' "$PT/prod-collection.json") điểm; snapshot có sẵn (KHÔNG bao giờ xoá): $(tr -d '[]"' <"$PT/snapshots-before.json")"
-    TUN=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
+        || die "/ cục bộ chỉ còn $((PT_FREE0 >> 30)) GB < $PT_MIN_LOCAL_FREE_GB GB (snapshot Qdrant ghi lên đĩa máy nguồn); không chạy"
+    PT="$SD/packtest"; mkdir -p "$PT"; chmod 700 "$PT"; rm -rf "$PT/proxy"
+    qcurl "$QURL/collections/$COLL" | python3 -I -c 'import json,sys
+r = json.load(sys.stdin)["result"]
+json.dump({"points_count": r["points_count"], "params": r["config"]["params"], "payload_schema_keys": sorted(r.get("payload_schema") or {})}, open(sys.argv[1], "w"))' \
+        "$PT/prod-collection.json" || die "không đọc được Qdrant nguồn $QURL/collections/$COLL"
+    local snapest
+    snapest="$(qcurl "$QURL/collections/$COLL/snapshots" | python3 -I -c 'import json,sys
+s = json.load(sys.stdin)["result"]
+json.dump([x["name"] for x in s], open(sys.argv[1], "w"))
+print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snapshots-before.json" "$PT_SNAP_DEFAULT")" \
+        || { rm -f "$PT/snapshots-before.json"; die "không liệt kê được snapshot Qdrant nguồn"; }
+    say "Qdrant nguồn: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["points_count"])' "$PT/prod-collection.json") điểm; snapshot có sẵn (KHÔNG bao giờ xoá): $(tr -d '[]"' <"$PT/snapshots-before.json")"
+    local srcb
+    srcb="$(du -scb --exclude=.git --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$src/neo4j/neo4j.dump" "$mcp" | tail -n1 | cut -f1)"
+    TUN=""; PROXY=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 
-    # --- b. băng thông: ~40 GB phải xong trong hạn 3 giờ
-    local t0 t1 mbps
+    # --- b. băng thông: (nguồn + snapshot ước tính) / tốc độ + thời gian pack/restore phải vừa trước deadline - 10 phút
+    local t0 t1 mbps need
     t0="$(date +%s.%N)"
-    head -c "$((bw << 20))" /dev/urandom | tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'cat >/dev/null' || die "đo băng thông lỗi"
+    head -c "$((bw << 20))" /dev/urandom | vssh 'cat >/dev/null' || die "đo băng thông lỗi"
     t1="$(date +%s.%N)"
     mbps="$(awk -v b="$bw" -v a="$t0" -v z="$t1" 'BEGIN { d = z - a; if (d < 0.001) d = 0.001; printf "%.1f", b / d }')"
-    say "băng thông tới VM: $mbps MB/s ($bw MB)"
-    if awk -v m="$mbps" -v k="$PT_MIN_MBPS" 'BEGIN { exit !(m < k) }'; then
-        echo "!!!!!! BĂNG THÔNG $mbps MB/s < $PT_MIN_MBPS MB/s: ~40 GB không xong trong hạn 3 giờ. KHÔNG chuyển dữ liệu. Chạy 'eval-vast.sh down' !!!!!!" >&2
-        die "packtest: băng thông $mbps MB/s < $PT_MIN_MBPS MB/s, dừng trước khi chuyển dữ liệu"
+    need="$(awk -v s="$srcb" -v n="$snapest" -v m="$mbps" -v a="$allow" 'BEGIN { printf "%d", (s + n) / (m * 1048576) + a * 60 }')"
+    say "băng thông tới VM: $mbps MB/s; cần ~${need}s (nguồn $srcb B + snapshot ~$snapest B + ${allow} phút pack/restore), còn $(left)s"
+    if awk -v m="$mbps" -v k="$PT_MIN_MBPS" 'BEGIN { exit !(m < k) }' || [ "$need" -gt "$(left)" ]; then
+        echo "!!!!!! BĂNG THÔNG $mbps MB/s: cần ~${need}s, chỉ còn $(left)s trước deadline (sàn $PT_MIN_MBPS MB/s). KHÔNG chuyển dữ liệu. Chạy 'eval-vast.sh down' !!!!!!" >&2
+        die "packtest: băng thông $mbps MB/s không đủ (cần ${need}s, còn $(left)s), dừng trước khi chuyển dữ liệu"
     fi
 
-    # --- c. đưa nguồn lên VM (rsync chỉ đọc nguồn; không -z vì phần lớn đã nén/nhị phân)
+    # --- c. đưa nguồn lên VM (rsync chỉ đọc nguồn; không -z). catalog.db đang ghi (WAL): chép bản nhất quán bằng sqlite backup API.
     local rsh s0 secs bytes
     rsh="$(rsh_cmd)"; s0="$(date +%s)"
-    tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'mkdir -p /srv/src-root/neo4j /srv/packtest' </dev/null || die "tạo thư mục trên VM lỗi"
-    tmo rsync -a --no-links --stats -e "$rsh" "$src/exploitdb" "$src/poc" "$src/poc-sources" "root@$HOST:/srv/src-root/" >"$PT/rsync-src.log" || die "rsync nguồn lỗi"
+    python3 -I -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
+        "$src/poc/catalog.db" "$PT/catalog.db" || die "sao lưu catalog.db lỗi"
+    vssh 'mkdir -p /srv/src-root/neo4j /srv/src-root/poc /srv/packtest' </dev/null || die "tạo thư mục trên VM lỗi"
+    tmo rsync -a --no-links --stats --exclude '/poc/catalog.db*' -e "$rsh" "$src/exploitdb" "$src/poc" "$src/poc-sources" "root@$HOST:/srv/src-root/" >"$PT/rsync-src.log" || die "rsync nguồn lỗi"
+    tmo rsync -a --no-links --stats -e "$rsh" "$PT/catalog.db" "root@$HOST:/srv/src-root/poc/" >"$PT/rsync-catalog.log" || die "rsync catalog.db lỗi"
+    rm -f "$PT/catalog.db"
     tmo rsync -a --no-links --stats -e "$rsh" "$src/neo4j/neo4j.dump" "root@$HOST:/srv/src-root/neo4j/" >"$PT/rsync-neo4j.log" || die "rsync neo4j.dump lỗi"
     # như pack.sh: .git/.env*/khoá của mcp-server không rời máy
     tmo rsync -a --no-links --stats --exclude .git --exclude '.env*' --exclude '*.pem' --exclude '*.key' -e "$rsh" "$mcp"/ \
@@ -590,39 +615,44 @@ json.dump({"points_count": r["points_count"], "params": r["config"]["params"], "
     bytes="$(cat "$PT"/rsync-*.log | awk -F': ' '/^Total transferred file size/ { gsub(/[^0-9]/, "", $2); s += $2 } END { print s + 0 }')"
     say "đưa nguồn: ${secs}s, $bytes byte"
 
-    # --- d. khoá (nếu có) qua stdin vào tệp 0600; thông tin collection prod; tunnel ngược Qdrant prod -> VM 127.0.0.1:16333
-    if [ -n "$QKEY" ]; then
-        printf '%s' "$QKEY" | tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'umask 077; cat > /srv/packtest/qkey' || die "đẩy khoá Qdrant lỗi"
-    fi
-    tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'cat > /srv/packtest/prod-collection.json' <"$PT/prod-collection.json" || die "đẩy thông tin collection lỗi"
-    # timeout chạy trực tiếp (không qua hàm tmo) để $! là PID của timeout: kill nó thì timeout chuyển TERM cho ssh.
-    timeout --kill-after=30 $(( DL - 600 - $(date +%s) )) ssh "${SSHO[@]}" -p "$PORT" -N -o ExitOnForwardFailure=yes -o ServerAliveCountMax=3 \
-        -R "127.0.0.1:16333:127.0.0.1:$qport" "root@$HOST" </dev/null >"$PT/tunnel.log" 2>&1 &
+    # --- d. proxy chặn ghi (khoá qua stdin của proxy) + tunnel ngược VM 127.0.0.1:16333 -> proxy
+    mkdir -p "$PT/proxy"
+    python3 -I "$HERE/qdrant-guard-proxy.py" --upstream "$QURL" --collection "$COLL" --state "$PT/proxy" --alert "$SD/ALERT.txt" \
+        < <(printf '%s\n' "$QKEY") >"$PT/proxy/proxy.log" 2>&1 &
+    PROXY=$!
+    local n pport=""
+    for n in $(seq 1 40); do pport="$(cat "$PT/proxy/port" 2>/dev/null)"; [ -n "$pport" ] && break; sleep 0.25; done
+    [[ "$pport" =~ ^[0-9]+$ ]] || die "qdrant-guard-proxy không lên (xem $PT/proxy/proxy.log)"
+    local l; l="$(left)"; [ "$l" -gt 0 ] || die "packtest: đã sát deadline, không mở tunnel"
+    # timeout chạy trực tiếp để $! là PID của timeout: kill nó thì timeout chuyển TERM cho ssh.
+    timeout --kill-after=30 "$l" ssh "${SSHO[@]}" -p "$PORT" -N -o ExitOnForwardFailure=yes -o ServerAliveCountMax=3 \
+        -R "127.0.0.1:16333:127.0.0.1:$pport" "root@$HOST" </dev/null >"$PT/tunnel.log" 2>&1 &
     TUN=$!
-    local n ok=0
+    local ok=0
     for n in $(seq 1 20); do
         kill -0 "$TUN" 2>/dev/null || die "tunnel ngược chết ngay (xem $PT/tunnel.log)"
-        if tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" 'curl -s -o /dev/null --max-time 5 http://127.0.0.1:16333/' </dev/null; then ok=1; break; fi
+        if vssh 'curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:16333/' </dev/null; then ok=1; break; fi
         sleep 1
     done
-    [ "$ok" = 1 ] || die "VM không tới được Qdrant prod qua tunnel"
+    [ "$ok" = 1 ] || die "VM không tới được Qdrant nguồn qua tunnel/proxy"
 
-    # --- e/f. pack + restore + kiểm trên VM; kết quả ở /opt/secai-stack/results (collect kéo về)
-    local prc=0
-    tmo ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" "COLL=$COLL NEO4J_EXPECT='$ne' VM_MIN_FREE_GB=$vmfree STAGE_SECS=$secs STAGE_BYTES=$bytes BW_MBPS=$mbps bash -s" <<'REMOTE_PACKTEST' || prc=$?
+    # --- e. pha pack trên VM (cần nguồn): số liệu tham chiếu từ nguồn + pack.sh. Xong là đóng tunnel và dọn snapshot ngay.
+    local prc=0 rrc=0 pclean=pass
+    vssh "PHASE=pack COLL=$COLL VM_MIN_FREE_GB=$vmfree bash -s" <<'REMOTE_PACKTEST_PACK' || prc=$?
 set -uo pipefail
 R=/opt/secai-stack/results; [ ! -e "$R" ] || mv "$R" "$R.prev-$(date +%Y%m%d-%H%M%S)-$$"; mkdir -p "$R"
-W=/srv/packtest SRC=/srv/src-root OUT=/srv/pkg-out DR=/srv/restore-test ST=/opt/secai-stack/stack
-QIMG=qdrant/qdrant:v1.10.1 NIMG=neo4j:5.20-community
-TIMEV=/usr/bin/time
+W=/srv/packtest SRC=/srv/src-root OUT=/srv/pkg-out ST=/opt/secai-stack/stack TIMEV=/usr/bin/time
 CHK="$R/checks.tsv"; : >"$CHK"; : >"$R/facts.tsv"
-chk() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$CHK"; }       # tên, pass|fail|recorded, chi tiết
+chk() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$CHK"; }       # tên, pass|fail|not_verified, chi tiết
 fact() { printf '%s\t%s\n' "$1" "$2" >>"$R/facts.tsv"; }
-cleanup() { kill "$DFP" 2>/dev/null; shred -u "$W/qkey" 2>/dev/null; docker rm -f packtest-qdrant packtest-neo4j >/dev/null 2>&1; true; }
-( while :; do df -B1 --output=used,avail /srv | tail -n1; sleep 10; done ) >"$R/disk-samples.txt" 2>/dev/null &
-DFP=$!; trap cleanup EXIT
+dfs() { df -B1 --output=used,avail /srv | tail -n1 >>"$R/disk-samples.txt"; }   # mẫu thêm ở các mốc
+mkdir -p "$W"
+# lấy mẫu đĩa mỗi 10 s, sống qua hết phiên ssh này (pha restore dừng nó)
+setsid nohup bash -c 'while :; do df -B1 --output=used,avail /srv | tail -n1; sleep 10; done' >>"$R/disk-samples.txt" 2>/dev/null </dev/null &
+echo $! >"$W/df.pid"
+fact disk_used_start "$(df -B1 --output=used /srv | tail -n1 | tr -d ' ')"
 cat >"$W/facts.py" <<'PY'
-# facts.py ROOT -> {dir: {files, bytes}} cho cây dữ liệu + số dòng từng bảng catalog.db (không theo symlink)
+# facts.py ROOT -> {cây: {files, bytes}} + số dòng từng bảng catalog.db (không theo symlink)
 import json, os, sqlite3, sys
 root, out = sys.argv[1], {}
 for d in ("exploitdb", "poc/store", "poc-sources", "exploitdb-mcp-server"):
@@ -637,42 +667,62 @@ out["catalog_rows"] = {t: c.execute('SELECT count(*) FROM "%s"' % t.replace('"',
                        for (t,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")}
 json.dump(out, sys.stdout, sort_keys=True)
 PY
-cat >"$W/qsample.py" <<'PY'
-# qsample.py prod URL COLL OUT: 20 điểm ngẫu nhiên trong 1000 id đầu (scroll) của Qdrant prod, kèm payload + vector. Khoá đọc từ tệp.
-import json, os, random, sys, urllib.request
+cat >"$W/qref.py" <<'PY'
+# qref.py URL COLL OUT: số liệu tham chiếu của Qdrant nguồn (chỉ đọc): info, mọi id (scroll), 20 điểm ngẫu nhiên kèm payload+vector
+import json, random, sys, urllib.request
 url, coll, out = sys.argv[1:4]
-key = open("/srv/packtest/qkey").read().strip() if os.path.exists("/srv/packtest/qkey") else ""
-def call(path, body):
-    rq = urllib.request.Request(url + path, data=json.dumps(body).encode(), headers={"Content-Type": "application/json", **({"api-key": key} if key else {})})
-    return json.load(urllib.request.urlopen(rq, timeout=120))["result"]
-ids = [p["id"] for p in call(f"/collections/{coll}/points/scroll", {"limit": 1000, "with_payload": False, "with_vector": False})["points"]]
+def call(method, path, body=None):
+    rq = urllib.request.Request(url + path, method=method, data=None if body is None else json.dumps(body).encode(),
+                                headers={"Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(rq, timeout=300))["result"]
+info = call("GET", f"/collections/{coll}")
+ids, off = [], None
+while True:
+    r = call("POST", f"/collections/{coll}/points/scroll", {"limit": 10000, "with_payload": False, "with_vector": False,
+                                                           **({"offset": off} if off is not None else {})})
+    ids += [p["id"] for p in r["points"]]
+    off = r.get("next_page_offset")
+    if off is None: break
 pick = random.sample(ids, min(20, len(ids)))
-json.dump(call(f"/collections/{coll}/points", {"ids": pick, "with_payload": True, "with_vector": True}), open(out, "w"))
+json.dump({"points_count": info["points_count"], "params": info["config"]["params"],
+           "payload_schema_keys": sorted(info.get("payload_schema") or {}), "ids_total": len(ids),
+           "sample": call("POST", f"/collections/{coll}/points", {"ids": pick, "with_payload": True, "with_vector": True})}, open(out, "w"))
 PY
-used0=$(df -B1 --output=used /srv | tail -n1 | tr -d ' '); fact disk_used_start "$used0"
-dfs() { df -B1 --output=used,avail /srv | tail -n1 >>"$R/disk-samples.txt"; }   # mẫu thêm ở các mốc (lấy mẫu 10 s có thể lỡ đỉnh)
-
-# 1. số liệu nguồn (trước khi pack, vì nguồn bị xoá trước restore để vừa đĩa)
 if python3 "$W/facts.py" "$SRC" >"$R/src-facts.json"; then chk src_facts pass ""; else chk src_facts fail "facts.py nguồn lỗi"; fi
 avail=$(df -B1 --output=avail /srv | tail -n1 | tr -d ' ')
 if [ "$avail" -ge $((VM_MIN_FREE_GB << 30)) ]; then chk vm_free pass "$avail"; else chk vm_free fail "$avail < ${VM_MIN_FREE_GB} GB"; fi
+if python3 "$W/qref.py" http://127.0.0.1:16333 "$COLL" "$W/prod-ref.json" 2>"$R/qref.log"; then chk qdrant_reference pass ""; else chk qdrant_reference fail "xem qref.log"; fi
+if awk -F'\t' '$2 == "fail" { f = 1 } END { exit !f }' "$CHK"; then exit 1; fi
+t=$(date +%s)
+env -u QDRANT_API_KEY QDRANT_URL=http://127.0.0.1:16333 QDRANT_COLLECTION="$COLL" \
+    "$TIMEV" -v -o "$R/pack.time" "$ST/pack.sh" data --mcp-dir "$SRC/exploitdb-mcp-server" --neo4j-dump "$SRC/neo4j/neo4j.dump" "$SRC" "$OUT" >"$R/pack.log" 2>&1
+prc=$?; fact pack_secs $(( $(date +%s) - t )); dfs
+if [ "$prc" = 0 ]; then chk pack pass ""; else chk pack fail "rc=$prc"; exit 1; fi
+REMOTE_PACKTEST_PACK
+    close_tunnel
+    finish_prod || pclean=fail
+    # số điểm của chính snapshot (proxy đếm ngay trước/sau lúc tạo): restore phải nằm trong khoảng đó, không so với số trước khi chạy
+    python3 -I -c 'import json,sys
+r = [json.loads(l) for l in open(sys.argv[1])] if __import__("os").path.exists(sys.argv[1]) else []
+json.dump(r[-1] if r else {}, sys.stdout)' "$PT/proxy/created.jsonl" | vssh 'cat > /srv/packtest/snapshot-points.json' || prc=1
 
-ok=0
-if ! awk -F'\t' '$2 == "fail" { f = 1 } END { exit !f }' "$CHK"; then
-    # 2. mẫu điểm prod + pack (snapshot qua tunnel). Khoá chỉ nằm trong tệp 0600, bị shred ngay sau pack.
-    if python3 "$W/qsample.py" http://127.0.0.1:16333 "$COLL" "$W/prod-sample.json" 2>"$R/qsample.log"; then chk qdrant_sample_fetch pass ""; else chk qdrant_sample_fetch fail "xem qsample.log"; fi
-    t=$(date +%s)
-    QDRANT_API_KEY=$(cat "$W/qkey" 2>/dev/null) QDRANT_URL=http://127.0.0.1:16333 QDRANT_COLLECTION="$COLL" \
-        "$TIMEV" -v -o "$R/pack.time" "$ST/pack.sh" data --mcp-dir "$SRC/exploitdb-mcp-server" --neo4j-dump "$SRC/neo4j/neo4j.dump" "$SRC" "$OUT" >"$R/pack.log" 2>&1
-    prc=$?; fact pack_secs $(( $(date +%s) - t )); shred -u "$W/qkey" 2>/dev/null; dfs
-    if [ "$prc" = 0 ]; then chk pack pass ""; ok=1; else chk pack fail "rc=$prc"; fi
-fi
-if [ "$ok" = 1 ]; then
+    # --- f. pha restore + kiểm trên VM (không cần nguồn). Kết quả ở /opt/secai-stack/results (collect kéo về).
+    vssh "PHASE=restore COLL=$COLL NEO4J_EXPECT='$ne' PROD_CLEAN=$pclean STAGE_SECS=$secs STAGE_BYTES=$bytes BW_MBPS=$mbps bash -s" <<'REMOTE_PACKTEST_RESTORE' || rrc=$?
+set -uo pipefail
+R=/opt/secai-stack/results W=/srv/packtest SRC=/srv/src-root OUT=/srv/pkg-out DR=/srv/restore-test ST=/opt/secai-stack/stack
+QIMG=qdrant/qdrant:v1.10.1 NIMG=neo4j:5.20-community TIMEV=/usr/bin/time
+mkdir -p "$R"; CHK="$R/checks.tsv"; touch "$CHK" "$R/facts.tsv"
+chk() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$CHK"; }
+fact() { printf '%s\t%s\n' "$1" "$2" >>"$R/facts.tsv"; }
+dfs() { df -B1 --output=used,avail /srv | tail -n1 >>"$R/disk-samples.txt"; }
+cleanup() { kill "$(cat "$W/df.pid" 2>/dev/null)" 2>/dev/null; docker rm -f packtest-qdrant packtest-neo4j >/dev/null 2>&1; true; }
+trap cleanup EXIT
+chk prod_snapshot_cleanup "$PROD_CLEAN" "chỉ xoá snapshot proxy ghi tên"
+if awk -F'\t' '$1 == "pack" && $2 == "pass" { f = 1 } END { exit !f }' "$CHK"; then
     fact package_bytes "$(du -sb "$OUT" | cut -f1)"
     (cd "$OUT" && ls -l --time-style=+ qdrant neo4j ./*.tar.zst) >"$R/package-files.txt" 2>&1
     if (cd "$OUT" && sha256sum -c --strict --quiet SHA256SUMS) >"$R/sha256.log" 2>&1; then chk package_sha256 pass ""; else chk package_sha256 fail "xem sha256.log"; fi
-    rm -rf "$SRC"   # nguồn đã đo; xoá để restore vừa đĩa
-    # 3. restore vào DATA_ROOT mới với Qdrant cục bộ (đúng image compose) cho recover snapshot
+    rm -rf "$SRC"   # nguồn đã đo ở pha pack; xoá để restore vừa đĩa
     mkdir -p "$DR/_state/qdrant_storage" "$DR/qdrant"
     docker rm -f packtest-qdrant >/dev/null 2>&1
     docker run -d --name packtest-qdrant -p 127.0.0.1:16334:6333 -v "$DR/_state/qdrant_storage:/qdrant/storage" \
@@ -682,35 +732,51 @@ if [ "$ok" = 1 ]; then
     env -u QDRANT_API_KEY DATA_ROOT="$DR" "$TIMEV" -v -o "$R/restore.time" "$ST/restore-data.sh" --qdrant-url http://127.0.0.1:16334 "$OUT" >"$R/restore.log" 2>&1
     rrc=$?; fact restore_secs $(( $(date +%s) - t )); dfs
     if [ "$rrc" = 0 ]; then chk restore pass ""; else chk restore fail "rc=$rrc"; fi
-    # 4. kiểm
-    curl -fsS --max-time 60 "http://127.0.0.1:16334/collections/$COLL" >"$W/restored-collection.json" 2>/dev/null || echo '{}' >"$W/restored-collection.json"
-    python3 - "$W/prod-collection.json" "$W/restored-collection.json" "$W/prod-sample.json" "$COLL" >>"$CHK" <<'PY'
+    # quyền theo restore-data.sh, đo TRƯỚC khi container Neo4j khởi động (entrypoint có thể chown /data)
+    for d in poc poc/store; do
+        read -r o m <<<"$(stat -c '%u:%g %a' "$DR/$d" 2>/dev/null)"
+        if [ "$o" = 10001:10100 ] && [ $(( 0$m & 020 )) -ne 0 ]; then chk "perm_${d/\//_}" pass "$o $m"; else chk "perm_${d/\//_}" fail "${o:-?} ${m:-?}"; fi
+    done
+    o=$(stat -c '%u' "$DR/_state/neo4j_data/databases" 2>/dev/null)
+    if [ "$o" = 7474 ]; then chk perm_neo4j_data pass "$o"; else chk perm_neo4j_data fail "${o:-?}"; fi
+    python3 - "$W/prod-ref.json" "$W/snapshot-points.json" "$COLL" >>"$CHK" <<'PY'
 import json, sys, urllib.request
-prod, rest = json.load(open(sys.argv[1])), json.load(open(sys.argv[2])).get("result") or {}
+ref, snap, coll = json.load(open(sys.argv[1])), json.load(open(sys.argv[2])), sys.argv[3]
 def row(n, ok, d): print(f"{n}\t{'pass' if ok else 'fail'}\t{d}")
+def call(method, path, body=None):
+    rq = urllib.request.Request("http://127.0.0.1:16334" + path, method=method, data=None if body is None else json.dumps(body).encode(),
+                                headers={"Content-Type": "application/json"})
+    return json.load(urllib.request.urlopen(rq, timeout=300))["result"]
+try: rest = call("GET", f"/collections/{coll}")
+except Exception: rest = {}
 rp = rest.get("points_count")
-row("qdrant_points", rp == prod["points_count"], f"prod={prod['points_count']} restored={rp}")
+lo, hi = snap.get("points_before"), snap.get("points_after")
+ok = isinstance(rp, int) and isinstance(lo, int) and isinstance(hi, int) and min(lo, hi) <= rp <= max(lo, hi)
+row("qdrant_points", ok, f"restored={rp} snapshot_points_before={lo} after={hi} prod_ref={ref['points_count']} ids_scrolled={ref['ids_total']}")
 rparams = (rest.get("config") or {}).get("params") or {}
-row("qdrant_vectors_config", rparams.get("vectors") == prod["params"].get("vectors") and rparams.get("sparse_vectors") == prod["params"].get("sparse_vectors"),
+row("qdrant_vectors_config", rparams.get("vectors") == ref["params"].get("vectors") and rparams.get("sparse_vectors") == ref["params"].get("sparse_vectors"),
     json.dumps({"vectors": rparams.get("vectors"), "sparse": rparams.get("sparse_vectors")}))
 rk = sorted(rest.get("payload_schema") or {})
-row("qdrant_payload_indexes", rk == prod["payload_schema_keys"], f"prod={len(prod['payload_schema_keys'])} restored={len(rk)}")
+row("qdrant_payload_indexes", rk == ref["payload_schema_keys"], f"ref={len(ref['payload_schema_keys'])} restored={len(rk)}")
+def close(a, b): return isinstance(a, list) and isinstance(b, list) and len(a) == len(b) and all(abs(x - y) <= 1e-6 for x, y in zip(a, b))
+def same_vec(a, b):
+    a, b = (a if isinstance(a, dict) else {"": a}), (b if isinstance(b, dict) else {"": b})
+    if sorted(a) != sorted(b): return False
+    for k in a:
+        x, y = a[k], b[k]
+        if isinstance(x, dict):   # sparse
+            if not isinstance(y, dict) or x.get("indices") != y.get("indices") or not close(x.get("values"), y.get("values")): return False
+        elif not close(x, y): return False
+    return True
 try:
-    sample = json.load(open(sys.argv[3]))
-    rq = urllib.request.Request(f"http://127.0.0.1:16334/collections/{sys.argv[4]}/points",
-                                data=json.dumps({"ids": [p["id"] for p in sample], "with_payload": True, "with_vector": True}).encode(),
-                                headers={"Content-Type": "application/json"})
-    got = {str(p["id"]): p for p in json.load(urllib.request.urlopen(rq, timeout=120))["result"]}
-    def shape(v):
-        v = v if isinstance(v, dict) else {"": v}
-        return {k: (len(x) if isinstance(x, list) else len(x.get("indices") or []) if isinstance(x, dict) else None) for k, x in v.items()}
+    sample = ref["sample"]
+    got = {str(p["id"]): p for p in call("POST", f"/collections/{coll}/points", {"ids": [p["id"] for p in sample], "with_payload": True, "with_vector": True})}
     bad = [str(p["id"]) for p in sample if str(p["id"]) not in got or got[str(p["id"])].get("payload") != p.get("payload")
-           or shape(got[str(p["id"])].get("vector")) != shape(p.get("vector"))]
+           or not same_vec(got[str(p["id"])].get("vector"), p.get("vector"))]
     row("qdrant_sample_points", len(sample) > 0 and not bad, f"n={len(sample)} mismatched={bad[:5]}")
 except Exception as e:
     row("qdrant_sample_points", False, type(e).__name__)
 PY
-    # Neo4j: mở bản khôi phục trong container tạm (không auth), đếm node
     docker rm -f packtest-neo4j >/dev/null 2>&1
     docker run -d --name packtest-neo4j -e NEO4J_AUTH=none -v "$DR/_state/neo4j_data:/data" "$NIMG" >/dev/null
     cnt=""
@@ -718,11 +784,11 @@ PY
         cnt=$(docker exec packtest-neo4j cypher-shell --format plain 'MATCH (n) RETURN count(n)' 2>/dev/null | tail -n1 | tr -d ' \r')
         [[ "$cnt" =~ ^[0-9]+$ ]] && break; cnt=""; sleep 3
     done
+    # Dump không mang số node đọc được mà không nạp nó; không có PACKTEST_NEO4J_NODES thì chỉ ghi số đếm (not_verified).
     if [ -z "$cnt" ]; then chk neo4j_nodes fail "không đếm được"
-    elif [ -z "$NEO4J_EXPECT" ]; then chk neo4j_nodes recorded "$cnt"
+    elif [ -z "$NEO4J_EXPECT" ]; then chk neo4j_nodes not_verified "$cnt (không có PACKTEST_NEO4J_NODES để so)"
     elif [ "$cnt" = "$NEO4J_EXPECT" ]; then chk neo4j_nodes pass "$cnt"
     else chk neo4j_nodes fail "expected=$NEO4J_EXPECT got=$cnt"; fi
-    # tệp: số tệp + tổng byte từng cây, số dòng bảng catalog.db
     if python3 "$W/facts.py" "$DR" >"$R/restored-facts.json"; then
         python3 - "$R/src-facts.json" "$R/restored-facts.json" >>"$CHK" <<'PY'
 import json, sys
@@ -731,16 +797,9 @@ for k in sorted(a):
     print(f"files_{k.replace('/', '_')}\t{'pass' if a[k] == b.get(k) else 'fail'}\tsrc={json.dumps(a[k])[:200]} restored={json.dumps(b.get(k))[:200]}")
 PY
     else chk restored_facts fail "facts.py bản khôi phục lỗi"; fi
-    # quyền theo restore-data.sh: poc và poc/store = 10001:10100 có g+w; neo4j data = 7474
-    for d in poc poc/store; do
-        read -r o m <<<"$(stat -c '%u:%g %a' "$DR/$d" 2>/dev/null)"
-        if [ "$o" = 10001:10100 ] && [ $(( 0$m & 020 )) -ne 0 ]; then chk "perm_${d/\//_}" pass "$o $m"; else chk "perm_${d/\//_}" fail "${o:-?} ${m:-?}"; fi
-    done
-    o=$(stat -c '%u' "$DR/_state/neo4j_data/databases" 2>/dev/null)
-    if [ "$o" = 7474 ]; then chk perm_neo4j_data pass "$o"; else chk perm_neo4j_data fail "${o:-?}"; fi
 fi
 cleanup; trap - EXIT
-# Tóm tắt: không có secret (chỉ số đếm, thời gian, kích thước). verdict pass khi mọi kiểm pass (recorded không tính trượt).
+# Tóm tắt (không secret). verdict pass khi không kiểm nào fail và đủ các kiểm bắt buộc; not_verified được liệt kê riêng.
 python3 - "$R" "$CHK" <<'PY'
 import json, os, re, sys
 R, chk = sys.argv[1], sys.argv[2]
@@ -750,21 +809,22 @@ for l in open(chk):
     checks[n] = {"status": s, "detail": d}
 facts = dict(l.rstrip("\n").split("\t", 1) for l in open(R + "/facts.tsv") if "\t" in l)
 def num(k): return int(facts[k]) if k in facts and facts[k].isdigit() else None
-used = [int(l.split()[0]) for l in open(R + "/disk-samples.txt") if l.split() and l.split()[0].isdigit()] + ([num("disk_used_start")] if num("disk_used_start") else [])
+try: samples = [int(l.split()[0]) for l in open(R + "/disk-samples.txt") if l.split() and l.split()[0].isdigit()]
+except OSError: samples = []
+used = samples + ([num("disk_used_start")] if num("disk_used_start") else [])
 def tv(f):
     try: t = open(f).read()
     except OSError: return None
     m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", t); e = re.search(r"Elapsed \(wall clock\) time.*: (\S+)", t)
     return {"max_rss_kb": int(m.group(1)) if m else None, "elapsed": e.group(1) if e else None}
-needed = {"pack", "restore", "qdrant_points", "qdrant_sample_points", "package_sha256"}
-st = {c["status"] for c in checks.values()}
-verdict = "fail" if "fail" in st or not needed <= checks.keys() else "pass"
-s = {"verdict": verdict, "checks": checks,
+needed = {"pack", "restore", "qdrant_points", "qdrant_sample_points", "package_sha256", "prod_snapshot_cleanup"}
+verdict = "fail" if any(c["status"] != "pass" and c["status"] != "not_verified" for c in checks.values()) or not needed <= checks.keys() else "pass"
+s = {"verdict": verdict, "not_verified": sorted(k for k, c in checks.items() if c["status"] == "not_verified"), "checks": checks,
      "timings_s": {"stage_rsync": int(os.environ["STAGE_SECS"]), "pack": num("pack_secs"), "restore": num("restore_secs")},
      "time_v": {"pack": tv(R + "/pack.time"), "restore": tv(R + "/restore.time")},
      "sizes_bytes": {"staged": int(os.environ["STAGE_BYTES"]), "package": num("package_bytes")},
      "disk": {"used_start": num("disk_used_start"), "used_peak": max(used) if used else None,
-              "peak_over_start": (max(used) - num("disk_used_start")) if used and num("disk_used_start") is not None else None, "samples": len(used)},
+              "peak_over_start": (max(used) - num("disk_used_start")) if used and num("disk_used_start") is not None else None, "samples": len(samples)},
      "bandwidth_mbps": float(os.environ["BW_MBPS"])}
 for f in ("src-facts.json", "restored-facts.json"):
     try: s[f.split(".")[0].replace("-", "_")] = json.load(open(f"{R}/{f}"))
@@ -777,8 +837,9 @@ rc=$?
 sed -i -E 's/([A-Za-z0-9_]*(TOKEN|KEY|SECRET|PASSWORD)[A-Za-z0-9_]*)=[^[:space:]]+/\1=<redacted>/g' "$R"/*.log
 (cd "$R" && find . -type f ! -name SHA256SUMS -exec sha256sum {} + >SHA256SUMS)
 exit "$rc"
-REMOTE_PACKTEST
-    [ "$prc" = 0 ] || die "packtest trên VM không đạt/lỗi (rc=$prc); collect để xem results/packtest-summary.json"
+REMOTE_PACKTEST_RESTORE
+    [ "$prc" = 0 ] && [ "$rrc" = 0 ] && [ "$pclean" = pass ] \
+        || die "packtest không đạt/lỗi (pack rc=$prc, restore rc=$rrc, dọn snapshot nguồn=$pclean); collect để xem results/packtest-summary.json"
 }
 
 cmd_down() { exec env STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; }
