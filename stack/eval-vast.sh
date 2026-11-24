@@ -506,14 +506,19 @@ finish_prod() {
         echo "!!!!!! proxy còn yêu cầu đang chạy tới Qdrant nguồn sau ${drain}s: KIỂM snapshot Qdrant prod bằng tay !!!!!!" >&2
         alert "proxy còn yêu cầu đang chạy sau ${drain}s: check prod snapshots ($QURL/collections/$COLL/snapshots)"; rc=1
     fi
-    kill "$PROXY" 2>/dev/null; wait "$PROXY" 2>/dev/null; PROXY=""
-    if [ -s "$pd/denied.log" ]; then alert "proxy đã TỪ CHỐI $(wc -l <"$pd/denied.log") yêu cầu tới Qdrant nguồn ($pd/denied.log)"; rc=1; fi
-    [ -f "$PT/snapshots-before.json" ] || { alert "không có danh sách snapshot trước khi chạy: không xoá gì, kiểm tay"; return 1; }
-    for n in $(python3 -I -c 'import json,sys
-for l in open(sys.argv[1]): print(json.loads(l)["name"])' "$pd/created.jsonl" 2>/dev/null); do
+    kill "$PROXY" 2>/dev/null; wait "$PROXY" 2>/dev/null; PROXY=""   # SIGTERM: proxy cũng tự xoá đúng tên nó ghi rồi thoát
+    if [ -s "$pd/denied.log" ]; then alert "proxy ghi $(wc -l <"$pd/denied.log") cảnh báo/từ chối với Qdrant nguồn ($pd/denied.log)"; rc=1; fi
+    # danh sách trước phải đọc được và đúng dạng (list tên); không thì không xoá gì
+    python3 -I -c 'import json,sys; l=json.load(open(sys.argv[1])); assert isinstance(l, list) and all(isinstance(x, str) for x in l)' \
+        "$PT/snapshots-before.json" 2>/dev/null || { alert "danh sách snapshot trước khi chạy không đọc được: không xoá gì, kiểm tay"; return 1; }
+    local created; created="$(python3 -I -c 'import json,sys
+for l in open(sys.argv[1]): print(json.loads(l)["name"])' "$pd/created.jsonl" 2>/dev/null)"
+    for n in $created; do
         [[ "$n" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]*$ ]] || { alert "tên snapshot lạ '$n': không xoá"; rc=1; continue; }
-        if python3 -I -c 'import json,sys; sys.exit(sys.argv[2] not in json.load(open(sys.argv[1])))' "$PT/snapshots-before.json" "$n"; then
-            alert "snapshot '$n' do proxy ghi lại TRÙNG một snapshot có sẵn: không xoá"; rc=1; continue
+        # chỉ xoá khi CHẮC CHẮN tên không có trong danh sách trước (rc 0 = không có; lỗi/có = không xoá)
+        if ! python3 -I -c 'import json,sys; l=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(l, list) and sys.argv[2] not in l else 3)' \
+                "$PT/snapshots-before.json" "$n" 2>/dev/null; then
+            alert "snapshot '$n' do proxy ghi lại trùng snapshot có sẵn hoặc không kiểm được: không xoá"; rc=1; continue
         fi
         gone=0
         for i in 1 2 3 4 5; do
@@ -524,6 +529,15 @@ for l in open(sys.argv[1]): print(json.loads(l)["name"])' "$pd/created.jsonl" 2>
         done
         [ "$gone" = 1 ] || { alert "snapshot '$n' trên Qdrant nguồn chưa xoá được: curl -X DELETE $QURL/collections/$COLL/snapshots/$n"; rc=1; }
     done
+    # snapshot lạ xuất hiện trong lúc chạy (không có trước, không do proxy tạo): chỉ báo, KHÔNG BAO GIỜ xoá
+    local extra
+    if extra="$(snap_list | python3 -I -c 'import json,sys
+known = set(json.load(open(sys.argv[1]))) | set(sys.argv[2].split())
+print(" ".join(n for n in sys.stdin.read().split() if n not in known))' "$PT/snapshots-before.json" "$created")"; then
+        [ -z "$extra" ] || alert "snapshot mới trên Qdrant nguồn không do lần chạy này tạo (KHÔNG xoá, kiểm tay): $extra"
+    else
+        alert "không liệt kê lại được snapshot Qdrant nguồn sau khi dọn: kiểm tay"; rc=1
+    fi
     return "$rc"
 }
 on_exit_packtest() {
@@ -617,13 +631,15 @@ print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snap
 
     # --- d. proxy chặn ghi (khoá qua stdin của proxy) + tunnel ngược VM 127.0.0.1:16333 -> proxy
     mkdir -p "$PT/proxy"
+    local l; l="$(left)"; [ "$l" -gt 0 ] || die "packtest: đã sát deadline, không mở proxy/tunnel"
+    # proxy tự thoát (và tự xoá snapshot nó ghi) khi script này chết, kể cả kill -9, hoặc hết thời gian còn lại
     python3 -I "$HERE/qdrant-guard-proxy.py" --upstream "$QURL" --collection "$COLL" --state "$PT/proxy" --alert "$SD/ALERT.txt" \
+        --parent-pid "$$" --max-secs "$l" --drain-secs "${PACKTEST_DRAIN_SECS:-600}" \
         < <(printf '%s\n' "$QKEY") >"$PT/proxy/proxy.log" 2>&1 &
     PROXY=$!
     local n pport=""
     for n in $(seq 1 40); do pport="$(cat "$PT/proxy/port" 2>/dev/null)"; [ -n "$pport" ] && break; sleep 0.25; done
     [[ "$pport" =~ ^[0-9]+$ ]] || die "qdrant-guard-proxy không lên (xem $PT/proxy/proxy.log)"
-    local l; l="$(left)"; [ "$l" -gt 0 ] || die "packtest: đã sát deadline, không mở tunnel"
     # timeout chạy trực tiếp để $! là PID của timeout: kill nó thì timeout chuyển TERM cho ssh.
     timeout --kill-after=30 "$l" ssh "${SSHO[@]}" -p "$PORT" -N -o ExitOnForwardFailure=yes -o ServerAliveCountMax=3 \
         -R "127.0.0.1:16333:127.0.0.1:$pport" "root@$HOST" </dev/null >"$PT/tunnel.log" 2>&1 &

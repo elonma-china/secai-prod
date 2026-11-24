@@ -31,7 +31,7 @@ def now_iso() -> str:
 
 # ------------------------------------------------------------------ Qdrant gia (prod hoac VM), moi server mot trang thai rieng
 
-def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payload_tweak=False):
+def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payload_tweak=False, bad_name=False):
     st = {"n": n_points, "snaps": [dict(x) for x in snaps or []], "reqs": [], "seq": 0, "lock": threading.Lock()}
 
     def point(i):
@@ -67,7 +67,7 @@ def make_qdrant(n_points=50, snaps=None, create_delay=0.0, vec_shift=0.0, payloa
                 time.sleep(create_delay)
                 with st["lock"]:
                     st["seq"] += 1
-                    name = f"c-own{st['seq']}-{time.strftime('%Y-%m-%d-%H-%M-%S')}.snapshot"
+                    name = f"c-own{st['seq']}-{time.strftime('%Y-%m-%d-%H-%M-%S')}.snapshot" if not bad_name else "../evil name"
                     st["snaps"].append({"name": name, "creation_time": now_iso(), "size": 4})
                 return self._send({"result": {"name": name}})
             if p.startswith("/collections/c/snapshots/") and m == "GET":
@@ -123,11 +123,12 @@ def prod():
 # ------------------------------------------------------------------ guard proxy (don vi)
 
 class Proxy:
-    def __init__(self, tmp: Path, upstream: int, key: str = ""):
+    def __init__(self, tmp: Path, upstream: int, key: str = "", parent: int | None = None, max_secs: int = 300, extra=()):
         self.dir = tmp / "proxy"
         self.alert = tmp / "ALERT.txt"
         self.p = subprocess.Popen([sys.executable, "-I", str(PROXY), "--upstream", f"http://127.0.0.1:{upstream}",
-                                   "--collection", "c", "--state", str(self.dir), "--alert", str(self.alert)],
+                                   "--collection", "c", "--state", str(self.dir), "--alert", str(self.alert),
+                                   "--parent-pid", str(parent or os.getpid()), "--max-secs", str(max_secs), "--drain-secs", "20", *extra],
                                   stdin=subprocess.PIPE, text=True)
         self.p.stdin.write(key + "\n")
         self.p.stdin.close()
@@ -150,8 +151,9 @@ class Proxy:
         return [json.loads(x) for x in f.read_text().splitlines()] if f.exists() else []
 
     def stop(self):
-        self.p.terminate()
-        self.p.wait(5)
+        if self.p.poll() is None:
+            self.p.terminate()
+            self.p.wait(30)
 
 
 @pytest.fixture
@@ -184,6 +186,14 @@ def proxy(tmp_path, prod):
     ("GET", "/collections/c?x=1", None),
     ("GET", "/collections/c/../other", None),
     ("POST", "/collections/c/points/search", {"vector": [0]}),
+    ("TRACE", "/collections/c", None),
+    ("CONNECT", "/collections/c", None),
+    ("POST", "/collections/c/points/scroll", {"limit": 10001}),
+    ("POST", "/collections/c/points/scroll", {"limit": 1001, "with_vector": True}),
+    ("POST", "/collections/c/points/scroll", [1]),
+    ("POST", "/collections/c/points", {"ids": list(range(1001))}),
+    ("POST", "/collections/c/points", {"ids": []}),
+    ("POST", "/collections/c/snapshots", {"x": 1}),
 ])
 def test_proxy_forbids_everything_off_the_allowlist(proxy, prod, method, path, body):
     code, _ = proxy.req(method, path, body)
@@ -323,6 +333,9 @@ if "PHASE=pack" in cmd:
     if "create" in modes:
         rq = urllib.request.Request(f"http://127.0.0.1:{px}/collections/c/snapshots", method="POST", data=b"")
         name = json.load(urllib.request.urlopen(rq, timeout=10))["result"]["name"]
+        if "kill9" in modes:
+            gp = int(open(f"/proc/{os.getppid()}/stat").read().rsplit(")", 1)[1].split()[1])
+            os.kill(gp, 9); sys.exit(0)
         if "download" in modes: call(px, "GET", f"/collections/c/snapshots/{name}")
         if "delete_own" in modes: call(px, "DELETE", f"/collections/c/snapshots/{name}")
     sys.exit(int(rd("pack_rc", "0")))
@@ -456,6 +469,7 @@ def test_packtest_full_flow_tunnel_to_proxy_and_cleans_only_recorded_snapshot(pt
     assert PRE <= left and not (own & left)
     foreign = {n for n in left if n not in PRE}
     assert len(foreign) == 1  # snapshot nguoi khac tao dong thoi (ten moi, thoi gian moi) van con
+    assert next(iter(foreign)) in (pt.sdir / "ALERT.txt").read_text()  # bao, khong xoa
     assert mutations(pt.prod, own) == []
     assert '"points_before": 50' in (pt.fake / "ssh.stdin").read_text()  # so diem cua chinh snapshot gui len VM
     assert "packtest XONG" in r.stdout
@@ -513,8 +527,9 @@ def test_packtest_unreadable_prelist_deletes_nothing(pt):
         'if "PHASE=pack" in cmd:\n    os.remove(os.environ["STACK_EVAL_DIR"] + "/packtest/snapshots-before.json")', 1))
     r = sh(EVAL, "packtest", b=pt)
     assert r.returncode != 0 and len(own_names(pt)) == 1
-    assert own_names(pt) <= snap_names(pt.prod)  # khong xoa gi
+    assert not (pt.sdir / "packtest/snapshots-deleted.log").exists()  # script khong xoa gi; proxy tu xoa dung ten no ghi
     assert "không xoá gì" in (pt.sdir / "ALERT.txt").read_text()
+    assert PRE <= snap_names(pt.prod) and mutations(pt.prod, own_names(pt)) == []
 
 
 def test_packtest_key_never_in_argv_or_on_vm(pt):
@@ -692,3 +707,187 @@ def test_remote_packtest_pack_failure_skips_restore_but_writes_summary(tmp_path,
     assert r1.returncode != 0 and r2.returncode != 0 and s["verdict"] == "fail" and s["checks"]["pack"]["status"] == "fail"
     assert "restore" not in s["checks"] and not (seen / "restore_key").exists() and vm_st["reqs"] == []
     assert (srv / "src-root").exists()  # nguon giu lai de dieu tra
+
+
+# ------------------------------------------------------------------ guard proxy: vong 3 (than yeu cau, ket noi, mot lan tao, tu don)
+
+def raw(port: int, data: bytes, wait: float = 5.0) -> bytes:
+    import socket
+    s = socket.create_connection(("127.0.0.1", port), timeout=wait)
+    try:
+        s.sendall(data)
+    except OSError:
+        pass
+    out = b""
+    try:
+        while chunk := s.recv(65536):
+            out += chunk
+    except OSError:
+        pass
+    s.close()
+    return out
+
+
+@pytest.mark.parametrize("cl", [b"-1", b"abc", b"99999999999", b"1048577"])
+def test_proxy_bad_content_length_denied_without_reading_body(proxy, prod, cl):
+    t = time.monotonic()
+    out = raw(proxy.port, b"POST /collections/c/points/scroll HTTP/1.1\r\nHost: x\r\nContent-Length: " + cl + b"\r\n\r\n" + b"A" * (4 << 20))
+    assert out.startswith(b"HTTP/1.0 403") and time.monotonic() - t < 4
+    assert prod["reqs"] == [] and "Content-Length" in (proxy.dir / "denied.log").read_text()
+
+
+def test_proxy_chunked_body_denied(proxy, prod):
+    out = raw(proxy.port, b"POST /collections/c/points/scroll HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n")
+    assert out.startswith(b"HTTP/1.0 403") and prod["reqs"] == []
+
+
+def test_proxy_hides_python_version(proxy):
+    out = raw(proxy.port, b"GET / HTTP/1.0\r\n\r\n")
+    server = [x for x in out.split(b"\r\n") if x.lower().startswith(b"server:")]
+    assert server == [b"Server: qdrant-guard"]
+
+
+def test_proxy_caps_concurrent_connections(tmp_path, prod):
+    import socket
+    px = Proxy(tmp_path, prod["port"], extra=("--client-timeout", "30"))
+    idle = [socket.create_connection(("127.0.0.1", px.port)) for _ in range(16)]
+    try:
+        time.sleep(0.5)
+        s = socket.create_connection(("127.0.0.1", px.port), timeout=3)
+        s.sendall(b"GET / HTTP/1.0\r\n\r\n")
+        assert s.recv(100) == b""  # thu 17: dong ngay, khong xu ly
+        s.close()
+    finally:
+        for s in idle:
+            s.close()
+    time.sleep(0.5)
+    assert px.req("GET", "/")[0] == 200  # giai phong slot khi client dong
+    px.stop()
+
+
+def test_proxy_drops_slow_client_after_timeout(tmp_path, prod):
+    import socket
+    px = Proxy(tmp_path, prod["port"], extra=("--client-timeout", "1"))
+    s = socket.create_connection(("127.0.0.1", px.port), timeout=5)
+    s.sendall(b"GET / HTTP/1.1\r\nHost: x\r\n")  # khong bao gio xong header
+    t = time.monotonic()
+    assert s.recv(100) == b"" and time.monotonic() - t < 4
+    s.close()
+    px.stop()
+
+
+def test_proxy_allows_exactly_one_create_even_concurrently(tmp_path):
+    slow = make_qdrant(create_delay=0.8)
+    px = Proxy(tmp_path, slow["port"])
+    codes = []
+    th = [threading.Thread(target=lambda: codes.append(px.req("POST", "/collections/c/snapshots")[0])) for _ in range(3)]
+    try:
+        for t in th:
+            t.start()
+        for t in th:
+            t.join()
+        assert sorted(codes) == [200, 403, 403]
+        assert px.req("POST", "/collections/c/snapshots")[0] == 403
+        assert len([1 for m, p, _ in slow["reqs"] if m == "POST" and p.endswith("/snapshots")]) == 1
+        assert "DENIED POST /collections/c/snapshots" in px.alert.read_text()
+    finally:
+        px.stop()
+        slow["srv"].shutdown()
+
+
+def test_proxy_alerts_on_created_snapshot_with_bad_name(tmp_path):
+    odd = make_qdrant(bad_name=True)
+    px = Proxy(tmp_path, odd["port"])
+    try:
+        assert px.req("POST", "/collections/c/snapshots")[0] == 200
+        assert px.created() == [] and "tên lạ" in px.alert.read_text()
+    finally:
+        px.stop()
+        odd["srv"].shutdown()
+
+
+def _wait_exit(px, secs=30):
+    t = time.monotonic() + secs
+    while px.p.poll() is None and time.monotonic() < t:
+        time.sleep(0.2)
+    return px.p.poll() is not None
+
+
+@pytest.mark.parametrize("how", ["parent_killed", "max_secs", "sigterm"])
+def test_proxy_exits_and_deletes_its_own_snapshot(tmp_path, prod, how):
+    parent = subprocess.Popen(["sleep", "60"])
+    px = Proxy(tmp_path, prod["port"], parent=parent.pid, max_secs=3 if how == "max_secs" else 300)
+    try:
+        code, data = px.req("POST", "/collections/c/snapshots")
+        name = json.loads(data)["result"]["name"]
+        assert code == 200 and name in snap_names(prod)
+        if how == "parent_killed":
+            parent.kill()
+            parent.wait()
+        elif how == "sigterm":
+            px.p.terminate()
+        assert _wait_exit(px)
+        assert name not in snap_names(prod) and PRE <= snap_names(prod)
+        assert mutations(prod, {name}) == []
+        assert f"{name} gone" in (px.dir / "selfclean.log").read_text()
+    finally:
+        parent.kill()
+        px.stop()
+
+
+def test_proxy_sigterm_waits_for_inflight_create_then_deletes_it(tmp_path):
+    slow = make_qdrant(snaps=OLD, create_delay=1.5)
+    px = Proxy(tmp_path, slow["port"])
+    try:
+        t = threading.Thread(target=lambda: px.req("POST", "/collections/c/snapshots", timeout=10))
+        t.start()
+        time.sleep(0.4)
+        px.p.terminate()
+        assert _wait_exit(px)
+        t.join()
+        assert len(px.created()) == 1 and snap_names(slow) == {s["name"] for s in OLD}
+    finally:
+        px.stop()
+        slow["srv"].shutdown()
+
+
+def test_packtest_kill9_of_script_still_deletes_recorded_snapshot(pt):
+    (pt.fake / "pack_mode").write_text("create kill9")
+    r = sh(EVAL, "packtest", b=pt)
+    assert r.returncode == -9 or r.returncode == 137
+    try:
+        own = set()
+        for _ in range(100):
+            own = own_names(pt)
+            if own and not (own & snap_names(pt.prod)):
+                break
+            time.sleep(0.2)
+        assert len(own) == 1 and not (own & snap_names(pt.prod)) and PRE <= snap_names(pt.prod)
+        assert mutations(pt.prod, own) == []
+    finally:
+        try:
+            os.kill(int((pt.fake / "tunnel.pid").read_text()), 9)
+        except (OSError, ValueError):
+            pass
+
+
+def test_packtest_corrupt_prelist_script_deletes_nothing(pt):
+    (pt.fake / "pack_mode").write_text("create")
+    real = (pt.tmp / "bin/ssh").read_text()
+    (pt.tmp / "bin/ssh").write_text(real.replace('if "PHASE=pack" in cmd:',
+        'if "PHASE=pack" in cmd:\n    open(os.environ["STACK_EVAL_DIR"] + "/packtest/snapshots-before.json", "w").write("{not json")', 1))
+    r = sh(EVAL, "packtest", b=pt)
+    assert r.returncode != 0 and "không đọc được" in (pt.sdir / "ALERT.txt").read_text()
+    assert not (pt.sdir / "packtest/snapshots-deleted.log").exists()  # script khong xoa gi (proxy tu xoa dung ten no ghi)
+    assert PRE <= snap_names(pt.prod)
+
+
+def test_proxy_caps_buffered_responses_but_streams_snapshot_download(tmp_path, prod):
+    px = Proxy(tmp_path, prod["port"], extra=("--max-resp-bytes", "300"))
+    try:
+        assert px.req("POST", "/collections/c/points/scroll", {"limit": 100})[0] == 502   # 50 id ~ 600 B > 300 B
+        assert px.req("POST", "/collections/c/points/scroll", {"limit": 1})[0] == 200
+        code, data = px.req("GET", "/collections/c/snapshots/c-1-2026-09-04-02-31-25.snapshot")
+        assert code == 200 and len(data) == 8000   # tai snapshot khong bi gioi han, duoc stream
+    finally:
+        px.stop()
