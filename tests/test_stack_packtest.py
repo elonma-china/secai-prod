@@ -5,6 +5,7 @@ nhau, ghi lai moi yeu cau. Phan tu xa (REMOTE_PACKTEST_PACK/RESTORE) chay THAT v
 """
 from __future__ import annotations
 
+import base64
 import datetime as dt
 import http.client
 import json
@@ -21,6 +22,7 @@ from pathlib import Path
 import pytest
 
 from test_stack_eval_vast import EVAL, STACK, assert_prod_alive, box, lines_with, log, sh, stub, write_state  # noqa: F401
+from test_stack_neo4j_export import PW, fake_neo4j, sample_graph
 
 PROXY = STACK / "qdrant-guard-proxy.py"
 QKEY = "QKEY_MARK_4d2e"
@@ -358,14 +360,27 @@ sys.exit(int(rd("ssh_rc", "0")))
 '''
 
 
-def setup_pt(box, prod):  # noqa: F811
+# python3 that, for every call, records whether NEO4J_PASSWORD was in its env, its argv, and the exporter's env names
+FAKE_PY = """#!/bin/bash
+printf '%s\\t%s\\n' "${NEO4J_PASSWORD+PW}" "$*" >> "$FAKE_DIR/python3.log"
+case "$*" in *neo4j-export.py*) env | cut -d= -f1 | sort > "$FAKE_DIR/exporter.envnames" ;; esac
+exec /usr/bin/python3 "$@"
+"""
+
+
+def setup_pt(box, prod, neo):  # noqa: F811
     binp = box.tmp / "bin"
     (binp / "ssh").write_text(FAKE_SSH)
     (binp / "ssh").chmod(0o755)
     stub(binp / "df", 'echo Avail; cat "$FAKE_DIR/df_avail" 2>/dev/null || echo 107374182400')
+    (binp / "python3").write_text(FAKE_PY)
+    (binp / "python3").chmod(0o755)
     (box.fake / "prod_port").write_text(str(prod["port"]))
+    pwf = box.tmp / "neo4j.pw"
+    pwf.write_text(PW + "\n")
+    pwf.chmod(0o600)
     src = box.tmp / "src"
-    for p in ("exploitdb/a", "poc/store/x", "poc-sources/y", "neo4j/neo4j.dump", "../exploitdb-mcp-server/z"):
+    for p in ("exploitdb/a", "poc/store/x", "poc-sources/y", "../exploitdb-mcp-server/z"):
         (src / p).parent.mkdir(parents=True, exist_ok=True)
         (src / p).write_text("x")  # mcp: thu muc anh em nhu mac dinh <src>/../exploitdb-mcp-server
     c = sqlite3.connect(src / "poc/catalog.db")
@@ -375,14 +390,21 @@ def setup_pt(box, prod):  # noqa: F811
     now = int(time.time())
     write_state(box, ssh_host="1.2.3.4", ssh_port=2222, mode="packtest", created_at=now, deadline=now + 3 * 3600)
     box.env.update({"PACKTEST_SRC_ROOT": str(src), "PACKTEST_QDRANT_COLLECTION": "c", "PACKTEST_BW_MB": "1",
-                    "PACKTEST_QDRANT_URL": f"http://127.0.0.1:{prod['port']}", "PACKTEST_DRAIN_SECS": "20"})
-    box.src, box.prod = src, prod
+                    "PACKTEST_QDRANT_URL": f"http://127.0.0.1:{prod['port']}", "PACKTEST_DRAIN_SECS": "20",
+                    "PACKTEST_NEO4J_URL": neo[0], "PACKTEST_NEO4J_PASSWORD_FILE": str(pwf)})
+    box.src, box.prod, box.neo, box.pwf = src, prod, neo[1], pwf
     return box
 
 
 @pytest.fixture
-def pt(box, prod):  # noqa: F811
-    return setup_pt(box, prod)
+def neo():
+    with fake_neo4j(sample_graph()) as n:
+        yield n
+
+
+@pytest.fixture
+def pt(box, prod, neo):  # noqa: F811
+    return setup_pt(box, prod, neo)
 
 
 def snap_names(st) -> set[str]:
@@ -419,9 +441,102 @@ def test_packtest_refuses_low_local_disk_before_anything(pt):
 
 
 def test_packtest_refuses_missing_source(pt):
-    (pt.src / "neo4j/neo4j.dump").unlink()
+    (pt.src / "poc/catalog.db").unlink()
     r = sh(EVAL, "packtest", b=pt)
-    assert r.returncode != 0 and "neo4j.dump" in r.stderr and log(pt, "ssh") == []
+    assert r.returncode != 0 and "catalog.db" in r.stderr and log(pt, "ssh") == [] and pt.neo["reqs"] == []
+
+
+@pytest.mark.parametrize("how", ["unset", "missing", "0644", "empty"])
+def test_packtest_neo4j_password_file_required_0600_before_anything(pt, how):
+    extra = {}
+    if how == "unset":
+        del pt.env["PACKTEST_NEO4J_PASSWORD_FILE"]
+    elif how == "missing":
+        extra["PACKTEST_NEO4J_PASSWORD_FILE"] = str(pt.tmp / "nope")
+    elif how == "0644":
+        pt.pwf.chmod(0o644)
+    else:
+        pt.pwf.write_text("\n")
+    r = sh(EVAL, "packtest", b=pt, extra=extra)
+    assert r.returncode != 0 and "PACKTEST_NEO4J_PASSWORD_FILE" in r.stderr and PW not in r.stderr + r.stdout
+    assert log(pt, "ssh") == [] and log(pt, "rsync") == [] and pt.prod["reqs"] == [] and pt.neo["reqs"] == []
+    assert not (pt.sdir / "packtest").exists()
+
+
+def test_packtest_neo4j_url_must_be_local(pt):
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_NEO4J_URL": "http://10.0.0.5:7474"})
+    assert r.returncode != 0 and "PACKTEST_NEO4J_URL" in r.stderr and pt.neo["reqs"] == [] and log(pt, "ssh") == []
+
+
+def test_packtest_exports_neo4j_locally_with_password_in_env_only(pt):
+    r = sh(EVAL, "packtest", b=pt)
+    assert r.returncode == 0, r.stderr + r.stdout
+    exp = pt.sdir / "packtest/neo4j-export"
+    assert json.loads((exp / "counts.json").read_text())["nodes"] == {"CVE": 3, "CWE": 2}
+    # password reached the exporter (Basic auth), through env only
+    want = "Basic " + base64.b64encode(f"neo4j:{PW}".encode()).decode()
+    assert pt.neo["reqs"] and {a for a, _ in pt.neo["reqs"]} == {want}
+    py = (pt.fake / "python3.log").read_text().splitlines()
+    exp_calls = [x for x in py if "neo4j-export.py" in x]
+    assert len(exp_calls) == 1 and exp_calls[0].startswith("PW\t") and "-I " in exp_calls[0] and str(exp) in exp_calls[0]
+    assert all(not x.startswith("PW") for x in py if "neo4j-export.py" not in x)   # no other child sees it
+    assert {"NEO4J_PASSWORD", "NEO4J_URL"} <= set((pt.fake / "exporter.envnames").read_text().split())
+    # never in argv, output, logs, the VM or files under the eval dir
+    assert PW not in "\n".join(py + log(pt, "ssh") + log(pt, "rsync")) and PW not in r.stdout + r.stderr
+    assert PW not in (pt.fake / "ssh.stdin").read_text()
+    for f in pt.sdir.rglob("*"):
+        if f.is_file():
+            assert PW.encode() not in f.read_bytes(), f
+    rs = log(pt, "rsync")
+    assert any(f"{exp}/ " in x and x.endswith(":/srv/src-root/neo4j-export/") for x in rs)
+    assert not any("images-pkg" in x for x in rs)
+    rest = next(x for x in log(pt, "ssh") if "PHASE=restore" in x)
+    assert "GATEWAY_IMAGE=''" in rest and "NEO4J_PASSWORD" not in rest and "NEO4J_EXPECT" not in rest
+
+
+def test_packtest_neo4j_export_drift_stops_before_transfer(box, prod):  # noqa: F811
+    g = sample_graph()
+    g["drift"] = {"CVE": 1}
+    with fake_neo4j(g) as n:
+        b = setup_pt(box, prod, n)
+        r = sh(EVAL, "packtest", b=b)
+    assert r.returncode != 0 and "neo4j-export" in r.stderr and PW not in r.stderr
+    assert not any("cat >/dev/null" in x for x in log(b, "ssh")) and log(b, "rsync") == []
+    assert not (b.sdir / "packtest/neo4j-export/counts.json").exists()
+
+
+FAKE_DOCKER_IMAGES = """echo "$*" >> "$FAKE_DIR/docker.log"
+case "$*" in
+  *"config --images"*) echo reg/gw:1 ;;
+  "image inspect"*) echo sha256:id0 ;;
+  save*) head -c 3000000 /dev/urandom ;;
+esac"""
+
+
+def test_packtest_images_env_packs_ships_and_counts_in_estimate(pt):
+    stub(pt.tmp / "bin/docker", FAKE_DOCKER_IMAGES)
+    ienv = pt.tmp / "img.env"
+    ienv.write_text("GATEWAY_IMAGE=old:0\nGATEWAY_IMAGE='reg/gw:1'\n")
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_IMAGES_ENV": str(ienv)})
+    assert r.returncode == 0, r.stderr + r.stdout
+    imgs = pt.sdir / "packtest/images-pkg/images"
+    assert (imgs / "images.txt").read_text() == "reg/gw:1 sha256:id0\n"
+    rs = log(pt, "rsync")
+    assert len(rs) == 5 and any(f"{imgs}/ " in x and x.endswith(":/srv/images-pkg/images/") for x in rs)
+    assert any("mkdir -p" in x and "/srv/images-pkg" in x for x in log(pt, "ssh"))
+    rest = next(x for x in log(pt, "ssh") if "PHASE=restore" in x)
+    assert "GATEWAY_IMAGE='reg/gw:1'" in rest
+    nb = int(re.search(r"nguồn (\d+) B", r.stdout).group(1))
+    exp = sum(f.stat().st_size for f in (pt.sdir / "packtest/neo4j-export").rglob("*") if f.is_file())
+    assert nb >= (imgs / "images.tar.zst").stat().st_size + exp and nb > 3_000_000
+
+
+@pytest.mark.parametrize("line", ["GATEWAY_IMAGE=", "GATEWAY_IMAGE=a b;rm", "X=1"])
+def test_packtest_images_env_needs_sane_gateway_image(pt, line):
+    ienv = pt.tmp / "img.env"
+    ienv.write_text(line + "\n")
+    r = sh(EVAL, "packtest", b=pt, extra={"PACKTEST_IMAGES_ENV": str(ienv)})
+    assert r.returncode != 0 and "GATEWAY_IMAGE" in r.stderr and log(pt, "ssh") == [] and pt.neo["reqs"] == []
 
 
 def test_packtest_fails_closed_when_prod_qdrant_unreachable(pt):
@@ -507,9 +622,9 @@ def test_packtest_denied_mutation_fails_run_and_never_reaches_prod(pt):
     assert any("PROD_CLEAN=fail" in x for x in log(pt, "ssh"))
 
 
-def test_packtest_inflight_create_when_tunnel_dies_is_recorded_and_deleted(tmp_path, box):  # noqa: F811
+def test_packtest_inflight_create_when_tunnel_dies_is_recorded_and_deleted(tmp_path, box, neo):  # noqa: F811
     slow = make_qdrant(snaps=OLD, create_delay=1.5)
-    b = setup_pt(box, slow)
+    b = setup_pt(box, slow, neo)
     (b.fake / "pack_mode").write_text("inflight")
     r = sh(EVAL, "packtest", b=b)
     assert r.returncode != 0  # pha pack chet
@@ -595,7 +710,8 @@ def heredoc(marker: str) -> str:
     return "\n".join(lines[start + 1:end])
 
 
-def run_remote(tmp_path: Path, prod_st, vm_st, *, snap_points=(50, 50), neo4j_expect="", pack_rc=0, drop_file=False, prod_clean="pass"):
+def run_remote(tmp_path: Path, prod_st, vm_st, *, snap_points=(50, 50), neo4j_restored=(5, 3), gateway_image="", bm25_out="17",
+               images_rc=0, pack_rc=0, drop_file=False, prod_clean="pass"):
     root, binp, seen = tmp_path / "vm", tmp_path / "bin", tmp_path / "seen"
     seen.mkdir()
 
@@ -605,22 +721,27 @@ def run_remote(tmp_path: Path, prod_st, vm_st, *, snap_points=(50, 50), neo4j_ex
                 .replace("127.0.0.1:16334", f"127.0.0.1:{vm_st['port']}"))
     srv, st = root / "srv", root / "opt/stack"
     src = srv / "src-root"
-    for p in ("exploitdb/a", "poc/store/x", "poc-sources/y", "exploitdb-mcp-server/z", "neo4j/neo4j.dump"):
+    for p in ("exploitdb/a", "poc/store/x", "poc-sources/y", "exploitdb-mcp-server/z", "neo4j-export/schema.cypher"):
         (src / p).parent.mkdir(parents=True, exist_ok=True)
         (src / p).write_text("data-" + p)
+    (src / "neo4j-export/counts.json").write_text(json.dumps({"nodes": {"CVE": 3, "CWE": 2}, "relationships": {"HAS_CWE": 3}}))
     c = sqlite3.connect(src / "poc/catalog.db")
     c.execute("CREATE TABLE pocs (id INTEGER)")
     c.executemany("INSERT INTO pocs VALUES (?)", [(1,), (2,), (3,)])
     c.commit()
     c.close()
-    stub(st / "pack.sh", f'echo "${{QDRANT_API_KEY-unset}} $QDRANT_URL" > "{seen}/pack_env"\n[ {pack_rc} = 0 ] || exit {pack_rc}\n'
+    stub(st / "pack.sh", f'echo "${{QDRANT_API_KEY-unset}} $QDRANT_URL" > "{seen}/pack_env"\necho "$*" > "{seen}/pack_args"\n'
+         f'[ {pack_rc} = 0 ] || exit {pack_rc}\n'
          'eval out=\\${$#}; eval s=\\${$(($#-1))}; mkdir -p "$out/qdrant" "$out/neo4j"; echo snap > "$out/qdrant/c.snapshot"\n'
          'tar -C "$s" -cf "$out/all.tar" exploitdb poc poc-sources exploitdb-mcp-server\n'
          '(cd "$out" && sha256sum qdrant/c.snapshot all.tar > SHA256SUMS)')
     stub(st / "restore-data.sh", f'echo "${{QDRANT_API_KEY-unset}}" > "{seen}/restore_key"\neval out=\\${{$#}}\n'
+         f'echo "${{#NEO4J_PASSWORD}} $*" > "{seen}/restore_npw"\n'
          'mkdir -p "$DATA_ROOT/_state/neo4j_data/databases"; tar -C "$DATA_ROOT" -xf "$out/all.tar"'
-         + ('\nrm "$DATA_ROOT/poc/store/x"' if drop_file else ""))
-    stub(binp / "docker", f'echo "$*" >> "{seen}/docker.log"; case "$1" in exec) printf "count(n)\\n42\\n" ;; *) echo cid ;; esac')
+         + ('\nrm "$DATA_ROOT/poc/store/x"' if drop_file else "")
+         + (f'\necho "==> neo4j: counts match ({neo4j_restored[0]} nodes, {neo4j_restored[1]} relationships)"' if neo4j_restored else ""))
+    stub(st / "bootstrap.sh", f'echo "$*" >> "{seen}/bootstrap.log"; echo all images present; exit {images_rc}')
+    stub(binp / "docker", f'echo "$*" >> "{seen}/docker.log"; case "$*" in "run --rm --network none"*) echo "{bm25_out}" ;; *) echo cid ;; esac')
     stub(binp / "time", 'shift 2; f=$1; shift; printf "\\tMaximum resident set size (kbytes): 1234\\n\\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:01.00\\n" > "$f"; exec "$@"')
     # chay khong root: gia lap quyen restore-data.sh dat (chown can root); ghi thoi diem goi de kiem thu tu so voi docker
     stub(binp / "stat", f'echo "stat $*" >> "{seen}/docker.log"\n'
@@ -633,7 +754,7 @@ def run_remote(tmp_path: Path, prod_st, vm_st, *, snap_points=(50, 50), neo4j_ex
     (srv / "packtest/snapshot-points.json").write_text(json.dumps({"name": "x", "points_before": lo, "points_after": hi}))
     rest = tmp_path / "restore.sh"
     rest.write_text(fix(heredoc("REMOTE_PACKTEST_RESTORE")) + "\n")
-    r2 = subprocess.run(["bash", str(rest)], env={**env, "NEO4J_EXPECT": neo4j_expect, "PROD_CLEAN": prod_clean, "STAGE_SECS": "5",
+    r2 = subprocess.run(["bash", str(rest)], env={**env, "GATEWAY_IMAGE": gateway_image, "PROD_CLEAN": prod_clean, "STAGE_SECS": "5",
                                                    "STAGE_BYTES": "100", "BW_MBPS": "50.0"}, text=True, capture_output=True, timeout=120)
     return r1, r2, root / "opt/results", seen, srv
 
@@ -660,7 +781,14 @@ def test_remote_packtest_pass(tmp_path, two):
                  "qdrant_sample_points", "files_exploitdb", "files_poc_store", "files_poc-sources", "files_exploitdb-mcp-server",
                  "files_catalog_rows", "perm_poc", "perm_poc_store", "perm_neo4j_data", "prod_snapshot_cleanup"):
         assert ck[name]["status"] == "pass", (name, ck[name])
-    assert ck["neo4j_nodes"]["status"] == "not_verified" and s["not_verified"] == ["neo4j_nodes"]
+    assert ck["neo4j_counts"]["status"] == "pass", ck["neo4j_counts"]
+    assert s["not_verified"] == ["bm25_offline", "images_load"]
+    args = (seen / "pack_args").read_text()
+    assert f"--neo4j-export {srv}/src-root/neo4j-export " in args and "--neo4j-dump" not in args
+    npw = (seen / "restore_npw").read_text().split()
+    assert npw[0] == "32" and not any(re.fullmatch(r"[0-9a-f]{32}", x) for x in npw[1:])   # random password in env, not argv
+    assert not (seen / "bootstrap.log").exists()
+    assert not re.search(r"env [^\n]*NEO4J_PASSWORD=", heredoc("REMOTE_PACKTEST_RESTORE"))
     assert s["timings_s"]["stage_rsync"] == 5 and isinstance(s["timings_s"]["pack"], int) and isinstance(s["timings_s"]["restore"], int)
     assert s["time_v"]["pack"]["max_rss_kb"] == 1234
     assert s["disk"]["used_peak"] >= s["disk"]["used_start"] > 0 and s["sizes_bytes"]["package"] > 0
@@ -673,9 +801,8 @@ def test_remote_packtest_pass(tmp_path, two):
     assert ref["ids_total"] == 25000 and max(p["id"] for p in ref["sample"]) > 10000
     # VM Qdrant: khong ghi gi ngoai doc
     assert all(m in ("GET", "POST") for m, _, _ in vm_st["reqs"])
-    dl = (seen / "docker.log").read_text().splitlines()
-    first_neo = next(i for i, x in enumerate(dl) if "packtest-neo4j" in x and x.startswith("run"))
-    assert max(i for i, x in enumerate(dl) if x.startswith("stat") and "%u" in x) < first_neo  # quyen do truoc khi Neo4j chay
+    dl = (seen / "docker.log").read_text()
+    assert "packtest-neo4j" not in dl and "NEO4J_AUTH" not in dl and "--network none" not in dl
     assert subprocess.run(["sha256sum", "-c", "--strict", "--quiet", "SHA256SUMS"], cwd=R).returncode == 0
     assert not (srv / "src-root").exists()
     for f in R.rglob("*"):
@@ -687,7 +814,10 @@ def test_remote_packtest_pass(tmp_path, two):
     ({}, {"snap_points": (24990, 24995)}, "qdrant_points"),          # khac so diem cua chinh snapshot
     ({"vec_shift": 1e-3}, {}, "qdrant_sample_points"),               # vector dense lech > 1e-6
     ({"payload_tweak": True}, {}, "qdrant_sample_points"),
-    ({}, {"neo4j_expect": "41"}, "neo4j_nodes"),
+    ({}, {"neo4j_restored": (4, 3)}, "neo4j_counts"),                 # totals differ from the export's counts.json
+    ({}, {"neo4j_restored": None}, "neo4j_counts"),                   # restore never printed the counts line
+    ({}, {"gateway_image": "reg/gw:1", "bm25_out": "Traceback"}, "bm25_offline"),
+    ({}, {"gateway_image": "reg/gw:1", "images_rc": 1}, "images_load"),
     ({}, {"drop_file": True}, "files_poc_store"),
     ({}, {"prod_clean": "fail"}, "prod_snapshot_cleanup"),
 ])
@@ -706,9 +836,14 @@ def test_remote_packtest_mismatch_is_fail(tmp_path, vm_kw, kw, check):
 def test_remote_packtest_tolerates_tiny_float_noise_and_ingest_within_snapshot_range(tmp_path):
     prod_st, vm_st = make_qdrant(n_points=200), make_qdrant(n_points=200, vec_shift=1e-8)
     try:
-        _, r2, R, _, _ = run_remote(tmp_path, prod_st, vm_st, snap_points=(190, 205), neo4j_expect="42")
+        _, r2, R, seen, srv = run_remote(tmp_path, prod_st, vm_st, snap_points=(190, 205), gateway_image="reg/gw:1")
         s = summary(R)
         assert r2.returncode == 0 and s["verdict"] == "pass" and s["not_verified"] == [], s["checks"]
+        assert s["checks"]["images_load"]["status"] == s["checks"]["bm25_offline"]["status"] == "pass"
+        assert (seen / "bootstrap.log").read_text() == f"load-images {srv}/images-pkg/images\n"
+        bm = [x for x in (seen / "docker.log").read_text().splitlines() if "--network none" in x]
+        assert len(bm) == 1 and bm[0].startswith("run --rm --network none -e HF_HUB_OFFLINE=1 --entrypoint python reg/gw:1 -c ")
+        assert "bm25._load_sparse_model()" in bm[0]
     finally:
         prod_st["srv"].shutdown()
         vm_st["srv"].shutdown()

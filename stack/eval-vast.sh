@@ -477,8 +477,10 @@ cmd_collect() {
 # tunnel ngược VM:16333 -> proxy, chỉ trong pha pack. Mọi thứ ghi cục bộ nằm trong $SD/packtest. Khoá Qdrant không rời máy này.
 # Biến: PACKTEST_SRC_ROOT (/home/ict/AIEngines/secai/secai-data), PACKTEST_MCP_DIR (<src>/../exploitdb-mcp-server),
 #   PACKTEST_QDRANT_URL (http://127.0.0.1:6333), PACKTEST_QDRANT_COLLECTION (cve_kb_hybrid), QDRANT_API_KEY hoặc
-#   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_NODES (số node mong đợi; không có thì neo4j = not_verified),
-#   PACKTEST_VM_MIN_FREE_GB (60), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (300; 30..400).
+#   PACKTEST_QDRANT_KEY_FILE (0600), PACKTEST_NEO4J_URL (http://127.0.0.1:7474: Neo4j nguồn, neo4j-export.py chỉ đọc ngay trên máy này),
+#   PACKTEST_NEO4J_PASSWORD_FILE (BẮT BUỘC, 0600: mật khẩu chỉ qua env cho neo4j-export.py, không lên argv/log/VM),
+#   PACKTEST_IMAGES_ENV (env file cho `pack.sh images`; có thì VM nạp image và kiểm BM25 offline bằng GATEWAY_IMAGE của file đó,
+#   không có thì images_load/bm25_offline = not_verified), PACKTEST_VM_MIN_FREE_GB (100), PACKTEST_PACK_RESTORE_MIN (45: phút dành cho pack+restore khi tính hạn), PACKTEST_DRAIN_SECS (300; 30..400).
 PT_MIN_LOCAL_FREE_GB=45 PT_MIN_MBPS=${PACKTEST_MIN_MBPS:-8} PT_SNAP_DEFAULT=$((5 << 30))
 qcurl() {   # khoá Qdrant qua cấu hình curl trên stdin (-K -), không lên argv. Chỉ đọc + xoá snapshot đã ghi tên.
     if [ -n "$QKEY" ]; then printf 'header = "api-key: %s"\n' "$QKEY" | curl -K - -fsS --max-time 60 "$@"
@@ -560,7 +562,7 @@ cmd_packtest() {
     [ "$(sget mode)" = packtest ] || die "packtest cần instance dựng bằng EVAL_MODE=packtest eval-vast.sh up"
     DL="$(sget deadline)"; [[ "$DL" =~ ^[0-9]+$ ]] || die "state thiếu deadline"
     [ "$(left)" -gt 0 ] || die "packtest: còn < 10 phút tới deadline; không bắt đầu"
-    local src="${PACKTEST_SRC_ROOT:-/home/ict/AIEngines/secai/secai-data}" mcp ne="${PACKTEST_NEO4J_NODES:-}" vmfree="${PACKTEST_VM_MIN_FREE_GB:-60}"
+    local src="${PACKTEST_SRC_ROOT:-/home/ict/AIEngines/secai/secai-data}" mcp vmfree="${PACKTEST_VM_MIN_FREE_GB:-100}"
     local bw="${PACKTEST_BW_MB:-200}" allow="${PACKTEST_PACK_RESTORE_MIN:-45}"
     PT_DRAIN="${PACKTEST_DRAIN_SECS:-300}"
     [[ "$PT_DRAIN" =~ ^[0-9]+$ ]] || die "PACKTEST_DRAIN_SECS phải là số"
@@ -570,7 +572,8 @@ cmd_packtest() {
     QURL="${PACKTEST_QDRANT_URL:-http://127.0.0.1:6333}"; QURL="${QURL%/}"; COLL="${PACKTEST_QDRANT_COLLECTION:-cve_kb_hybrid}"
     [[ "$QURL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$ ]] || die "PACKTEST_QDRANT_URL phải là http://127.0.0.1:<cổng> (Qdrant nguồn trên máy này): $QURL"
     [[ "$COLL" =~ ^[A-Za-z0-9_-]+$ ]] || die "PACKTEST_QDRANT_COLLECTION lạ: $COLL"
-    [ -z "$ne" ] || [[ "$ne" =~ ^[0-9]+$ ]] || die "PACKTEST_NEO4J_NODES phải là số: $ne"
+    NURL="${PACKTEST_NEO4J_URL:-http://127.0.0.1:7474}"; NURL="${NURL%/}"
+    [[ "$NURL" =~ ^http://(127\.0\.0\.1|localhost):[0-9]{1,5}$ ]] || die "PACKTEST_NEO4J_URL phải là http://127.0.0.1:<cổng> (Neo4j nguồn trên máy này): $NURL"
     [[ "$vmfree" =~ ^[0-9]+$ ]] && [[ "$bw" =~ ^[1-9][0-9]*$ ]] && [[ "$allow" =~ ^[0-9]+$ ]] \
         || die "PACKTEST_VM_MIN_FREE_GB/PACKTEST_BW_MB/PACKTEST_PACK_RESTORE_MIN phải là số"
     QKEY="${QDRANT_API_KEY:-}"; unset QDRANT_API_KEY
@@ -580,10 +583,22 @@ cmd_packtest() {
         QKEY="$(tr -d '[:space:]' <"$PACKTEST_QDRANT_KEY_FILE")"
     fi
     [ -z "$QKEY" ] || [[ "$QKEY" =~ ^[A-Za-z0-9._~+/=-]+$ ]] || die "khoá Qdrant có ký tự lạ (không đưa vào cấu hình curl)"
+    # Mật khẩu Neo4j nguồn: biến shell KHÔNG export; chỉ tiến trình neo4j-export.py nhận qua env.
+    unset NEO4J_PASSWORD
+    local npwf="${PACKTEST_NEO4J_PASSWORD_FILE:-}" npw
+    [ -n "$npwf" ] && [ -f "$npwf" ] && [ "$(stat -c '%a %u' "$npwf")" = "600 $(id -u)" ] \
+        || die "PACKTEST_NEO4J_PASSWORD_FILE phải là tệp 0600 của $(id -un) (mật khẩu Neo4j nguồn)"
+    npw="$(tr -d '\r\n' <"$npwf")"; [ -n "$npw" ] || die "PACKTEST_NEO4J_PASSWORD_FILE rỗng"
+    local ienv="${PACKTEST_IMAGES_ENV:-}" gimg=""
+    if [ -n "$ienv" ]; then
+        [ -f "$ienv" ] || die "PACKTEST_IMAGES_ENV không tồn tại: $ienv"
+        gimg="$(sed -n 's/^GATEWAY_IMAGE=//p' "$ienv" | tail -n1 | tr -d '\r')"; gimg="${gimg%[\"\']}"; gimg="${gimg#[\"\']}"
+        [[ "$gimg" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]] || die "PACKTEST_IMAGES_ENV: GATEWAY_IMAGE trống hoặc lạ: '$gimg'"
+    fi
 
     # --- a. kiểm cục bộ (fail closed, chưa tạo gì)
     local p missing=()
-    for p in "$src/exploitdb" "$src/poc/catalog.db" "$src/poc/store" "$src/poc-sources" "$src/neo4j/neo4j.dump" "$mcp"; do [ -e "$p" ] || missing+=("$p"); done
+    for p in "$src/exploitdb" "$src/poc/catalog.db" "$src/poc/store" "$src/poc-sources" "$mcp"; do [ -e "$p" ] || missing+=("$p"); done
     [ ${#missing[@]} -eq 0 ] || die "thiếu nguồn: ${missing[*]}"
     PT_FREE0="$(local_free)"; [[ "$PT_FREE0" =~ ^[0-9]+$ ]] || die "không đọc được dung lượng trống của /"
     [ "$PT_FREE0" -ge $((PT_MIN_LOCAL_FREE_GB << 30)) ] \
@@ -600,9 +615,19 @@ json.dump([x["name"] for x in s], open(sys.argv[1], "w"))
 print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snapshots-before.json" "$PT_SNAP_DEFAULT")" \
         || { rm -f "$PT/snapshots-before.json"; die "không liệt kê được snapshot Qdrant nguồn"; }
     say "Qdrant nguồn: $(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["points_count"])' "$PT/prod-collection.json") điểm; snapshot có sẵn (KHÔNG bao giờ xoá): $(tr -d '[]"' <"$PT/snapshots-before.json")"
+    # --- a2. Neo4j nguồn: export CSV chỉ đọc ngay trên máy này (mật khẩu chỉ trong env của tiến trình con); image nếu có
+    rm -rf "$PT/neo4j-export" "$PT/images-pkg"
+    say "export Neo4j nguồn $NURL -> $PT/neo4j-export"
+    ( export NEO4J_PASSWORD="$npw" NEO4J_URL="$NURL"; tmo python3 -I "$HERE/neo4j-export.py" "$PT/neo4j-export" ) >"$PT/neo4j-export.log" 2>&1 \
+        || die "neo4j-export lỗi rc=$? (3 = đồ thị bị ghi trong lúc xuất; xem $PT/neo4j-export.log): $(tail -n3 "$PT/neo4j-export.log")"
+    local staged=("$PT/neo4j-export")
+    if [ -n "$ienv" ]; then
+        tmo "$HERE/pack.sh" images "$ienv" "$PT/images-pkg" >"$PT/pack-images.log" 2>&1 || die "pack.sh images lỗi (xem $PT/pack-images.log)"
+        staged+=("$PT/images-pkg/images")
+    fi
     local srcb n poc_du=() poc_rs=(--exclude .git)   # cùng danh sách với pack.sh: rsync và pack phải loại giống nhau
     for n in "${POC_SOURCES_SKIP[@]}"; do poc_du+=("--exclude=$src/poc-sources/$n"); poc_rs+=(--exclude "/poc-sources/$n"); done
-    srcb="$(du -scb --exclude=.git "${poc_du[@]}" --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$src/neo4j/neo4j.dump" "$mcp" | tail -n1 | cut -f1)"
+    srcb="$(du -scb --exclude=.git "${poc_du[@]}" --exclude='.env*' --exclude='*.pem' --exclude='*.key' "$src/exploitdb" "$src/poc" "$src/poc-sources" "$mcp" "${staged[@]}" | tail -n1 | cut -f1)"
     TUN=""; PROXY=""; trap on_exit_packtest EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 
     # --- b. băng thông: (nguồn + snapshot ước tính) / tốc độ + thời gian pack/restore phải vừa trước deadline - 10 phút
@@ -623,11 +648,15 @@ print(max([int(x.get("size") or 0) for x in s] + [int(sys.argv[2])]))' "$PT/snap
     rsh="$(rsh_cmd)"; s0="$(date +%s)"
     python3 -I -c 'import sqlite3,sys; s=sqlite3.connect("file:"+sys.argv[1]+"?mode=ro",uri=True); d=sqlite3.connect(sys.argv[2]); s.backup(d); d.close(); s.close()' \
         "$src/poc/catalog.db" "$PT/catalog.db" || die "sao lưu catalog.db lỗi"
-    vssh 'mkdir -p /srv/src-root/neo4j /srv/src-root/poc /srv/packtest' </dev/null || die "tạo thư mục trên VM lỗi"
+    rm -f "$PT"/rsync-*.log   # STAGE_BYTES chỉ cộng log của lần chạy này
+    vssh 'mkdir -p /srv/src-root/poc /srv/packtest /srv/images-pkg' </dev/null || die "tạo thư mục trên VM lỗi"
     tmo rsync -a --no-links --stats --exclude '/poc/catalog.db*' "${poc_rs[@]}" -e "$rsh" "$src/exploitdb" "$src/poc" "$src/poc-sources" "root@$HOST:/srv/src-root/" >"$PT/rsync-src.log" || die "rsync nguồn lỗi"
     tmo rsync -a --no-links --stats -e "$rsh" "$PT/catalog.db" "root@$HOST:/srv/src-root/poc/" >"$PT/rsync-catalog.log" || die "rsync catalog.db lỗi"
     rm -f "$PT/catalog.db"
-    tmo rsync -a --no-links --stats -e "$rsh" "$src/neo4j/neo4j.dump" "root@$HOST:/srv/src-root/neo4j/" >"$PT/rsync-neo4j.log" || die "rsync neo4j.dump lỗi"
+    tmo rsync -a --no-links --stats -e "$rsh" "$PT/neo4j-export"/ "root@$HOST:/srv/src-root/neo4j-export/" >"$PT/rsync-neo4j.log" || die "rsync neo4j-export lỗi"
+    if [ -n "$ienv" ]; then
+        tmo rsync -a --no-links --stats -e "$rsh" "$PT/images-pkg/images"/ "root@$HOST:/srv/images-pkg/images/" >"$PT/rsync-images.log" || die "rsync images lỗi"
+    fi
     # như pack.sh: .git/.env*/khoá của mcp-server không rời máy
     tmo rsync -a --no-links --stats --exclude .git --exclude '.env*' --exclude '*.pem' --exclude '*.key' -e "$rsh" "$mcp"/ \
         "root@$HOST:/srv/src-root/exploitdb-mcp-server/" >"$PT/rsync-mcp.log" || die "rsync exploitdb-mcp-server lỗi"
@@ -717,7 +746,7 @@ if python3 "$W/qref.py" http://127.0.0.1:16333 "$COLL" "$W/prod-ref.json" 2>"$R/
 if awk -F'\t' '$2 == "fail" { f = 1 } END { exit !f }' "$CHK"; then exit 1; fi
 t=$(date +%s)
 env -u QDRANT_API_KEY QDRANT_URL=http://127.0.0.1:16333 QDRANT_COLLECTION="$COLL" \
-    "$TIMEV" -v -o "$R/pack.time" "$ST/pack.sh" data --mcp-dir "$SRC/exploitdb-mcp-server" --neo4j-dump "$SRC/neo4j/neo4j.dump" "$SRC" "$OUT" >"$R/pack.log" 2>&1
+    "$TIMEV" -v -o "$R/pack.time" "$ST/pack.sh" data --mcp-dir "$SRC/exploitdb-mcp-server" --neo4j-export "$SRC/neo4j-export" "$SRC" "$OUT" >"$R/pack.log" 2>&1
 prc=$?; fact pack_secs $(( $(date +%s) - t )); dfs
 if [ "$prc" = 0 ]; then chk pack pass ""; else chk pack fail "rc=$prc"; exit 1; fi
 REMOTE_PACKTEST_PACK
@@ -729,21 +758,22 @@ r = [json.loads(l) for l in open(sys.argv[1])] if __import__("os").path.exists(s
 json.dump(r[-1] if r else {}, sys.stdout)' "$PT/proxy/created.jsonl" | vssh 'cat > /srv/packtest/snapshot-points.json' || prc=1
 
     # --- f. pha restore + kiểm trên VM (không cần nguồn). Kết quả ở /opt/secai-stack/results (collect kéo về).
-    vssh "PHASE=restore COLL=$COLL NEO4J_EXPECT='$ne' PROD_CLEAN=$pclean STAGE_SECS=$secs STAGE_BYTES=$bytes BW_MBPS=$mbps bash -s" <<'REMOTE_PACKTEST_RESTORE' || rrc=$?
+    vssh "PHASE=restore COLL=$COLL GATEWAY_IMAGE='$gimg' PROD_CLEAN=$pclean STAGE_SECS=$secs STAGE_BYTES=$bytes BW_MBPS=$mbps bash -s" <<'REMOTE_PACKTEST_RESTORE' || rrc=$?
 set -uo pipefail
 R=/opt/secai-stack/results W=/srv/packtest SRC=/srv/src-root OUT=/srv/pkg-out DR=/srv/restore-test ST=/opt/secai-stack/stack
-QIMG=qdrant/qdrant:v1.10.1 NIMG=neo4j:5.20-community TIMEV=/usr/bin/time
+QIMG=qdrant/qdrant:v1.10.1 TIMEV=/usr/bin/time
 mkdir -p "$R"; CHK="$R/checks.tsv"; touch "$CHK" "$R/facts.tsv"
 chk() { printf '%s\t%s\t%s\n' "$1" "$2" "$3" >>"$CHK"; }
 fact() { printf '%s\t%s\n' "$1" "$2" >>"$R/facts.tsv"; }
 dfs() { df -B1 --output=used,avail /srv | tail -n1 >>"$R/disk-samples.txt"; }
-cleanup() { kill "$(cat "$W/df.pid" 2>/dev/null)" 2>/dev/null; docker rm -f packtest-qdrant packtest-neo4j >/dev/null 2>&1; true; }
+cleanup() { kill "$(cat "$W/df.pid" 2>/dev/null)" 2>/dev/null; docker rm -f packtest-qdrant >/dev/null 2>&1; true; }
 trap cleanup EXIT
 chk prod_snapshot_cleanup "$PROD_CLEAN" "chỉ xoá snapshot proxy ghi tên"
 if awk -F'\t' '$1 == "pack" && $2 == "pass" { f = 1 } END { exit !f }' "$CHK"; then
     fact package_bytes "$(du -sb "$OUT" | cut -f1)"
     (cd "$OUT" && ls -l --time-style=+ qdrant neo4j ./*.tar.zst) >"$R/package-files.txt" 2>&1
     if (cd "$OUT" && sha256sum -c --strict --quiet SHA256SUMS) >"$R/sha256.log" 2>&1; then chk package_sha256 pass ""; else chk package_sha256 fail "xem sha256.log"; fi
+    cp "$SRC/neo4j-export/counts.json" "$W/neo4j-counts.json" 2>/dev/null   # số đếm của export, để so với restore
     rm -rf "$SRC"   # nguồn đã đo ở pha pack; xoá để restore vừa đĩa
     mkdir -p "$DR/_state/qdrant_storage" "$DR/qdrant"
     docker rm -f packtest-qdrant >/dev/null 2>&1
@@ -751,10 +781,11 @@ if awk -F'\t' '$1 == "pack" && $2 == "pass" { f = 1 } END { exit !f }' "$CHK"; t
         -v "$DR/qdrant:/qdrant/snapshots" "$QIMG" >/dev/null
     for i in $(seq 1 60); do curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:16334/ && break; sleep 2; done
     t=$(date +%s)
-    env -u QDRANT_API_KEY DATA_ROOT="$DR" "$TIMEV" -v -o "$R/restore.time" "$ST/restore-data.sh" --qdrant-url http://127.0.0.1:16334 "$OUT" >"$R/restore.log" 2>&1
+    # Mật khẩu Neo4j ngẫu nhiên cho bản khôi phục thử: chỉ qua env (gán trước lệnh), không lên argv.
+    NEO4J_PASSWORD="$(openssl rand -hex 16)" env -u QDRANT_API_KEY DATA_ROOT="$DR" "$TIMEV" -v -o "$R/restore.time" "$ST/restore-data.sh" --qdrant-url http://127.0.0.1:16334 "$OUT" >"$R/restore.log" 2>&1
     rrc=$?; fact restore_secs $(( $(date +%s) - t )); dfs
     if [ "$rrc" = 0 ]; then chk restore pass ""; else chk restore fail "rc=$rrc"; fi
-    # quyền theo restore-data.sh, đo TRƯỚC khi container Neo4j khởi động (entrypoint có thể chown /data)
+    # quyền theo restore-data.sh (import Neo4j chown /data cho 7474)
     for d in poc poc/store; do
         read -r o m <<<"$(stat -c '%u:%g %a' "$DR/$d" 2>/dev/null)"
         if [ "$o" = 10001:10100 ] && [ $(( 0$m & 020 )) -ne 0 ]; then chk "perm_${d/\//_}" pass "$o $m"; else chk "perm_${d/\//_}" fail "${o:-?} ${m:-?}"; fi
@@ -799,18 +830,17 @@ try:
 except Exception as e:
     row("qdrant_sample_points", False, type(e).__name__)
 PY
-    docker rm -f packtest-neo4j >/dev/null 2>&1
-    docker run -d --name packtest-neo4j -e NEO4J_AUTH=none -v "$DR/_state/neo4j_data:/data" "$NIMG" >/dev/null
-    cnt=""
-    for i in $(seq 1 60); do
-        cnt=$(docker exec packtest-neo4j cypher-shell --format plain 'MATCH (n) RETURN count(n)' 2>/dev/null | tail -n1 | tr -d ' \r')
-        [[ "$cnt" =~ ^[0-9]+$ ]] && break; cnt=""; sleep 3
-    done
-    # Dump không mang số node đọc được mà không nạp nó; không có PACKTEST_NEO4J_NODES thì chỉ ghi số đếm (not_verified).
-    if [ -z "$cnt" ]; then chk neo4j_nodes fail "không đếm được"
-    elif [ -z "$NEO4J_EXPECT" ]; then chk neo4j_nodes not_verified "$cnt (không có PACKTEST_NEO4J_NODES để so)"
-    elif [ "$cnt" = "$NEO4J_EXPECT" ]; then chk neo4j_nodes pass "$cnt"
-    else chk neo4j_nodes fail "expected=$NEO4J_EXPECT got=$cnt"; fi
+    # restore-data.sh tự dựng Neo4j tạm, nạp schema và so số đếm; ở đây đối chiếu dòng đó với counts.json của export
+    python3 - "$R/restore.log" "$W/neo4j-counts.json" >>"$CHK" <<'PY'
+import json, re, sys
+m = re.search(r"^==> neo4j: counts match \((\d+) nodes, (\d+) relationships\)$", open(sys.argv[1], errors="replace").read(), re.M)
+got = (int(m.group(1)), int(m.group(2))) if m else None
+try:
+    c = json.load(open(sys.argv[2])); want = (sum(c["nodes"].values()), sum(c["relationships"].values()))
+except Exception:
+    want = None
+print(f"neo4j_counts\t{'pass' if got is not None and got == want else 'fail'}\trestored={got} export={want}")
+PY
     if python3 "$W/facts.py" "$DR" >"$R/restored-facts.json"; then
         python3 - "$R/src-facts.json" "$R/restored-facts.json" >>"$CHK" <<'PY'
 import json, sys
@@ -819,6 +849,17 @@ for k in sorted(a):
     print(f"files_{k.replace('/', '_')}\t{'pass' if a[k] == b.get(k) else 'fail'}\tsrc={json.dumps(a[k])[:200]} restored={json.dumps(b.get(k))[:200]}")
 PY
     else chk restored_facts fail "facts.py bản khôi phục lỗi"; fi
+fi
+# Image + BM25 offline: chỉ khi packtest mang image (PACKTEST_IMAGES_ENV); không thì not_verified.
+if [ -z "$GATEWAY_IMAGE" ]; then
+    chk images_load not_verified "không có PACKTEST_IMAGES_ENV"; chk bm25_offline not_verified "không có PACKTEST_IMAGES_ENV"
+else
+    if "$ST/bootstrap.sh" load-images /srv/images-pkg/images >"$R/images-load.log" 2>&1; then chk images_load pass "$(tail -n1 "$R/images-load.log")"
+    else chk images_load fail "xem images-load.log"; fi
+    n=$(docker run --rm --network none -e HF_HUB_OFFLINE=1 --entrypoint python "$GATEWAY_IMAGE" -c \
+        "from secai_gateway.retrieval import bm25; m = bm25._load_sparse_model(); print(len(list(m.query_embed(['apache struts rce']))[0].indices))" \
+        2>"$R/bm25-offline.log" | tail -n1)
+    if [[ "$n" =~ ^[1-9][0-9]*$ ]]; then chk bm25_offline pass "indices=$n"; else chk bm25_offline fail "xem bm25-offline.log"; fi
 fi
 cleanup; trap - EXIT
 # Tóm tắt (không secret). verdict pass khi không kiểm nào fail và đủ các kiểm bắt buộc; not_verified được liệt kê riêng.
@@ -839,8 +880,9 @@ def tv(f):
     except OSError: return None
     m = re.search(r"Maximum resident set size \(kbytes\): (\d+)", t); e = re.search(r"Elapsed \(wall clock\) time.*: (\S+)", t)
     return {"max_rss_kb": int(m.group(1)) if m else None, "elapsed": e.group(1) if e else None}
-needed = {"pack", "restore", "qdrant_points", "qdrant_sample_points", "package_sha256", "prod_snapshot_cleanup"}
-verdict = "fail" if any(c["status"] != "pass" and c["status"] != "not_verified" for c in checks.values()) or not needed <= checks.keys() else "pass"
+needed = {"pack", "restore", "qdrant_points", "qdrant_sample_points", "package_sha256", "prod_snapshot_cleanup", "neo4j_counts"}
+if os.environ["GATEWAY_IMAGE"]: needed |= {"images_load", "bm25_offline"}
+verdict = "fail" if any(c["status"] not in ("pass", "not_verified") for c in checks.values()) or any(checks.get(k, {}).get("status") != "pass" for k in needed) else "pass"
 s = {"verdict": verdict, "not_verified": sorted(k for k, c in checks.items() if c["status"] == "not_verified"), "checks": checks,
      "timings_s": {"stage_rsync": int(os.environ["STAGE_SECS"]), "pack": num("pack_secs"), "restore": num("restore_secs")},
      "time_v": {"pack": tv(R + "/pack.time"), "restore": tv(R + "/restore.time")},
