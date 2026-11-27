@@ -93,6 +93,7 @@ require_hub_private() {
 known_secret_specs() {
     [ -z "$HUB_TOKEN_FILE" ] || printf '%s\n' "?raw:$HUB_TOKEN_FILE"   # token Docker Hub cũng không được lọt vào gói
     local f; for f in "$HOME"/.config/secai/*.token; do [ ! -f "$f" ] || printf '?raw:%s\n' "$f"; done
+    for f in "$HOME"/.config/secai/*.env "$HOME"/Downloads/CVE-DB/*.env; do [ ! -f "$f" ] || printf '?env:%s\n' "$f"; done
     if [ -n "${PUBLISH_KNOWN_SECRETS+x}" ]; then printf '%s\n' "$PUBLISH_KNOWN_SECRETS"; return; fi
     printf '%s\n' gh "env:$DOCKER_DIR/.env" "env:$MAIN/.env" "?env:$REPO/stack/.env" "?env:$MAIN/stack/.env" \
         "compose:$DOCKER_DIR/docker-compose.yml" "shell:$HOME/Downloads/CVE-DB/run_sync.sh" "json:$HOME/secai-releases/*/*.json" \
@@ -210,6 +211,31 @@ push_ref() {   # push_ref REF SEED_SRC_REPO [auth]
     [ "$d" = "$want" ] || die "push $ref: digest in ra '$d' khác .Id cục bộ '$want'"
     verify_remote "$ref" "$want" "$mode"
 }
+# verify_published MANIFEST BUNDLE_REF [stable]: sau khi push, đọc lại ẨN DANH từ GHCR (như máy đích) mọi image dự án trong
+# manifest, bundle và (nếu có) stable; tag phải có và digest phải đúng manifest/bundle. Ghi $WORK/published.json bằng digest
+# đọc lại từ registry. Sai hay thiếu: thoát khác 0.
+verify_published() {
+    local man="$1" bundle="$2" want_b got k ref dg lines out=""
+    want_b="$(local_id "$bundle")" || die "không có bundle cục bộ $bundle"
+    lines="$(python3 -I -c 'import json,sys
+m = json.load(open(sys.argv[1]))
+for k in ("GATEWAY_IMAGE", "VM_IMAGE"):
+    print(k, m["images"][k]["ref"], m["images"][k]["digest"])' "$man")" || die "không đọc được $man"
+    lines+=$'\n'"BUNDLE $bundle $want_b"
+    [ "${3:-}" != stable ] || lines+=$'\n'"STABLE $REGISTRY/$PKG_STACK:stable $want_b"
+    while read -r k ref dg; do
+        got="$(regq digest "$ref" 2>/dev/null)" || die "kiểm sau push: GHCR (ẩn danh) không có $ref"
+        [ "$got" = "$dg" ] || die "kiểm sau push: GHCR trả $got cho $ref, manifest/bundle ghi $dg"
+        log "GHCR (đọc lại ẩn danh): $ref = $got"
+        out+="$k $ref $got"$'\n'
+    done <<<"$lines"
+    OUT="$out" python3 -I - "$WORK/published.json" <<'PY'
+import json, os, sys
+rows = [l.split() for l in os.environ["OUT"].splitlines() if l.strip()]
+json.dump({k: {"ref": r, "registry_digest": d} for k, r, d in rows}, open(sys.argv[1], "w"), indent=1)
+PY
+}
+
 verify_remote() {   # verify_remote REF DIGEST [hub]: đọc ẩn danh (GHCR public: chứng minh máy đích kéo được) hoặc bằng token Docker Hub
     local got i q=regq
     [ "${3:-}" != hub ] || q=regq_hub
@@ -461,7 +487,8 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
     push_ref "$vm" oven/bun
     push_ref "$bundle" ""
     [ "$stable" = 0 ] || promote_to_stable "$VERSION"
-    log "XONG: $VERSION (gateway $(local_id "$gw"), vm $(local_id "$vm"), bundle $(local_id "$bundle")); ghi ở $WORK"
+    verify_published "$WORK/secai-stack.json" "$bundle" $([ "$stable" = 0 ] || echo stable)
+    log "XONG: $VERSION; digest đọc lại từ GHCR ở $WORK/published.json"
     cat "$WORK/secai-stack.json"
 }
 
@@ -576,10 +603,12 @@ EOF
     tag_absent "$ref" hub
     hub_login
     push_ref "$ref" "" hub
-    python3 -I - "$WORK/scan-data.json" "$version" "$(local_id "$ref")" "$WORK/data-release.json" <<'PY'
+    local rdg; rdg="$(regq_hub digest "$ref")" || die "kiểm sau push: Docker Hub không có $ref"
+    [ "$rdg" = "$(local_id "$ref")" ] || die "kiểm sau push: Docker Hub trả $rdg cho $ref, cục bộ $(local_id "$ref")"
+    python3 -I - "$WORK/scan-data.json" "$version" "$rdg" "$WORK/data-release.json" <<'PY'
 import json, sys
 scan = json.load(open(sys.argv[1]))
-rec = {"version": sys.argv[2], "digest": sys.argv[3], "secret_scan": {
+rec = {"version": sys.argv[2], "registry_digest": sys.argv[3], "secret_scan": {
     "policy": scan.get("policy"), "corpus": scan.get("corpus"), "corpus_counts": scan.get("corpus_counts"),
     "findings": len(scan.get("findings", [])), "known_secret_hits": scan.get("known_secret_hits"),
     "scanned_files": scan.get("scanned_files"), "scanned_bytes": scan.get("scanned_bytes"), "qdrant_points": scan.get("qdrant_points")}}

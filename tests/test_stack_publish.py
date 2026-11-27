@@ -149,6 +149,10 @@ if cmd == "hub-delete-tag":
     open(os.path.join(F, "deleted.log"), "a").write(args[2] + "\n"); sys.exit(0)
 if cmd == "tags": sys.exit(2)
 if os.path.exists(os.path.join(F, "reg_error")): sys.exit(2)
+hide = st("reg_hide.json", {})   # ref -> "missing" | digest khác (registry không thấy / trả sai sau push)
+if ref in hide:
+    if hide[ref] == "missing": sys.exit(3)
+    print(hide[ref]); sys.exit(0)
 if ref in remote: print(remote[ref]); sys.exit(0)
 if ref.startswith("docker.io/") and ref.split(":")[-1] in hub["tags"]:
     print("sha256:" + hashlib.sha256(ref.encode()).hexdigest()); sys.exit(0)
@@ -684,3 +688,41 @@ def test_prune_fails_closed_when_stable_unreadable(box):
     (box.fake / "remote.json").write_text(json.dumps({f"{REG}/secai-stack:stable": "sha256:" + "5" * 64}))
     r = box.run("prune-data", "--keep", "3", "--yes")   # không có nội dung stable để đọc
     assert r.returncode == 1 and "KHÔNG xoá gì" in r.stderr and not (box.fake / "deleted.log").exists()
+
+
+
+# ───────────── kiểm sau push: đọc lại ẩn danh từ GHCR, digest phải khớp manifest ─────────────
+def test_published_json_has_registry_digests(box):
+    r = box.run("publish", "--stable")
+    assert r.returncode == 0, r.stderr
+    v = box.version
+    pub = json.loads((box.work / f"stack-{v}" / "published.json").read_text())
+    remote = json.loads((box.fake / "remote.json").read_text())
+    m = manifest(box)
+    assert pub["GATEWAY_IMAGE"] == {"ref": f"{REG}/secai-agent-gateway:{v}", "registry_digest": remote[f"{REG}/secai-agent-gateway:{v}"]}
+    assert pub["GATEWAY_IMAGE"]["registry_digest"] == m["images"]["GATEWAY_IMAGE"]["digest"]
+    assert pub["VM_IMAGE"]["registry_digest"] == m["images"]["VM_IMAGE"]["digest"]
+    assert pub["BUNDLE"]["registry_digest"] == remote[f"{REG}/secai-stack:{v}"] == pub["STABLE"]["registry_digest"]
+    # các lần đọc lại là ẩn danh (không --auth) và nằm sau lần push cuối
+    reg = [json.loads(l.split("]", 1)[1]) if l.startswith("[]") else None for l in (box.fake / "reg.log").read_text().splitlines()]
+    assert any(x == ["digest", f"{REG}/secai-stack:{v}"] for x in reg if x)
+
+
+@pytest.mark.parametrize("which", ["secai-agent-gateway", "secai-pentestcode-vm", "secai-stack"])
+@pytest.mark.parametrize("how", ["missing", "sha256:" + "9" * 64])
+def test_publish_fails_when_registry_does_not_show_pushed_image(box, which, how):
+    v = box.version
+    (box.fake / "reg_hide.json").write_text(json.dumps({f"{REG}/{which}:{v}": how}))
+    r = box.run("publish")
+    assert r.returncode != 0
+    assert "GHCR" in r.stderr or "registry" in r.stderr
+    assert not (box.work / f"stack-{v}" / "published.json").exists()
+
+
+def test_publish_data_records_registry_digest(box, qurl):
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
+    assert r.returncode == 0, r.stderr
+    rec = json.loads((box.work / "data-2026.11.28" / "data-release.json").read_text())
+    remote = json.loads((box.fake / "remote.json").read_text())
+    assert rec["registry_digest"] == remote[f"{DATA}:2026.11.28"]
