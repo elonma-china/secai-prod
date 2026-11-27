@@ -12,7 +12,9 @@
 #       pack.sh data (hoặc gói có sẵn) -> quét secret toàn bộ nội dung gói (+ payload Qdrant, chính sách corpus cố định
 #       trong lib/secret_scan.py, secret thật của máy này) -> image FROM scratch -> kiểm repo Docker Hub ĐÃ CÓ và PRIVATE -> push
 #       $SECAI_DATA_REPO:<ngày>. Cảnh báo khi repo có hơn 3 tag dữ liệu.
-#   prune-data [--keep N] [--yes]   xoá tag dữ liệu cũ trên Docker Hub, giữ N bản mới nhất (mặc định 3; không --yes thì chỉ in)
+#   prune-data [--keep N] [--protect TAG]... [--yes]
+#       XOÁ tag dữ liệu cũ trên Docker Hub (không hoàn tác), giữ N bản mới nhất (mặc định 3), bản bundle stable đang dùng và
+#       các TAG --protect; không --yes thì chỉ in danh sách.
 #   promote VERSION     dời tag stable của bundle sang VERSION (bản đó phải đã có trên GHCR).
 #   scan PATH...        chỉ quét secret (lib/secret_scan.py).
 #
@@ -28,8 +30,11 @@
 #   PUBLISH_MIN_FREE_GB (45), SECAI_GHCR_OWNER (elonma-china), SECAI_DOCKER_DIR (thư mục .env prod cho smoke),
 #   SECAI_DATA_ROOT (dữ liệu nguồn), SECAI_REGISTRY_HELPER (lib/registry.py), SECAI_SEED_BLOB (seed_blob.py của secai-serving),
 #   QDRANT_URL (http://127.0.0.1:6333), NEO4J_PASSWORD (hoặc --neo4j-password-file),
-#   PUBLISH_KNOWN_SECRETS (thay danh sách nguồn secret thật, mỗi dòng một spec của secret_scan.py --known-secrets; cho test),
-#   PUBLISH_NO_FETCH=1 (bỏ `git fetch origin`; chỉ cho test/offline).
+#   PUBLISH_KNOWN_SECRETS (thay phần nguồn secret thật CỐ ĐỊNH, mỗi dòng một spec của secret_scan.py --known-secrets; cho test;
+#   tệp token Docker Hub, ~/.config/*/*.env, ~/.config/secai/*.token, khoá ~/.ssh/id_*, ~/.docker/config.json và mật khẩu
+#   Neo4j của publish-data luôn được thêm),
+#   PUBLISH_NO_FETCH=1 (bỏ `git fetch origin`; chỉ cho test/offline), PUBLISH_NOW (thời điểm cố định cho ngày phiên bản và
+#   khung giờ cấm 03:00-05:00, dạng `date -d`; chỉ cho test).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,6 +67,7 @@ WORK=""
 die() { echo "publish: $*" >&2; [ -z "$WORK" ] || printf '%s FAIL: %s\n' "$(date '+%F %T')" "$*" >>"$WORK/publish.log" 2>/dev/null || true; exit 1; }
 log() { echo "==> $*" >&2; [ -z "$WORK" ] || printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$WORK/publish.log" 2>/dev/null || true; }
 need_cmds() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "thiếu lệnh '$c'"; done; }
+now() { if [ -n "${PUBLISH_NOW:-}" ]; then date -d "$PUBLISH_NOW" "$@"; else date "$@"; fi; }   # now +FORMAT
 regq() { python3 -I "$REGHELP" "$@"; }
 regq_hub() { python3 -I "$REGHELP" --auth "$HUB_USER:$HUB_TOKEN_FILE" "$@"; }   # token Docker Hub chỉ đọc trong tiến trình python
 
@@ -89,15 +95,30 @@ require_hub_private() {
     esac
 }
 
-# Nguồn secret THẬT của máy này (chủ dự án 2026-11-27). Thiếu nguồn bắt buộc thì quét lỗi (fail closed); '?' = tuỳ chọn.
+# Nguồn secret THẬT của máy này (chủ dự án 2026-11-27: chặn mọi secret thật trên máy). Thiếu nguồn bắt buộc thì quét lỗi
+# (fail closed); '?' = tuỳ chọn. KNOWN_EXTRA: nguồn thêm trong lần chạy (mật khẩu Neo4j của publish-data).
+KNOWN_EXTRA=()
+env_like() {   # env_like FILE...: in '?env:FILE' cho tệp .env thật (bỏ .example/.sample/.template/.dist)
+    local f; for f in "$@"; do
+        case "$f" in *.example|*.sample|*.template|*.dist) continue ;; esac
+        [ ! -f "$f" ] || printf '?env:%s\n' "$f"
+    done
+}
 known_secret_specs() {
     [ -z "$HUB_TOKEN_FILE" ] || printf '%s\n' "?raw:$HUB_TOKEN_FILE"   # token Docker Hub cũng không được lọt vào gói
+    [ ${#KNOWN_EXTRA[@]} -eq 0 ] || printf '%s\n' "${KNOWN_EXTRA[@]}"
     local f; for f in "$HOME"/.config/secai/*.token; do [ ! -f "$f" ] || printf '?raw:%s\n' "$f"; done
-    for f in "$HOME"/.config/secai/*.env "$HOME"/Downloads/CVE-DB/*.env; do [ ! -f "$f" ] || printf '?env:%s\n' "$f"; done
+    env_like "$HOME"/.config/*/*.env "$HOME"/Downloads/CVE-DB/*.env
+    for f in "$HOME"/.ssh/id_*; do case "$f" in *.pub) ;; *) [ ! -f "$f" ] || printf '?raw:%s\n' "$f" ;; esac; done
+    printf '%s\n' "?json:$HOME/.docker/config.json"
     if [ -n "${PUBLISH_KNOWN_SECRETS+x}" ]; then printf '%s\n' "$PUBLISH_KNOWN_SECRETS"; return; fi
     printf '%s\n' gh "env:$DOCKER_DIR/.env" "env:$MAIN/.env" "?env:$REPO/stack/.env" "?env:$MAIN/stack/.env" \
         "compose:$DOCKER_DIR/docker-compose.yml" "shell:$HOME/Downloads/CVE-DB/run_sync.sh" "json:$HOME/secai-releases/*/*.json" \
         "?raw:$HOME/.config/vastai/vast_api_key" "?raw:$HOME/.cache/huggingface/token"
+    # .env.pentest, .env.local, .env.bak* (khoá cũ vẫn có thể còn hiệu lực) cạnh .env prod, của checkout chính và worktree
+    local more=("$DOCKER_DIR"/.env.* "$MAIN"/.env.*)
+    [ "$REPO" = "$MAIN" ] || more+=("$REPO"/.env "$REPO"/.env.*)
+    env_like "${more[@]}"
 }
 
 CLEANUPS=()
@@ -121,20 +142,15 @@ check_disk() {
 
 # Package GHCR mới luôn private và API không đổi được: chủ dự án bật Public trên web. Push khi chưa public = máy đích không kéo được.
 pkg_visibility() { gh api "/users/$OWNER/packages/container/$1" --jq .visibility 2>/dev/null || echo "không-đọc-được"; }
-require_visibility() {   # require_visibility public|private PKG...
-    local want="$1" p v bad=(); shift
+require_public() {   # require_public PKG...
+    local p v bad=()
     need_cmds gh
-    for p in "$@"; do v="$(pkg_visibility "$p")"; [ "$v" = "$want" ] || bad+=("$p=$v"); done
+    for p in "$@"; do v="$(pkg_visibility "$p")"; [ "$v" = public ] || bad+=("$p=$v"); done
     [ ${#bad[@]} -eq 0 ] && return 0
-    echo "publish: package phải $want nhưng: ${bad[*]}" >&2
-    if [ "$want" = public ]; then
-        echo "publish: bật Public tại https://github.com/users/$OWNER/packages/container/<tên>/settings rồi chạy lại; KHÔNG push gì" >&2
-    else
-        echo "publish: package phải giữ PRIVATE; KHÔNG push" >&2
-    fi
+    echo "publish: package phải public nhưng: ${bad[*]}" >&2
+    echo "publish: bật Public tại https://github.com/users/$OWNER/packages/container/<tên>/settings rồi chạy lại; KHÔNG push gì" >&2
     exit 5
 }
-require_public() { require_visibility public "$@"; }
 
 tmp_docker_config() {   # một DOCKER_CONFIG tạm cho cả lần chạy; logout + xoá khi thoát
     [ -z "${DOCKER_CONFIG_TMP:-}" ] || return 0
@@ -181,7 +197,7 @@ tag_absent() {
 
 # push_ref REF BASE_REPO: push, đối chiếu digest push in ra với .Id cục bộ (containerd store: .Id == digest manifest).
 # NotFound content digest (blob nền thiếu trong content store) -> seed blob từ Docker Hub bằng seed_blob.py rồi thử lại một lần.
-push_ref() {   # push_ref REF SEED_SRC_REPO [auth]
+push_ref() {   # push_ref REF SEED_SRC_REPO [hub]
     local ref="$1" srcrepo="$2" mode="${3:-}" out d want try dst ok=0 seeded=" " msg
     want="$(local_id "$ref")" || die "không có image cục bộ $ref"
     for try in 1 2 3 4 5 6 7 8 9 10 11 12; do
@@ -239,7 +255,7 @@ PY
 verify_remote() {   # verify_remote REF DIGEST [hub]: đọc ẩn danh (GHCR public: chứng minh máy đích kéo được) hoặc bằng token Docker Hub
     local got i q=regq
     [ "${3:-}" != hub ] || q=regq_hub
-    for i in 1 2 3 4 5; do got="$($q digest "$1" 2>/dev/null)" && break; sleep 3; done
+    for i in 1 2 3 4 5; do got="$($q digest "$1" 2>/dev/null)" && break; [ "$i" = 5 ] || sleep 3; done
     [ "$got" = "$2" ] || die "registry trả digest '$got' cho $1, mong đợi $2"
     log "đã push $1 ($2)"
 }
@@ -411,7 +427,7 @@ cmd_publish() {
     [ "${PUBLISH_NO_FETCH:-0}" = 1 ] || git -C "$REPO" fetch -q origin || die "git fetch origin lỗi; không phát hành từ ref có thể đã cũ"
     SHA="$(git -C "$REPO" rev-parse --verify "$ref^{commit}")" || die "ref không tồn tại: $ref"
     S8="${SHA:0:8}"
-    VERSION="$(date +%Y.%m.%d)-$S8"
+    VERSION="$(now +%Y.%m.%d)-$S8"
     [[ "$VERSION" =~ $VERSION_RE ]] || die "version lạ: $VERSION"
     BRANCH=main
     [ "$SHA" = "$(git -C "$REPO" rev-parse --verify -q origin/main 2>/dev/null)" ] \
@@ -441,24 +457,28 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
         IMAGES_TSV+=$'\n'"$k"$'\t'"$r"$'\t'"$d"
     done <<<"$bi"
     DATA_VERSION=""; DATA_DIGEST=""
-    if [ -n "$DATA_REPO" ] && data_repo_ok && { [ -z "$HUB_TOKEN_FILE" ] || hub_token_ok; } && [ -n "$HUB_TOKEN_FILE" ]; then
-        [ -n "$data_version" ] || data_version="$(latest_data_version)" || data_version=""
-        DATA_VERSION="$data_version"
-        if [ -n "$DATA_VERSION" ]; then
-            [[ "$DATA_VERSION" =~ $DATA_RE ]] || die "--data-version '$DATA_VERSION' không hợp lệ"
-            DATA_DIGEST="$(regq_hub digest "$DATA_REPO:$DATA_VERSION")" || {
-                [ "$dry" = 1 ] || die "không thấy $DATA_REPO:$DATA_VERSION trên Docker Hub (publish-data trước)"; DATA_DIGEST=""; }
-        fi
-    fi
-    if [ -z "$DATA_DIGEST" ] && [ -n "$DATA_REPO" ] && [[ "$DATA_REPO" =~ $DATA_REPO_RE ]] && [[ "$data_version" =~ $DATA_RE ]] \
-        && [ -z "$HUB_TOKEN_FILE" ]; then
-        # Repo dữ liệu private mà chưa có token đọc: chỉ nhận khi người phát hành ghi rõ --data-version; digest để trống.
+    [ -z "$DATA_REPO" ] || data_repo_ok
+    [ -z "$data_version" ] || [[ "$data_version" =~ $DATA_RE ]] || die "--data-version '$data_version' không hợp lệ"
+    if [ -n "$DATA_REPO" ] && [ -n "$HUB_TOKEN_FILE" ] && hub_token_ok; then
+        # (1) có token Docker Hub: bản dữ liệu (tham số, hoặc tag mới nhất) và digest đọc lại từ Docker Hub
+        DATA_VERSION="${data_version:-$(latest_data_version || true)}"
+        local drc=0
+        [ -z "$DATA_VERSION" ] || DATA_DIGEST="$(regq_hub digest "$DATA_REPO:$DATA_VERSION")" || drc=$?
+        case "$drc" in
+            0) ;;
+            3) DATA_DIGEST=""; [ "$dry" = 1 ] || die "không thấy $DATA_REPO:$DATA_VERSION trên Docker Hub (publish-data trước)" ;;
+            *) DATA_DIGEST=""; [ "$dry" = 1 ] || die "không đọc được digest của $DATA_REPO:$DATA_VERSION từ Docker Hub (rc=$drc: quyền/mạng/429); thử lại sau" ;;
+        esac
+    elif [ -n "$DATA_REPO" ] && [ -z "$HUB_TOKEN_FILE" ] && [ -n "$data_version" ]; then
+        # (2) chưa có token đọc repo private: chỉ nhận --data-version tường minh, digest để trống
         echo "publish: CẢNH BÁO: chưa kiểm được $DATA_REPO:$data_version (repo private, không có SECAI_DOCKERHUB_TOKEN_FILE); manifest ghi bản dữ liệu mặc định không kèm digest" >&2
         DATA_VERSION="$data_version"
-    elif [ -z "$DATA_VERSION" ] || [ -z "$DATA_DIGEST" ]; then
+    fi
+    if [ -z "$DATA_VERSION" ] || { [ -z "$DATA_DIGEST" ] && [ -n "$HUB_TOKEN_FILE" ]; }; then
+        # (3) chưa xác định được bản dữ liệu: dry-run để trống, phát hành thật thì dừng
         [ "$dry" = 1 ] || die "cần SECAI_DATA_REPO, SECAI_DOCKERHUB_TOKEN_FILE và một bản dữ liệu đã có trên Docker Hub (publish-data trước hoặc --data-version)"
         echo "publish: (dry-run) chưa xác định bản dữ liệu mặc định (SECAI_DATA_REPO/token/tag)" >&2
-        DATA_VERSION=""; DATA_DIGEST=""; [ -n "$DATA_REPO" ] && [[ "$DATA_REPO" =~ $DATA_REPO_RE ]] || DATA_REPO=""
+        DATA_VERSION=""; DATA_DIGEST=""
     fi
 
     log "bundle $bundle"
@@ -530,7 +550,7 @@ cmd_publish_data() {
     done
     need_cmds docker python3 zstd sha256sum du flock
     take_lock
-    version="${version:-$(date +%Y.%m.%d)}"
+    version="${version:-$(now +%Y.%m.%d)}"
     [[ "$version" =~ $DATA_RE ]] || die "version dữ liệu '$version' không hợp lệ (YYYY.MM.DD hoặc YYYY.MM.DD.N)"
     data_repo_ok
     local ref="$DATA_REPO:$version" hubok=1
@@ -546,6 +566,16 @@ cmd_publish_data() {
         echo "publish: (dry-run) không có token Docker Hub: bỏ kiểm repo private và tag đã có" >&2
     fi
     local pkg qargs=()
+    if [ -n "$pwfile" ]; then
+        [ -f "$pwfile" ] && [ "$(stat -c %a "$pwfile")" = 600 ] || die "--neo4j-password-file phải là tệp 0600"
+        NEO4J_PASSWORD="$(tr -d '\r\n' <"$pwfile")"
+    fi
+    if [ -n "${NEO4J_PASSWORD:-}" ]; then
+        # Mật khẩu Neo4j nguồn là secret thật: so khớp chính xác trong cả gói (tệp 0600 trong $WORK, xoá khi thoát).
+        (umask 077; printf '%s' "$NEO4J_PASSWORD" >"$WORK/.neo4j-password")
+        CLEANUPS+=("rm -f '$WORK/.neo4j-password'")
+        KNOWN_EXTRA+=("raw:$WORK/.neo4j-password")
+    fi
     if [ -n "$frompkg" ]; then
         pkg="$(cd "$frompkg" && pwd)"
         [ -s "$pkg/SHA256SUMS" ] || die "$pkg không phải gói dữ liệu (thiếu SHA256SUMS)"
@@ -554,12 +584,8 @@ cmd_publish_data() {
         [ -n "$qurl" ] || die "--from-pkg cần --qdrant-url <collection nguồn> để quét payload Qdrant (fail closed)"
         qargs=(--qdrant-url "$qurl" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
     else
-        local hh; hh="$(date +%H)"
+        local hh; hh="$(now +%H)"
         [ "$hh" != 03 ] && [ "$hh" != 04 ] || die "03:00-05:00: autoscan ghi Neo4j, export sẽ lệch số đếm; chạy giờ khác"
-        if [ -n "$pwfile" ]; then
-            [ -f "$pwfile" ] && [ "$(stat -c %a "$pwfile")" = 600 ] || die "--neo4j-password-file phải là tệp 0600"
-            NEO4J_PASSWORD="$(tr -d '\r\n' <"$pwfile")"
-        fi
         [ -n "${NEO4J_PASSWORD:-}" ] || die "cần NEO4J_PASSWORD (env) hoặc --neo4j-password-file để xuất Neo4j"
         export NEO4J_PASSWORD
         pkg="$WORK/pkg"
@@ -570,7 +596,8 @@ cmd_publish_data() {
         qargs=(--qdrant-url "${QDRANT_URL:-http://127.0.0.1:6333}" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
     fi
     (cd "$pkg" && sha256sum -c --strict --quiet SHA256SUMS) || die "SHA256SUMS của gói không khớp"
-    scan_tree "$pkg" data --policy data --exclude .git ${qargs[@]+"${qargs[@]}"}
+    # Không loại gì khỏi quét: mọi thứ trong gói đều được COPY vào image (kể cả .git của gói cũ/ghép tay).
+    scan_tree "$pkg" data --policy data ${qargs[@]+"${qargs[@]}"}
     python3 -I - "$WORK/scan-data.json" "$pkg/MANIFEST.md" <<'PY' || die "số điểm Qdrant đã quét payload khác MANIFEST: collection nguồn đã đổi so với gói; KHÔNG push"
 import json, re, sys
 got = json.load(open(sys.argv[1])).get("qdrant_points")
@@ -602,9 +629,8 @@ EOF
     require_hub_private
     tag_absent "$ref" hub
     hub_login
-    push_ref "$ref" "" hub
-    local rdg; rdg="$(regq_hub digest "$ref")" || die "kiểm sau push: Docker Hub không có $ref"
-    [ "$rdg" = "$(local_id "$ref")" ] || die "kiểm sau push: Docker Hub trả $rdg cho $ref, cục bộ $(local_id "$ref")"
+    push_ref "$ref" "" hub   # verify_remote đã đọc lại digest từ Docker Hub (bằng token) và so với .Id cục bộ
+    local rdg; rdg="$(local_id "$ref")"
     python3 -I - "$WORK/scan-data.json" "$version" "$rdg" "$WORK/data-release.json" <<'PY'
 import json, sys
 scan = json.load(open(sys.argv[1]))
@@ -672,5 +698,5 @@ case "${1:-}" in
     prune-data) shift; cmd_prune_data "$@" ;;
     promote) shift; cmd_promote "$@" ;;
     scan) shift; [ $# -gt 0 ] || die "dùng: publish.sh scan PATH..."; python3 -I "$SCANNER" "$@" ;;
-    *) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+    *) awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2; exit 2 ;;
 esac

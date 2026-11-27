@@ -89,7 +89,8 @@ bản dữ liệu mà `stable` dùng; `DOCKER_CONFIG` tạm phải có `config.j
   không phải về khác biệt dữ liệu.
 - `data rollback`, `prune-data` thật trên Docker Hub (cần token có quyền Delete), đăng nhập qua Docker context không mặc định:
   chỉ kiểm bằng test giả.
-- Mật khẩu Neo4j prod dài 9 ký tự, dưới ngưỡng 12 ký tự của tầng "secret thật" nên không được so khớp.
-- Một hồ sơ JSON trong `~/secai-releases` (`devspace-review-tokens.json`, chủ uid 10001, 0600) không đọc được khi nạp secret thật.
+- Tầng "secret thật" lúc phát hành dữ liệu này bỏ qua một số secret ngắn và chưa nạp vài nguồn secret của máy. Đã sửa sau review
+  PR #73 (ngưỡng hạ, giá trị ngắn khớp theo token riêng, thêm nguồn); bản dữ liệu `2026.11.27` chưa được quét lại bằng bộ quét mới.
+- Có hồ sơ JSON trong `~/secai-releases` không đọc được bằng user phát hành khi nạp secret thật (được báo trong tổng kết quét).
 - Lưu lượng Docker Hub: mỗi lần cài kéo khoảng 5,2 GB dữ liệu từ repo private; chưa đo giới hạn băng thông của gói miễn phí.
 - Chuyển prod trên máy này sang gói: chưa làm (kế hoạch + rollback ở `stack/README.md`).

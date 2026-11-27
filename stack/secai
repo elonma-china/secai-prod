@@ -13,7 +13,8 @@
 #
 # Biến môi trường: SECAI_HOME (mặc định /opt/secai khi chạy root, ~/secai nếu không), SECAI_REGISTRY (ghcr.io/elonma-china),
 #   SECAI_YES=1 hoặc --yes (không hỏi; thiếu biến bắt buộc thì dừng), SECAI_DATA_VERSION (bộ dữ liệu khi install),
-#   SECAI_MIN_FREE_GB (chỗ trống tối thiểu), SECAI_UP_TIMEOUT (giây chờ healthy, 900).
+#   SECAI_MIN_FREE_GB (chỗ trống tối thiểu ở SECAI_HOME), SECAI_MIN_DOCKER_FREE_GB (chỗ trống tối thiểu ở thư mục gốc của Docker,
+#   nơi image và dữ liệu kéo về nằm), SECAI_UP_TIMEOUT (giây chờ healthy, 900).
 #   Dữ liệu nằm ở repo Docker Hub PRIVATE ghi trong manifest của bundle (data.image, vd docker.io/<ns>/secai-data; đè bằng
 #   SECAI_DATA_REPO): cần token Docker Hub loại Read-only, lấy từ SECAI_DOCKERHUB_TOKEN_FILE (tệp 0600/0400 của chính user),
 #   SECAI_DOCKERHUB_TOKEN (env) hoặc hỏi ẩn; user SECAI_DOCKERHUB_USER (mặc định = namespace của repo). Token chỉ đi qua stdin
@@ -23,11 +24,12 @@
 #   Biến bắt buộc lần đầu có thể đặt sẵn trong môi trường (không bao giờ qua tham số dòng lệnh): LLM_BASE_URL LLM_MODEL
 #   LLM_API_KEY EMBEDDING_API_URL EMBEDDING_MODEL EMBEDDING_API_KEY RERANKER_API_URL RERANKER_MODEL RERANKER_API_KEY
 #   VERIFY_ALLOWED_TARGETS; tuỳ chọn GATEWAY_BIND GATEWAY_HOST_PORT VM_SLOTS VM_MEM_LIMIT COMPOSE_PROJECT_NAME POC_LABS_NETWORK
-#   POC_LABS_EXTERNAL. Chạy bằng sudo: sudo xoá môi trường; dùng `sudo -i` hoặc `sudo --preserve-env=TÊN,...`, KHÔNG BAO GIỜ
-#   `sudo KHOÁ=giá-trị ./secai` (giá trị nằm trên argv và trong log của sudo).
+#   POC_LABS_EXTERNAL. Chạy bằng sudo: sudo xoá môi trường; dùng shell root `sudo -s` (giữ thư mục hiện tại) hoặc
+#   `sudo --preserve-env=TÊN,...`, KHÔNG BAO GIỜ `sudo KHOÁ=giá-trị ./secai` (giá trị nằm trên argv và trong log của sudo).
 # Không bao giờ `docker compose down -v`: volume giữ DB báo cáo/phiên/review.
-# Mã thoát upgrade / data update / data rollback: 0 đạt; 1 lỗi trước khi chuyển (không đổi gì);
-#   3 check trượt và đã quay về bản trước; 4 đã quay về nhưng check sau khi quay về vẫn trượt.
+# Mã thoát upgrade / data update: 0 đạt; 1 lỗi trước khi chuyển (không đổi gì); 3 check trượt và đã quay về bản trước;
+#   4 đã quay về nhưng check sau khi quay về vẫn trượt. rollback / data rollback: 0 đạt; 1 lỗi trước khi chuyển (không đổi
+#   gì); 4 đã chuyển về bản trước nhưng check trượt. Sửa .env thì chạy `secai up` (tạo lại container) trước `secai check`.
 set -euo pipefail
 
 CLI_SCHEMA=1
@@ -124,6 +126,11 @@ os.chmod(t, 0o600); os.replace(t, p)
 PY
 }
 require_installed() { [ "$(st_get installed)" = true ] || die "chưa cài (không thấy $STATE hoặc install chưa xong); chạy: secai install"; }
+# require_stack: đủ tệp để vận hành stack, kể cả khi install trượt ở bước up/chờ healthy (installed=partial): logs/down/up/status/check
+require_stack() {
+    case "$(st_get installed)" in true|partial) ;; *) die "chưa cài (không thấy $STATE hoặc install chưa tới bước chạy stack); chạy: secai install" ;; esac
+    [ -f "$STACK/compose.yml" ] && [ -f "$ENVF" ] || die "thiếu $STACK/compose.yml hoặc $ENVF; chạy lại: secai install"
+}
 take_lock() {
     mkdir -p "$SECAI_HOME"
     exec 9>"$SECAI_HOME/.lock"
@@ -131,15 +138,16 @@ take_lock() {
 }
 
 # ───────────────────────────── manifest ─────────────────────────────
-# man_field FILE KEY (version | git_sha | data_default | data_image | schema)
+# man_field FILE KEY (version | git_sha | created | schema | data_default | data_image | data_digest)
 man_field() {
     python3 -I - "$1" "$2" <<'PY'
 import json, sys
 m = json.load(open(sys.argv[1]))
 k = sys.argv[2]
 d = m.get("data") or {}
-v = d.get("default_version", "") if k == "data_default" else d.get("image", "") if k == "data_image" else m.get(k, "")
-print(v)
+sub = {"data_default": "default_version", "data_image": "image", "data_digest": "digest"}
+v = d.get(sub[k], "") if k in sub else m.get(k, "")
+print("" if v is None else v)
 PY
 }
 # man_images FILE -> "KEY<TAB>REF<TAB>DIGEST" mỗi image; kiểm dạng, sai thì thoát != 0.
@@ -160,12 +168,9 @@ for k in allowed:
     print(f"{k}\t{ref}\t{dg}")
 PY
 }
-pin_of() {   # pin_of MANIFEST KEY -> ref@digest
-    man_images "$1" | awk -F'\t' -v k="$2" '$1 == k { print $2 "@" $3 }'
-}
 
 # ───────────────────────────── kiểm máy ─────────────────────────────
-host_checks() {   # host_checks MIN_FREE_GB
+host_checks() {   # host_checks MIN_FREE_GB [MIN_DOCKER_FREE_GB]
     need_cmds docker python3 curl tar sha256sum awk flock df
     [ "$(uname -m)" = x86_64 ] || die "chỉ hỗ trợ máy x86_64 (image linux/amd64); máy này là $(uname -m)"
     dk info >/dev/null 2>&1 || die "không gọi được Docker daemon (cài Docker, bật dịch vụ, và chạy bằng root hoặc user trong nhóm docker)"
@@ -184,9 +189,20 @@ host_checks() {   # host_checks MIN_FREE_GB
         else die "vm.max_map_count=$mm < 262144 (Elasticsearch không chạy); chạy: sudo sysctl -w vm.max_map_count=262144"; fi
     fi
     mkdir -p "$SECAI_HOME"
-    local free_gb want="${SECAI_MIN_FREE_GB:-$1}"
+    local free_gb want="${SECAI_MIN_FREE_GB:-$1}" droot dwant="${SECAI_MIN_DOCKER_FREE_GB:-${2:-0}}" dfree
     free_gb=$(( $(df -Pk "$SECAI_HOME" | awk 'NR == 2 { print $4 }') / 1048576 ))
-    (( free_gb >= want )) || die "chỉ còn ${free_gb} GB trống ở $SECAI_HOME, cần >= ${want} GB"
+    # Image dự án và image dữ liệu (vài GB, containerd giữ cả blob nén lẫn bản giải nén) nằm ở thư mục gốc của Docker,
+    # thường là /var/lib/docker trên ổ hệ thống, không phải SECAI_HOME. Cùng một ổ thì cộng hai nhu cầu.
+    droot="$(dk info --format '{{.DockerRootDir}}' 2>/dev/null)" || droot=""
+    if (( dwant > 0 )) && [ -z "${DOCKER_HOST:-}" ] && [[ "$droot" == /* ]] && [ -d "$droot" ]; then
+        if [ "$(stat -c %d "$droot")" = "$(stat -c %d "$SECAI_HOME")" ]; then
+            (( free_gb >= want + dwant )) || die "chỉ còn ${free_gb} GB trống ở $SECAI_HOME (cùng ổ với thư mục Docker $droot), cần >= $((want + dwant)) GB (${want} dữ liệu + ${dwant} image; SECAI_MIN_FREE_GB, SECAI_MIN_DOCKER_FREE_GB)"
+        else
+            dfree=$(( $(df -Pk "$droot" | awk 'NR == 2 { print $4 }') / 1048576 ))
+            (( dfree >= dwant )) || die "chỉ còn ${dfree} GB trống ở thư mục Docker $droot (image + dữ liệu kéo về), cần >= ${dwant} GB (SECAI_MIN_DOCKER_FREE_GB); dọn: docker image prune"
+        fi
+    fi
+    (( free_gb >= want )) || die "chỉ còn ${free_gb} GB trống ở $SECAI_HOME, cần >= ${want} GB (SECAI_MIN_FREE_GB)"
     local mem_gb; mem_gb=$(( $(awk '/^MemTotal:/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0) / 1048576 ))
     (( mem_gb >= 30 )) || say "CẢNH BÁO: RAM ${mem_gb} GB; profile exploit (2 VM) và kho dữ liệu nên có >= 32 GB"
 }
@@ -271,18 +287,6 @@ write_pins() {
     envset SECAI_VERSION "$1"
 }
 
-pull_images() {   # kéo mọi image của bộ phát hành theo pin trong .env
-    local k p
-    for k in "${IMAGE_KEYS[@]}"; do
-        p="$(envget "$k")"
-        [[ "$p" == *@sha256:* ]] || die "$k trong .env không ghim digest: '$p'"
-        dk image inspect "$p" >/dev/null 2>&1 && continue
-        say "kéo $p"
-        hub_login 0   # chỉ đăng nhập khi thật sự phải kéo (lần đầu), tuỳ chọn
-        dkp "$p" >/dev/null || return 1
-    done
-}
-
 # ───────────────────────────── hỏi cấu hình ─────────────────────────────
 interactive() { [ "$ASSUME_YES" != 1 ] && [ -t 0 ]; }
 valid_setting() {   # valid_setting KEY VALUE -> 0 nếu hợp lệ
@@ -329,7 +333,7 @@ ask_required() {
         done
         envset "$k" "$v"
     done
-    [ ${#missing[@]} -eq 0 ] || die "thiếu biến bắt buộc: ${missing[*]} (đặt trong môi trường, hoặc chạy không có SECAI_YES/--yes để được hỏi; sudo xoá môi trường: dùng 'sudo -i' hoặc 'sudo --preserve-env=...', không 'sudo KHOÁ=...')"
+    [ ${#missing[@]} -eq 0 ] || die "thiếu biến bắt buộc: ${missing[*]} (đặt trong môi trường, hoặc chạy không có SECAI_YES/--yes để được hỏi; sudo xoá môi trường: dùng shell root 'sudo -s' hoặc 'sudo --preserve-env=...', không 'sudo KHOÁ=...')"
 }
 
 # ───────────────────────────── dữ liệu ─────────────────────────────
@@ -340,6 +344,37 @@ try: print(json.load(open(sys.argv[1])).get("content", ""))
 except Exception: print("")' "$(data_root "$1")/.secai-data-complete"
 }
 data_complete() { [ -f "$(data_root "$1")/.secai-data-complete" ]; }
+data_digest() {   # digest (sha256:... hoặc dir:...) ghi khi nạp xong data/<ver>
+    python3 -I -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("digest", ""))
+except Exception: print("")' "$(data_root "$1")/.secai-data-complete"
+}
+# rm_tree PATH: xoá cây trong SECAI_HOME; tệp do container tạo (Neo4j uid 7474, Qdrant root) mà user này không xoá được thì
+# xoá bằng image gateway (root trong container, không mạng).
+rm_tree() {
+    rm -rf "${1:?}" 2>/dev/null && return 0
+    local img; img="$(envget GATEWAY_IMAGE)"
+    [ -n "$img" ] && dk run --rm --network none --user 0:0 --entrypoint sh -v "$(dirname "$1"):/p" "$img" \
+        -c 'rm -rf "/p/$1"' sh "$(basename "$1")" >/dev/null 2>&1 && [ ! -e "$1" ]
+}
+# reset_partial_data ROOT: ROOT có mà chưa có .secai-data-complete = lần nạp trước bị ngắt (SSH rớt, Ctrl-C). Qdrant tạo
+# collection trước khi phục hồi xong shard, Neo4j import dở để lại store hỏng, snapshot có thể chép dở: xoá các phần đó để
+# nạp lại từ đầu (cây exploitdb/poc/... giải nén nguyên tử nên giữ). Không bao giờ đụng DATA_ROOT của stack đã cài.
+reset_partial_data() {
+    local root="$1" nd="$1/_state/neo4j_data" parts=() p
+    [ -d "$root" ] || return 0
+    if [ "$(st_get installed)" = true ] && [ "$(envget DATA_ROOT)" = "$root" ]; then
+        die "$root là DATA_ROOT đang dùng nhưng thiếu .secai-data-complete: không tự xoá; kiểm tra tay"
+    fi
+    [ ! -e "$root/_state/qdrant_storage" ] || parts+=(_state/qdrant_storage)
+    [ ! -e "$root/qdrant" ] || parts+=(qdrant)
+    if [ -e "$nd/.secai-restore-started" ] && [ ! -e "$nd/.secai-restore-complete" ]; then parts+=(_state/neo4j_data); fi
+    [ ${#parts[@]} -gt 0 ] || return 0
+    say "dữ liệu ở $root nạp dở từ lần trước (bị ngắt): xoá ${parts[*]} rồi nạp lại"
+    for p in "${parts[@]}"; do
+        rm_tree "$root/$p" || die "không xoá được $root/$p; xoá tay: sudo rm -rf '$root/$p' rồi chạy lại"
+    done
+}
 
 # fix_poc_perms ROOT: gateway (uid 10001, nhóm VM_SHARED_GID) phải ghi được poc và poc/store; dùng chính image gateway (root).
 fix_poc_perms() {
@@ -381,12 +416,23 @@ PY
     dk rm -f "$name" >/dev/null 2>&1 || true
 }
 
-# data_repo: repo dữ liệu (SECAI_DATA_REPO hoặc data.image trong manifest của bản đang dùng)
+# data_repo_raw: repo dữ liệu (SECAI_DATA_REPO hoặc data.image trong manifest của bản đang dùng), chưa kiểm; data_repo: đã kiểm
+DATA_REPO_RE='^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$'
+data_repo_raw() { printf '%s' "${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null || true)}"; }
 data_repo() {
-    local r="${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null)}"
-    [[ "$r" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]] \
+    local r; r="$(data_repo_raw)"
+    [[ "$r" =~ $DATA_REPO_RE ]] \
         || die "không biết repo dữ liệu (manifest không có data.image hợp lệ); đặt SECAI_DATA_REPO=docker.io/<ns>/secai-data hoặc dùng --data-dir"
     printf '%s' "$r"
+}
+# data_pin DATA_VERSION: digest dữ liệu người phát hành đã kiểm và ghi trong manifest (data.digest) khi DATA_VERSION là
+# data.default_version của bản đang dùng; rỗng nếu không có. Tag Docker Hub đổi được: có digest thì kéo theo digest.
+data_pin() {
+    local m="$STACK/secai-stack.json" d
+    [ "$(man_field "$m" data_default 2>/dev/null)" = "$1" ] || return 0
+    d="$(man_field "$m" data_digest 2>/dev/null)" || d=""
+    [ -z "$d" ] || [[ "$d" =~ ^sha256:[0-9a-f]{64}$ ]] || die "manifest ghi data.digest lạ: '$d'"
+    printf '%s' "$d"
 }
 # hub_token_get: token Docker Hub chỉ đọc vào HUB_TOKEN; PROMPT=1 thì được hỏi ẩn. Trả 1 nếu không có.
 hub_token_get() {
@@ -413,9 +459,8 @@ hub_login() {
     [ -z "$CLEAN_DCFG" ] || return 0
     [ "$need" = 1 ] || [ -z "$HUB_TRIED" ] || return 0   # đăng nhập tuỳ chọn: chỉ thử (và cảnh báo) một lần mỗi lệnh
     HUB_TRIED=1
-    if [ "$need" = 1 ]; then repo="$(data_repo)"
-    else repo="${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null || true)}"; fi
-    if [[ "$repo" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
+    if [ "$need" = 1 ]; then repo="$(data_repo)"; else repo="$(data_repo_raw)"; fi
+    if [[ "$repo" =~ $DATA_REPO_RE ]]; then
         host="${repo%%/*}"; user="${HUB_USER_INPUT:-$(cut -d/ -f2 <<<"$repo")}"
     else
         host=docker.io; user="$HUB_USER_INPUT"   # không rõ repo dữ liệu: chỉ đăng nhập Docker Hub khi biết user
@@ -450,14 +495,20 @@ manifest_date() {
 # data/<ver> (Neo4j + tệp qua restore-data.sh, Qdrant qua container tạm), sửa quyền poc, đánh dấu hoàn tất.
 # Đã hoàn tất thì bỏ qua. Không đụng stack đang chạy.
 data_prepare() {
-    local dv="$1" src="${2:-}" root dg pkg
+    local dv="$1" src="${2:-}" root dg pkg pin=""
     root="$(data_root "$dv")"
+    [ -n "$src" ] || pin="$(data_pin "$dv")"
     if data_complete "$dv"; then
         if [ -n "$src" ] && [ "$(data_content "$dv")" != "$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)" ]; then
             die "đã có dữ liệu $dv với NỘI DUNG KHÁC gói $src; chọn phiên bản dữ liệu khác (vd $dv.2)"
         fi
+        local have; have="$(data_digest "$dv")"
+        if [ -n "$pin" ] && [[ "$have" == sha256:* ]] && [ "$have" != "$pin" ]; then
+            die "dữ liệu $dv đã nạp từ digest $have nhưng manifest ghim $pin (tag $dv đã bị đẩy lại?); báo người phát hành, KHÔNG dùng tiếp"
+        fi
         say "dữ liệu $dv đã có ($root)"; return 0
     fi
+    reset_partial_data "$root"
     if [ -n "$src" ]; then
         pkg="$(cd "$src" 2>/dev/null && pwd)" || die "không có thư mục gói dữ liệu $src"
         [ -s "$pkg/SHA256SUMS" ] || die "$pkg không phải gói dữ liệu (thiếu SHA256SUMS)"
@@ -465,12 +516,20 @@ data_prepare() {
         say "dùng gói dữ liệu có sẵn $pkg"
     else
         local repo; repo="$(data_repo)"
-        say "kéo dữ liệu $repo:$dv (vài GB, repo private)"
         hub_login 1
-        dkp "$repo:$dv" >/dev/null || { hub_logout; die "không kéo được $repo:$dv (sai phiên bản, hoặc token không có quyền đọc)"; }
+        if [ -n "$pin" ]; then
+            # digest người phát hành đã kiểm (manifest của bundle): docker kiểm nội dung theo digest, tag bị đẩy lại không lọt
+            say "kéo dữ liệu $repo:$dv theo digest $pin ghim trong manifest (vài GB, repo private)"
+            dkp "$repo@$pin" >/dev/null || { hub_logout; die "không kéo được $repo@$pin (dữ liệu $dv ghim trong manifest; token không có quyền đọc, hoặc bản đó đã bị xoá khỏi repo: báo người phát hành)"; }
+            dg="$pin"
+        else
+            say "CẢNH BÁO: manifest không ghim digest cho dữ liệu $dv (chỉ ghim bản mặc định): kéo theo tag, tin vào repo private"
+            say "kéo dữ liệu $repo:$dv (vài GB, repo private)"
+            dkp "$repo:$dv" >/dev/null || { hub_logout; die "không kéo được $repo:$dv (sai phiên bản, hoặc token không có quyền đọc)"; }
+            # tên trong RepoDigests: Docker Hub bỏ tiền tố docker.io/
+            dg="$(repo_digest "$repo:$dv" "$repo")"; [ -n "$dg" ] || dg="$(repo_digest "$repo:$dv" "${repo#docker.io/}")"
+        fi
         hub_logout
-        # tên trong RepoDigests: Docker Hub bỏ tiền tố docker.io/
-        dg="$(repo_digest "$repo:$dv" "$repo")"; [ -n "$dg" ] || dg="$(repo_digest "$repo:$dv" "${repo#docker.io/}")"
         [[ "$dg" =~ ^sha256:[0-9a-f]{64}$ ]] || die "không đọc được digest của $repo:$dv"
         pkg="$SECAI_HOME/downloads/data-$dv"
         rm -rf "$pkg"
@@ -580,7 +639,7 @@ cmd_install() {
     done
     [ -z "$datadir" ] || [ -s "$datadir/SHA256SUMS" ] || die "--data-dir $datadir không phải gói dữ liệu (thiếu SHA256SUMS)"
     if [ "$(st_get installed)" = true ]; then die "đã cài bản $(st_get version) ở $SECAI_HOME; dùng 'secai upgrade' hoặc 'secai status'"; fi
-    host_checks 60
+    host_checks 60 25
     take_lock
     mkdir -p "$SECAI_HOME/logs"; chmod 750 "$SECAI_HOME"
     logline "install $want"
@@ -615,30 +674,44 @@ cmd_install() {
     envset SECAI_DATA_VERSION "$dv"
     # Dữ liệu phải kéo từ repo private: hỏi/kiểm token TRƯỚC khi kéo image nền để chúng cũng đi qua phiên đăng nhập.
     if [ -z "$datadir" ] && ! data_complete "$dv"; then hub_login 1; fi
-    pull_images || die "kéo image lỗi"
+    prefetch_release "$ver" || die "kéo image lỗi"
     data_prepare "$dv" "$datadir"
     hub_logout
     preflight || die "preflight trượt (xem các dòng ở trên, sửa $ENVF rồi chạy lại 'secai install')"
-    up_stack || die "docker compose up lỗi"
-    wait_healthy || die "stack chưa healthy; xem 'secai logs <service>'"
+    # Từ đây có container chạy: ghi trạng thái dở để logs/status/down/up/check dùng được nếu up/chờ healthy trượt.
+    st_set installed=partial version="$ver" bundle_digest="$dg" previous_version= data_version="$dv" previous_data_version=
+    up_stack || die "docker compose up lỗi (vd cổng $(envget GATEWAY_HOST_PORT) đã có người dùng: đặt GATEWAY_HOST_PORT); xem 'secai logs <service>', dừng: 'secai down', sửa rồi chạy lại 'secai install'"
+    wait_healthy || die "stack chưa healthy; xem 'secai status' và 'secai logs <service>', dừng: 'secai down', sửa rồi chạy lại 'secai install'"
     st_set installed=true version="$ver" bundle_digest="$dg" previous_version= data_version="$dv" \
         previous_data_version= installed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     logline "install $ver data $dv: up"
     if run_check; then
         say "XONG: SecAI $ver, dữ liệu $dv. Gateway: http://$(envget GATEWAY_BIND):$(envget GATEWAY_HOST_PORT)  (secai status)"
     else
-        say "đã cài và chạy, nhưng check.sh all trượt (xem ở trên). Sửa $ENVF rồi chạy 'secai check'"
+        say "đã cài và chạy, nhưng check.sh all trượt (xem ở trên). Sửa $ENVF, chạy 'secai up' (container nhận .env mới) rồi 'secai check'"
         exit 1
     fi
 }
 
+# is_older A B: bản A cũ hơn B (theo "created" trong manifest; thiếu thì theo ngày trong tên phiên bản)
+is_older() {
+    local a b
+    a="$(man_field "$SECAI_HOME/releases/$1/secai-stack.json" created 2>/dev/null)" || a=""
+    b="$(man_field "$SECAI_HOME/releases/$2/secai-stack.json" created 2>/dev/null)" || b=""
+    if [ -n "$a" ] && [ -n "$b" ]; then [[ "$a" < "$b" ]]; else [[ "${1%%-*}" < "${2%%-*}" ]]; fi
+}
+
 cmd_upgrade() {
-    local want=stable a
-    for a in "$@"; do case "$a" in --yes|-y) ASSUME_YES=1 ;; -*) die "tham số lạ: $a" ;; *) want="$a" ;; esac; done
-    require_installed; host_checks 15; take_lock
+    local want=stable a explicit=0 verb=lên
+    for a in "$@"; do case "$a" in --yes|-y) ASSUME_YES=1 ;; -*) die "tham số lạ: $a" ;; *) want="$a"; explicit=1 ;; esac; done
+    require_installed; host_checks 15 15; take_lock
     local cur; cur="$(st_get version)"
     fetch_bundle "$want"
     local new="$B_VERSION" dg="$B_DIGEST"
+    if [ "$new" != "$cur" ] && is_older "$new" "$cur"; then
+        [ "$explicit" = 1 ] || die "stable ($new) CŨ HƠN bản đang chạy ($cur): không tự hạ cấp. Muốn hạ thật: 'secai upgrade $new' (hoặc 'secai rollback')"
+        say "CẢNH BÁO: HẠ CẤP $cur -> $new theo yêu cầu"; verb="hạ về"
+    fi
     if [ "$new" = "$cur" ]; then
         if release_consistent "$cur"; then say "đang ở bản $cur, không có gì để nâng"; return 0; fi
         say "tệp/pin trong $STACK lệch bản đang ghi ($cur): khôi phục"
@@ -660,7 +733,7 @@ cmd_upgrade() {
         st_set version="$new" bundle_digest="$dg" previous_version="$cur" previous_bundle_digest="$(st_get bundle_digest)" last_failed_upgrade=
         prune_releases "$new" "$cur"
         logline "upgrade $cur -> $new: OK"
-        say "XONG: đã lên $new (bản trước: $cur, quay lại bằng 'secai rollback')"
+        say "XONG: đã $verb $new (bản trước: $cur, quay lại bằng 'secai rollback')"
         return 0
     fi
     say "check.sh all trượt trên $new: TỰ QUAY VỀ $cur"
@@ -686,12 +759,9 @@ cmd_rollback() {
         die "chuẩn bị/preflight của $prev trượt; giữ nguyên $cur"
     fi
     local pdg; pdg="$(cat "$SECAI_HOME/releases/$prev/.bundle-digest" 2>/dev/null || true)"
-    if start_and_check; then
-        st_set version="$prev" bundle_digest="$pdg" previous_version="$cur" previous_bundle_digest="$(st_get bundle_digest)"
-        say "XONG: đã quay về $prev (bản vừa rời: $cur)"; return 0
-    fi
     st_set version="$prev" bundle_digest="$pdg" previous_version="$cur" previous_bundle_digest="$(st_get bundle_digest)"
-    say "đã quay về $prev nhưng check.sh all trượt"; exit 1
+    if start_and_check; then say "XONG: đã quay về $prev (bản vừa rời: $cur)"; return 0; fi
+    say "đã quay về $prev nhưng check.sh all trượt (xem ở trên)"; exit 4
 }
 
 # prune_releases KEEP...: xoá bản phát hành cũ không còn giữ, gỡ image dự án của chúng nếu không bản giữ lại nào dùng.
@@ -707,6 +777,23 @@ prune_releases() {
         done
         rm -rf "$d"
     done
+}
+
+# prune_data KEEP...: xoá các bộ data/<ver> không còn giữ (không phải bản đang dùng/bản trước: 'data rollback' không quay
+# về được nữa) và gói tải dở trong downloads/. Không xoá được thì chỉ cảnh báo.
+prune_data() {
+    local d v k keep cur; cur="$(envget DATA_ROOT)"
+    for d in "$SECAI_HOME"/data/*/; do
+        [ -d "$d" ] || continue
+        d="${d%/}"; v="$(basename "$d")"; keep=0
+        [[ "$v" =~ $DATA_RE ]] || continue   # chỉ các bộ do secai nạp (tên là phiên bản dữ liệu)
+        for k in "$@"; do [ "$k" = "$v" ] && keep=1; done
+        [ "$keep" = 0 ] && [ "$d" != "$cur" ] || continue
+        say "xoá bộ dữ liệu cũ $v ($d)"
+        rm -f "$d/.secai-data-complete" 2>/dev/null || true
+        rm_tree "$d" || say "CẢNH BÁO: không xoá được $d; xoá tay: sudo rm -rf '$d'"
+    done
+    for d in "$SECAI_HOME"/downloads/data-*; do [ ! -e "$d" ] || rm_tree "$d" || true; done
 }
 
 # switch_data DATA_VERSION: đổi DATA_ROOT, up, chờ, check. 0 đạt, 1 trượt.
@@ -732,23 +819,28 @@ cmd_data() {
 
 data_update() {   # data_update SRC_DIR(rỗng = registry) [DATA_VERSION]
     require_installed
-    local src="$1" want="${2:-}" cur
+    local src="$1" want="${2:-}" cur explicit=1
     cur="$(st_get data_version)"
-    [ -n "$want" ] || want="$(man_field "$STACK/secai-stack.json" data_default)"
+    [ -n "$want" ] || { want="$(man_field "$STACK/secai-stack.json" data_default)"; explicit=0; }
     [[ "$want" =~ $DATA_RE ]] || die "phiên bản dữ liệu '$want' không hợp lệ (YYYY.MM.DD)"
+    if [ "$want" != "$cur" ] && [ "$(printf '%s\n%s\n' "$want" "$cur" | sort -V | head -n1)" = "$want" ]; then
+        [ "$explicit" = 1 ] || die "bản dữ liệu mặc định của manifest ($want) CŨ HƠN bộ đang dùng ($cur): không tự hạ. Muốn thật: 'secai data update $want' (hoặc 'secai data rollback')"
+        say "CẢNH BÁO: dữ liệu $want CŨ HƠN bộ đang dùng ($cur), chuyển theo yêu cầu"
+    fi
     if [ "$want" = "$cur" ]; then
         if [ -n "$src" ] && [ "$(data_content "$cur")" != "$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)" ]; then
             die "đang dùng dữ liệu $cur nhưng gói $src có nội dung khác; nạp với phiên bản khác: secai data load $src $cur.2"
         fi
         say "đang dùng dữ liệu $cur"; return 0
     fi
-    data_complete "$want" && host_checks 5 || host_checks 40
+    if data_complete "$want"; then host_checks 5; else host_checks 40 15; fi
     take_lock
     logline "data update $cur -> $want"
     data_prepare "$want" "$src"
     backup_env "data-$cur"
     if switch_data "$want"; then
         st_set data_version="$want" previous_data_version="$cur"
+        prune_data "$want" "$cur"
         logline "data update $cur -> $want: OK"
         say "XONG: dữ liệu $want (bản cũ $cur giữ ở $(data_root "$cur"); quay lại: 'secai data rollback')"
         return 0
@@ -767,17 +859,15 @@ data_rollback() {
     data_complete "$prev" || die "dữ liệu $prev không còn đầy đủ ở $(data_root "$prev")"
     logline "data rollback $cur -> $prev"
     backup_env "data-$cur"
-    if switch_data "$prev"; then
-        st_set data_version="$prev" previous_data_version="$cur"
-        say "XONG: quay về dữ liệu $prev"; return 0
-    fi
+    local ok=0; switch_data "$prev" && ok=1
     st_set data_version="$prev" previous_data_version="$cur"
-    say "đã chuyển về dữ liệu $prev nhưng check.sh all trượt"; exit 1
+    if [ "$ok" = 1 ]; then say "XONG: quay về dữ liệu $prev"; return 0; fi
+    say "đã chuyển về dữ liệu $prev nhưng check.sh all trượt (xem ở trên)"; exit 4
 }
 
 cmd_status() {
     local json=0; [ "${1:-}" = --json ] && json=1
-    require_installed
+    require_stack
     local ids info health port
     ids="$(compose ps -aq 2>/dev/null | tr '\n' ' ')" || ids=""
     info=""
@@ -817,6 +907,7 @@ try: h = json.loads(os.environ["HEALTH"]) if os.environ["HEALTH"] else {}
 except ValueError: h = {}
 sha8 = (man.get("git_sha") or "")[:8]
 out = {
+    "installed": st.get("installed", ""),
     "version": st.get("version", ""), "bundle_digest": st.get("bundle_digest", ""),
     "previous_version": st.get("previous_version", ""), "data_version": st.get("data_version", ""),
     "previous_data_version": st.get("previous_data_version", ""), "data_root": os.environ["DV_ROOT"],
@@ -828,6 +919,7 @@ out = {
 }
 if os.environ["JSON"] == "1":
     print(json.dumps(out, ensure_ascii=False, indent=1)); sys.exit()
+if out["installed"] != "true": print("CÀI CHƯA XONG (install trượt ở bước chạy stack): sửa rồi chạy lại 'secai install'")
 print(f"SecAI {out['version']}  (bundle {out['bundle_digest'][:19]}…)   bản trước: {out['previous_version'] or '-'}")
 print(f"Dữ liệu {out['data_version']}  ({out['data_root']})   bộ trước: {out['previous_data_version'] or '-'}")
 g = out["health_git_sha"]
@@ -841,7 +933,7 @@ if out["last_failed_upgrade"]: print(f"Lần nâng cấp trượt gần nhất: 
 PY
 }
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "${BASH_SOURCE[0]}"; }
 
 main() {
     local cmd="${1:-}"; shift || true
@@ -852,10 +944,10 @@ main() {
         rollback) cmd_rollback ;;
         data) cmd_data "$@" ;;
         status) cmd_status "$@" ;;
-        check) require_installed; run_check ;;
-        logs) require_installed; compose logs --tail "${SECAI_LOG_TAIL:-200}" "$@" ;;
-        up) require_installed; take_lock; up_stack && wait_healthy ;;
-        down) require_installed; take_lock; compose down ;;   # không bao giờ -v
+        check) require_stack; run_check ;;
+        logs) require_stack; compose logs --tail "${SECAI_LOG_TAIL:-200}" "$@" ;;
+        up) require_stack; take_lock; up_stack && wait_healthy ;;
+        down) require_stack; take_lock; compose down ;;   # không bao giờ -v
         version) echo "secai CLI schema $CLI_SCHEMA; registry $REGISTRY; cài: $(st_get version) dữ liệu: $(st_get data_version)" ;;
         -h|--help|help|"") usage ;;
         *) usage >&2; exit 2 ;;

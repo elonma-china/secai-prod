@@ -1020,12 +1020,16 @@ def test_rsync_e_quotes_ssh_key_path_with_spaces(box):
 
 GHCR_VM_TEST = STACK / "acceptance" / "ghcr-vm-test.sh"
 G_REF = "0123456789abcdef0123456789abcdef01234567"
-import tempfile  # noqa: E402
 
-_G_PKG = Path(tempfile.mkdtemp(prefix="ghcr-test-pkg-"))   # gói dữ liệu giả cho ghcrtest (secai-data private, VM không có token)
-(_G_PKG / "SHA256SUMS").write_text("x  y\n")
-G_OK = {"GHCR_TEST_REF": G_REF, "GHCR_TEST_V1": "2026.11.27-0f980c19", "GHCR_TEST_V2": "2026.11.28-1a2b3c4d",
-        "GHCR_TEST_D1": "2026.11.27", "GHCR_TEST_D2": "2026.11.27.2", "GHCR_TEST_DATA_PKG": str(_G_PKG)}
+
+@pytest.fixture
+def g_ok(tmp_path: Path) -> dict[str, str]:
+    """Env hợp lệ cho ghcrtest; gói dữ liệu giả (secai-data private, VM không có token) nằm trong tmp_path của test."""
+    pkg = tmp_path / "ghcr-test-pkg"
+    pkg.mkdir()
+    (pkg / "SHA256SUMS").write_text("x  y\n")
+    return {"GHCR_TEST_REF": G_REF, "GHCR_TEST_V1": "2026.11.27-0f980c19", "GHCR_TEST_V2": "2026.11.28-1a2b3c4d",
+            "GHCR_TEST_D1": "2026.11.27", "GHCR_TEST_D2": "2026.11.27.2", "GHCR_TEST_DATA_PKG": str(pkg)}
 
 
 def no_env_no_pkg(b) -> dict[str, str]:
@@ -1097,9 +1101,9 @@ def ghcr_state(b, **kw) -> None:
     write_state(b, ssh_host="1.2.3.4", ssh_port=2222, **{"mode": "ghcr", "created_at": now, "deadline": now + 3 * 3600, **kw})
 
 
-def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box):
+def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box, g_ok):
     ghcr_state(box)
-    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    r = sh(EVAL, "ghcrtest", b=box, extra=g_ok)
     assert r.returncode == 0, r.stderr
     calls = log(box, "ssh")
     assert len(calls) == 1
@@ -1110,10 +1114,10 @@ def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box):
     assert "collect" in r.stdout
 
 
-def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box):
+def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box, g_ok):
     ghcr_state(box)
     set_mode(box, "ssh_rc", "5")
-    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_REPO": "me/fork.x", "GHCR_TEST_FAILTEST": "0"})
+    r = sh(EVAL, "ghcrtest", b=box, extra={**g_ok, "GHCR_TEST_REPO": "me/fork.x", "GHCR_TEST_FAILTEST": "0"})
     assert r.returncode == 5
     assert "REPO=me/fork.x FAILTEST=0 DATA_DIR=/opt/secai-stack/pkg SECAI_DOCKERHUB_TOKEN_FILE= bash -s" in log(box, "ssh")[0]
 
@@ -1128,34 +1132,34 @@ def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box):
     {"GHCR_TEST_REPO": "noslash"}, {"GHCR_TEST_REPO": "a/b/c"}, {"GHCR_TEST_REPO": "a/b;x"}, {"GHCR_TEST_REPO": "a/b c"},
     {"GHCR_TEST_FAILTEST": "2"}, {"GHCR_TEST_FAILTEST": "yes"},
 ])
-def test_ghcrtest_rejects_bad_inputs_before_ssh(box, bad):
+def test_ghcrtest_rejects_bad_inputs_before_ssh(box, bad, g_ok):
     ghcr_state(box)
-    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, **bad})
+    r = sh(EVAL, "ghcrtest", b=box, extra={**g_ok, **bad})
     assert r.returncode != 0 and log(box, "ssh") == []
     assert "GHCR_TEST_" in r.stderr
 
 
 @pytest.mark.parametrize("mode", [None, "packtest", "full"])
-def test_ghcrtest_requires_ghcr_state(box, mode):
+def test_ghcrtest_requires_ghcr_state(box, mode, g_ok):
     now = int(time.time())
     kw = {} if mode is None else {"mode": mode}
     write_state(box, ssh_host="1.2.3.4", ssh_port=2222, created_at=now, deadline=now + 3600, **kw)
-    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    r = sh(EVAL, "ghcrtest", b=box, extra=g_ok)
     assert r.returncode != 0 and log(box, "ssh") == [] and "ghcr" in r.stderr
 
 
-def test_ghcrtest_refuses_near_deadline(box):
+def test_ghcrtest_refuses_near_deadline(box, g_ok):
     ghcr_state(box, deadline=int(time.time()) + 300)
-    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    r = sh(EVAL, "ghcrtest", b=box, extra=g_ok)
     assert r.returncode != 0 and "deadline" in r.stderr and log(box, "ssh") == []
 
 
-def test_ghcrtest_is_bounded_by_deadline(box):
+def test_ghcrtest_is_bounded_by_deadline(box, g_ok):
     # ssh gia ngu lau: timeout (deadline - 10 phut) phai cat no
     ghcr_state(box, deadline=int(time.time()) + 602)
     (box.tmp / "bin" / "ssh").write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_DIR/ssh.log\"\nexec sleep 30\n")
     t0 = time.time()
-    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    r = sh(EVAL, "ghcrtest", b=box, extra=g_ok)
     assert r.returncode != 0 and time.time() - t0 < 20 and len(log(box, "ssh")) == 1
 
 
@@ -1300,27 +1304,27 @@ def test_remote_run_skip_reasons_follow_real_config(tmp_path, env_lines, tr, poc
 
 
 
-def test_ghcrtest_rsyncs_data_pkg_and_passes_data_dir(box, tmp_path):
+def test_ghcrtest_rsyncs_data_pkg_and_passes_data_dir(box, tmp_path, g_ok):
     ghcr_state(box)
     pkg = tmp_path / "datapkg"; pkg.mkdir()
     (pkg / "SHA256SUMS").write_text("x  y\n")
-    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_DATA_PKG": str(pkg)})
+    r = sh(EVAL, "ghcrtest", b=box, extra={**g_ok, "GHCR_TEST_DATA_PKG": str(pkg)})
     assert r.returncode == 0, r.stderr
     rs = log(box, "rsync")
     assert len(rs) == 1 and f"{pkg}/ root@1.2.3.4:/opt/secai-stack/pkg/" in rs[0] and "--no-links" in rs[0]
     assert "DATA_DIR=/opt/secai-stack/pkg SECAI_DOCKERHUB_TOKEN_FILE= bash -s" in log(box, "ssh")[0]
 
 
-def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path):
+def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path, g_ok):
     ghcr_state(box)
-    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_DATA_PKG": str(tmp_path / "missing")})
+    r = sh(EVAL, "ghcrtest", b=box, extra={**g_ok, "GHCR_TEST_DATA_PKG": str(tmp_path / "missing")})
     assert r.returncode != 0 and log(box, "ssh") == [] and log(box, "rsync") == []
 
 
 
-def test_ghcrtest_requires_data_pkg(box):
+def test_ghcrtest_requires_data_pkg(box, g_ok):
     ghcr_state(box)
-    r = sh(EVAL, "ghcrtest", b=box, extra={k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"})
+    r = sh(EVAL, "ghcrtest", b=box, extra={k: v for k, v in g_ok.items() if k != "GHCR_TEST_DATA_PKG"})
     assert r.returncode != 0 and "GHCR_TEST_RO_TOKEN_FILE" in r.stderr and log(box, "ssh") == []
 
 
@@ -1334,10 +1338,10 @@ def _ro_token(tmp_path, name="dockerhub-ro.token", mode=0o600):
     return p
 
 
-def test_ghcrtest_read_only_token_goes_via_stdin_and_is_removed(box, tmp_path):
+def test_ghcrtest_read_only_token_goes_via_stdin_and_is_removed(box, tmp_path, g_ok):
     ghcr_state(box)
     tok = _ro_token(tmp_path)
-    extra = {k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"}
+    extra = {k: v for k, v in g_ok.items() if k != "GHCR_TEST_DATA_PKG"}
     r = sh(EVAL, "ghcrtest", b=box, extra={**extra, "GHCR_TEST_RO_TOKEN_FILE": str(tok)})
     assert r.returncode == 0, r.stderr
     calls = log(box, "ssh")
@@ -1352,9 +1356,9 @@ def test_ghcrtest_read_only_token_goes_via_stdin_and_is_removed(box, tmp_path):
 
 
 @pytest.mark.parametrize("name,mode", [("dockerhub-rw.token", 0o600), ("dockerhub-ro.token", 0o644)])
-def test_ghcrtest_refuses_write_or_loose_token(box, tmp_path, name, mode):
+def test_ghcrtest_refuses_write_or_loose_token(box, tmp_path, name, mode, g_ok):
     ghcr_state(box)
     tok = _ro_token(tmp_path, name, mode)
-    extra = {k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"}
+    extra = {k: v for k, v in g_ok.items() if k != "GHCR_TEST_DATA_PKG"}
     r = sh(EVAL, "ghcrtest", b=box, extra={**extra, "GHCR_TEST_RO_TOKEN_FILE": str(tok)})
     assert r.returncode != 0 and log(box, "ssh") == []

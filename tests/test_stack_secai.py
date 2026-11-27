@@ -52,7 +52,9 @@ def resolve(ref):
 def fail(msg, rc=1):
     sys.stderr.write("fake docker: " + msg + "\n"); sys.exit(rc)
 cmd = argv[0] if argv else ""
-if cmd == "info": sys.exit(0)
+if cmd == "info":
+    if "--format" in argv and os.path.exists(os.path.join(F, "docker_root")): print(open(os.path.join(F, "docker_root")).read().strip())
+    sys.exit(0)
 if cmd == "compose":
     a = argv[1:]
     if a[:1] == ["version"]: print("Docker Compose version v2.40.3"); sys.exit(0)
@@ -86,6 +88,12 @@ if cmd == "login":
     open(os.path.join(F, "login.stdin"), "a").write(tok)
     cfg = os.environ.get("DOCKER_CONFIG", "")
     open(os.path.join(F, "login.cfg"), "a").write(cfg + "\n")
+    cj = os.path.join(cfg, "config.json") if cfg else ""
+    seed = {"exists": bool(cj) and os.path.exists(cj)}
+    if seed["exists"]:
+        seed["content"] = json.load(open(cj)); seed["mode"] = oct(os.stat(cj).st_mode & 0o777)
+        seed["dir_mode"] = oct(os.stat(cfg).st_mode & 0o777)
+    open(os.path.join(F, "login.seed"), "a").write(json.dumps(seed) + "\n")
     if not cfg or tok != open(os.path.join(F, "valid_token")).read(): fail("unauthorized")
     json.dump({"auths": {"ghcr.io": {"auth": "x"}}}, open(os.path.join(cfg, "config.json"), "w")); sys.exit(0)
 if cmd == "logout":
@@ -207,7 +215,7 @@ class Box:
         imgs = {"GATEWAY_IMAGE": f"{REG}/secai-agent-gateway:{v}", "VM_IMAGE": f"{REG}/secai-pentestcode-vm:{v}", **BASES}
         return {k: {"ref": r, "digest": dg(r)} for k, r in imgs.items()}
 
-    def add_bundle(self, v, manifest_version=None, tag=None):
+    def add_bundle(self, v, manifest_version=None, tag=None, data_default=None, data_digest=None):
         fs = self.tmp / f"bundle-{tag or v}"
         st = fs / "stack"
         shutil.copytree(STACK, st, ignore=shutil.ignore_patterns(".env", "secrets", "tokenizer", "node_modules", "__pycache__",
@@ -215,7 +223,8 @@ class Box:
         write_exec(st / "check.sh", FAKE_CHECK.replace("@FAKE@", str(self.fake)))
         write_exec(st / "restore-data.sh", FAKE_RESTORE.replace("@FAKE@", str(self.fake)))
         man = {"schema": 1, "version": manifest_version or v, "git_sha": v[-8:] * 5, "images": self.pins(v),
-               "data": {"default_version": D1, "image": DATA}}
+               "data": {"default_version": data_default or D1, "image": DATA,
+                        "digest": dg("data" + (data_default or D1)) if data_digest is None else data_digest}}
         (st / "secai-stack.json").write_text(json.dumps(man))
         self.reg[f"{REG}/secai-stack:{tag or v}"] = {"digest": dg("bundle" + (tag or v)), "fs": str(fs)}
         for k, e in self.pins(v).items():
@@ -338,10 +347,17 @@ def test_install_secret_never_in_argv_or_output(box):
 
 def test_children_get_clean_environment(box):
     # biến shell (vd. GATEWAY_IMAGE export sẵn) không được lọt vào compose/check (compose ưu tiên môi trường hơn .env)
-    installed(box)
+    evil = {"GATEWAY_IMAGE": "evil/gw:1", "VM_IMAGE": "evil/vm:1", "QDRANT_IMAGE": "evil/q:1", "DATA_ROOT": "/evil"}
+    r = box.run("install", V1, env=box.install_env(**evil))
+    assert r.returncode == 0, r.stderr
     envs = [json.loads(l) for l in (box.fake / "env.log").read_text().splitlines()]
     for e in envs:
-        assert "LLM_API_KEY" not in e and "GATEWAY_IMAGE" not in e and "SECAI_YES" not in e
+        assert "LLM_API_KEY" not in e and "SECAI_YES" not in e
+        assert not set(evil) & set(e), set(evil) & set(e)
+    up = box.ups()[-1]
+    assert up["GATEWAY_IMAGE"].startswith(f"{REG}/secai-agent-gateway:{V1}@") and up["QDRANT_IMAGE"] != "evil/q:1"
+    assert up["DATA_ROOT"] == str(box.home / "data" / D1)
+    assert not any("evil" in json.dumps(c) for c in box.calls())
 
 
 def test_install_missing_required_non_interactive(box):
@@ -397,6 +413,7 @@ def test_install_check_fail_exit1_but_installed(box):
     box.set("check_fail", V1)
     r = box.run("install", V1, env=box.install_env())
     assert r.returncode == 1 and "secai check" in r.stderr
+    assert "'secai up'" in r.stderr   # sửa .env phải tạo lại container trước khi check lại
     assert box.state()["installed"] == "true"
 
 
@@ -705,7 +722,7 @@ def test_base_images_pulled_with_hub_session_when_token(box):
     for k in ("QDRANT_IMAGE", "NEO4J_IMAGE", "REDIS_IMAGE"):
         e = box.pins(V1)[k]
         assert p[f"{e['ref']}@{e['digest']}"], k              # kéo trong DOCKER_CONFIG tạm đã đăng nhập
-    assert p[f"{DATA}:{D1}"]
+    assert p[f"{DATA}@{dg('data' + D1)}"]
     assert all(not Path(c).exists() for c in p.values() if c)   # mọi DOCKER_CONFIG tạm đã xoá
 
 
@@ -722,7 +739,7 @@ def test_data_repo_override(box):
     box.reg[f"{other}:{D1}"] = dict(box.reg[f"{DATA}:{D1}"]); box.save()
     r = box.run("install", V1, env=box.install_env(SECAI_DATA_REPO=other))
     assert r.returncode == 0, r.stderr
-    assert any(ref == f"{other}:{D1}" for ref, _ in pulls(box))
+    assert any(ref == f"{other}@{dg('data' + D1)}" for ref, _ in pulls(box))   # bản mặc định: theo digest ghim
     assert [c for c in box.calls() if c[0] == "login"][0][2] == "otherns"
 
 
@@ -762,6 +779,175 @@ def test_registry_data_needs_token_before_any_pull(box):
 
 
 def test_temp_docker_config_is_seeded(box):
+    # config.json mồi có "auths" TRƯỚC khi docker login: không có thì docker có thể ghi token vào credential helper hệ thống
     installed(box)
     cfgs = [l for l in (box.fake / "login.cfg").read_text().split() if l]
-    assert cfgs   # thư mục đã xoá sau đó; fake ghi config.json khi login nên chỉ kiểm có login vào thư mục tạm
+    seeds = [json.loads(l) for l in (box.fake / "login.seed").read_text().splitlines()]
+    assert cfgs and len(seeds) == len(cfgs)
+    for s in seeds:
+        assert s["exists"] and "auths" in s["content"] and "credsStore" not in s["content"], s
+        assert s["mode"] == "0o600" and s["dir_mode"] == "0o700", s
+
+
+
+# ───────────── sửa sau review PR #73 ─────────────
+def test_help_prints_whole_header(box):
+    r = box.run("--help")
+    assert r.returncode == 0
+    for needle in ("VERIFY_ALLOWED_TARGETS", "sudo KHOÁ=giá-trị", "down -v", "Mã thoát", "secai up"):
+        assert needle in r.stdout, needle
+    assert "set -euo" not in r.stdout and "CLI_SCHEMA" not in r.stdout
+
+
+def test_default_data_pulled_by_pinned_digest_even_if_tag_repushed(box):
+    # publish.sh ghi data.digest đã kiểm vào manifest; tag Docker Hub bị đẩy lại sang nội dung khác không được lọt
+    pinned = dg("data" + D1)
+    box.reg[f"{DATA}:orig-{D1}"] = dict(box.reg[f"{DATA}:{D1}"])          # nội dung gốc vẫn còn theo digest
+    box.add_data("2026.12.31"); evil = box.reg.pop(f"{DATA}:2026.12.31")
+    box.reg[f"{DATA}:{D1}"] = evil                                          # tag D1 giờ trỏ nội dung khác
+    box.save()
+    r = installed(box)
+    refs = [ref for ref, _ in pulls(box) if "secai-data" in ref]
+    assert refs == [f"{DATA}@{pinned}"], refs
+    marker = json.loads((box.home / "data" / D1 / ".secai-data-complete").read_text())
+    assert marker["digest"] == pinned
+    assert "theo digest" in r.stderr
+
+
+def test_non_default_data_version_pulled_by_tag_with_warning(box):
+    installed(box)
+    r = box.run("data", "update", D2)
+    assert r.returncode == 0, r.stderr
+    assert f"{DATA}:{D2}" in [ref for ref, _ in pulls(box)]
+    assert "không ghim digest" in r.stderr
+
+
+def test_complete_data_from_other_digest_refused(box):
+    installed(box)
+    m = box.home / "data" / D1 / ".secai-data-complete"
+    rec = json.loads(m.read_text()); rec["digest"] = "sha256:" + "e" * 64; m.write_text(json.dumps(rec))
+    st = json.loads((box.home / "state.json").read_text()); st["installed"] = "partial"
+    (box.home / "state.json").write_text(json.dumps(st))
+    r = box.run("install", V1, env=box.install_env())
+    assert r.returncode == 1 and "đẩy lại" in r.stderr
+
+
+def test_failed_install_still_allows_logs_status_down_check(box):
+    box.set("health", "unhealthy")
+    r = box.run("install", V1, env=box.install_env())
+    assert r.returncode == 1 and "chưa healthy" in r.stderr and "secai down" in r.stderr
+    assert box.state()["installed"] == "partial"
+    for args in (["logs", "gateway"], ["status"], ["check"], ["down"]):
+        r = box.run(*args)
+        assert r.returncode == 0, (args, r.stderr)
+    s = json.loads(box.run("status", "--json").stdout)
+    assert s["installed"] == "partial" and s["version"] == V1
+    assert "CHƯA XONG" in box.run("status").stdout
+    assert box.run("upgrade", V2).returncode == 1   # nâng/quay/dữ liệu vẫn cần cài xong
+    # sửa nguyên nhân rồi chạy lại install: hoàn tất
+    (box.fake / "health").unlink()
+    r = box.run("install", V1, env=box.install_env())
+    assert r.returncode == 0, r.stderr
+    assert box.state()["installed"] == "true"
+
+
+def test_interrupted_data_load_is_reset_and_retried(box):
+    root = box.home / "data" / D1
+    (root / "_state" / "qdrant_storage" / "collections" / "cve_kb_hybrid").mkdir(parents=True)
+    (root / "_state" / "qdrant_storage" / "collections" / "cve_kb_hybrid" / "half").write_text("x")
+    (root / "qdrant").mkdir(); (root / "qdrant" / "cve_kb_hybrid.snapshot").write_text("truncated")
+    nd = root / "_state" / "neo4j_data"; nd.mkdir(parents=True); (nd / ".secai-restore-started").write_text("")
+    (nd / "half-store").write_text("x")
+    (root / "exploitdb").mkdir(); (root / "exploitdb" / "keep").write_text("x")   # giải nén nguyên tử: giữ
+    r = installed(box)
+    assert "nạp dở" in r.stderr
+    assert not (root / "_state" / "qdrant_storage" / "collections" / "cve_kb_hybrid" / "half").exists()
+    assert not (root / "qdrant" / "cve_kb_hybrid.snapshot").exists() and not (nd / "half-store").exists()
+    assert (root / "exploitdb" / "keep").exists() and (root / ".secai-data-complete").exists()
+
+
+def test_completed_neo4j_kept_when_only_qdrant_was_interrupted(box):
+    root = box.home / "data" / D1
+    nd = root / "_state" / "neo4j_data"; nd.mkdir(parents=True)
+    for f in (".secai-restore-started", ".secai-restore-complete", "store"):
+        (nd / f).write_text("x")
+    (root / "_state" / "qdrant_storage").mkdir(); (root / "_state" / "qdrant_storage" / "half").write_text("x")
+    installed(box)
+    assert (nd / "store").exists() and not (root / "_state" / "qdrant_storage" / "half").exists()
+
+
+def test_upgrade_without_version_refuses_downgrade(box):
+    installed(box)
+    assert box.run("upgrade", V2).returncode == 0
+    box.reg[f"{REG}/secai-stack:stable"] = dict(box.reg[f"{REG}/secai-stack:{V1}"]); box.save()   # stable vẫn là bản cũ
+    n = len(box.ups())
+    r = box.run("upgrade")
+    assert r.returncode == 1 and "CŨ HƠN" in r.stderr
+    assert box.state()["version"] == V2 and len(box.ups()) == n
+    r = box.run("upgrade", V1)                         # ghi rõ phiên bản: được hạ, báo đúng chữ
+    assert r.returncode == 0, r.stderr
+    assert "HẠ CẤP" in r.stderr and "hạ về" in r.stderr and "đã lên" not in r.stderr
+    assert box.state()["version"] == V1
+
+
+def test_data_update_default_refuses_downgrade(box):
+    installed(box)
+    assert box.run("data", "update", D2).returncode == 0
+    r = box.run("data", "update")                      # mặc định manifest = D1 < D2
+    assert r.returncode == 1 and "CŨ HƠN" in r.stderr and box.state()["data_version"] == D2
+    r = box.run("data", "update", D1)
+    assert r.returncode == 0, r.stderr
+    assert box.state()["data_version"] == D1
+
+
+def test_data_update_prunes_sets_older_than_previous(box):
+    installed(box)
+    D3 = "2026.11.29"; box.add_data(D3); box.save()
+    (box.home / "downloads" / "data-2026.01.01").mkdir(parents=True)   # gói tải dở của lần trượt cũ
+    assert box.run("data", "update", D2).returncode == 0
+    assert (box.home / "data" / D1).is_dir()            # bộ trước: giữ cho data rollback
+    r = box.run("data", "update", D3)
+    assert r.returncode == 0, r.stderr
+    assert not (box.home / "data" / D1).exists() and (box.home / "data" / D2 / ".secai-data-complete").exists()
+    assert (box.home / "data" / D3 / ".secai-data-complete").exists()
+    assert not list((box.home / "downloads").glob("data-*"))
+    assert box.run("data", "rollback").returncode == 0 and box.state()["data_version"] == D2
+
+
+def test_data_update_failure_prunes_nothing(box):
+    installed(box)
+    box.set("check_fail", D2)
+    assert box.run("data", "update", D2).returncode == 3
+    assert (box.home / "data" / D1 / ".secai-data-complete").exists() and (box.home / "data" / D2 / ".secai-data-complete").exists()
+
+
+@pytest.mark.parametrize("same_fs", [True, False])
+def test_docker_root_disk_checked(box, same_fs):
+    droot = box.tmp / "docker-root"; droot.mkdir()
+    if not same_fs:
+        droot = Path("/dev/shm") if Path("/dev/shm").is_dir() and Path("/dev/shm").stat().st_dev != box.tmp.stat().st_dev else None
+        if droot is None:
+            pytest.skip("không có filesystem khác để thử")
+    box.set("docker_root", str(droot))
+    r = box.run("install", V1, env=box.install_env(SECAI_MIN_DOCKER_FREE_GB="999999"))
+    assert r.returncode == 1 and "Docker" in r.stderr and "SECAI_MIN_DOCKER_FREE_GB" in r.stderr
+    assert ("cùng ổ" in r.stderr) == same_fs
+    assert not any(c[0] == "pull" for c in box.calls())
+    r = box.run("install", V1, env=box.install_env(SECAI_MIN_DOCKER_FREE_GB="0"))
+    assert r.returncode == 0, r.stderr
+
+
+def test_rollback_check_failure_exits_4_after_switch(box):
+    installed(box)
+    assert box.run("upgrade", V2).returncode == 0
+    box.set("check_fail", V1)
+    r = box.run("rollback")
+    assert r.returncode == 4 and box.state()["version"] == V1
+
+
+def test_data_rollback_check_failure_exits_4_after_switch(box):
+    installed(box)
+    assert box.run("data", "update", D2).returncode == 0
+    box.set("check_fail", D1)
+    r = box.run("data", "rollback")
+    assert r.returncode == 4 and box.state()["data_version"] == D1

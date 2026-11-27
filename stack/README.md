@@ -3,7 +3,8 @@
 ## Người vận hành: 3 lệnh
 
 Máy đích cần Linux x86_64, Docker có `docker compose`, `curl`, `python3`, chạy bằng root (hoặc user trong nhóm docker),
-RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git. Image và bundle kéo từ GHCR public, không cần đăng nhập;
+RAM từ 32 GB, đĩa trống từ 100 GB (trong đó khoảng 25 GB ở thư mục gốc của Docker, thường `/var/lib/docker`, nơi image và dữ
+liệu kéo về nằm; `secai` kiểm cả hai chỗ) và có internet. Không cần git. Image và bundle kéo từ GHCR public, không cần đăng nhập;
 riêng **dữ liệu nằm ở repo Docker Hub private** (`docker.io/secai1999/secai-data`, ghi sẵn trong bundle) nên cần một token
 Docker Hub chỉ đọc (xem dưới).
 
@@ -33,7 +34,8 @@ model và khoá của LLM, embedding, rerank, cùng dải lab `VERIFY_ALLOWED_TA
 mọi image theo digest, tải và nạp dữ liệu, bật stack rồi chạy `check.sh all`. Mọi thứ nằm trong `/opt/secai` (đổi bằng
 `SECAI_HOME`); cấu hình ở `/opt/secai/stack/.env` (0600). Giá trị không được chứa khoảng trắng, `$`, nháy, `\` hay `` ` ``.
 
-Cài không hỏi (sudo xoá môi trường, nên làm trong shell root): `sudo -i`, rồi `read -rs LLM_API_KEY` (gõ ẩn) cho từng khoá,
+Cài không hỏi (sudo xoá môi trường, nên làm trong shell root): `sudo -s` (giữ thư mục hiện tại, nơi có `./secai`; nếu dùng
+`sudo -i` thì shell chuyển về `/root`, phải `cd` lại), rồi `read -rs LLM_API_KEY` (gõ ẩn) cho từng khoá,
 `export LLM_API_KEY EMBEDDING_API_KEY RERANKER_API_KEY LLM_BASE_URL=... LLM_MODEL=...` (đủ các biến bắt buộc), sau đó
 `SECAI_DOCKERHUB_TOKEN_FILE=/root/dockerhub-read.token ./secai install --yes`. Từ shell user thường thì dùng
 `sudo --preserve-env=LLM_BASE_URL,LLM_MODEL,LLM_API_KEY,...` (liệt kê tường minh, không dùng `sudo -E`).
@@ -41,15 +43,19 @@ Cài không hỏi (sudo xoá môi trường, nên làm trong shell root): `sudo 
 | Lệnh | Việc |
 |---|---|
 | `sudo ./secai status` | bản đang chạy, bộ dữ liệu, trạng thái service, `git_sha` của gateway, image có đúng digest trong manifest không |
-| `sudo ./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy |
+| `sudo ./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy. Stable cũ hơn bản đang chạy thì từ chối (không tự hạ cấp); muốn hạ thì ghi rõ phiên bản |
 | `sudo ./secai rollback` | quay về bản liền trước |
-| `sudo ./secai data update [NGÀY]` | kéo bộ dữ liệu mới (cần token), nạp bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `sudo ./secai data rollback` |
+| `sudo ./secai data update [NGÀY]` | kéo bộ dữ liệu mới (cần token), nạp bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ liền trước vẫn giữ (`sudo ./secai data rollback`), các bộ cũ hơn được xoá sau khi chuyển đạt. Bản mặc định của manifest được kéo theo digest người phát hành đã ghi (`data.digest`), không theo tag. Lần nạp trước bị ngắt (SSH rớt, Ctrl-C) thì chạy lại là được: phần Qdrant/Neo4j dở được xoá và nạp lại |
 | `sudo ./secai data load <thư mục> [NGÀY]` | như `data update` nhưng lấy gói từ thư mục đã chép sẵn (không cần token) |
-| `sudo ./secai check` | chạy lại `check.sh all` (sau khi sửa `.env`) |
-| `sudo ./secai logs [service]`, `sudo ./secai up`, `sudo ./secai down` | xem log, bật lại, dừng (không bao giờ xoá volume) |
+| `sudo ./secai check` | chạy lại `check.sh all`. Sau khi sửa `.env` phải `sudo ./secai up` trước (container gateway chỉ nhận `.env` mới khi được tạo lại) |
+| `sudo ./secai logs [service]`, `sudo ./secai up`, `sudo ./secai down` | xem log, bật lại / áp dụng `.env` mới, dừng (không bao giờ xoá volume). Dùng được cả khi `install` trượt ở bước bật stack (cổng trùng, thiếu RAM): xem log, `down`, sửa rồi chạy lại `install` |
 
 Mã thoát của `upgrade` và `data update`: 0 đạt; 1 lỗi trước khi chuyển (không có gì thay đổi); 3 check trượt và đã tự quay về;
-4 đã quay về nhưng check vẫn trượt (thường do endpoint model, xem `./secai check`).
+4 đã quay về nhưng check vẫn trượt (thường do endpoint model: sửa `.env`, rồi `./secai up && ./secai check`). `rollback` và
+`data rollback`: 0 đạt; 1 lỗi trước khi chuyển; 4 đã chuyển về bản trước nhưng check trượt.
+
+Bundle mặc định lấy theo tag `stable` trên GHCR. Muốn ghim chắc chắn một bản đã kiểm: cài/nâng theo phiên bản cụ thể
+(`install 2026.11.28-abcd1234`) và so `bundle` trong `secai status` với digest người phát hành công bố.
 
 Bộ phát hành gồm core (gateway, Qdrant, Neo4j, Redis, Elasticsearch) và profile `exploit` (2 container VM). Model (LLM,
 embedding, rerank) là endpoint ngoài. Profile translation/report/review vẫn có trong compose nhưng không thuộc bộ phát hành,
@@ -69,7 +75,7 @@ Chỉ chạy trên máy dev có repo, Docker và `gh` đã đăng nhập (quyề
 
 ```sh
 stack/publish.sh publish-data [--version 2026.11.27]     # pack.sh data, quét secret toàn bộ gói, push $SECAI_DATA_REPO:<ngày>
-stack/publish.sh prune-data --keep 3 [--yes]             # giữ tối đa 3 bản dữ liệu (Docker Hub có thể bóp băng thông khi dùng nhiều)
+stack/publish.sh prune-data --keep 3 [--protect NGÀY] [--yes]   # XOÁ tag dữ liệu cũ trên Docker Hub (không hoàn tác), giữ 3 bản mới nhất + bản stable dùng
 stack/publish.sh publish [--ref origin/main] [--stable]  # gate, build, manifest, bundle, push bản YYYY.MM.DD-<sha8>
 stack/publish.sh promote 2026.11.27-abcd1234             # dời tag stable (bản người vận hành cài mặc định)
 stack/publish.sh publish --dry-run                       # chạy hết trừ login/push, in manifest
@@ -83,15 +89,19 @@ stack/publish.sh publish --dry-run                       # chạy hết trừ lo
   đọc lại ẩn danh từ GHCR (chứng minh máy đích kéo được) và phải bằng `.Id` cục bộ.
 - **Quét secret** (`lib/secret_scan.py`, chỉ in tên luật + vị trí, không bao giờ in giá trị), hai tầng:
   - Luôn chặn ở mọi nơi: token `ghp_`/`gho_`/`github_pat_`, `hf_`, tệp `.env`, và **secret thật của máy dev** (so khớp chính
-    xác trong bộ nhớ với: `gh auth token`, các khoá/mật khẩu trong `.env` của `secai-docker` và checkout chính, `stack/.env`,
-    compose prod, `run_sync.sh` của CVE-DB, `environment` trong hồ sơ `~/secai-releases/*/*.json`, khoá Vast và token HF; bỏ
-    giá trị dưới 12 ký tự và giá trị hiển nhiên). Khớp secret thật ở bất kỳ đâu: dừng với mã 6, báo người phụ trách.
+    xác trong bộ nhớ với: `gh auth token`, các khoá/mật khẩu trong `.env` và `.env.*` (`.env.pentest`, `.env.bak*`...; trừ
+    `.example`/`.sample`/`.template`/`.dist`) của `secai-docker`, checkout chính và worktree, `stack/.env`, compose prod,
+    `run_sync.sh` của CVE-DB, `~/.config/*/*.env` (secai, secai-mlops...), `~/.config/secai/*.token` và tệp token Docker Hub,
+    `environment` trong hồ sơ `~/secai-releases/*/*.json`, `~/.docker/config.json`, khoá `~/.ssh/id_*`, khoá Vast, token HF,
+    và mật khẩu Neo4j mà `publish-data` dùng để xuất). Bỏ giá trị dưới 6 ký tự và giá trị hiển nhiên/giữ chỗ; giá trị dưới
+    12 ký tự chỉ khớp khi đứng thành token riêng (không dính chữ/số hai bên). Khớp secret thật ở bất kỳ đâu: dừng với mã 6,
+    báo người phụ trách; nếu đó là mật khẩu yếu trùng nội dung corpus công khai thì đổi mật khẩu, không nới luật.
   - Luật mềm (gán `password`/`api_key`, private key, AKIA, `sk-`): chặn ở mọi nơi, trừ các cây corpus công khai cố định trong
     mã (`DATA_CORPUS`: exploitdb, poc-sources, poc/store, catalog.db, node_modules của exploitdb-mcp-server, payload và snapshot
     Qdrant `cve_kb_hybrid`), nơi chúng chỉ được đếm theo luật và theo cây vào hồ sơ phát hành `data-release.json`.
 - **Dữ liệu**: từ chối trong 03:00-05:00 và khi còn dưới 45 GB đĩa. Quét mọi tệp của gói, kể cả bên trong `.tar.zst`, tar lồng
   nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc (`--from-pkg` thì bắt buộc `--qdrant-url`, số điểm phải khớp
-  MANIFEST). Mỗi nhóm COPY là một layer dưới 9,5 GB. Registry từ chối vì quota/billing thì dừng (mã 7), không lách. Sau mỗi
+  MANIFEST); không loại gì khỏi quét (kể cả `.git`), vì mọi thứ trong gói đều vào image. Mỗi nhóm COPY là một layer dưới 9,5 GB. Registry từ chối vì quota/billing thì dừng (mã 7), không lách. Sau mỗi
   lần push, quá 3 tag dữ liệu thì cảnh báo; dọn bằng `prune-data` (đừng xoá bản mà bundle `stable` đang trỏ tới).
 - Chưa có token Docker Hub: `publish --data-version YYYY.MM.DD` vẫn phát hành image, manifest ghi bản dữ liệu mặc định không kèm
   digest (có cảnh báo).
@@ -129,7 +139,7 @@ Làm sau khi gói đã ổn định, là một việc riêng:
 | Đường dẫn | Việc |
 |---|---|
 | `secai` | CLI người vận hành (tải bằng curl): install/status/upgrade/rollback/data update, tự rollback khi check trượt |
-| `publish.sh` | Người phát hành: gate, build, manifest, bundle, `publish-data`, `promote`; push image khi package public, dữ liệu khi package private |
+| `publish.sh` | Người phát hành: gate, build, manifest, bundle, `publish-data`, `prune-data`, `promote`; push image GHCR khi package public, dữ liệu lên repo Docker Hub khi repo private |
 | `compose.yml` | Toàn bộ service, mạng, volume. Không `container_name`, không `:latest`, không docker.sock. Image nền đọc `QDRANT_IMAGE`, `NEO4J_IMAGE`, `REDIS_IMAGE`, `ES_IMAGE` (`secai` ghim digest) |
 | `.env.example` | Mẫu cấu hình, mỗi biến một chú thích. `.env` thật (0600) và `secrets/` bị gitignore |
 | `bootstrap.sh` | `init` tạo `.env` và sinh secret; `preflight` kiểm `.env`, đường dẫn, quyền, máy chủ |
@@ -138,7 +148,7 @@ Làm sau khi gói đã ổn định, là một việc riêng:
 | `check.sh` | `env`, `config`, `models`, `health`, `all`: kiểm trước và sau `up` |
 | `eval-vast.sh`, `destroy-eval.sh` | Chạy thử gói trên một máy Vast thuê rẻ rồi huỷ đúng ID đã ghi. Chỉ cho người vận hành, cần ngân sách do chủ dự án duyệt |
 | `images/` | Dockerfile dựng trên máy đích: `pentestcode-vm`, `converter`, `review-ui`, `tunnel` |
-| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`), `secret_scan.py` (quét secret trước khi push), `registry.py` (đọc digest/tag ẩn danh) |
+| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`), `secret_scan.py` (quét secret trước khi push), `registry.py` (đọc digest/tag qua Registry API ẩn danh hoặc bằng token; Docker Hub API bằng token; xoá tag cho `prune-data`) |
 | `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả; `stubs/model_stub.py` (LLM/embedding/rerank giả, chỉ để test), `ghcr-vm-test.sh` (chạy đúng luồng người vận hành trên VM thuê; `eval-vast.sh` với `EVAL_MODE=ghcr` rồi `ghcrtest`) |
 
 ## Dựng tay trên máy mới (5 bước, khi không dùng `secai`)

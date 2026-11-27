@@ -469,8 +469,21 @@ def test_qdrant_http_error_exit_2(qdrant: str) -> None:
 
 
 # ───────────── chính sách gói dữ liệu (--policy data) và tầng secret thật (--known-secrets) ─────────────
-sys.path.insert(0, str(Path(SCRIPT).parent))
-import secret_scan as ss  # noqa: E402
+def _load_scanner():
+    """Nạp stack/lib/secret_scan.py không ghi .pyc vào cây nguồn (stack/lib/__pycache__)."""
+    import importlib.util
+    old = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location("secret_scan_under_test", SCRIPT)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = old
+    return mod
+
+
+ss = _load_scanner()
 
 
 def test_data_corpus_is_fixed_explicit_and_narrow() -> None:
@@ -556,8 +569,8 @@ def test_policy_data_hard_rules_still_block_inside_corpus(tmp_path: Path) -> Non
 
 def _sources(tmp_path: Path, secret: str) -> list[str]:
     write(tmp_path / "prod.env", f"export ADMIN_API_KEY='{secret}'\nQDRANT_COLLECTION=cve_kb_hybrid_long\n"
-          f"SHORT_TOKEN=abc123\nDB_URL=postgres://u:{secret}X@db:5432/x\nPLAIN_URL=http://example.org/very/long/path\n"
-          "FLAG_PASSWORD=true\n")
+          f"SHORT_TOKEN=abc12\nDB_URL=postgres://u:{secret}X@db:5432/x\nPLAIN_URL=http://example.org/very/long/path\n"
+          "FLAG_PASSWORD=true\nQWEN_API_KEY=not-needed\nFILLER_SECRET=xxxxxxxx\nNEO4J_PASSWORD=Qz9mPw4kL\n")
     write(tmp_path / "docker-compose.yml", f"services:\n  neo4j:\n    environment:\n      NEO4J_AUTH: neo4j/${{NEO4J_PASSWORD:-{secret}N}}\n"
           f"      OTHER_SECRET: '{secret}S'\n")
     write(tmp_path / "run_sync.sh", f"#!/bin/sh\nexport NVD_API_KEY=\"{secret}V\"\ncurl -H 'apiKey: {secret}H' x\n")
@@ -572,10 +585,13 @@ def test_known_secret_sources_parsed_with_filters(tmp_path: Path) -> None:
     specs = _sources(tmp_path, secret)
     got = {b.decode(): lab for b, lab in ss.load_known(specs, err=io.StringIO())}
     want = {secret, f"postgres://u:{secret}X@db:5432/x", secret + "X", secret + "N", secret + "S", secret + "V", secret + "H",
-            secret + "J"}
+            secret + "J", "Qz9mPw4kL"}
     assert set(got) == want
-    # không lấy: tên khoá không phải secret, < 12 ký tự, giá trị hiển nhiên, URL không credential
-    assert "cve_kb_hybrid_long" not in got and "abc123" not in got and "long-model-name-x" not in got
+    # không lấy: tên khoá không phải secret, < 6 ký tự, giá trị hiển nhiên/giữ chỗ, URL không credential
+    assert "cve_kb_hybrid_long" not in got and "abc12" not in got and "long-model-name-x" not in got
+    assert "not-needed" not in got and "xxxxxxxx" not in got
+    # mật khẩu ngắn (9 ký tự) từ nguồn secret đã biết vẫn được nạp (review PR #73: trước đây bị bỏ vì < 12)
+    assert got["Qz9mPw4kL"].endswith("prod.env#NEO4J_PASSWORD")
     assert got[secret].endswith("prod.env#ADMIN_API_KEY")
     assert got[secret + "J"] == "json:r1/p.json#REWARD_SERVICE_TOKEN"
 
@@ -652,6 +668,14 @@ def test_secret_name_segments() -> None:
     assert ss.secret_candidates("/app/translation-tokenizer/tokenizer.json") == []
 
 
+def _tracked_stack_copy(tmp_path: Path) -> Path:
+    """Bản sao stack/ bỏ đúng những gì stack/.gitignore bỏ (.env, secrets/, node_modules... chỉ có trên máy dev)."""
+    dst = tmp_path / "stack-copy" / "stack"
+    shutil.copytree(Path(SCRIPT).parents[1], dst, ignore=shutil.ignore_patterns(
+        ".env", "secrets", "tokenizer", "node_modules", "test-results", "playwright-report", "__pycache__"))
+    return dst
+
+
 def test_real_stack_scans_clean_with_translation_profile_style_sources(tmp_path: Path) -> None:
     # Hồ sơ release chứa tên TOKENIZER + băm + đường dẫn y như stack/compose.yml: không được bị coi là secret thật.
     comp = (Path(SCRIPT).parents[1] / "compose.yml").read_text()
@@ -664,7 +688,7 @@ def test_real_stack_scans_clean_with_translation_profile_style_sources(tmp_path:
                                                                          "Config": {"Env": [f"DOCKER_ENV_TOKEN={MARK}envList9"]}}))
     got = {lab for _, lab in ss.load_known([f"json:{tmp_path / 'rel'}/*/*.json"], err=io.StringIO())}
     assert got == {"json:r/translation-release.json#REAL_API_KEY", "json:r/translation-release.json#DOCKER_ENV_TOKEN"}
-    p = run("--known-secrets", f"json:{tmp_path / 'rel'}/*/*.json", str(Path(SCRIPT).parents[1]))
+    p = run("--known-secrets", f"json:{tmp_path / 'rel'}/*/*.json", str(_tracked_stack_copy(tmp_path)))
     assert p.returncode == 0, p.stdout + p.stderr
 
 
@@ -690,7 +714,10 @@ def test_data_after_tar_eof_is_scanned(tmp_path: Path) -> None:
     p = run(str(tmp_path / "cat.tar"))
     assert p.returncode == 1 and findings(p.stdout)[0][1].startswith("cat.tar!<sau-EOF-tar>")
     p = run(str(tmp_path / "tail.tar"))
-    assert p.returncode == 1 and findings(p.stdout) == [("hf-token", "tail.tar!<sau-EOF-tar>:2")] or findings(p.stdout)[0][0] == "hf-token"
+    assert p.returncode == 1, p.stderr
+    # phần sau EOF còn khối NUL đệm của tar nên được coi là nhị phân: vị trí theo @offset, không theo dòng
+    f = findings(p.stdout)
+    assert [r for r, _ in f] == ["hf-token"] and f[0][1].startswith("tail.tar!<sau-EOF-tar>@"), f
 
 
 def test_summary_write_failure_keeps_exit_3(tmp_path: Path) -> None:
@@ -698,3 +725,54 @@ def test_summary_write_failure_keeps_exit_3(tmp_path: Path) -> None:
     write(tmp_path / "f.txt", f"x {MARK}zzzzzz\n")
     p = run("--known-secrets", f"env:{tmp_path / 'k.env'}", "--summary-json", str(tmp_path / "nodir" / "s.json"), str(tmp_path / "f.txt"))
     assert p.returncode == 3
+
+
+# ───────────── sửa sau review PR #73 ─────────────
+@pytest.mark.parametrize("line", [
+    "NEO4J_PASSWORD=Password@2024", 'db_password = "passwd-Z9x!kQ2"', 'password = "Password#1"', "PASSWORD=self.password.x9Q!",
+    "API_KEY=api_key-9f8e7d", "password=password123", "password=hunter2xyz"])
+def test_literal_starting_with_keyword_is_still_a_literal(tmp_path: Path, line: str) -> None:
+    # `\b` sau từ khoá từng coi `Password@2024`, `passwd-...` là tham chiếu biến: phải là literal (luật mềm vẫn bắt)
+    write(tmp_path / "a.txt", line + "\n")
+    p = run(str(tmp_path / "a.txt"))
+    assert p.returncode == 1 and [r for r, _ in findings(p.stdout)] in (["password-assign"], ["api-key-assign"]), line
+
+
+@pytest.mark.parametrize("line", [
+    "self.password = password", "api_key=args.api_key", 'password = "password"', "f(password=password, x=1)",
+    "API_KEY=api_key", "kw = dict(password=password)", "x(api_key=api_key)", "password=self.password;"])
+def test_reference_ending_the_value_is_not_a_literal(tmp_path: Path, line: str) -> None:
+    write(tmp_path / "a.txt", line + "\n")
+    p = run(str(tmp_path / "a.txt"))
+    assert p.returncode == 0, (line, p.stdout)
+
+
+@needs_zstd
+def test_short_known_secret_matches_as_token_even_in_corpus(tmp_path: Path) -> None:
+    # mật khẩu Neo4j 9 ký tự lấy từ .env#NEO4J_PASSWORD nằm trong poc/store (corpus): phải chặn với mã 3
+    pw = "Qz9mPw4kL"
+    write(tmp_path / "prod.env", f"NEO4J_PASSWORD={pw}\n")
+    (tmp_path / "pkg").mkdir()
+    pkg = _pkg(tmp_path, {"poc": {"poc/store/run1/log.txt": f"connect bolt://neo4j:{pw}@neo4j:7687\n".encode(),
+                                  "poc/store/run2/env.txt": f"NEO4J_AUTH=neo4j/{pw}\n".encode()}})
+    p = run("--policy", "data", "--known-secrets", f"env:{tmp_path / 'prod.env'}", str(pkg))
+    assert p.returncode == 3, p.stdout + p.stderr
+    rows = sorted((r[2], r[3].rsplit("#", 1)[-1]) for r in (l.split("\t") for l in p.stdout.splitlines()) if r[1] == "known-secret")
+    assert rows == [("poc.tar.zst!poc/store/run1/log.txt:1", "NEO4J_PASSWORD"), ("poc.tar.zst!poc/store/run2/env.txt:1", "NEO4J_PASSWORD")]
+    assert pw not in p.stdout + p.stderr
+
+
+def test_short_known_secret_inside_longer_token_does_not_match(tmp_path: Path) -> None:
+    pw = "Qz9mPw4kL"
+    write(tmp_path / "k.env", f"NEO4J_PASSWORD={pw}\n")
+    write(tmp_path / "noise.txt", f"x{pw} {pw}9 a{pw}b\n")                  # dính chữ/số hai bên: chuỗi ngẫu nhiên khác
+    write(tmp_path / "hit.txt", "y" * 9000 + f'\n"{pw}"\n' + "z" * 9000 + f"\n{pw}")   # đứng riêng, kể cả cuối tệp
+    p = run("--known-secrets", f"env:{tmp_path / 'k.env'}", str(tmp_path / "noise.txt"))
+    assert p.returncode == 0, p.stdout
+    p = run("--known-secrets", f"env:{tmp_path / 'k.env'}", str(tmp_path / "hit.txt"), env={**os.environ, "SECRET_SCAN_CHUNK": "8192"})
+    assert p.returncode == 3 and [loc for _, loc in findings(p.stdout)] == ["hit.txt:2", "hit.txt:4"], p.stdout
+    # giá trị dài (>= 12) vẫn khớp cả khi dính chữ hai bên như trước
+    long = MARK + "Sec7zz"
+    write(tmp_path / "k2.env", f"A_API_KEY={long}\n")
+    write(tmp_path / "glued.txt", f"x{long}y\n")
+    assert run("--known-secrets", f"env:{tmp_path / 'k2.env'}", str(tmp_path / "glued.txt")).returncode == 3

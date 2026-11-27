@@ -82,7 +82,14 @@ if c == "cp":
 if c in ("rm", "logs"): sys.exit(0)
 if c == "login":
     open(os.path.join(F, "login.stdin"), "a").write(sys.stdin.read() + "\n")
-    open(os.path.join(F, "login.cfg"), "a").write(os.environ.get("DOCKER_CONFIG", "") + "\n"); sys.exit(0)
+    cfg = os.environ.get("DOCKER_CONFIG", "")
+    cj = os.path.join(cfg, "config.json") if cfg else ""
+    seed = {"exists": bool(cj) and os.path.exists(cj)}
+    if seed["exists"]:
+        seed["content"] = json.load(open(cj)); seed["mode"] = oct(os.stat(cj).st_mode & 0o777)
+        seed["dir_mode"] = oct(os.stat(cfg).st_mode & 0o777)
+    open(os.path.join(F, "login.seed"), "a").write(json.dumps(seed) + "\n")
+    open(os.path.join(F, "login.cfg"), "a").write(cfg + "\n"); sys.exit(0)
 if c == "logout": sys.exit(0)
 def by_digest(ref):
     d = ref.split("@", 1)[1]
@@ -147,11 +154,11 @@ if cmd == "hub-tags":
     print("\n".join(hub["tags"] + [r.split(":")[-1] for r in remote if r.startswith("docker.io/")])); sys.exit(0)
 if cmd == "hub-delete-tag":
     open(os.path.join(F, "deleted.log"), "a").write(args[2] + "\n"); sys.exit(0)
-if cmd == "tags": sys.exit(2)
 if os.path.exists(os.path.join(F, "reg_error")): sys.exit(2)
 hide = st("reg_hide.json", {})   # ref -> "missing" | digest khác (registry không thấy / trả sai sau push)
 if ref in hide:
     if hide[ref] == "missing": sys.exit(3)
+    if hide[ref] == "error": sys.exit(2)
     print(hide[ref]); sys.exit(0)
 if ref in remote: print(remote[ref]); sys.exit(0)
 if ref.startswith("docker.io/") and ref.split(":")[-1] in hub["tags"]:
@@ -240,6 +247,7 @@ class Box:
              "SECAI_DOCKER_DIR": str(self.dockerdir), "SECAI_DATA_ROOT": str(self.tmp / "data"),
              "SECAI_REGISTRY_HELPER": str(self.tmp / "registry-fake"), "SECAI_SEED_BLOB": str(self.tmp / "no-seed.py"),
              "PUBLISH_KNOWN_SECRETS": f"env:{self.tmp / 'ks.env'}", "PUBLISH_NO_FETCH": "1", "LANG": "C.UTF-8",
+             "PUBLISH_NOW": "2026-11-28 12:00:00",
              "SECAI_DATA_REPO": DATA, "SECAI_DOCKERHUB_TOKEN_FILE": str(self.hubtok)}
         e.update(kw)
         return e
@@ -257,8 +265,7 @@ class Box:
 
     @property
     def version(self):
-        import datetime
-        return datetime.date.today().strftime("%Y.%m.%d") + "-" + self.sha[:8]
+        return "2026.11.28-" + self.sha[:8]   # PUBLISH_NOW cố định: không phụ thuộc ngày giờ chạy test
 
     def set(self, name, text="1"):
         (self.fake / name).write_text(text)
@@ -432,15 +439,16 @@ def _tar(path, files):
             ti = tarfile.TarInfo(name); ti.size = len(data); t.addfile(ti, io.BytesIO(data))
 
 
-def make_pkg(d, secret=False, extra=None):
-    """Gói dữ liệu nhỏ đúng định dạng thật: tar.zst cho các cây, snapshot Qdrant là tar, neo4j CSV."""
+def make_pkg(d, secret=False, extra=None, members=None):
+    """Gói dữ liệu nhỏ đúng định dạng thật: tar.zst cho các cây, snapshot Qdrant là tar, neo4j CSV.
+    members: {cây: {tên member: bytes}} thêm vào tarball của cây đó."""
     (d / "qdrant").mkdir(parents=True)
     (d / "neo4j").mkdir()
     _tar(d / "qdrant" / "cve_kb_hybrid.snapshot", {"0/segments/a.bin": b"\x00payload CVE-2021-44228"})
     (d / "neo4j" / "counts.json").write_text("{}")
     for n in ("exploitdb", "poc", "poc-sources", "exploitdb-mcp-server"):
         body = b"print('hi')\n" + (b"password=hunter2-real\n" if secret and n == "poc-sources" else b"") + (extra or {}).get(n, b"")
-        _tar(d / f"{n}.tar", {f"{n}/x.py": body})
+        _tar(d / f"{n}.tar", {f"{n}/x.py": body, **(members or {}).get(n, {})})
         subprocess.run(["zstd", "-q", "--rm", str(d / f"{n}.tar"), "-o", str(d / f"{n}.tar.zst")], check=True)
     (d / "MANIFEST.md").write_text("# SecAI data package\n\n- qdrant collection: cve_kb_hybrid (2 points)\n")
     files = sorted(str(p.relative_to(d)) for p in d.rglob("*") if p.is_file())
@@ -565,8 +573,13 @@ def test_publish_data_rejects_existing_and_bad_version(box, qurl):
 
 def test_publish_data_requires_neo4j_password_when_packing(box):
     r = box.run("publish-data", "--version", "2026.11.28")
-    assert r.returncode == 1 and ("NEO4J_PASSWORD" in r.stderr or "03:00-05:00" in r.stderr)
+    assert r.returncode == 1 and "NEO4J_PASSWORD" in r.stderr and "03:00-05:00" not in r.stderr
     assert not box.pushes()
+
+
+def test_publish_data_refuses_autoscan_window(box):
+    r = box.run("publish-data", "--version", "2026.11.28", PUBLISH_NOW="2026-11-28 03:30:00", NEO4J_PASSWORD="x" * 12)
+    assert r.returncode == 1 and "03:00-05:00" in r.stderr and not box.pushes()
 
 
 def test_promote(box):
@@ -609,9 +622,7 @@ def test_seed_blob_once_per_digest_then_stops(box):
     seed = box.tmp / "seed.py"
     seed.write_text("import sys\nopen(sys.argv[0] + '.calls', 'a').write(' '.join(sys.argv[1:]) + '\\n')\n")
     box.set("push_fail", "secai-agent-gateway")
-    r = box.run("publish", SECAI_SEED_BLOB=str(seed)) if False else subprocess.run(
-        ["bash", str(PUBLISH), "publish"], text=True, capture_output=True, env=box.env(SECAI_SEED_BLOB=str(seed)),
-        stdin=subprocess.DEVNULL, timeout=300)
+    r = box.run("publish", SECAI_SEED_BLOB=str(seed))
     assert r.returncode == 1
     calls = (box.tmp / "seed.py.calls").read_text().splitlines()
     assert calls == [f"sha256:{'e' * 64} library/python elonma-china/secai-agent-gateway"]
@@ -726,3 +737,90 @@ def test_publish_data_records_registry_digest(box, qurl):
     rec = json.loads((box.work / "data-2026.11.28" / "data-release.json").read_text())
     remote = json.loads((box.fake / "remote.json").read_text())
     assert rec["registry_digest"] == remote[f"{DATA}:2026.11.28"]
+
+
+
+# ───────────── sửa sau review PR #73 ─────────────
+def test_temp_docker_config_is_seeded_before_login(box, qurl):
+    # config.json mồi có "auths": thiếu nó docker có thể ghi token vào credential helper hệ thống (còn lại sau khi xoá thư mục tạm)
+    assert box.run("publish").returncode == 0
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    assert box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl).returncode == 0
+    seeds = [json.loads(l) for l in (box.fake / "login.seed").read_text().splitlines()]
+    assert len(seeds) >= 2
+    for s in seeds:
+        assert s["exists"] and "auths" in s["content"] and "credsStore" not in s["content"], s
+        assert s["mode"] == "0o600" and s["dir_mode"] == "0o700", s
+
+
+@pytest.mark.parametrize("how", ["env", "file"])
+def test_publish_data_neo4j_password_is_a_known_secret(box, qurl, how):
+    # mật khẩu Neo4j nguồn (ngắn, 9 ký tự) lọt vào poc/store của gói => mã 6, dù poc/store là corpus và luật chỉ đếm
+    pw = "Qz9mPw4kL"
+    pkg = box.tmp / "pkg"; make_pkg(pkg, members={"poc": {"poc/store/run1/env.txt": f"NEO4J_AUTH=neo4j/{pw}\n".encode()}})
+    kw = {"NEO4J_PASSWORD": pw}
+    args = ["publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl]
+    if how == "file":
+        f = box.tmp / "neo4j.pw"; f.write_text(pw + "\n"); f.chmod(0o600)
+        args += ["--neo4j-password-file", str(f)]; kw = {}
+    r = box.run(*args, **kw)
+    assert r.returncode == 6, r.stderr
+    assert "poc.tar.zst!poc/store/run1/env.txt:1" in r.stderr and pw not in r.stdout + r.stderr
+    assert not box.pushes()
+    assert not list(box.work.rglob(".neo4j-password"))   # tệp tạm chứa mật khẩu đã xoá
+    for f in box.work.rglob("*"):
+        if f.is_file():
+            assert pw not in f.read_text(errors="replace"), f
+
+
+def test_publish_data_scans_git_dirs_inside_package(box, qurl):
+    # gói cũ/ghép tay có .git/config chứa URL kèm token: được COPY vào image nên phải được quét, không --exclude .git
+    tok = "gh" + "p_" + "Z" * 36
+    pkg = box.tmp / "pkg"
+    make_pkg(pkg, members={"exploitdb-mcp-server": {"exploitdb-mcp-server/.git/config":
+                                                    f"[remote]\n\turl = https://u:{tok}@github.com/x/y\n".encode()}})
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
+    assert r.returncode == 1 and "github-token\texploitdb-mcp-server.tar.zst!exploitdb-mcp-server/.git/config:2" in r.stderr
+    assert tok not in r.stdout + r.stderr and not box.pushes()
+
+
+def test_default_known_sources_include_env_variants_and_config_envs(box, qurl):
+    # không đặt PUBLISH_KNOWN_SECRETS: danh sách mặc định phải có .env.pentest, .env.bak*, ~/.config/*/*.env; bỏ .env.example
+    home = box.tmp / "home"
+    (home / "Downloads" / "CVE-DB").mkdir(parents=True)
+    (home / "Downloads" / "CVE-DB" / "run_sync.sh").write_text("#!/bin/sh\n")
+    (box.dockerdir / "docker-compose.yml").write_text("services: {}\n")
+    (box.repo / ".env").write_text("X=1\n")
+    pentest = "pentest-" + "AdminKey7731zz"
+    (box.repo / ".env.pentest").write_text(f"ADMIN_API_KEY={pentest}\n")
+    (box.dockerdir / ".env.bak-old-1").write_text("OLD_API_KEY=" + "oldkey-" + "Zq81PwXm0000" + "\n")
+    (box.dockerdir / ".env.example").write_text("EXAMPLE_API_KEY=" + "example-" + "NotSecret999" + "\n")
+    (home / ".config" / "secai-mlops").mkdir(parents=True)
+    (home / ".config" / "secai-mlops" / "mlops.env").write_text("JUDGE_API_KEY=" + "judge-" + "Kk3Lm9Qq7Ww1" + "\n")
+    pkg = box.tmp / "pkg"
+    make_pkg(pkg, extra={"poc-sources": f"a {pentest}\nb oldkey-Zq81PwXm0000\nc judge-Kk3Lm9Qq7Ww1\nd example-NotSecret999\n".encode()})
+    e = box.env(); del e["PUBLISH_KNOWN_SECRETS"]
+    r = subprocess.run(["bash", str(PUBLISH), "publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl,
+                        "--dry-run"], text=True, capture_output=True, env=e, stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 6, r.stderr
+    rows = [l.split("\t") for l in (box.work / "data-2026.11.28" / "scan-data.txt").read_text().splitlines()
+            if l.startswith("FINDING\tknown-secret")]
+    srcs = sorted(x[3].rsplit("/", 1)[-1] for x in rows)
+    assert srcs == [".env.bak-old-1#OLD_API_KEY", ".env.pentest#ADMIN_API_KEY", "mlops.env#JUDGE_API_KEY"], srcs
+    assert ".env.example" not in r.stderr
+
+
+def test_publish_data_digest_read_error_is_not_reported_as_missing(box):
+    # lỗi tạm (429/5xx, registry.py rc=2) khi đọc digest dữ liệu: báo "không đọc được", không phải "không thấy ... publish-data trước"
+    (box.fake / "reg_hide.json").write_text(json.dumps({f"{DATA}:2026.11.27": "error"}))
+    r = box.run("publish")
+    assert r.returncode == 1 and "không đọc được digest" in r.stderr and "publish-data trước" not in r.stderr
+    assert not box.pushes()
+
+
+def test_usage_prints_whole_header(box):
+    r = box.run()
+    assert r.returncode == 2
+    for needle in ("PUBLISH_KNOWN_SECRETS", "PUBLISH_NO_FETCH", "--protect", "Mã thoát"):
+        assert needle in r.stderr, needle
+    assert "set -euo" not in r.stderr

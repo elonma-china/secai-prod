@@ -14,7 +14,9 @@ stdout: FINDING<TAB><luật><TAB><vị trí>, tối đa --max-print dòng, phầ
 cố định trong mã) chỉ được đếm (corpus_counts); ngoài các cây đó và với mọi luật cứng thì vẫn là phát hiện.
 --known-secrets [?]KIND[:PATH]: nạp giá trị secret THẬT của máy này (env|compose|shell|json|raw:PATH, hoặc gh = `gh auth token`;
 '?' = nguồn tuỳ chọn) và tìm khớp chính xác ở mọi nơi, kể cả corpus. Giá trị chỉ nằm trong bộ nhớ; dòng báo là
-FINDING<TAB>known-secret<TAB><vị trí><TAB><nguồn#tên khoá>. Bỏ giá trị < 12 ký tự và giá trị hiển nhiên.
+FINDING<TAB>known-secret<TAB><vị trí><TAB><nguồn#tên khoá>. Bỏ giá trị < 6 ký tự và giá trị hiển nhiên; giá trị < 12 ký tự
+chỉ khớp khi đứng thành token riêng (ký tự liền trước/sau không phải chữ/số ASCII), để chuỗi ngắn ngẫu nhiên trong corpus
+hàng chục GB không khớp nhầm.
 Mã thoát: 0 sạch, 1 có phát hiện, 2 lỗi đọc/giải nén/HTTP hoặc sai cú pháp (fail closed), 3 khớp secret thật (ưu tiên nhất).
 Env cho test: SECRET_SCAN_CHUNK (byte mỗi lần đọc, tối thiểu 8192), SECRET_SCAN_ZIP_MAX, SECRET_SCAN_MAX_BYTES.
 """
@@ -51,8 +53,9 @@ HEAD = 8192     # có NUL trong 8 KiB đầu => nhị phân, vị trí theo @off
 MAX_DEPTH = 12  # archive lồng sâu hơn => lỗi (zip tự chứa chính nó)
 
 # Giá trị gán: không rỗng, không mở đầu bằng biểu thức shell/template ($ % { < ( [), có thể nằm trong nháy.
-_VAL = rb"""(?=["'`]?[ \t]*=[ \t]*["'`]?(?![$%{<(\[])(?!(?:[a-z_][a-z0-9_]*\.)*(?:passw(?:or)?d|api[_-]?key)\b)[^\s"'`&;,)])"""
-# (giá trị là tham chiếu tới biến/thuộc tính cùng tên, vd `self.password = password`, `api_key=args.api_key`: không phải literal)
+_VAL = rb"""(?=["'`]?[ \t]*=[ \t]*["'`]?(?![$%{<(\[])(?!(?:[a-z_][a-z0-9_]*\.)*(?:passw(?:or)?d|api[_-]?key)(?![^\s"'`,;)\]}]))[^\s"'`&;,)])"""
+# (giá trị là tham chiếu tới biến/thuộc tính cùng tên, vd `self.password = password`, `api_key=args.api_key`: không phải literal.
+# Tham chiếu phải KẾT THÚC giá trị: `Password@2024`, `passwd-x9!`, `password#1`, `self.password.x9!` là literal.)
 # (luật, regex, quét trên bản chữ thường). Mỗi regex mở đầu bằng chữ cố định để re tìm nhanh (~1 GB/s mỗi luật,
 # một regex gộp chỉ ~30 MB/s); lookbehind đặt sau tiền tố nhưng vẫn xét ký tự đứng trước tiền tố.
 RULES = (
@@ -83,7 +86,9 @@ DATA_CORPUS = (
 SOFT_RULES = frozenset(("password-assign", "api-key-assign", "private-key", "aws-access-key", "sk-key"))
 POLICIES = ("strict", "data")
 
-# Tên khoá mang secret; giá trị "hiển nhiên" và giá trị ngắn hơn MIN_SECRET bị bỏ (chủ dự án 2026-11-27).
+# Tên khoá mang secret; giá trị "hiển nhiên" và giá trị ngắn hơn MIN_SECRET bị bỏ (chủ dự án 2026-11-27; ngưỡng hạ từ 12
+# xuống 6 sau review PR #73: mật khẩu ngắn lấy từ nguồn secret đã biết vẫn phải được so khớp). Giá trị ngắn hơn SHORT_SECRET
+# chỉ khớp khi đứng thành token riêng (xem Scanner.scan_data).
 # So theo TỪNG ĐOẠN của tên khoá (tách _ . - và camelCase): TOKENIZER, *_TOKENS (số đếm) không phải secret; tên trỏ tới
 # tệp/đường dẫn/băm/khoá công khai (REVIEW_CREDENTIALS_FILE, *_SHA256, GPG_KEY...) cũng không.
 SECRET_NAME = re.compile(r"(?:^|_)(?:API_?KEY|APIKEY|KEYS?|TOKEN|SECRETS?|PASSWORD|PASSWD|PASS|PWD|AUTH|CREDENTIALS?|PRIVATE_?KEY)(?:_|$)")
@@ -94,8 +99,14 @@ def is_secret_name(name):
     n = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(name))
     n = re.sub(r"[.\-\s]+", "_", n).upper()
     return bool(SECRET_NAME.search(n)) and not NOT_SECRET_NAME.search(n)
-MIN_SECRET, MAX_SECRET = 12, 1024
-OBVIOUS = frozenset(("true", "false", "yes", "no", "on", "off", "null", "none", "changeme", "placeholder"))
+MIN_SECRET, SHORT_SECRET, MAX_SECRET = 6, 12, 1024
+OBVIOUS = frozenset((
+    "true", "false", "yes", "no", "on", "off", "null", "none", "changeme", "placeholder",
+    # giá trị giữ chỗ hay gặp trong .env/compose (không phải secret; ngắn nên dễ khớp nhầm khắp corpus)
+    "empty", "dummy", "local", "secret", "password", "passwd", "notused", "unused", "not-used", "not-needed", "notneeded",
+    "not_needed", "sk-local", "sk-empty", "sk-dummy", "sk-noauth", "noauth", "no-auth", "token", "apikey", "api-key", "api_key",
+    "example", "default", "redacted", "disabled", "enabled", "required", "optional", "string", "bearer", "insecure",
+    "test", "testing", "secret-key", "your-api-key", "your_api_key", "changeit", "change-me", "change_me"))
 _URL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
 _URL_CRED = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://([^/@\s]+)@")
 KNOWN_KINDS = ("env", "compose", "shell", "json", "raw", "gh")
@@ -149,6 +160,10 @@ def _read_full(f, n):
         parts.append(b)
         got += len(b)
     return parts[0] if len(parts) == 1 else b"".join(parts)
+
+
+def _alnum_at(buf, j):
+    return 0 <= j < len(buf) and buf[j:j + 1].isalnum()
 
 
 def _drain(f):
@@ -242,6 +257,7 @@ def _unquote(v):
 
 def _keep(v):
     return (MIN_SECRET <= len(v) <= MAX_SECRET and v.lower() not in OBVIOUS and not re.fullmatch(r"[0-9.:,_-]+", v)
+            and not re.fullmatch(r"(.)\1*", v)                  # một ký tự lặp lại (xxxxxx, ******)
             and not re.match(r"(?:/|\./|~/)[^\s]*$", v))   # đường dẫn tệp không phải secret
 
 
@@ -292,11 +308,9 @@ def _src_shell(path):
         yield m.group(1), secret_candidates(m.group(2))
 
 
-JSON_UNREADABLE = []
-
-
-def _src_json(pattern):
-    """environment (dict hoặc list K=V), Env của docker inspect (list K=V), và mọi cặp khoá-chuỗi có tên secret ở mọi độ sâu."""
+def _src_json(pattern, unreadable):
+    """environment (dict hoặc list K=V), Env của docker inspect (list K=V), và mọi cặp khoá-chuỗi có tên secret ở mọi độ sâu.
+    Tệp không đọc được (quyền) được thêm vào `unreadable` để báo trong tổng kết, không im lặng."""
     import glob
     for path in sorted(glob.glob(pattern)):
         try:
@@ -305,7 +319,7 @@ def _src_json(pattern):
         except ValueError:
             continue   # không phải JSON: không chứa giá trị đọc được
         except OSError:
-            JSON_UNREADABLE.append(path)   # báo trong tổng kết, không im lặng
+            unreadable.append(path)
             continue
         lab = f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}"
         todo = [doc]
@@ -337,6 +351,7 @@ def load_known(specs, err=sys.stderr):
         if kind not in KNOWN_KINDS or (kind != "gh" and not path):
             raise ScanError(f"--known-secrets '{spec}': cần [?]KIND:PATH với KIND trong {', '.join(KNOWN_KINDS)} (hoặc gh)")
         label = "gh auth token" if kind == "gh" else path
+        unreadable = []
         try:
             if kind == "gh":
                 r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
@@ -347,7 +362,7 @@ def load_known(specs, err=sys.stderr):
                 with open(path, encoding="utf-8", errors="surrogateescape") as f:
                     pairs = [("", secret_candidates(f.read().strip(), True))]
             elif kind == "json":
-                pairs = list(_src_json(path))
+                pairs = list(_src_json(path, unreadable))
             else:
                 pairs = list({"env": _src_env, "compose": _src_compose, "shell": _src_shell}[kind](path))
         except FileNotFoundError as e:
@@ -365,8 +380,7 @@ def load_known(specs, err=sys.stderr):
                 if b not in found:
                     found[b] = lab
                     n += 1
-        counts.append(f"{label}={n}" + (f" (không đọc được {len(JSON_UNREADABLE)} tệp)" if kind == "json" and JSON_UNREADABLE else ""))
-        JSON_UNREADABLE.clear()
+        counts.append(f"{label}={n}" + (f" (không đọc được {len(unreadable)} tệp)" if unreadable else ""))
     # Payload Qdrant được quét ở dạng JSON: thêm biến thể đã escape nếu khác.
     for b, lab in list(found.items()):
         esc = json.dumps(b.decode("utf-8", "surrogateescape"), ensure_ascii=False)[1:-1].encode("utf-8", "surrogateescape")
@@ -477,13 +491,15 @@ class Scanner:
                         if a >= limit:
                             break
                         last[i] = base + m.end()
-                        hits.append((a, rule))
+                        hits.append((a, rule, None))
                 for v, lab in self.known:
+                    short = len(v) < SHORT_SECRET
                     i = buf.find(v, win)
                     while i != -1 and i < limit:
-                        hits.append((i, "known-secret", lab))
+                        # giá trị ngắn: chỉ nhận khi đứng riêng (buf luôn còn CTX byte trước cửa sổ và OVERLAP byte sau limit)
+                        if not short or (not _alnum_at(buf, i - 1) and not _alnum_at(buf, i + len(v))):
+                            hits.append((i, "known-secret", lab))
                         i = buf.find(v, i + 1)
-                hits = [h if len(h) == 3 else (h[0], h[1], None) for h in hits]
                 hits.sort(key=lambda h: (h[0], h[1]))
                 for a, rule, lab in hits:
                     if not suffix:
@@ -714,7 +730,7 @@ class Scanner:
         if key:
             headers["api-key"] = key
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # Qdrant nội bộ: không qua proxy
-        offset, pages = None, 0
+        offset = None
         while True:
             body = {"limit": 1000, "with_payload": True, "with_vector": False}
             if offset is not None:
@@ -731,7 +747,6 @@ class Scanner:
                 data = json.dumps(p.get("payload"), ensure_ascii=False).encode("utf-8", "surrogatepass")
                 self.points += 1
                 self.scan_data(f"qdrant:{clean(coll)}#{clean(str(p.get('id')))}", data, None, True, suffix=False)
-            pages += 1
             if nxt is None:
                 return
             if nxt == offset:

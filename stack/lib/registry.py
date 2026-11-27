@@ -2,7 +2,6 @@
 """registry.py [--auth USER:TOKEN_FILE] LỆNH ... - hỏi registry / Docker Hub, chỉ đọc (trừ hub-delete-tag).
 
   digest <name:tag>            -> sha256:<hex> (Docker-Content-Digest của manifest/index, Registry HTTP API v2)
-  tags <name>                  -> mỗi tag một dòng (Registry API v2)
   hub-repo <ns>/<repo>         -> "private" hoặc "public" (Docker Hub API, trường is_private; cần --auth)
   hub-tags <ns>/<repo>         -> mỗi tag một dòng (Docker Hub API; repo private cần --auth)
   hub-delete-tag <ns>/<repo> <tag>   xoá một tag (cần token Docker Hub có quyền Delete)
@@ -33,6 +32,7 @@ ACCEPT = ", ".join([
 ])
 TIMEOUT = 30
 AUTH = None   # (user, token) từ --auth
+_JWT = None   # JWT Docker Hub API: đăng nhập một lần mỗi lần chạy, dùng chung cho mọi trang/lệnh
 
 
 def hub_api():
@@ -140,12 +140,6 @@ def digest(ref):
     return d
 
 
-def tags(name):
-    host, repo, _ = split_ref(name + ":x")
-    with request(host, f"/v2/{repo}/tags/list?n=1000", repo, accept="application/json") as r:
-        return json.load(r).get("tags") or []
-
-
 # ───────────── Docker Hub API (hub.docker.com) ─────────────
 def _hub_jwt():
     if not AUTH:
@@ -175,9 +169,11 @@ def _hub_repo_path(name):
 
 
 def _hub(path, method="GET"):
+    global _JWT
     hdr = {"Accept": "application/json"}
     if AUTH:
-        hdr["Authorization"] = "Bearer " + _hub_jwt()
+        _JWT = _JWT or _hub_jwt()
+        hdr["Authorization"] = "Bearer " + _JWT
     return _open(urllib.request.Request(hub_api() + path, method=method, headers=hdr))
 
 
@@ -209,7 +205,7 @@ def hub_delete_tag(name, tag):
         r.read()
 
 
-CMDS = {"digest": 1, "tags": 1, "hub-repo": 1, "hub-tags": 1, "hub-delete-tag": 2}
+CMDS = {"digest": 1, "hub-repo": 1, "hub-tags": 1, "hub-delete-tag": 2}
 
 
 def main(argv):
@@ -229,8 +225,6 @@ def main(argv):
     try:
         if cmd == "digest":
             print(digest(args[1]))
-        elif cmd == "tags":
-            print("\n".join(tags(args[1])))
         elif cmd == "hub-repo":
             print(hub_repo(args[1]))
         elif cmd == "hub-tags":

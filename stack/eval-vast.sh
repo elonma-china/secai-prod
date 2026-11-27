@@ -938,6 +938,8 @@ REMOTE_PACKTEST_RESTORE
 # Biến: GHCR_TEST_REF (SHA commit đủ 40 hex, nơi lấy stack/secai + model stub trên raw GitHub), GHCR_TEST_V1/GHCR_TEST_V2 (hai bản
 #   stack YYYY.MM.DD-<sha8>, khác nhau), GHCR_TEST_D1/GHCR_TEST_D2 (hai bản dữ liệu YYYY.MM.DD[.N], khác nhau),
 #   GHCR_TEST_REPO (elonma-china/secai-prod), GHCR_TEST_FAILTEST (1: thử upgrade hỏng phải tự rollback; 0: bỏ).
+#   Bắt buộc một trong hai: GHCR_TEST_RO_TOKEN_FILE (tệp 0600 token Docker Hub CHỈ ĐỌC cho repo dữ liệu private) hoặc
+#   GHCR_TEST_DATA_PKG (thư mục gói dữ liệu có SHA256SUMS, rsync lên VM).
 # Không chạy quá deadline - 10 phút. Kết quả nằm ở $REMOTE/results (có SHA256SUMS) cho `collect`. rc = rc của script trên VM.
 cmd_ghcrtest() {
     local ref="${GHCR_TEST_REF:-}" v1="${GHCR_TEST_V1:-}" v2="${GHCR_TEST_V2:-}" d1="${GHCR_TEST_D1:-}" d2="${GHCR_TEST_D2:-}"
@@ -952,8 +954,6 @@ cmd_ghcrtest() {
     [ "$d1" != "$d2" ] || die "GHCR_TEST_D1 và GHCR_TEST_D2 phải khác nhau (cần thử data update)"
     [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "GHCR_TEST_REPO phải dạng owner/repo: '$repo'"
     [[ "$ft" =~ ^[01]$ ]] || die "GHCR_TEST_FAILTEST phải là 0 hoặc 1: '$ft'"
-    # Dữ liệu là package PRIVATE: không chép token gh (có quyền ghi) lên VM. Chưa có token chỉ-đọc thì đẩy gói dữ liệu bằng rsync
-    # (GHCR_TEST_DATA_PKG, thư mục pack.sh data có SHA256SUMS) và VM dùng `secai install --data-dir` / `secai data load`.
     # Dữ liệu ở repo Docker Hub private. Hai cách: GHCR_TEST_RO_TOKEN_FILE = token Docker Hub CHỈ ĐỌC (tệp 0600; chép lên VM qua
     # stdin, xoá ngay sau bài thử; KHÔNG BAO GIỜ token ghi), hoặc GHCR_TEST_DATA_PKG = gói dữ liệu rsync lên VM (data load).
     if [ -n "$tok" ]; then
