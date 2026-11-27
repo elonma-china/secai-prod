@@ -120,6 +120,7 @@ def _line(body: str) -> tuple[str, str | None]:
     nxt = None
     m = _MAP_LINE.match(body)
     e = None if m else _ENV_LINE.match(body)
+    n = _NAME_ITEM.match(body) if m and m["key"] == "name" else None
     if m and _secret_name(m["key"]):
         val = m["val"]
         core = re.split(r"\s#", val, maxsplit=1)[0].strip()
@@ -127,7 +128,7 @@ def _line(body: str) -> tuple[str, str | None]:
             nxt = "block"
         else:
             body = m["pre"] + m["q"] + m["key"] + m["q"] + m["sep"] + _mask_scalar(val)
-    elif m and m["key"] == "name" and _NAME_ITEM.match(body) and _secret_name(_NAME_ITEM.match(body)["name"]):
+    elif n and _secret_name(n["name"]):
         nxt = "value"
     elif e and _secret_name(e["key"]):
         body = e["pre"] + e["q"] + e["key"] + "=" + _mask_scalar(e["val"], e["q"])
