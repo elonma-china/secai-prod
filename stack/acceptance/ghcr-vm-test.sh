@@ -5,7 +5,7 @@
 # Gọi bởi `eval-vast.sh ghcrtest`: ssh "REF=... V1=... V2=... D1=... D2=... REPO=... FAILTEST=... bash -s" < tệp này.
 #   REF (SHA commit 40 hex), V1/V2 (YYYY.MM.DD-<sha8>, khác nhau), D1/D2 (YYYY.MM.DD[.N], khác nhau), REPO (owner/repo), FAILTEST (0|1),
 #   DATA_DIR (tuỳ chọn: thư mục gói dữ liệu đã rsync lên VM; có thì install --data-dir và data load thay cho kéo secai-data
-#   private từ GHCR, vì VM không được giữ token gh có quyền ghi).
+#   private), hoặc SECAI_DOCKERHUB_TOKEN_FILE (token Docker Hub CHỈ ĐỌC đã chép lên VM, 0600): kéo dữ liệu thật từ Docker Hub.
 # Kết quả trong $RESULTS_DIR (/opt/secai-stack/results): steps.txt ('<bước> rc=<n>' hoặc '<bước> skipped'), <bước>.log, timings.tsv,
 #   status-<n>.json, model-stub.log, acceptance/, summary.json, SHA256SUMS (cho `eval-vast.sh collect`). Thoát 0 chỉ khi verdict = pass.
 # Không có secret thật: khoá model là khoá stub cố định, chỉ qua env đã export cho đúng lệnh install (không lên argv); log vẫn che
@@ -28,6 +28,10 @@ validate() {
     [[ "$FAILTEST" =~ ^[01]$ ]] || die "FAILTEST phải là 0 hoặc 1: '$FAILTEST'"
     [ -z "${STUB_HOST:-}" ] || is_ipv4 "$STUB_HOST" || die "STUB_HOST phải là IPv4: '$STUB_HOST'"
     [ -z "$DATA_DIR" ] || [[ "$DATA_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "DATA_DIR phải là đường dẫn tuyệt đối đơn giản: '$DATA_DIR'"
+    [ -z "${SECAI_DOCKERHUB_TOKEN_FILE:-}" ] || [[ "$SECAI_DOCKERHUB_TOKEN_FILE" =~ ^/[A-Za-z0-9._/-]+$ ]] \
+        || die "SECAI_DOCKERHUB_TOKEN_FILE phải là đường dẫn tuyệt đối đơn giản"
+    [ -n "$DATA_DIR" ] || [ -n "${SECAI_DOCKERHUB_TOKEN_FILE:-}" ] \
+        || die "cần DATA_DIR (gói dữ liệu) hoặc SECAI_DOCKERHUB_TOKEN_FILE (token Docker Hub chỉ đọc): dữ liệu là repo private"
 }
 is_ipv4() { [[ "$1" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; }
 

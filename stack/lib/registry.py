@@ -10,10 +10,12 @@
 Ví dụ name: ghcr.io/elonma-china/secai-stack, qdrant/qdrant (Docker Hub, thêm library/ cho image chính thức),
 docker.io/<ns>/secai-data. Mặc định ẩn danh. --auth USER:TOKEN_FILE: token đọc trong tiến trình này từ tệp (phải thuộc user
 đang chạy, mode 600/400), dùng làm Basic auth khi xin token registry và khi đăng nhập Docker Hub API; không lên argv/log.
-Mã thoát: 0 đạt; 1 không có/không có quyền (401/403/404); 2 lỗi mạng/định dạng/sai cú pháp.
+Mã thoát: 0 đạt; 1 không có quyền/không có repo (401/403); 2 lỗi mạng/định dạng/429/5xx/sai cú pháp;
+3 (digest) manifest/tag không có (HTTP 404 khi đã có quyền đọc) - chỉ mã này mới nghĩa là "tag chưa có".
 Env cho test: HUB_API_URL (mặc định https://hub.docker.com).
 """
 import base64
+import http.client
 import json
 import os
 import re
@@ -93,6 +95,8 @@ def _token(www, repo):
     hdr = {"Authorization": _basic()} if AUTH else {}
     with _open(urllib.request.Request(realm + "?" + urllib.parse.urlencode(q), headers=hdr)) as r:
         d = json.load(r)
+    if not isinstance(d, dict):
+        raise RuntimeError("token endpoint trả dữ liệu lạ")
     return d.get("token") or d.get("access_token")
 
 
@@ -107,17 +111,29 @@ def request(host, path, repo, method="GET", accept=ACCEPT):
         www = e.headers.get("WWW-Authenticate", "")
     try:
         tok = _token(www, repo)
-    except urllib.error.HTTPError as e:   # repo private: token ẩn danh/không đủ quyền bị từ chối
-        raise PermissionError(f"không có quyền đọc {host}/{repo} (HTTP {e.code})") from None
+    except urllib.error.HTTPError as e:   # chỉ 401/403 là "không có quyền"; 429/5xx là lỗi tạm (không được hiểu là "không có")
+        if e.code in (401, 403):
+            raise PermissionError(f"không có quyền đọc {host}/{repo} (HTTP {e.code})") from None
+        raise RuntimeError(f"token endpoint HTTP {e.code}") from None
     if not tok:
         raise PermissionError(f"không có token đọc cho {host}/{repo}")
     hdr["Authorization"] = "Bearer " + tok
     return _open(urllib.request.Request(url, method=method, headers=hdr))
 
 
+class TagMissing(Exception):
+    """Manifest/tag không có (404 sau khi đã có quyền đọc)."""
+
+
 def digest(ref):
     host, repo, tag = split_ref(ref)
-    with request(host, f"/v2/{repo}/manifests/{tag}", repo, method="HEAD") as r:
+    try:
+        r = request(host, f"/v2/{repo}/manifests/{tag}", repo, method="HEAD")
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise TagMissing(f"{ref}: không có") from None
+        raise
+    with r:
         d = r.headers.get("Docker-Content-Digest", "")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", d):
         raise RuntimeError("registry không trả Docker-Content-Digest")
@@ -222,6 +238,9 @@ def main(argv):
         else:
             hub_delete_tag(args[1], args[2])
         return 0
+    except TagMissing as e:
+        print(f"registry.py: {e}", file=sys.stderr)
+        return 3
     except PermissionError as e:
         print(f"registry.py: {e}", file=sys.stderr)
         return 1
@@ -230,6 +249,9 @@ def main(argv):
         return 1 if e.code in (401, 403, 404) else 2
     except (urllib.error.URLError, OSError, ValueError, RuntimeError, json.JSONDecodeError) as e:
         print(f"registry.py: lỗi: {e}", file=sys.stderr)
+        return 2
+    except (http.client.HTTPException, AttributeError, KeyError, TypeError) as e:   # mọi lỗi khác: không bao giờ là 0/1/3
+        print(f"registry.py: lỗi bất ngờ: {type(e).__name__}", file=sys.stderr)
         return 2
 
 

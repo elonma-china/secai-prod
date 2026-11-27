@@ -67,10 +67,15 @@ if c == "run":
     sys.exit(1 if flag("run_fail") else 0)
 if c == "inspect": sys.exit(1)
 def cidof(t): return "cid-" + t.replace("/", "_").replace(":", "_")
-if c == "create": print(cidof(argv[-1])); sys.exit(0)
+if c == "create":
+    ref = argv[-2] if argv[-1] == "/none" else argv[-1]
+    if ref not in imgs: sys.exit(1)
+    print(cidof(ref)); sys.exit(0)
 if c == "cp":
     cid, path = argv[1].split(":", 1)
     tag = [t for t in imgs if cidof(t) == cid][0]
+    if path.endswith("secai-stack.json"):
+        shutil.copy(os.path.join(imgs[tag]["snap"], "stack", "secai-stack.json"), argv[2]); sys.exit(0)
     shutil.copytree(os.path.join(imgs[tag]["snap"], "src"), argv[2])
     if flag("src_drift"): open(os.path.join(argv[2], "extra.py"), "w").write("x=1\n")
     sys.exit(0)
@@ -88,6 +93,9 @@ if c == "tag":
 if c == "pull":
     remote = st("remote.json", {})
     ref = argv[-1]
+    if ref.endswith("secai-stack:stable") and flag("stable_fs"):
+        imgs[ref] = {"id": remote[ref], "snap": open(os.path.join(F, "stable_fs")).read(), "labels": {}, "gitsha": ""}
+        put("images.json", imgs); sys.exit(0)
     if "@" in ref:   # kéo theo digest: có trên "GHCR" (remote) và đã có nội dung cục bộ
         d = ref.split("@", 1)[1]
         sys.exit(0 if d in remote.values() and by_digest(ref) else 1)
@@ -144,7 +152,8 @@ if os.path.exists(os.path.join(F, "reg_error")): sys.exit(2)
 if ref in remote: print(remote[ref]); sys.exit(0)
 if ref.startswith("docker.io/") and ref.split(":")[-1] in hub["tags"]:
     print("sha256:" + hashlib.sha256(ref.encode()).hexdigest()); sys.exit(0)
-if ref.startswith(("ghcr.io/", "docker.io/")): sys.exit(1)
+if ref.startswith("docker.io/"): sys.exit(3)   # repo private đọc được bằng token, tag chưa có
+if ref.startswith("ghcr.io/"): sys.exit(1 if os.path.exists(os.path.join(F, "ghcr_no_pkg")) else 3)
 print("sha256:" + hashlib.sha256(ref.encode()).hexdigest())
 '''
 
@@ -639,3 +648,39 @@ def test_real_publish_with_explicit_unverified_data_version(box):
     assert r.returncode == 0, r.stderr
     assert "chưa kiểm được" in r.stderr
     assert manifest(box)["data"] == {"image": DATA, "default_version": "2026.11.27", "digest": ""}
+
+
+
+def test_hub_tag_check_only_404_means_absent(box, qurl):
+    # registry trả 1 (401/403) cho repo dữ liệu đã kiểm private: không được hiểu là "tag chưa có"
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    reg = box.tmp / "registry-fake"
+    reg.write_text(reg.read_text().replace('if ref.startswith("docker.io/"): sys.exit(3)', 'if ref.startswith("docker.io/"): sys.exit(1)'))
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
+    assert r.returncode == 1 and "không kiểm được" in r.stderr and not box.pushes()
+
+
+def test_ghcr_new_package_counts_as_absent(box):
+    box.set("ghcr_no_pkg")
+    r = box.run("publish", "--dry-run")
+    assert r.returncode == 0, r.stderr
+
+
+def test_prune_protects_stable_data_version(box, qurl):
+    # bundle stable trỏ tới 2026.11.01: không được xoá dù cũ nhất
+    box.hub(tags=["2026.11.01", "2026.11.10", "2026.11.20", "2026.11.27", "2026.11.28"])
+    fs = box.tmp / "stablefs" / "stack"; fs.mkdir(parents=True)
+    (fs / "secai-stack.json").write_text(json.dumps({"data": {"default_version": "2026.11.01"}}))
+    remote = {f"{REG}/secai-stack:stable": "sha256:" + "5" * 64}
+    (box.fake / "remote.json").write_text(json.dumps(remote))
+    (box.fake / "stable_fs").write_text(str(fs.parent))
+    r = box.run("prune-data", "--keep", "3", "--yes")
+    assert r.returncode == 0, r.stderr
+    assert (box.fake / "deleted.log").read_text().split() == ["2026.11.10"]
+
+
+def test_prune_fails_closed_when_stable_unreadable(box):
+    box.hub(tags=["2026.11.01", "2026.11.10", "2026.11.20", "2026.11.27", "2026.11.28"])
+    (box.fake / "remote.json").write_text(json.dumps({f"{REG}/secai-stack:stable": "sha256:" + "5" * 64}))
+    r = box.run("prune-data", "--keep", "3", "--yes")   # không có nội dung stable để đọc
+    assert r.returncode == 1 and "KHÔNG xoá gì" in r.stderr and not (box.fake / "deleted.log").exists()

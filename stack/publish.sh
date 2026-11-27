@@ -92,6 +92,7 @@ require_hub_private() {
 # Nguồn secret THẬT của máy này (chủ dự án 2026-11-27). Thiếu nguồn bắt buộc thì quét lỗi (fail closed); '?' = tuỳ chọn.
 known_secret_specs() {
     [ -z "$HUB_TOKEN_FILE" ] || printf '%s\n' "?raw:$HUB_TOKEN_FILE"   # token Docker Hub cũng không được lọt vào gói
+    local f; for f in "$HOME"/.config/secai/*.token; do [ ! -f "$f" ] || printf '?raw:%s\n' "$f"; done
     if [ -n "${PUBLISH_KNOWN_SECRETS+x}" ]; then printf '%s\n' "$PUBLISH_KNOWN_SECRETS"; return; fi
     printf '%s\n' gh "env:$DOCKER_DIR/.env" "env:$MAIN/.env" "?env:$REPO/stack/.env" "?env:$MAIN/stack/.env" \
         "compose:$DOCKER_DIR/docker-compose.yml" "shell:$HOME/Downloads/CVE-DB/run_sync.sh" "json:$HOME/secai-releases/*/*.json" \
@@ -136,7 +137,13 @@ require_public() { require_visibility public "$@"; }
 
 tmp_docker_config() {   # một DOCKER_CONFIG tạm cho cả lần chạy; logout + xoá khi thoát
     [ -z "${DOCKER_CONFIG_TMP:-}" ] || return 0
-    DOCKER_CONFIG_TMP="$(mktemp -d)"; chmod 700 "$DOCKER_CONFIG_TMP"; export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
+    local ctx ucfg="${DOCKER_CONFIG:-$HOME/.docker}"
+    ctx="$(docker context show 2>/dev/null || echo default)"
+    DOCKER_CONFIG_TMP="$(mktemp -d)"; chmod 700 "$DOCKER_CONFIG_TMP"
+    # mục auths giả: docker không tự dò credential helper hệ thống, token ở lại trong thư mục tạm
+    (umask 077; printf '{"auths":{"secai.invalid":{}}}\n' >"$DOCKER_CONFIG_TMP/config.json")
+    if [ "$ctx" != default ] && [ -d "$ucfg/contexts" ]; then ln -s "$ucfg/contexts" "$DOCKER_CONFIG_TMP/contexts"; export DOCKER_CONTEXT="$ctx"; fi
+    export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
     CLEANUPS+=("docker logout ghcr.io; docker logout; rm -rf '$DOCKER_CONFIG_TMP'")
 }
 ghcr_login() {
@@ -158,13 +165,15 @@ take_lock() {   # một lần phát hành tại một thời điểm (cùng WORK
     flock -n 8 || die "một publish.sh khác đang chạy ($WORK_ROOT/publish.lock)"
 }
 
-# tag_absent REF [hub]: 0 nếu tag CHƯA có trên registry; tag đã có => die (phiên bản bất biến); không kiểm được => die.
+# tag_absent REF [hub]: 0 nếu tag CHƯA có; tag đã có => die (phiên bản bất biến); không kiểm được => die (fail closed).
+# registry.py: 3 = manifest 404 (đã có quyền đọc). GHCR public: package chưa từng có trả 403 khi xin token ẩn danh (rc 1),
+# cũng nghĩa là chưa có tag. Docker Hub (đã kiểm repo private đọc được bằng token): chỉ 3 mới là "chưa có".
 tag_absent() {
     local rc=0
     if [ "${2:-}" = hub ]; then regq_hub digest "$1" >/dev/null 2>&1 || rc=$?; else regq digest "$1" >/dev/null 2>&1 || rc=$?; fi
-    case "$rc" in
-        0) die "$1 đã có trên registry (phiên bản bất biến)" ;;
-        1) return 0 ;;
+    case "$rc:${2:-}" in
+        0:*) die "$1 đã có trên registry (phiên bản bất biến)" ;;
+        3:*|1:) return 0 ;;
         *) die "không kiểm được $1 trên registry (rc=$rc); thử lại sau, KHÔNG push" ;;
     esac
 }
@@ -587,11 +596,27 @@ PY
     fi
 }
 
+# stable_data_version: data.default_version trong bundle ghcr .../secai-stack:stable (public, kéo ẩn danh). In rỗng nếu chưa
+# có tag stable; không đọc được => trả 1 (fail closed).
+stable_data_version() {
+    local rc=0 cid tmp v
+    regq digest "$REGISTRY/$PKG_STACK:stable" >/dev/null 2>&1 || rc=$?
+    case "$rc" in 0) ;; 1|3) return 0 ;; *) return 1 ;; esac
+    docker pull -q "$REGISTRY/$PKG_STACK:stable" >/dev/null 2>&1 || return 1
+    tmp="$(mktemp -d)"; CLEANUPS+=("rm -rf '$tmp'")
+    cid="$(docker create "$REGISTRY/$PKG_STACK:stable" /none 2>/dev/null)" || return 1
+    docker cp "$cid:/stack/secai-stack.json" "$tmp/m.json" >/dev/null 2>&1 || { docker rm -f "$cid" >/dev/null 2>&1; return 1; }
+    docker rm -f "$cid" >/dev/null 2>&1 || true
+    v="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["default_version"])' "$tmp/m.json")" || return 1
+    printf '%s' "$v"
+}
+
 cmd_prune_data() {
-    local keep="$DATA_KEEP" yes=0 tags del t
+    local keep="$DATA_KEEP" yes=0 tags del t keepv="" sv
     while [ $# -gt 0 ]; do
         case "$1" in
             --keep) keep="$2"; shift 2 ;;
+            --protect) keepv+=" $2"; shift 2 ;;
             --yes) yes=1; shift ;;
             *) die "tham số lạ: $1" ;;
         esac
@@ -602,11 +627,14 @@ cmd_prune_data() {
     data_repo_ok
     hub_token_ok || exit 5
     tags="$(regq_hub hub-tags "$DATA_NS_REPO")" || die "không đọc được tag của $DATA_NS_REPO"
+    sv="$(stable_data_version)" || die "không đọc được bản dữ liệu mà bundle stable dùng; KHÔNG xoá gì"
+    [ -z "$sv" ] || { keepv+=" $sv"; log "giữ $sv (bundle stable dùng)"; }
     del="$(grep -E "$DATA_RE" <<<"$tags" | sort -V | head -n -"$keep")" || del=""
-    if [ -z "$del" ]; then log "không có tag dữ liệu nào cần xoá (giữ $keep)"; return 0; fi
+    for t in $keepv; do del="$(grep -vxF "$t" <<<"$del" || true)"; done
+    if [ -z "${del//[[:space:]]/}" ]; then log "không có tag dữ liệu nào cần xoá (giữ $keep${keepv:+, và$keepv})"; return 0; fi
     echo "Sẽ xoá khỏi $DATA_NS_REPO (giữ $keep bản mới nhất):" >&2; printf '  %s\n' $del >&2
     if [ "$yes" != 1 ]; then echo "publish: chưa xoá gì; thêm --yes để xoá (token cần quyền Delete)" >&2; return 0; fi
-    for t in $del; do regq_hub hub-delete-tag "$DATA_NS_REPO" "$t" || die "xoá tag $t lỗi (token thiếu quyền Delete?)"; log "đã xoá $DATA_NS_REPO:$t"; done
+    for t in $del; do [ -n "$t" ] || continue; regq_hub hub-delete-tag "$DATA_NS_REPO" "$t" || die "xoá tag $t lỗi (token thiếu quyền Delete?)"; log "đã xoá $DATA_NS_REPO:$t"; done
 }
 
 case "${1:-}" in

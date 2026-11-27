@@ -197,16 +197,18 @@ repo_digest() {
     dk image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$1" 2>/dev/null \
         | awk -v r="$2@" 'index($0, r) == 1 { print substr($0, length(r) + 1); exit }'
 }
-CLEAN_CIDS=(); CLEAN_DCFG=""; CLEAN_DSRV=""
+CLEAN_CIDS=(); CLEAN_DCFG=""; CLEAN_DSRV=""; CLEAN_DCTX=""
 cleanup_cids() { local c; for c in ${CLEAN_CIDS[@]+"${CLEAN_CIDS[@]}"}; do dk rm -f "$c" >/dev/null 2>&1 || true; done; CLEAN_CIDS=(); }
+# dkt: docker với DOCKER_CONFIG tạm (credential tạm) nhưng vẫn đúng Docker context của người vận hành
+dkt() { "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" ${CLEAN_DCTX:+DOCKER_CONTEXT="$CLEAN_DCTX"} docker "$@"; }
 hub_logout() {   # xoá credential tạm: logout (kể cả khi docker dùng credential helper) rồi xoá thư mục
     [ -n "$CLEAN_DCFG" ] || return 0
-    "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker logout ${CLEAN_DSRV:+"$CLEAN_DSRV"} >/dev/null 2>&1 || true
-    rm -rf "$CLEAN_DCFG"; CLEAN_DCFG=""; CLEAN_DSRV=""
+    dkt logout ${CLEAN_DSRV:+"$CLEAN_DSRV"} >/dev/null 2>&1 || true
+    rm -rf "$CLEAN_DCFG"; CLEAN_DCFG=""; CLEAN_DSRV=""; CLEAN_DCTX=""
 }
 trap 'cleanup_cids; hub_logout' EXIT
 # dkp: docker pull, dùng phiên đăng nhập tạm nếu có
-dkp() { if [ -n "$CLEAN_DCFG" ]; then "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker pull -q "$1"; else dk pull -q "$1"; fi; }
+dkp() { if [ -n "$CLEAN_DCFG" ]; then dkt pull -q "$1"; else dk pull -q "$1"; fi; }
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -276,6 +278,7 @@ pull_images() {   # kéo mọi image của bộ phát hành theo pin trong .env
         [[ "$p" == *@sha256:* ]] || die "$k trong .env không ghim digest: '$p'"
         dk image inspect "$p" >/dev/null 2>&1 && continue
         say "kéo $p"
+        hub_login 0   # chỉ đăng nhập khi thật sự phải kéo (lần đầu), tuỳ chọn
         dkp "$p" >/dev/null || return 1
     done
 }
@@ -389,7 +392,10 @@ data_repo() {
 hub_token_get() {
     [ -z "$HUB_TOKEN" ] || return 0
     if [ -n "$HUB_TOKEN_FILE" ]; then
-        [ -f "$HUB_TOKEN_FILE" ] || die "SECAI_DOCKERHUB_TOKEN_FILE không tồn tại"
+        if [ ! -f "$HUB_TOKEN_FILE" ]; then
+            [ "${1:-0}" = 1 ] && die "SECAI_DOCKERHUB_TOKEN_FILE không tồn tại"
+            say "CẢNH BÁO: SECAI_DOCKERHUB_TOKEN_FILE không tồn tại; bỏ qua"; return 1
+        fi
         local mode owner; read -r mode owner <<<"$(stat -L -c '%a %u' "$HUB_TOKEN_FILE")"
         [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] \
             || die "SECAI_DOCKERHUB_TOKEN_FILE phải thuộc user này và mode 600/400 (đang $mode, uid $owner): chmod 600 <tệp>"
@@ -401,9 +407,12 @@ hub_token_get() {
 }
 # hub_login REQUIRED: đăng nhập registry của repo dữ liệu vào DOCKER_CONFIG tạm (cả lần chạy dùng chung, xoá khi xong/thoát).
 # REQUIRED=1 (phải kéo dữ liệu private): không có token thì dừng. REQUIRED=0: không có token thì cảnh báo, kéo ẩn danh.
+HUB_TRIED=""
 hub_login() {
     local need="$1" repo host user
     [ -z "$CLEAN_DCFG" ] || return 0
+    [ "$need" = 1 ] || [ -z "$HUB_TRIED" ] || return 0   # đăng nhập tuỳ chọn: chỉ thử (và cảnh báo) một lần mỗi lệnh
+    HUB_TRIED=1
     if [ "$need" = 1 ]; then repo="$(data_repo)"
     else repo="${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null || true)}"; fi
     if [[ "$repo" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
@@ -416,10 +425,20 @@ hub_login() {
         say "CẢNH BÁO: không có token Docker Hub: kéo image nền ẩn danh (giới hạn khoảng 10 lần/giờ/IP; lỗi 'toomanyrequests' thì đặt SECAI_DOCKERHUB_TOKEN_FILE rồi chạy lại)"
         return 0
     fi
+    local ctx ucfg="${DOCKER_CONFIG:-${HOME:-/root}/.docker}"
+    ctx="$(dk context show 2>/dev/null || echo default)"
     CLEAN_DCFG="$(mktemp -d)"; chmod 700 "$CLEAN_DCFG"
+    # Mồi config.json có mục auths: docker không tự dò credential helper hệ thống (token phải ở lại trong thư mục tạm).
+    (umask 077; printf '{"auths":{"secai.invalid":{}}}\n' >"$CLEAN_DCFG/config.json")
+    # Giữ Docker context của người vận hành (rootless, Desktop, tcp+TLS): trỏ tới kho context gốc, không chép credential.
+    if [ "$ctx" != default ] && [ -d "$ucfg/contexts" ]; then ln -s "$ucfg/contexts" "$CLEAN_DCFG/contexts"; CLEAN_DCTX="$ctx"; fi
     [ "$host" = docker.io ] || CLEAN_DSRV="$host"
-    printf '%s' "$HUB_TOKEN" | "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker login ${CLEAN_DSRV:+"$CLEAN_DSRV"} -u "$user" --password-stdin >/dev/null 2>&1 \
-        || { hub_logout; die "đăng nhập ${CLEAN_DSRV:-Docker Hub} ($user) bằng token thất bại (token sai/hết hạn, hoặc SECAI_DOCKERHUB_USER sai)"; }
+    if ! printf '%s' "$HUB_TOKEN" | dkt login ${CLEAN_DSRV:+"$CLEAN_DSRV"} -u "$user" --password-stdin >/dev/null 2>&1; then
+        hub_logout
+        [ "$need" = 1 ] && die "đăng nhập ${host} ($user) bằng token thất bại (token sai/hết hạn, SECAI_DOCKERHUB_USER sai, hoặc không có mạng)"
+        say "CẢNH BÁO: đăng nhập ${host} thất bại (token hết hạn/không có mạng): kéo ẩn danh"
+        return 0
+    fi
 }
 
 # manifest_date DIR: ngày tạo trong MANIFEST.md của gói -> YYYY.MM.DD (rỗng nếu không đọc được)
@@ -525,6 +544,7 @@ prefetch_release() {
     while IFS=$'\t' read -r k ref dg; do
         dk image inspect "$ref@$dg" >/dev/null 2>&1 && continue
         say "kéo $ref@$dg"
+        hub_login 0
         dkp "$ref@$dg" >/dev/null || return 1
     done <<<"$lines"
 }
@@ -593,7 +613,8 @@ cmd_install() {
     write_pins "$ver"
     envset DATA_ROOT "$(data_root "$dv")"
     envset SECAI_DATA_VERSION "$dv"
-    hub_login 0   # có token thì kéo image nền Docker Hub bằng phiên đăng nhập; data_prepare dùng lại phiên này
+    # Dữ liệu phải kéo từ repo private: hỏi/kiểm token TRƯỚC khi kéo image nền để chúng cũng đi qua phiên đăng nhập.
+    if [ -z "$datadir" ] && ! data_complete "$dv"; then hub_login 1; fi
     pull_images || die "kéo image lỗi"
     data_prepare "$dv" "$datadir"
     hub_logout
@@ -627,7 +648,6 @@ cmd_upgrade() {
         return 0
     fi
     logline "upgrade $cur -> $new"
-    hub_login 0
     prefetch_release "$new" || { say "kéo image của $new lỗi; KHÔNG đổi gì, vẫn $cur"; exit 1; }
     hub_logout
     backup_env "$cur"
@@ -658,7 +678,6 @@ cmd_rollback() {
     [ -n "$prev" ] || die "không có bản trước để quay về"
     [ -f "$SECAI_HOME/releases/$prev/secai-stack.json" ] || die "không còn bản $prev trong $SECAI_HOME/releases"
     logline "rollback $cur -> $prev"
-    hub_login 0
     prefetch_release "$prev" || die "kéo image của $prev lỗi; KHÔNG đổi gì, vẫn $cur"
     hub_logout
     backup_env "$cur"
@@ -785,7 +804,10 @@ for line in os.environ["INFO"].splitlines():
     ok = None
     if k:
         pin = pins.get(k, "")
-        ok = cfg == pin or (pin.endswith("@" + img) if img.startswith("sha256:") else False)
+        norm = lambda r: r.removeprefix("docker.io/").removeprefix("library/")
+        pdg = pin.split("@", 1)[1] if "@" in pin else "-"
+        # compose có thể chuẩn hoá tên (docker.io/, library/): so chuỗi đã chuẩn hoá, rồi digest trong tên, rồi id image
+        ok = norm(cfg) == norm(pin) or cfg.endswith("@" + pdg) or img == pdg
         if not ok: mismatch.append(s)
     services.append({"service": s, "state": state, "health": health, "image": cfg, "image_ok": ok})
 present = {x["service"] for x in services}

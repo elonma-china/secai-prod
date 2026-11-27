@@ -942,6 +942,7 @@ REMOTE_PACKTEST_RESTORE
 cmd_ghcrtest() {
     local ref="${GHCR_TEST_REF:-}" v1="${GHCR_TEST_V1:-}" v2="${GHCR_TEST_V2:-}" d1="${GHCR_TEST_D1:-}" d2="${GHCR_TEST_D2:-}"
     local repo="${GHCR_TEST_REPO:-elonma-china/secai-prod}" ft="${GHCR_TEST_FAILTEST:-1}" pkg="${GHCR_TEST_DATA_PKG:-}" l rc ddir=""
+    local tok="${GHCR_TEST_RO_TOKEN_FILE:-}" rtok="" mode owner
     local vre='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{8}$' dre='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{1,2})?$'
     # Các giá trị này lên argv của ssh (shell từ xa): chỉ nhận đúng dạng.
     [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || die "GHCR_TEST_REF phải là SHA commit đủ 40 ký tự hex thường: '$ref'"
@@ -953,10 +954,22 @@ cmd_ghcrtest() {
     [[ "$ft" =~ ^[01]$ ]] || die "GHCR_TEST_FAILTEST phải là 0 hoặc 1: '$ft'"
     # Dữ liệu là package PRIVATE: không chép token gh (có quyền ghi) lên VM. Chưa có token chỉ-đọc thì đẩy gói dữ liệu bằng rsync
     # (GHCR_TEST_DATA_PKG, thư mục pack.sh data có SHA256SUMS) và VM dùng `secai install --data-dir` / `secai data load`.
-    # Chưa có đường truyền token chỉ-đọc lên VM: không có gói thì install chắc chắn chết ở bước kéo dữ liệu private.
-    [ -n "$pkg" ] || die "đặt GHCR_TEST_DATA_PKG = thư mục gói dữ liệu (pack.sh data): secai-data là package private, VM không có token đọc"
-    [ -d "$pkg" ] && [ -s "$pkg/SHA256SUMS" ] || die "GHCR_TEST_DATA_PKG phải là thư mục gói dữ liệu có SHA256SUMS: '$pkg'"
-    ddir=/opt/secai-stack/pkg
+    # Dữ liệu ở repo Docker Hub private. Hai cách: GHCR_TEST_RO_TOKEN_FILE = token Docker Hub CHỈ ĐỌC (tệp 0600; chép lên VM qua
+    # stdin, xoá ngay sau bài thử; KHÔNG BAO GIỜ token ghi), hoặc GHCR_TEST_DATA_PKG = gói dữ liệu rsync lên VM (data load).
+    if [ -n "$tok" ]; then
+        [ -f "$tok" ] || die "GHCR_TEST_RO_TOKEN_FILE không tồn tại"
+        read -r mode owner <<<"$(stat -L -c '%a %u' "$tok")"
+        [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] || die "GHCR_TEST_RO_TOKEN_FILE phải thuộc user này, mode 600/400"
+        case "$(basename "$tok")" in *rw*|*write*) die "GHCR_TEST_RO_TOKEN_FILE trông như token GHI ('$(basename "$tok")'); chỉ dùng token chỉ đọc trên VM" ;; esac
+        [ -z "${SECAI_DOCKERHUB_TOKEN_FILE:-}" ] || ! cmp -s "$tok" "$SECAI_DOCKERHUB_TOKEN_FILE" \
+            || die "GHCR_TEST_RO_TOKEN_FILE trùng nội dung SECAI_DOCKERHUB_TOKEN_FILE (token ghi); không đưa lên VM"
+        rtok=/root/.dockerhub-ro.token
+    elif [ -n "$pkg" ]; then
+        [ -d "$pkg" ] && [ -s "$pkg/SHA256SUMS" ] || die "GHCR_TEST_DATA_PKG phải là thư mục gói dữ liệu có SHA256SUMS: '$pkg'"
+        ddir=/opt/secai-stack/pkg
+    else
+        die "đặt GHCR_TEST_RO_TOKEN_FILE (token Docker Hub chỉ đọc) hoặc GHCR_TEST_DATA_PKG (gói dữ liệu): dữ liệu là repo private"
+    fi
     [ -f "$HERE/acceptance/ghcr-vm-test.sh" ] || die "thiếu $HERE/acceptance/ghcr-vm-test.sh"
     need_cmds ssh timeout; load_conn
     [ "$(sget mode)" = ghcr ] || die "ghcrtest cần instance dựng bằng EVAL_MODE=ghcr eval-vast.sh up"
@@ -969,10 +982,18 @@ cmd_ghcrtest() {
             || die "rsync gói dữ liệu lên VM lỗi"
         l="$(left)"; [ "$l" -gt 0 ] || die "ghcrtest: sát deadline sau rsync; không chạy tiếp"
     fi
-    say "ghcrtest: $v1 -> $v2, dữ liệu $d1 -> $d2 (${ddir:+gói $ddir, }${ddir:-GHCR}), secai từ $repo@$ref; tối đa ${l}s"
+    if [ -n "$rtok" ]; then
+        rssh "umask 077; cat > $rtok && chmod 600 $rtok" <"$tok" || die "chép token chỉ đọc lên VM lỗi"
+    fi
+    say "ghcrtest: $v1 -> $v2, dữ liệu $d1 -> $d2 (${ddir:+gói $ddir}${rtok:+Docker Hub, token chỉ đọc}), secai từ $repo@$ref; tối đa ${l}s"
     timeout --kill-after=30 "$l" ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" \
-        "REF=$ref V1=$v1 V2=$v2 D1=$d1 D2=$d2 REPO=$repo FAILTEST=$ft DATA_DIR=$ddir bash -s" <"$HERE/acceptance/ghcr-vm-test.sh"
+        "REF=$ref V1=$v1 V2=$v2 D1=$d1 D2=$d2 REPO=$repo FAILTEST=$ft DATA_DIR=$ddir SECAI_DOCKERHUB_TOKEN_FILE=$rtok bash -s" \
+        <"$HERE/acceptance/ghcr-vm-test.sh"
     rc=$?
+    if [ -n "$rtok" ]; then   # xoá token khỏi VM ngay, trước collect/down
+        rssh "shred -u $rtok 2>/dev/null || rm -f $rtok; test ! -e $rtok" && say "đã xoá token chỉ đọc trên VM" \
+            || echo "eval-vast: CẢNH BÁO: chưa xoá được $rtok trên VM; xoá tay trước khi down" >&2
+    fi
     [ "$rc" != 124 ] || echo "eval-vast: ghcrtest bị cắt vì sát deadline" >&2
     [ "$rc" = 0 ] && say "ghcrtest ĐẠT. Tiếp: collect -> down" || echo "eval-vast: ghcrtest KHÔNG ĐẠT/lỗi (rc=$rc); vẫn chạy collect rồi down" >&2
     return "$rc"

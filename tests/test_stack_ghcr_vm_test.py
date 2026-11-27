@@ -137,6 +137,7 @@ class VM:
         self.stub_py = self.root / "model_stub.py"
         self.secai = self.root / "secai"
         self.env = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": str(self.tmp), "FAKE_DIR": str(self.fake),
+                    "SECAI_DOCKERHUB_TOKEN_FILE": "/root/.dockerhub-ro.token",
                     "FAKE_PIDF": str(self.root / "model_stub.pid"), "RESULTS_DIR": str(self.R), "SECAI_BIN": str(self.secai),
                     "STUB_PY": str(self.stub_py), "SECAI_HOME": str(self.home),
                     "REF": REF, "V1": V1, "V2": V2, "D1": D1, "D2": D2, "REPO": "elonma-china/secai-prod", "FAILTEST": "1"}
@@ -399,3 +400,15 @@ def test_data_dir_mode_uses_install_data_dir_and_data_load(vm):
 def test_data_dir_validated(vm, bad):
     r = vm.run(DATA_DIR=bad)
     assert r.returncode == 2 and not vm.log("secai.log")
+
+
+
+def test_needs_data_dir_or_read_only_token(vm):
+    r = vm.run(SECAI_DOCKERHUB_TOKEN_FILE=None)
+    assert r.returncode == 2 and "SECAI_DOCKERHUB_TOKEN_FILE" in r.stderr and not vm.log("secai.log")
+
+
+def test_token_mode_passes_token_file_env_to_secai_only_as_path(vm):
+    r = vm.run()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"data update {D2}" in vm.log("secai.log")

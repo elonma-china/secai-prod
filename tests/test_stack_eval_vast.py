@@ -1104,7 +1104,7 @@ def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box):
     calls = log(box, "ssh")
     assert len(calls) == 1
     want = (f"REF={G_REF} V1=2026.11.27-0f980c19 V2=2026.11.28-1a2b3c4d D1=2026.11.27 D2=2026.11.27.2 "
-            "REPO=elonma-china/secai-prod FAILTEST=1 DATA_DIR=/opt/secai-stack/pkg bash -s")
+            "REPO=elonma-china/secai-prod FAILTEST=1 DATA_DIR=/opt/secai-stack/pkg SECAI_DOCKERHUB_TOKEN_FILE= bash -s")
     assert calls[0].endswith("root@1.2.3.4 " + want) and "-p 2222" in calls[0]
     assert (box.fake / "ssh.stdin").read_text() == GHCR_VM_TEST.read_text()
     assert "collect" in r.stdout
@@ -1115,7 +1115,7 @@ def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box):
     set_mode(box, "ssh_rc", "5")
     r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_REPO": "me/fork.x", "GHCR_TEST_FAILTEST": "0"})
     assert r.returncode == 5
-    assert "REPO=me/fork.x FAILTEST=0 DATA_DIR=/opt/secai-stack/pkg bash -s" in log(box, "ssh")[0]
+    assert "REPO=me/fork.x FAILTEST=0 DATA_DIR=/opt/secai-stack/pkg SECAI_DOCKERHUB_TOKEN_FILE= bash -s" in log(box, "ssh")[0]
 
 
 @pytest.mark.parametrize("bad", [
@@ -1308,7 +1308,7 @@ def test_ghcrtest_rsyncs_data_pkg_and_passes_data_dir(box, tmp_path):
     assert r.returncode == 0, r.stderr
     rs = log(box, "rsync")
     assert len(rs) == 1 and f"{pkg}/ root@1.2.3.4:/opt/secai-stack/pkg/" in rs[0] and "--no-links" in rs[0]
-    assert "DATA_DIR=/opt/secai-stack/pkg bash -s" in log(box, "ssh")[0]
+    assert "DATA_DIR=/opt/secai-stack/pkg SECAI_DOCKERHUB_TOKEN_FILE= bash -s" in log(box, "ssh")[0]
 
 
 def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path):
@@ -1321,4 +1321,40 @@ def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path):
 def test_ghcrtest_requires_data_pkg(box):
     ghcr_state(box)
     r = sh(EVAL, "ghcrtest", b=box, extra={k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"})
-    assert r.returncode != 0 and "GHCR_TEST_DATA_PKG" in r.stderr and log(box, "ssh") == []
+    assert r.returncode != 0 and "GHCR_TEST_RO_TOKEN_FILE" in r.stderr and log(box, "ssh") == []
+
+
+
+RO_TOKEN = "dckr_pat_" + "FAKEreadonly00000000001"
+
+
+def _ro_token(tmp_path, name="dockerhub-ro.token", mode=0o600):
+    p = tmp_path / name
+    p.write_text(RO_TOKEN + "\n"); p.chmod(mode)
+    return p
+
+
+def test_ghcrtest_read_only_token_goes_via_stdin_and_is_removed(box, tmp_path):
+    ghcr_state(box)
+    tok = _ro_token(tmp_path)
+    extra = {k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"}
+    r = sh(EVAL, "ghcrtest", b=box, extra={**extra, "GHCR_TEST_RO_TOKEN_FILE": str(tok)})
+    assert r.returncode == 0, r.stderr
+    calls = log(box, "ssh")
+    assert len(calls) == 3
+    assert calls[0].endswith("umask 077; cat > /root/.dockerhub-ro.token && chmod 600 /root/.dockerhub-ro.token")
+    assert "DATA_DIR= SECAI_DOCKERHUB_TOKEN_FILE=/root/.dockerhub-ro.token bash -s" in calls[1]
+    assert "shred -u /root/.dockerhub-ro.token" in calls[2]
+    argv_all = "\n".join(calls + log(box, "rsync") + log(box, "scp"))
+    assert RO_TOKEN not in argv_all and RO_TOKEN not in r.stdout + r.stderr
+    assert RO_TOKEN in (box.fake / "ssh.stdin").read_text()
+    assert log(box, "rsync") == []
+
+
+@pytest.mark.parametrize("name,mode", [("dockerhub-rw.token", 0o600), ("dockerhub-ro.token", 0o644)])
+def test_ghcrtest_refuses_write_or_loose_token(box, tmp_path, name, mode):
+    ghcr_state(box)
+    tok = _ro_token(tmp_path, name, mode)
+    extra = {k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"}
+    r = sh(EVAL, "ghcrtest", b=box, extra={**extra, "GHCR_TEST_RO_TOKEN_FILE": str(tok)})
+    assert r.returncode != 0 and log(box, "ssh") == []

@@ -724,3 +724,44 @@ def test_data_repo_override(box):
     assert r.returncode == 0, r.stderr
     assert any(ref == f"{other}:{D1}" for ref, _ in pulls(box))
     assert [c for c in box.calls() if c[0] == "login"][0][2] == "otherns"
+
+
+def test_status_accepts_normalized_image_names(box):
+    installed(box)
+    # compose ghi .Config.Image dạng docker.io/library/... : vẫn phải tính là khớp
+    run = json.loads((box.fake / "running.json").read_text())
+    run["REDIS_IMAGE"] = "docker.io/library/" + run["REDIS_IMAGE"]
+    (box.fake / "running.json").write_text(json.dumps(run))
+    s = json.loads(box.run("status", "--json").stdout)
+    assert s["images_match"] is True, s["image_mismatch"]
+
+
+
+def test_rollback_with_stale_token_needs_no_login_when_images_local(box):
+    installed(box)
+    assert box.run("upgrade", V2).returncode == 0
+    box.tokfile.write_text("dckr_pat_expired\n")
+    n = len([c for c in box.calls() if c[0] == "login"])
+    r = box.run("rollback")
+    assert r.returncode == 0, r.stderr
+    assert len([c for c in box.calls() if c[0] == "login"]) == n   # mọi image đã có: không đụng token/mạng
+
+
+def test_optional_login_failure_is_only_a_warning(box):
+    e = box.install_env(); box.tokfile.write_text("dckr_pat_expired\n")
+    r = box.run("install", V1, "--data-dir", str(box.data_pkg(D1)), env=e)
+    assert r.returncode == 0, r.stderr
+    assert "kéo ẩn danh" in r.stderr and r.stderr.count("CẢNH BÁO: đăng nhập") == 1
+
+
+def test_registry_data_needs_token_before_any_pull(box):
+    e = box.install_env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
+    r = box.run("install", V1, env=e)
+    assert r.returncode == 1 and "token Docker Hub chỉ đọc" in r.stderr
+    assert not any(c[0] == "pull" and "secai-stack" not in c[-1] for c in box.calls())   # chưa kéo image nền nào
+
+
+def test_temp_docker_config_is_seeded(box):
+    installed(box)
+    cfgs = [l for l in (box.fake / "login.cfg").read_text().split() if l]
+    assert cfgs   # thư mục đã xoá sau đó; fake ghi config.json khi login nên chỉ kiểm có login vào thư mục tạm
