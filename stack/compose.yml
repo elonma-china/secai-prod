@@ -1,5 +1,7 @@
 # SecAI stack - core (gateway + qdrant + neo4j + redis + es) + profile exploit (vm-a, vm-b), translation, report, review.
 # Tên project lấy từ COMPOSE_PROJECT_NAME (mặc định secai-stack); `-p` ghi đè.
+# Image nền đọc QDRANT_IMAGE/NEO4J_IMAGE/REDIS_IMAGE/ES_IMAGE (mặc định là tag gốc); `secai` ghi các biến này trong .env
+# dạng <tag>@sha256:<digest> theo manifest của bản phát hành.
 name: ${COMPOSE_PROJECT_NAME:-secai-stack}
 
 x-vm-data:
@@ -174,7 +176,7 @@ services:
     networks: [secai-net, poc-labs-internal]
 
   qdrant:
-    image: qdrant/qdrant:v1.10.1
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}
     restart: unless-stopped
     ulimits:                               # collection lớn mở nhiều file RocksDB .sst
       nofile: { soft: 262144, hard: 262144 }
@@ -190,7 +192,7 @@ services:
       start_period: 15s
 
   neo4j:
-    image: neo4j:5.20-community
+    image: ${NEO4J_IMAGE:-neo4j:5.20-community}
     restart: unless-stopped
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD}
@@ -209,7 +211,7 @@ services:
       start_period: 30s
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
     volumes:
@@ -223,7 +225,7 @@ services:
       start_period: 5s
 
   es:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    image: ${ES_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.15.3}
     restart: unless-stopped
     environment:
       discovery.type: single-node

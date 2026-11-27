@@ -1,0 +1,442 @@
+#!/usr/bin/env bash
+# publish.sh - phát hành SecAI stack lên GHCR. Lệnh tay của NGƯỜI PHÁT HÀNH, chạy trên máy dev (không phải máy đích).
+#
+#   publish [--ref REF] [--data-version V] [--stable] [--dry-run]
+#       gate (pytest toàn bộ trên git archive REF, build FULL, import app, /app/src == archive, smoke *-smoke-<ngày> trên
+#       127.0.0.1) -> image VM -> digest image nền -> secai-stack.json -> bundle FROM scratch (đã quét secret) -> kiểm 4 package
+#       public -> push gateway, vm, bundle (cùng tag YYYY.MM.DD-<sha8>), kiểm digest ẩn danh. --stable: dời tag stable sang bản này.
+#   publish-data [--version YYYY.MM.DD[.N]] [--src-root D] [--mcp-dir D] [--from-pkg D] [--neo4j-password-file F]
+#                [--allow F] [--keep] [--dry-run]
+#       pack.sh data (hoặc gói có sẵn) -> quét secret toàn bộ nội dung gói (+ payload Qdrant) -> image FROM scratch -> push.
+#   promote VERSION     dời tag stable của bundle sang VERSION (bản đó phải đã có trên GHCR).
+#   scan PATH...        chỉ quét secret (lib/secret_scan.py).
+#
+# Không push gì khi một gate trượt, khi quét secret có phát hiện, khi package chưa public, hoặc với --dry-run.
+# Token gh chỉ đi qua stdin của `docker login` (DOCKER_CONFIG tạm, xoá khi thoát); không lên argv/log.
+# Biến (chủ yếu cho test/máy khác): PUBLISH_REPO_ROOT, PUBLISH_PYTHON (python có pytest), PUBLISH_WORK_ROOT (~/secai-releases),
+#   PUBLISH_MIN_FREE_GB (45), SECAI_GHCR_OWNER (elonma-china), SECAI_DOCKER_DIR (thư mục .env prod cho smoke),
+#   SECAI_DATA_ROOT (dữ liệu nguồn), SECAI_REGISTRY_HELPER (lib/registry.py), SECAI_SEED_BLOB (seed_blob.py của secai-serving),
+#   QDRANT_URL (http://127.0.0.1:6333), NEO4J_PASSWORD (hoặc --neo4j-password-file).
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="${PUBLISH_REPO_ROOT:-$(cd "$HERE/.." && pwd)}"
+OWNER="${SECAI_GHCR_OWNER:-elonma-china}"
+REGISTRY="ghcr.io/$OWNER"
+PKG_GATEWAY=secai-agent-gateway; PKG_VM=secai-pentestcode-vm; PKG_STACK=secai-stack; PKG_DATA=secai-data
+SOURCE_URL="https://github.com/elonma-china/secai-prod"
+MAIN="$(git -C "$REPO" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')" || MAIN=""
+MAIN="${MAIN:-$REPO}"
+BASE="$(dirname "$MAIN")"
+PY="${PUBLISH_PYTHON:-$MAIN/.venv/bin/python}"
+DOCKER_DIR="${SECAI_DOCKER_DIR:-$BASE/secai-docker}"
+DATA_SRC="${SECAI_DATA_ROOT:-$BASE/secai-data}"
+WORK_ROOT="${PUBLISH_WORK_ROOT:-$HOME/secai-releases}"
+REGHELP="${SECAI_REGISTRY_HELPER:-$HERE/lib/registry.py}"
+SCANNER="$HERE/lib/secret_scan.py"
+SEED_BLOB="${SECAI_SEED_BLOB:-$BASE/secai-serving/docker/seed_blob.py}"
+MIN_FREE_GB="${PUBLISH_MIN_FREE_GB:-45}"
+VERSION_RE='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{8}$'
+DATA_RE='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{1,2})?$'
+BASE_KEYS=(QDRANT_IMAGE NEO4J_IMAGE REDIS_IMAGE ES_IMAGE)
+WORK=""
+
+die() { echo "publish: $*" >&2; [ -z "$WORK" ] || printf '%s FAIL: %s\n' "$(date '+%F %T')" "$*" >>"$WORK/publish.log" 2>/dev/null || true; exit 1; }
+log() { echo "==> $*" >&2; [ -z "$WORK" ] || printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$WORK/publish.log" 2>/dev/null || true; }
+need_cmds() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "thiếu lệnh '$c'"; done; }
+regq() { python3 -I "$REGHELP" "$@"; }
+
+CLEANUPS=()
+on_exit() {
+    local rc=$? c
+    for c in ${CLEANUPS[@]+"${CLEANUPS[@]}"}; do eval "$c" >/dev/null 2>&1 || true; done
+    exit "$rc"
+}
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+check_disk() {
+    local p gb
+    for p in "$WORK_ROOT" "$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /)"; do
+        [ -e "$p" ] || p=/
+        gb=$(( $(df -Pk "$p" | awk 'NR == 2 { print $4 }') / 1048576 ))
+        (( gb >= MIN_FREE_GB )) || die "chỉ còn ${gb} GB trống ở $p, cần >= ${MIN_FREE_GB} GB; dọn trước khi đóng gói"
+    done
+}
+
+# Package GHCR mới luôn private và API không đổi được: chủ dự án bật Public trên web. Push khi chưa public = máy đích không kéo được.
+pkg_visibility() { gh api "/users/$OWNER/packages/container/$1" --jq .visibility 2>/dev/null || echo "không-đọc-được"; }
+require_public() {
+    local p v bad=()
+    need_cmds gh
+    for p in "$@"; do v="$(pkg_visibility "$p")"; [ "$v" = public ] || bad+=("$p=$v"); done
+    [ ${#bad[@]} -eq 0 ] && return 0
+    echo "publish: package chưa public: ${bad[*]}" >&2
+    echo "publish: bật Public tại https://github.com/users/$OWNER/packages/container/<tên>/settings rồi chạy lại; KHÔNG push gì" >&2
+    exit 5
+}
+
+ghcr_login() {
+    [ -z "${DOCKER_CONFIG_TMP:-}" ] || return 0
+    need_cmds gh
+    DOCKER_CONFIG_TMP="$(mktemp -d)"; export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
+    CLEANUPS+=("docker logout ghcr.io; rm -rf '$DOCKER_CONFIG_TMP'")
+    gh auth token | docker login ghcr.io -u "$OWNER" --password-stdin >/dev/null 2>&1 || die "docker login ghcr.io thất bại"
+}
+
+local_id() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null; }
+
+# push_ref REF BASE_REPO: push, đối chiếu digest push in ra với .Id cục bộ (containerd store: .Id == digest manifest).
+# NotFound content digest (blob nền thiếu trong content store) -> seed blob từ Docker Hub bằng seed_blob.py rồi thử lại một lần.
+push_ref() {
+    local ref="$1" srcrepo="$2" out d want try dst
+    want="$(local_id "$ref")" || die "không có image cục bộ $ref"
+    for try in 1 2; do
+        if out="$(docker push "$ref" 2>&1)"; then break; fi
+        d="$(grep -oE 'content digest sha256:[0-9a-f]{64}' <<<"$out" | head -n1 | awk '{ print $3 }')"
+        if [ "$try" = 1 ] && [ -n "$d" ] && [ -n "$srcrepo" ] && [ -f "$SEED_BLOB" ]; then
+            log "blob nền $d thiếu trong content store: seed từ $srcrepo"
+            dst="${ref#"$REGISTRY"/}"; dst="$OWNER/${dst%%[:@]*}"
+            python3 -I "$SEED_BLOB" "$d" "$srcrepo" "$dst" >&2 || die "seed_blob $d thất bại"
+            continue
+        fi
+        printf '%s\n' "$out" | tail -n 5 >&2
+        die "docker push $ref thất bại"
+    done
+    d="$(grep -oE 'digest: sha256:[0-9a-f]{64}' <<<"$out" | tail -n1 | awk '{ print $2 }')"
+    [ "$d" = "$want" ] || die "push $ref: digest in ra '$d' khác .Id cục bộ '$want'"
+    verify_remote "$ref" "$want"
+}
+verify_remote() {   # verify_remote REF DIGEST: đọc ẩn danh (chứng minh máy đích kéo được) và so digest
+    local got i
+    for i in 1 2 3 4 5; do got="$(regq digest "$1" 2>/dev/null)" && break; sleep 3; done
+    [ "$got" = "$2" ] || die "GHCR trả digest '$got' cho $1, mong đợi $2"
+    log "đã push $1 ($2)"
+}
+
+# ───────────────────────────── gates (chép từ scripts/release-prod.sh, không chạm prod) ─────────────────────────────
+gate_pytest() {
+    local tree="$1" rc=0 last
+    log "gate 1/3: pytest toàn bộ trên git archive $S8 (~15 phút)"
+    [ -x "$PY" ] || die "không thấy python có pytest: $PY (PUBLISH_PYTHON)"
+    if [ -f "$MAIN/.env" ]; then install -m 600 "$MAIN/.env" "$tree/.env"; CLEANUPS+=("rm -f '$tree/.env'"); fi
+    (cd "$tree" && PYTHONPATH="$tree/src" "$PY" -m pytest -q -p no:cacheprovider) >"$WORK/pytest.log" 2>&1 || rc=$?
+    rm -f "$tree/.env"
+    last="$(grep -E '[0-9]+ (passed|failed|error)' "$WORK/pytest.log" | tail -n1)" || last=""
+    echo "pytest: ${last:-<không có dòng tổng kết>} (rc=$rc)" >&2
+    [ "$rc" = 0 ] && grep -q ' passed' <<<"$last" && ! grep -Eq ' (failed|error)' <<<"$last" \
+        || die "pytest không xanh (xem $WORK/pytest.log); KHÔNG phát hành"
+}
+
+gate_build_gateway() {
+    local tree="$1" ref="$2" cid
+    log "gate 2/3: build FULL $ref"
+    docker build -q --build-arg GIT_SHA="$S8" --build-arg GIT_BRANCH="$BRANCH" \
+        --label org.opencontainers.image.source="$SOURCE_URL" --label org.opencontainers.image.revision="$SHA" \
+        --label org.opencontainers.image.version="$VERSION" -t "$ref" "$tree" >/dev/null || die "build gateway lỗi"
+    docker run --rm --network none --entrypoint python "$ref" \
+        -c "import secai_gateway.unified_app, secai_gateway.multilang_app, secai_gateway.translation.worker" >/dev/null \
+        || die "image gateway import app lỗi"
+    rm -rf "$WORK/src-fresh" "$WORK/imgsrc"; mkdir -p "$WORK/src-fresh"
+    git -C "$REPO" archive "$SHA" src | tar -x -C "$WORK/src-fresh"   # cây mới, không phải cây vừa chạy pytest
+    cid="$(docker create "$ref")"; docker cp "$cid:/app/src" "$WORK/imgsrc" >/dev/null; docker rm "$cid" >/dev/null
+    diff -rq -x __pycache__ "$WORK/imgsrc" "$WORK/src-fresh/src" >/dev/null || die "/app/src của image khác git archive $S8"
+}
+
+gate_smoke() {
+    local ref="$1" name port h i data="$DATA_SRC" args=()
+    log "gate 3/3: smoke container (chỉ 127.0.0.1, không mount dữ liệu ghi của prod)"
+    name="secai-stack-gateway-smoke-$(date +%Y%m%d)"
+    if docker inspect "$name" >/dev/null 2>&1; then
+        [ "$(docker inspect -f '{{index .Config.Labels "secai.publish"}}' "$name")" = 1 ] || die "đã có container $name không do publish.sh tạo; không đụng"
+        docker rm -f "$name" >/dev/null
+    fi
+    [ -f "$DOCKER_DIR/.env" ] || die "không thấy $DOCKER_DIR/.env cho smoke (SECAI_DOCKER_DIR)"
+    port="$(python3 -I -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1])")"
+    CLEANUPS+=("docker rm -f '$name'")
+    [ ! -d "$BASE/HO-SO-GOC-NGHIEM-THU-AI" ] || args+=(-v "$BASE/HO-SO-GOC-NGHIEM-THU-AI:/srv/showcase/hosogoc:ro")
+    docker run -d --name "$name" --label secai.publish=1 --network secai-docker_secai-net \
+        --add-host host.docker.internal:host-gateway --env-file "$DOCKER_DIR/.env" -p "127.0.0.1:$port:8131" \
+        -e QDRANT_URL=http://qdrant:6333 -e NEO4J_URI=bolt://neo4j:7687 -e REDIS_URL=redis://redis:6379 \
+        -e GATEWAY_DB_PATH=/app/data/gateway.db -e SESSION_DB_PATH=/app/data/sessions.db -e REVIEW_DB_PATH=/app/data/reviews.db \
+        -e REPORT_DB_PATH=/app/data/reports.db -e SESSION_STORE_BACKEND=sqlite \
+        -e TRANSLATION_UPSTREAM_URL=http://host.docker.internal:18185 -e REVIEW_ENABLED=false -e REWARD_ENABLED=false \
+        -e EXPLOITDB_ROOT=/srv/exploitdb -e POC_CATALOG_DB=/srv/poc/catalog.db -e POC_ARTIFACT_STORE=/srv/poc-store \
+        -e POC_SOURCES_ROOT=/srv/poc-sources -v "$data/exploitdb:/srv/exploitdb:ro" -v "$data/poc-sources:/srv/poc-sources:ro" \
+        ${args[@]+"${args[@]}"} "$ref" uvicorn secai_gateway.unified_app:app --host 0.0.0.0 --port 8131 >/dev/null \
+        || die "không chạy được smoke $name"
+    h=""
+    for i in $(seq 1 45); do h="$(curl -fsS -m 5 "http://127.0.0.1:$port/health" 2>/dev/null)" && [ -n "$h" ] && break; h=""; sleep 2; done
+    [ -n "$h" ] || { docker logs --tail 30 "$name" >&2 || true; die "smoke: /health không lên"; }
+    printf '%s\n' "$h" >"$WORK/health-smoke.json"
+    curl -fsS -m 5 http://127.0.0.1:8131/health >"$WORK/health-prod.json" 2>/dev/null || : >"$WORK/health-prod.json"
+    python3 -I - "$WORK/health-smoke.json" "$WORK/health-prod.json" "$S8" <<'PY' || die "smoke: /health sai (xem $WORK/health-smoke.json)"
+import json, sys
+new = json.load(open(sys.argv[1]))
+try: old = json.load(open(sys.argv[2]))
+except Exception: old = {}
+assert new.get("git_sha") == sys.argv[3], f"git_sha={new.get('git_sha')} != {sys.argv[3]}"
+def deps(h): return {k: v.get("ok") for k, v in (h.get("serving") or {}).items() if isinstance(v, dict)} | {k: h[k] for k in ("redis",) if k in h}
+bad = [k for k, v in deps(old).items() if v in (True, "ok") and deps(new).get(k) not in (True, "ok")]
+assert not bad, f"dep OK ở prod nhưng hỏng ở smoke: {bad}"
+PY
+    curl -fsS -m 10 -o /dev/null "http://127.0.0.1:$port/ai/v3/translate/languages" || die "smoke: /ai/v3/translate/languages không 200"
+    docker rm -f "$name" >/dev/null
+}
+
+build_vm() {
+    local ref="$1" ctx="$WORK/vm-ctx"
+    log "build image VM $ref (git archive pentestcode + stack/images/pentestcode-vm)"
+    rm -rf "$ctx"; mkdir -p "$ctx"
+    git -C "$REPO" archive "$SHA" pentestcode stack/images/pentestcode-vm | tar -x -C "$ctx"
+    docker build -q -f "$ctx/stack/images/pentestcode-vm/Dockerfile" --build-arg GIT_SHA="$SHA" \
+        --label org.opencontainers.image.source="$SOURCE_URL" --label org.opencontainers.image.version="$VERSION" \
+        -t "$ref" "$ctx" >"$WORK/vm-build.log" 2>&1 || { tail -n 30 "$WORK/vm-build.log" >&2; die "build VM lỗi"; }
+    [ "$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$ref")" = "$SHA" ] \
+        || die "image VM không mang revision $SHA"
+    docker run --rm --network none --entrypoint sh "$ref" -c \
+        'command -v bun nuclei httpx python3 >/dev/null && test -f /opt/vm/supervisor.py && test -d /opt/pentestcode/node_modules' \
+        || die "image VM thiếu công cụ cơ bản"
+    rm -rf "$ctx"
+}
+
+# base_images TREE -> "KEY<TAB>REF" theo mặc định ${KEY:-ref} trong compose.yml của cây phát hành.
+base_images() {
+    python3 -I - "$1/stack/compose.yml" "${BASE_KEYS[*]}" <<'PY'
+import re, sys
+t = open(sys.argv[1]).read()
+for k in sys.argv[2].split():
+    m = re.search(r"\$\{" + k + r":-([^}]+)\}", t)
+    if not m: sys.exit("compose.yml không có ${%s:-...}" % k)
+    print(k + "\t" + m.group(1))
+PY
+}
+
+latest_data_version() {
+    regq tags "$REGISTRY/$PKG_DATA" 2>/dev/null | grep -E "$DATA_RE" | sort -V | tail -n1
+}
+
+write_manifest() {   # write_manifest OUT (đọc IMAGES_TSV, DATA_VERSION, DATA_DIGEST qua môi trường, không ghép vào mã)
+    IMAGES_TSV="$IMAGES_TSV" M_VERSION="$VERSION" M_SHA="$SHA" M_SOURCE="$SOURCE_URL" M_REGISTRY="$REGISTRY" \
+    M_DATA_IMAGE="$REGISTRY/$PKG_DATA" M_DATA_VERSION="$DATA_VERSION" M_DATA_DIGEST="$DATA_DIGEST" python3 -I - "$1" <<'PY'
+import json, os, sys, time
+e = os.environ
+imgs = {}
+for line in e["IMAGES_TSV"].strip().splitlines():
+    k, ref, dg = line.split("\t")
+    imgs[k] = {"ref": ref, "digest": dg}
+m = {"schema": 1, "version": e["M_VERSION"], "git_sha": e["M_SHA"], "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+     "source": e["M_SOURCE"], "registry": e["M_REGISTRY"], "profiles": ["exploit"], "images": imgs,
+     "data": {"image": e["M_DATA_IMAGE"], "default_version": e["M_DATA_VERSION"], "digest": e["M_DATA_DIGEST"]}}
+with open(sys.argv[1], "w") as f:
+    json.dump(m, f, indent=1, sort_keys=True); f.write("\n")
+PY
+}
+
+scan_tree() {   # scan_tree DIR NAME [scanner args...]: có phát hiện thì dừng, chỉ in luật + vị trí
+    local dir="$1" name="$2" rc=0; shift 2
+    log "quét secret: $name"
+    python3 -I "$SCANNER" --summary-json "$WORK/scan-$name.json" "$@" "$dir" >"$WORK/scan-$name.txt" || rc=$?
+    case "$rc" in
+        0) log "quét secret $name: sạch" ;;
+        1) head -n 50 "$WORK/scan-$name.txt" >&2; die "quét secret $name: có phát hiện (luật + vị trí ở $WORK/scan-$name.txt); KHÔNG push" ;;
+        *) die "quét secret $name lỗi (rc=$rc); KHÔNG push" ;;
+    esac
+}
+
+cmd_publish() {
+    local ref=origin/main data_version="" stable=0 dry=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --ref) [ $# -ge 2 ] || die "--ref cần giá trị"; ref="$2"; shift 2 ;;
+            --data-version) [ $# -ge 2 ] || die "--data-version cần giá trị"; data_version="$2"; shift 2 ;;
+            --stable) stable=1; shift ;;
+            --dry-run) dry=1; shift ;;
+            *) die "tham số lạ: $1" ;;
+        esac
+    done
+    need_cmds git docker python3 curl tar diff
+    SHA="$(git -C "$REPO" rev-parse --verify "$ref^{commit}")" || die "ref không tồn tại: $ref"
+    S8="${SHA:0:8}"
+    VERSION="$(date +%Y.%m.%d)-$S8"
+    [[ "$VERSION" =~ $VERSION_RE ]] || die "version lạ: $VERSION"
+    BRANCH=main
+    [ "$SHA" = "$(git -C "$REPO" rev-parse --verify -q origin/main 2>/dev/null)" ] \
+        || { BRANCH="$(printf '%s' "${ref#origin/}" | tr -c 'A-Za-z0-9._-' '-')"; echo "publish: CẢNH BÁO: $ref ($S8) không phải origin/main" >&2; }
+    mkdir -p "$WORK_ROOT"; WORK="$WORK_ROOT/stack-$VERSION"; mkdir -p "$WORK"; chmod 700 "$WORK"
+    log "phát hành $VERSION từ $ref ($SHA)$([ "$dry" = 0 ] || echo ' (dry-run)')"
+    check_disk
+    if regq digest "$REGISTRY/$PKG_STACK:$VERSION" >/dev/null 2>&1; then
+        [ "$dry" = 1 ] || die "$REGISTRY/$PKG_STACK:$VERSION đã có trên GHCR (phiên bản bất biến)"
+        echo "publish: (dry-run) $VERSION đã có trên GHCR" >&2
+    fi
+    [ "$dry" = 1 ] || require_public "$PKG_GATEWAY" "$PKG_VM" "$PKG_STACK" "$PKG_DATA"   # dừng sớm, trước 15 phút pytest
+
+    local tree="$WORK/tree"
+    rm -rf "$tree"; mkdir -p "$tree"
+    git -C "$REPO" archive "$SHA" | tar -x -C "$tree"
+    local gw="$REGISTRY/$PKG_GATEWAY:$VERSION" vm="$REGISTRY/$PKG_VM:$VERSION" bundle="$REGISTRY/$PKG_STACK:$VERSION"
+    gate_pytest "$tree"
+    gate_build_gateway "$tree" "$gw"
+    gate_smoke "$gw"
+    build_vm "$vm"
+
+    log "digest image nền (registry gốc, ẩn danh)"
+    local k r d
+    IMAGES_TSV="GATEWAY_IMAGE	$REGISTRY/$PKG_GATEWAY:$VERSION	$(local_id "$gw")
+VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
+    while IFS=$'\t' read -r k r; do
+        d="$(regq digest "$r")" || die "không lấy được digest của $r"
+        IMAGES_TSV+=$'\n'"$k"$'\t'"$r"$'\t'"$d"
+    done < <(base_images "$tree")
+    [ -n "$data_version" ] || data_version="$(latest_data_version)" || data_version=""
+    DATA_VERSION="$data_version"; DATA_DIGEST=""
+    if [ -n "$DATA_VERSION" ]; then
+        [[ "$DATA_VERSION" =~ $DATA_RE ]] || die "--data-version '$DATA_VERSION' không hợp lệ"
+        DATA_DIGEST="$(regq digest "$REGISTRY/$PKG_DATA:$DATA_VERSION")" || {
+            [ "$dry" = 1 ] || die "không thấy $REGISTRY/$PKG_DATA:$DATA_VERSION trên GHCR (publish-data trước)"; DATA_DIGEST=""; }
+    else
+        [ "$dry" = 1 ] || die "chưa có bản dữ liệu nào trên GHCR: chạy publish-data trước hoặc --data-version"
+        echo "publish: (dry-run) chưa xác định bản dữ liệu mặc định" >&2
+    fi
+
+    log "bundle $bundle"
+    local bdir="$WORK/bundle"
+    rm -rf "$bdir"; mkdir -p "$bdir"
+    git -C "$REPO" archive "$SHA" stack | tar -x -C "$bdir"
+    write_manifest "$bdir/stack/secai-stack.json"
+    local allow=()
+    [ ! -f "$bdir/stack/secret-scan-allow.txt" ] || allow=(--allow "$bdir/stack/secret-scan-allow.txt")
+    scan_tree "$bdir/stack" bundle ${allow[@]+"${allow[@]}"}
+    printf 'FROM scratch\nCOPY stack /stack\n' >"$WORK/Dockerfile.bundle"
+    docker build -q -f "$WORK/Dockerfile.bundle" --label org.opencontainers.image.source="$SOURCE_URL" \
+        --label org.opencontainers.image.revision="$SHA" --label org.opencontainers.image.version="$VERSION" \
+        --label org.opencontainers.image.title="$PKG_STACK" -t "$bundle" "$bdir" >/dev/null || die "build bundle lỗi"
+    cp "$bdir/stack/secai-stack.json" "$WORK/secai-stack.json"
+    rm -rf "$tree"
+
+    if [ "$dry" = 1 ]; then
+        log "DRY-RUN xong: không login, không push. Manifest: $WORK/secai-stack.json"
+        cat "$WORK/secai-stack.json"
+        return 0
+    fi
+    require_public "$PKG_GATEWAY" "$PKG_VM" "$PKG_STACK"
+    ghcr_login
+    push_ref "$gw" library/python
+    push_ref "$vm" oven/bun
+    push_ref "$bundle" ""
+    [ "$stable" = 0 ] || promote_to_stable "$VERSION"
+    log "XONG: $VERSION (gateway $(local_id "$gw"), vm $(local_id "$vm"), bundle $(local_id "$bundle")); ghi ở $WORK"
+    cat "$WORK/secai-stack.json"
+}
+
+promote_to_stable() {
+    local v="$1" want
+    want="$(regq digest "$REGISTRY/$PKG_STACK:$v")" || die "không đọc được $REGISTRY/$PKG_STACK:$v trên GHCR"
+    docker image inspect "$REGISTRY/$PKG_STACK:$v" >/dev/null 2>&1 || docker pull -q "$REGISTRY/$PKG_STACK:$v" >/dev/null \
+        || die "không kéo được $REGISTRY/$PKG_STACK:$v"
+    [ "$(local_id "$REGISTRY/$PKG_STACK:$v")" = "$want" ] || die "bundle cục bộ $v khác GHCR"
+    docker tag "$REGISTRY/$PKG_STACK:$v" "$REGISTRY/$PKG_STACK:stable"
+    ghcr_login
+    push_ref "$REGISTRY/$PKG_STACK:stable" ""
+    log "stable -> $v ($want)"
+}
+
+cmd_promote() {
+    local v="${1:-}"
+    [[ "$v" =~ $VERSION_RE ]] || die "dùng: publish.sh promote YYYY.MM.DD-<sha8>"
+    need_cmds docker python3
+    require_public "$PKG_STACK"
+    promote_to_stable "$v"
+}
+
+cmd_publish_data() {
+    local version="" src="$DATA_SRC" mcp="" frompkg="" pwfile="" allowf="" keep=0 dry=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --version) version="$2"; shift 2 ;;
+            --src-root) src="$2"; shift 2 ;;
+            --mcp-dir) mcp="$2"; shift 2 ;;
+            --from-pkg) frompkg="$2"; shift 2 ;;
+            --neo4j-password-file) pwfile="$2"; shift 2 ;;
+            --allow) allowf="$2"; shift 2 ;;
+            --keep) keep=1; shift ;;
+            --dry-run) dry=1; shift ;;
+            *) die "tham số lạ: $1" ;;
+        esac
+    done
+    need_cmds docker python3 zstd sha256sum du
+    version="${version:-$(date +%Y.%m.%d)}"
+    [[ "$version" =~ $DATA_RE ]] || die "version dữ liệu '$version' không hợp lệ (YYYY.MM.DD hoặc YYYY.MM.DD.N)"
+    local ref="$REGISTRY/$PKG_DATA:$version"
+    mkdir -p "$WORK_ROOT"; WORK="$WORK_ROOT/data-$version"; mkdir -p "$WORK"; chmod 700 "$WORK"
+    log "phát hành dữ liệu $version$([ "$dry" = 0 ] || echo ' (dry-run)')"
+    check_disk
+    if regq digest "$ref" >/dev/null 2>&1; then die "$ref đã có trên GHCR (bất biến); chọn $version.2 ..."; fi
+    [ "$dry" = 1 ] || require_public "$PKG_DATA"
+    local pkg qargs=()
+    if [ -n "$frompkg" ]; then
+        pkg="$(cd "$frompkg" && pwd)"
+        [ -s "$pkg/SHA256SUMS" ] || die "$pkg không phải gói dữ liệu (thiếu SHA256SUMS)"
+        [ -z "${QDRANT_URL_SCAN:-}" ] || qargs=(--qdrant-url "$QDRANT_URL_SCAN" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
+    else
+        local hh; hh="$(date +%H)"
+        [ "$hh" != 03 ] && [ "$hh" != 04 ] || die "03:00-05:00: autoscan ghi Neo4j, export sẽ lệch số đếm; chạy giờ khác"
+        if [ -n "$pwfile" ]; then
+            [ -f "$pwfile" ] && [ "$(stat -c %a "$pwfile")" = 600 ] || die "--neo4j-password-file phải là tệp 0600"
+            NEO4J_PASSWORD="$(tr -d '\r\n' <"$pwfile")"
+        fi
+        [ -n "${NEO4J_PASSWORD:-}" ] || die "cần NEO4J_PASSWORD (env) hoặc --neo4j-password-file để xuất Neo4j"
+        export NEO4J_PASSWORD
+        pkg="$WORK/pkg"
+        [ ! -e "$pkg" ] || die "$pkg đã có (lần chạy dở?); xoá hoặc dùng --from-pkg $pkg"
+        log "pack.sh data $src -> $pkg (snapshot Qdrant tạo rồi xoá trên máy nguồn; Neo4j chỉ đọc)"
+        bash "$HERE/pack.sh" data ${mcp:+--mcp-dir "$mcp"} "$src" "$pkg" >&2 || die "pack.sh data lỗi"
+        unset NEO4J_PASSWORD
+        qargs=(--qdrant-url "${QDRANT_URL:-http://127.0.0.1:6333}" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
+    fi
+    (cd "$pkg" && sha256sum -c --strict --quiet SHA256SUMS) || die "SHA256SUMS của gói không khớp"
+    local allow=()
+    [ -z "$allowf" ] || allow=(--allow "$allowf")
+    scan_tree "$pkg" data --exclude .git ${allow[@]+"${allow[@]}"} ${qargs[@]+"${qargs[@]}"}
+    # GHCR giới hạn ~10 GB mỗi layer; mỗi nhóm COPY là một layer.
+    local grp sz
+    for grp in qdrant neo4j "exploitdb.tar.zst poc.tar.zst poc-sources.tar.zst exploitdb-mcp-server.tar.zst"; do
+        sz=$(cd "$pkg" && du -scb $grp | tail -n1 | cut -f1)
+        (( sz < 9500000000 )) || die "layer '$grp' ${sz} byte > 9,5 GB (GHCR giới hạn ~10 GB mỗi layer)"
+    done
+    cat >"$WORK/Dockerfile.data" <<'EOF'
+FROM scratch
+COPY qdrant /secai-data/qdrant
+COPY neo4j /secai-data/neo4j
+COPY exploitdb.tar.zst poc.tar.zst poc-sources.tar.zst exploitdb-mcp-server.tar.zst /secai-data/
+COPY MANIFEST.md SHA256SUMS /secai-data/
+EOF
+    log "build $ref"
+    docker build -q -f "$WORK/Dockerfile.data" --label org.opencontainers.image.source="$SOURCE_URL" \
+        --label org.opencontainers.image.version="$version" --label org.opencontainers.image.title="$PKG_DATA" \
+        -t "$ref" "$pkg" >/dev/null || die "build image dữ liệu lỗi"
+    cp "$pkg/MANIFEST.md" "$WORK/MANIFEST.md"
+    if [ "$dry" = 1 ]; then
+        log "DRY-RUN xong: image $ref dựng cục bộ ($(local_id "$ref")), không push"
+        return 0
+    fi
+    require_public "$PKG_DATA"
+    ghcr_login
+    push_ref "$ref" ""
+    printf '{"version":"%s","digest":"%s"}\n' "$version" "$(local_id "$ref")" >"$WORK/data-release.json"
+    if [ "$keep" = 0 ]; then
+        [ -n "$frompkg" ] || rm -rf "$pkg"
+        docker image rm "$ref" >/dev/null 2>&1 || true
+    fi
+    log "XONG: $ref ($(cat "$WORK/data-release.json"))"
+}
+
+case "${1:-}" in
+    publish) shift; cmd_publish "$@" ;;
+    publish-data) shift; cmd_publish_data "$@" ;;
+    promote) shift; cmd_promote "$@" ;;
+    scan) shift; [ $# -gt 0 ] || die "dùng: publish.sh scan PATH..."; python3 -I "$SCANNER" "$@" ;;
+    *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+esac

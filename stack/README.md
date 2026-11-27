@@ -1,8 +1,75 @@
 # `stack/` - gói triển khai SecAI cho một máy mới
 
-Một thư mục, một `compose.yml`, một `.env`: dựng backend SecAI (gateway + kho dữ liệu + các dịch vụ tuỳ chọn) trên máy
-chỉ có Docker, không cần đường dẫn riêng của máy nào. Thay thế `deploy/docker-compose.yml` và `deploy/up.sh` (đã đánh dấu
-deprecated).
+## Người vận hành: 3 lệnh
+
+Máy đích cần Linux x86_64, Docker có `docker compose`, `curl`, `python3`, chạy bằng root (hoặc user trong nhóm docker),
+RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git, không cần tài khoản GHCR.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/elonma-china/secai-prod/main/stack/secai -o secai && chmod +x secai
+sudo ./secai install            # bản stable; muốn bản cụ thể: sudo ./secai install 2026.11.27-abcd1234
+sudo ./secai status
+```
+
+`install` tự làm hết: kiểm máy (Docker, đĩa, RAM, `vm.max_map_count`), kéo bundle, hỏi đúng các thông tin bắt buộc (URL, tên
+model và khoá của LLM, embedding, rerank, cùng dải lab `VERIFY_ALLOWED_TARGETS`; khoá gõ ẩn, không qua tham số dòng lệnh), kéo
+mọi image theo digest, tải và nạp dữ liệu, bật stack rồi chạy `check.sh all`. Mọi thứ nằm trong `/opt/secai` (đổi bằng
+`SECAI_HOME`); cấu hình ở `/opt/secai/stack/.env` (0600). Cài không hỏi: đặt sẵn các biến đó trong môi trường rồi thêm `--yes`.
+
+| Lệnh | Việc |
+|---|---|
+| `./secai status` | bản đang chạy, bộ dữ liệu, trạng thái service, `git_sha` của gateway, image có đúng digest trong manifest không |
+| `./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy |
+| `./secai rollback` | quay về bản liền trước |
+| `./secai data update [NGÀY]` | nạp bộ dữ liệu mới bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `./secai data rollback` |
+| `./secai check` | chạy lại `check.sh all` (sau khi sửa `.env`) |
+| `./secai logs [service]`, `./secai up`, `./secai down` | xem log, bật lại, dừng (không bao giờ xoá volume) |
+
+Mã thoát của `upgrade` và `data update`: 0 đạt; 1 lỗi trước khi chuyển (không có gì thay đổi); 3 check trượt và đã tự quay về;
+4 đã quay về nhưng check vẫn trượt (thường do endpoint model, xem `./secai check`).
+
+Bộ phát hành gồm core (gateway, Qdrant, Neo4j, Redis, Elasticsearch) và profile `exploit` (2 container VM). Model (LLM,
+embedding, rerank) là endpoint ngoài. Profile translation/report/review vẫn có trong compose nhưng không thuộc bộ phát hành,
+`secai` không bật chúng. Phiên bản bộ stack có dạng `YYYY.MM.DD-<sha8>`: gateway, VM và bundle cùng tag, mọi image (kể cả
+qdrant/neo4j/redis/elasticsearch kéo từ registry gốc) ghim theo digest trong `secai-stack.json` của bundle. Dữ liệu có phiên bản
+riêng theo ngày (`secai-data:YYYY.MM.DD`).
+
+## Người phát hành: `publish.sh` (máy dev, lệnh tay)
+
+Chỉ chạy trên máy dev có repo, Docker và `gh` đã đăng nhập (quyền `write:packages`). Bốn package
+`ghcr.io/elonma-china/{secai-agent-gateway,secai-pentestcode-vm,secai-stack,secai-data}` phải Public (package mới luôn private,
+chỉ đổi được trên web GitHub); script kiểm và không push gì nếu chưa public.
+
+```sh
+stack/publish.sh publish-data [--version 2026.11.27]     # pack.sh data, quét secret toàn bộ gói, push secai-data:<ngày>
+stack/publish.sh publish [--ref origin/main] [--stable]  # gate, build, manifest, bundle, push bản YYYY.MM.DD-<sha8>
+stack/publish.sh promote 2026.11.27-abcd1234             # dời tag stable (bản người vận hành cài mặc định)
+stack/publish.sh publish --dry-run                       # chạy hết trừ login/push, in manifest
+```
+
+- **Gate** (chép từ `scripts/release-prod.sh`, không chạm prod): pytest toàn bộ trên `git archive` của ref (~15 phút); build
+  FULL gateway với `GIT_SHA`; import app; `/app/src` == `git archive`; smoke `secai-stack-gateway-smoke-<ngày>` chỉ bind
+  127.0.0.1 (`/health` đúng `git_sha`, không dep nào tệ hơn prod, `/ai/v3/translate/languages` 200). Gate trượt thì không push.
+- Image VM dựng từ `git archive <ref> pentestcode stack/images/pentestcode-vm`. Bundle là image `FROM scratch` chứa `stack/`
+  của cùng ref cộng `secai-stack.json`, quét secret trước khi dựng (`secret-scan-allow.txt` liệt kê các phát hiện đã xem xét,
+  như khoá stub công khai). Sau push, digest được đọc lại ẩn danh từ GHCR và phải bằng `.Id` cục bộ.
+- **Dữ liệu**: từ chối trong 03:00-05:00 và khi còn dưới 45 GB đĩa. Quét mọi tệp của gói, kể cả bên trong `.tar.zst`, tar lồng
+  nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc; có phát hiện thì dừng và chỉ in tên luật cùng vị trí, không in
+  giá trị. Mỗi nhóm COPY là một layer dưới 9,5 GB (GHCR giới hạn khoảng 10 GB mỗi layer).
+- Phiên bản bất biến: tag đã có trên GHCR thì từ chối. Dữ liệu phát hành lại trong ngày dùng `YYYY.MM.DD.2`.
+
+## Chuyển prod trên máy này sang gói (kế hoạch, chưa làm)
+
+Làm sau khi gói đã ổn định, là một việc riêng:
+
+1. Cài song song: `SECAI_HOME=/opt/secai-next` với `COMPOSE_PROJECT_NAME=secai-next`, `GATEWAY_BIND=127.0.0.1`, cổng khác
+   8131; `secai install` kéo bộ dữ liệu mới nhất. Prod `secai-docker` vẫn chạy nguyên.
+2. So sánh: `/health`, `check.sh all`, `acceptance/run-api.sh` trên cổng mới với số gốc của prod (`ACCEPTANCE.md`).
+3. Chuyển (cần chủ dự án duyệt): theo quy trình release (lock, sao lưu compose) dừng gateway prod bằng compose của
+   `secai-docker`, không `docker stop` tay; đổi `GATEWAY_BIND`/`GATEWAY_HOST_PORT` của stack mới sang `0.0.0.0:8131`,
+   `secai up && secai check`.
+4. Rollback: `secai down` stack mới, bật lại compose `secai-docker` từ bản sao lưu (container, image, volume và dữ liệu prod
+   không bị đụng trong cả quá trình). Giữ ít nhất 3 ngày trước khi dọn stack cũ.
 
 ## Gói này là gì, không là gì
 
@@ -20,7 +87,9 @@ deprecated).
 
 | Đường dẫn | Việc |
 |---|---|
-| `compose.yml` | Toàn bộ service, mạng, volume. Không `container_name`, không `:latest`, không docker.sock |
+| `secai` | CLI người vận hành (tải bằng curl): install/status/upgrade/rollback/data update, tự rollback khi check trượt |
+| `publish.sh` | Người phát hành: gate, build, manifest, bundle, `publish-data`, `promote`; push GHCR chỉ khi package public |
+| `compose.yml` | Toàn bộ service, mạng, volume. Không `container_name`, không `:latest`, không docker.sock. Image nền đọc `QDRANT_IMAGE`, `NEO4J_IMAGE`, `REDIS_IMAGE`, `ES_IMAGE` (`secai` ghim digest) |
 | `.env.example` | Mẫu cấu hình, mỗi biến một chú thích. `.env` thật (0600) và `secrets/` bị gitignore |
 | `bootstrap.sh` | `init` tạo `.env` và sinh secret; `preflight` kiểm `.env`, đường dẫn, quyền, máy chủ |
 | `pack.sh` | `image` dựng image gateway từ `git archive`; `data` đóng gói dữ liệu từ máy nguồn |
@@ -28,10 +97,11 @@ deprecated).
 | `check.sh` | `env`, `config`, `models`, `health`, `all`: kiểm trước và sau `up` |
 | `eval-vast.sh`, `destroy-eval.sh` | Chạy thử gói trên một máy Vast thuê rẻ rồi huỷ đúng ID đã ghi. Chỉ cho người vận hành, cần ngân sách do chủ dự án duyệt |
 | `images/` | Dockerfile dựng trên máy đích: `pentestcode-vm`, `converter`, `review-ui`, `tunnel` |
-| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`) |
-| `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả |
+| `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`), `secret_scan.py` (quét secret trước khi push), `registry.py` (đọc digest/tag ẩn danh) |
+| `secret-scan-allow.txt` | Phát hiện đã xem xét trong `stack/` (khoá stub công khai, tài liệu); `publish.sh` dùng khi quét bundle |
+| `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả; `stubs/model_stub.py` (LLM/embedding/rerank giả, chỉ để test), `ghcr-vm-test.sh` (chạy đúng luồng người vận hành trên VM thuê) |
 
-## Dựng trên máy mới (5 bước)
+## Dựng tay trên máy mới (5 bước, khi không dùng `secai`)
 
 Yêu cầu: Docker Compose v2, `zstd`, `curl`, `sha256sum`, `python3`; `vm.max_map_count >= 262144` (Elasticsearch;
 `sudo sysctl -w vm.max_map_count=262144`); RAM đủ cho 2 container VM (mỗi cái `VM_MEM_LIMIT`, mặc định 48g) cộng các kho
@@ -54,9 +124,9 @@ tới vào `<out_dir>/images/` (thiếu image cục bộ hoặc là placeholder 
 trên máy đích `stack/bootstrap.sh load-images <thư mục gói>/images` rồi mới `docker compose up`. `images.txt` ghi mỗi ref kèm
 `layers-sha256:` (sha256 của danh sách diff_id layer), không dùng `.Id` vì `.Id` khác nhau giữa containerd store và overlay2.
 
-Gateway có thể kéo từ GHCR (private: `docker login ghcr.io` bằng token đọc) thay vì dựng. VM, converter, review-ui, tunnel
-dựng trên máy đích. Mọi tag phải cố định (không `:latest`). **`docker push` là việc làm tay của chủ dự án**; không script
-nào trong gói push image.
+Gateway và VM có thể kéo từ GHCR public (`ghcr.io/elonma-china/secai-agent-gateway`, `secai-pentestcode-vm`) thay vì dựng;
+`secai` làm việc đó tự động theo digest. Converter, review-ui, tunnel dựng trên máy đích. Mọi tag phải cố định (không `:latest`).
+Phát hành lên GHCR chỉ bằng `publish.sh` (lệnh tay của người phát hành, có gate); ngoài nó không script nào `docker push`.
 
 **2. Gói dữ liệu.** Trên máy nguồn: `stack/pack.sh data <src_root> <out_dir>` (chi tiết ở mục dưới). Trên máy đích:
 
@@ -200,6 +270,8 @@ Kết quả `direct`/stub chỉ chứng minh đường ống, không chứng min
 
 ## Cập nhật phiên bản
 
+Dùng `secai upgrade [VERSION]` (tự rollback khi check trượt). Làm tay khi không dùng `secai`:
+
 1. Dựng/kéo image mới, đặt tag mới vào `.env` (`GATEWAY_IMAGE`, `VM_IMAGE`, ...).
 2. `./bootstrap.sh preflight && ./check.sh config`.
 3. `docker compose up -d` (chỉ service đổi image bị tạo lại). Volume và `DATA_ROOT` giữ nguyên.
@@ -208,6 +280,8 @@ Kết quả `direct`/stub chỉ chứng minh đường ống, không chứng min
 Không chạy `down -v`: volume `report-data`, `gw-data`, `translation-data`, `review-data` giữ DB báo cáo/job/review.
 
 ## Rollback
+
+Dùng `secai rollback` (bản) hoặc `secai data rollback` (dữ liệu). Làm tay:
 
 Đổi tag trong `.env` về bản trước (image cũ vẫn còn trên máy nếu chưa `docker rmi`), rồi `docker compose up -d` và
 `./check.sh all`. Dữ liệu không đụng tới. Giữ image phiên bản liền trước cho đến khi bản mới ổn định.
