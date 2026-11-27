@@ -3,7 +3,13 @@
 Nhánh `feat/stack-ghcr`. Kế hoạch: `docs/superpowers/plans/2026-11-27-stack-ghcr.md`. Phần này ghi những gì đã chạy thật trên
 máy dev (máy prod) và những gì còn chờ.
 
-## Trạng thái: CHỜ chủ dự án bật Public 3 package image
+## Tiến độ phát hành thật (2026-11-28)
+
+- 3 package image GHCR đã public; dữ liệu chuyển sang Docker Hub private `docker.io/secai1999/secai-data` (gói miễn phí).
+- `secai-data:2026.11.27` đã push: digest đọc lại bằng token chỉ đọc `sha256:67508336e64c5692c4ee79c69e8e457ae2105fc6c903ef6c3a647a817f062179`.
+- Lần chạy V1 đầu (c33427b7) dừng trước mọi push ở bước kiểm tag (tôi thay `registry.py` giữa lúc chạy); đã sửa, chạy lại.
+
+## Trạng thái cũ (trước 2026-11-28): CHỜ chủ dự án bật Public 3 package image
 
 Điều kiện push thật (chủ dự án, 2026-11-27): `secai-agent-gateway`, `secai-pentestcode-vm`, `secai-stack` phải **public**;
 `secai-data` phải **private**. Kiểm lần cuối (23:05 +07) bằng
