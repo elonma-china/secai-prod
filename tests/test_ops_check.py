@@ -856,21 +856,37 @@ def test_compose_with_only_references_is_not_a_leak_sec3(w: World, monkeypatch: 
     monkeypatch.setattr(oc, "world_readable", lambda p: bool(Path(p).stat().st_mode & 0o004))
     w.compose.write_text("services:\n  neo4j:\n    environment:\n"
                          "      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD chua set trong .env}\n"
-                         "      ADMIN_API_KEY: ${ADMIN_API_KEY}\n      BASIC_AUTH: ${BASIC_AUTH:-}\n"
-                         "      REPORT_API_KEY: ${REPORT_API_KEY:+SetElsewhere99}\n")
+                         "      ADMIN_API_KEY: ${ADMIN_API_KEY}\n      BASIC_AUTH: ${BASIC_AUTH:-}\n")
     w.compose.chmod(0o664)
     rs = results(w, "OPS-SEC-3", "OPS-SEC-4")
     assert rs["OPS-SEC-3"].status == oc.PASS and rs["OPS-SEC-4"].status == oc.PASS, rs
-    w.compose.write_text("services:\n  neo4j:\n    environment:\n"
-                         "      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-LiteralDefault-99}\n")
-    r = one(w, "OPS-SEC-3")
-    assert r.status == oc.FAIL and "NEO4J_" in r.evidence and "LiteralDefault-99" not in r.evidence, r.evidence
+    # mặc định ${X:-lit} và giá trị thay thế ${X:+lit} là literal nằm thẳng trong file
+    for line in ("NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-LiteralDefault-99}",
+                 "NEO4J_AUTH: ${NEO4J_PASSWORD:+neo4j/LiteralAlt-99}"):
+        w.compose.write_text(f"services:\n  neo4j:\n    environment:\n      {line}\n")
+        r = one(w, "OPS-SEC-3")
+        assert r.status == oc.FAIL and "NEO4J_PASSWORD" in r.evidence and "Literal" not in r.evidence, (line, r.evidence)
 
 
 def test_placeholders_are_not_literal_secrets() -> None:
-    for v in ("sk-placeholder", "change-me", "<mật-khẩu-mạnh>", "xxxxxxxx", "sk-xxxxxxxx"):
+    for v in ("sk-placeholder", "change-me", "CHANGEME", "<mật-khẩu-mạnh>", "xxxxxxxx", "sk-xxxxxxxx",
+              "${OPENAI_API_KEY:-sk-placeholder}"):
         assert oc.literal_secret(v) is None, v
-    assert oc.literal_secret("sk-live-0123456789") == "sk-live-0123456789"
+    # chỉ miễn khi CẢ giá trị là placeholder: mật khẩu chứa chuỗi con 'changeme'/'placeholder' vẫn là secret
+    for v in ("sk-live-0123456789", "Changeme2026!Prod", "${NEO4J_PASSWORD:-Changeme#Prod2026}",
+              "neo4j/MyPlaceholderPw99", "sk-live-abcdef1234567890  # placeholder until rotation"):
+        assert oc.literal_secret(v), v
+
+
+def test_secret_containing_placeholder_word_is_reported(w: World) -> None:
+    w.compose.write_text("services:\n  gw:\n    environment:\n"
+                         "      OPENAI_API_KEY: sk-live-abcdef1234567890  # placeholder until rotation\n")
+    r = one(w, "OPS-SEC-4")
+    assert r.status == oc.FAIL and "OPENAI_API_KEY" in r.evidence and "abcdef" not in r.evidence, r.evidence
+    ctx = make_ctx(w)
+    assert oc._secret_names("NEO4J_PASSWORD=Changeme2026!Prod\n", ctx) == ["NEO4J_PASSWORD"]
+    assert oc._secret_names('pw = os.environ.get("NEO4J_PASSWORD", "ChangeMe-Prod-2026")\n', ctx) == ["NEO4J_PASSWORD"]
+    assert oc._secret_names('k = os.environ.get("LLM_API_KEY", "sk-placeholder")\n', ctx) == []
 
 
 @pytest.mark.parametrize("text,name", [

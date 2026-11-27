@@ -145,6 +145,71 @@ def test_redact_is_idempotent() -> None:
     assert deploy.redact_secrets(once) == once
 
 
+# (input, giá trị giả phải biến mất, các dòng output mong đợi). Mỗi dạng là YAML/compose hợp lệ.
+LEAK_CASES = [
+    # `$` literal: compose viết `$$`; `Pa$w0rd` còn phần literal `Pa`; literal ghép tham chiếu
+    ("NEO4J_AUTH: neo4j/Pa$$w0rdFake01\n", "w0rdFake01", ["NEO4J_AUTH: <redacted>"]),
+    ("NEO4J_PASSWORD: Pa$$w0rdFake02\n", "w0rdFake02", ["NEO4J_PASSWORD: <redacted>"]),
+    ("env:\n  - NEO4J_PASSWORD=Pa$$w0rdFake03\n", "w0rdFake03", ["  - NEO4J_PASSWORD=<redacted>"]),
+    ('API_KEY: "Pa$w0rdFake04"\n', "w0rdFake04", ['API_KEY: "<redacted>"']),
+    ("API_KEY: sk-Fake05${SUFFIX}\n", "Fake05", ["API_KEY: <redacted>"]),
+    ("NEO4J_PASSWORD: ${NEO4J_PASSWORD:-Pa$$Fake06}\n", "Fake06", ["NEO4J_PASSWORD: ${NEO4J_PASSWORD:-<redacted>}"]),
+    # `*`/`{` trong ngoặc hay dạng KEY=value là literal, không phải alias/flow mapping
+    ('API_KEY: "*abcFake07"\n', "abcFake07", ['API_KEY: "<redacted>"']),
+    ("API_KEY: '*abcFake08'\n", "abcFake08", ["API_KEY: '<redacted>'"]),
+    ("env:\n  - DB_PASSWORD=*abcFake09\n", "abcFake09", ["  - DB_PASSWORD=<redacted>"]),
+    ('env:\n  - "API_KEY=*abcFake10"\n', "abcFake10", ['  - "API_KEY=<redacted>"']),
+    ('API_KEY: "{abcFake11}"\n', "abcFake11", ['API_KEY: "<redacted>"']),
+    ("env:\n  - API_KEY={abcFake12\n", "abcFake12", ["  - API_KEY=<redacted>"]),
+    # giá trị nằm ở dòng sau khoá: plain scalar xuống dòng, list, `value: |` sau `- name:`
+    ("env:\n  NEO4J_AUTH:\n    neo4j/Fake13\n  OTHER: x\n", "Fake13", ["  NEO4J_AUTH:", "    <redacted>", "  OTHER: x"]),
+    ("env:\n  NEO4J_AUTH: neo4j/Fake14a\n    Fake14b\n  OTHER: x\n", "Fake14",
+     ["  NEO4J_AUTH: <redacted>", "    <redacted>", "  OTHER: x"]),
+    ("apiKeys:\n  - Fake15a\n  - Fake15b\nother: x\n", "Fake15", ["  - <redacted>", "other: x"]),
+    ("apiKeys:\n- Fake16\nother: x\n", "Fake16", ["- <redacted>", "other: x"]),
+    ("- name: API_TOKEN\n  value: |\n    Fake17\n- name: LOG_LEVEL\n  value: debug\n", "Fake17",
+     ["  value: |", "    <redacted>", "  value: debug"]),
+    ('API_KEY: "abc\n  Fake18"\nOTHER: x\n', "Fake18", ['API_KEY: "<redacted>', '  <redacted>"', "OTHER: x"]),
+    ('API_KEY: "ab\\"Fake19"\n', "Fake19", ['API_KEY: "<redacted>"']),
+    ("data:\n  TLS_KEY: !!binary |\n    RmFrZTI0\n  other: x\n", "RmFrZTI0", ["  TLS_KEY: !!binary |", "    <redacted>", "  other: x"]),
+    # mặc định literal trong template Helm, cờ argv và URL có `$$`
+    ('password: {{ .Values.neo4j.password | default "Fake20" }}\n', "Fake20",
+     ['password: {{ .Values.neo4j.password | default "<redacted>" }}']),
+    ('env:\n  - name: NEO4J_PASSWORD\n    value: {{ .Values.neo4j.password | default "Fake21" | quote }}\n', "Fake21",
+     ['    value: {{ .Values.neo4j.password | default "<redacted>" | quote }}']),
+    ('command: ["run", "--password", "$$Fake22"]\n', "Fake22", ['command: ["run", "--password", "<redacted>"]']),
+    ("REDIS_URL: redis://:$$Fake23@redis:6379/0\n", "Fake23", ["REDIS_URL: redis://:<redacted>@redis:6379/0"]),
+]
+
+
+@pytest.mark.parametrize("src,fake,want", LEAK_CASES, ids=[f"case{i:02d}" for i in range(len(LEAK_CASES))])
+def test_redact_literal_forms(src: str, fake: str, want: list[str]) -> None:
+    out = deploy.redact_secrets(src)
+    assert fake not in out, out
+    lines = out.splitlines()
+    for w in want:
+        assert w in lines, (w, out)
+    assert len(lines) == len(src.splitlines())
+    assert deploy.redact_secrets(out) == out
+    if "{{" not in out:  # template Helm chưa render không phải YAML
+        yaml.safe_load(out)
+
+
+def test_redact_keeps_references_and_non_secret_names() -> None:
+    src = ("services:\n  gw:\n    environment:\n"
+           "      REVIEW_CREDENTIALS_FILE: /srv/review/credentials.json\n"
+           "      LLM_MAX_TOKENS: 4096\n      KEYWORD_INDEX: cve-keywords\n      AUTHOR: secai\n"
+           "      NEO4J_AUTH: neo4j/$NEO4J_PASSWORD\n      BASIC_AUTH: ${BASIC_USER}:${BASIC_PASS}\n"
+           "      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN}\n"
+           "x-auth: &auth\n  NEO4J_USER: neo4j\n"
+           "auth:\n  enabled: true\n  username: neo4j\n  password: fake-nested-pw\n"
+           '- { name: NEO4J_AUTH, value: "neo4j/{{ required "neo4j.password is required" .Values.neo4j.password }}" }\n'
+           "imagePullSecrets:\n  {{- toYaml .Values.imagePullSecrets | nindent 2 }}\n")
+    out = deploy.redact_secrets(src)
+    assert "fake-nested-pw" not in out
+    assert out == src.replace("  password: fake-nested-pw", "  password: <redacted>"), out
+
+
 def _client(monkeypatch: pytest.MonkeyPatch, compose: Path, helm: Path) -> TestClient:
     monkeypatch.setattr(deploy, "get_settings", lambda: SimpleNamespace(
         showcase_docker_compose=str(compose), showcase_helm_dir=str(helm)))

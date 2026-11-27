@@ -121,7 +121,8 @@ NOT_SECRET_NAME_RE = re.compile(r"(_FILE|_PATH|_DIR|_FILES)$", re.I)
 GET_DEFAULT_RE = re.compile(
     r"""(?:\.get|\bgetenv)\(\s*(?P<q1>["'])(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P=q1)\s*,\s*(?P<q2>["'])(?P<val>[^"'\n]*)(?P=q2)""")
 # Giá trị giữ chỗ hiển nhiên, không phải secret: sk-placeholder, change-me, <mật-khẩu>, xxxx, ****.
-PLACEHOLDER_RE = re.compile(r"(?i)placeholder|change[-_]?me|^<.*>$|^(?:sk-)?(?:x{4,}|\*{4,})$")
+# So với TOÀN BỘ phần literal (fullmatch): `Changeme2026!` hay `sk-live-… # placeholder` vẫn là secret.
+PLACEHOLDER_RE = re.compile(r"(?i)(?:sk-)?(?:placeholder|change[-_]?me|x{4,}|\*{4,})|<[^<>]*>")
 PUBLIC_ENV_NAMES = {"GPG_KEY"}
 
 
@@ -1646,14 +1647,16 @@ def literal_secret(v: str) -> str | None:
     """Phần literal của giá trị gán cho biến secret: cả giá trị nếu không có ${...}; giá trị mặc định
     của ${X:-lit} (mặc định nằm thẳng trong file nên cũng là secret lộ). None nếu chỉ tham chiếu."""
     v = (v or "").strip().strip("'\"")
-    if not v or v.lower() in ("changeme", "required", "optional", "none", "null", "false", "true") or PLACEHOLDER_RE.search(v):
+    if not v or v.lower() in ("required", "optional", "none", "null", "false", "true"):
         return None
     defaults = [d.strip("}") for d in DEFAULT_RE.findall(v) if d.strip("}")]
     if defaults:
-        return defaults[0]
-    if "$" in v or v.startswith(("<", "{")) or "(" in v or "[" in v:  # tham chiếu, lời gọi hàm, subscript
+        lit = defaults[0]
+    elif "$" in v or v.startswith(("<", "{")) or "(" in v or "[" in v:  # tham chiếu, lời gọi hàm, subscript
         return None
-    return v
+    else:
+        lit = v
+    return None if PLACEHOLDER_RE.fullmatch(lit.strip().strip("'\"")) else lit
 
 
 def _secret_names(text: str, ctx: Ctx) -> list[str]:
@@ -1663,11 +1666,11 @@ def _secret_names(text: str, ctx: Ctx) -> list[str]:
         if not is_secret_name(name):
             continue
         if text[max(0, m.start("name") - 2):m.start("name")] == "${":
-            # Tham chiếu ${NAME...}: ${NAME:?msg}/${NAME:+x} chỉ là thông báo/thay thế, không phải literal;
-            # chỉ phần mặc định của ${NAME:-x}/${NAME:=x} nằm thẳng trong file.
-            if val[:1] in ("?", "+"):
+            # Tham chiếu ${NAME...}: ${NAME:?msg} chỉ là thông báo, không phải literal; mặc định của
+            # ${NAME:-x}/${NAME:=x} và giá trị thay thế của ${NAME:+x} nằm thẳng trong file nên vẫn xét.
+            if val[:1] == "?":
                 continue
-            val = val.lstrip("-=")
+            val = val.lstrip("+-=")
         # Tên chữ thường không có ngoặc ở tên lẫn giá trị là code/chú thích (`llm_key = s.x`, `a token: …`),
         # không phải cấu hình; env/compose/shell dùng tên viết hoa, JSON/Python literal có ngoặc.
         if not name.isupper() and not (m["q1"] or m["q2"]):
