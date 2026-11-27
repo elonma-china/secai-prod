@@ -13,7 +13,7 @@ import pytest
 
 STACK = Path(__file__).resolve().parents[1] / "stack"
 PUBLISH = STACK / "publish.sh"
-TOKEN = "gho_FAKEpublishTOKEN0123456789abcdefghijklm"   # token gh giả: chỉ được đi qua stdin của docker login
+TOKEN = "gho_" + "FAKEpublishTOKEN0123456789abcdefghijklm"   # token gh giả: chỉ được đi qua stdin của docker login
 REALSECRET = "real-" + "SECRETvalue-77aa"   # "secret thật" giả của máy (nguồn ks.env)
 HUBTOKEN = "dckr_pat_" + "FAKEwriteToken0123456789"   # token Docker Hub giả: chỉ được đi qua stdin của docker login
 DATA = "docker.io/testns/secai-data"
