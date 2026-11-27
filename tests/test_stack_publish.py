@@ -12,6 +12,7 @@ import pytest
 STACK = Path(__file__).resolve().parents[1] / "stack"
 PUBLISH = STACK / "publish.sh"
 TOKEN = "gho_FAKEpublishTOKEN0123456789abcdefghijklm"   # token gh giả: chỉ được đi qua stdin của docker login
+REALSECRET = "real-" + "SECRETvalue-77aa"   # "secret thật" giả của máy (nguồn ks.env)
 REG = "ghcr.io/elonma-china"
 
 
@@ -83,6 +84,8 @@ if c == "push":
     tag = argv[1]
     if flag("push_fail") and open(os.path.join(F, "push_fail")).read().strip() in tag:
         print("failed: NotFound: content digest sha256:" + "e" * 64); sys.exit(1)
+    if flag("push_quota") and "secai-data" in tag:
+        print("denied: insufficient storage quota for this account (billing)"); sys.exit(1)
     d = iid(tag) if not flag("push_wrong_digest") else "sha256:" + "d" * 64
     remote = st("remote.json", {}); remote[tag] = d; put("remote.json", remote)
     print(f"{tag.split(':')[-1]}: digest: {d} size: 1234"); sys.exit(0)
@@ -104,7 +107,12 @@ sys.exit(9)
 FAKE_REG = r'''#!/usr/bin/env python3
 import hashlib, json, os, sys
 F = "@FAKE@"
-cmd, ref = sys.argv[1], sys.argv[2]
+args = sys.argv[1:]
+auth = args[:1] == ["--gh-auth"]
+if auth: args = args[2:]
+open(os.path.join(F, "reg.log"), "a").write(json.dumps(sys.argv[1:]) + "\n")
+cmd, ref = args[0], args[1]
+if "secai-data" in ref and not auth: sys.exit(1)   # package private: ẩn danh không đọc được
 if cmd == "tags":
     print("\n".join(json.load(open(os.path.join(F, "data_tags.json"))))); sys.exit(0)
 remote = json.load(open(os.path.join(F, "remote.json"))) if os.path.exists(os.path.join(F, "remote.json")) else {}
@@ -158,7 +166,9 @@ class Box:
         write_exec(self.bin / "curl", sub(FAKE_CURL))
         write_exec(tmp / "registry-fake", sub(FAKE_REG))
         write_exec(tmp / "fakepython", sub(FAKE_PY))
-        self.set_visibility("public")
+        self.set_visibility("public", **{"secai-data": "private"})
+        # nguồn secret thật giả (không bao giờ đọc secret thật của máy chạy test)
+        (tmp / "ks.env").write_text(f"FAKE_API_KEY={REALSECRET}\nQDRANT_COLLECTION=cve_kb_hybrid\n")
         (self.fake / "data_tags.json").write_text(json.dumps(["2026.11.20", "2026.11.27", "init"]))
         # repo git tạm: src/, Dockerfile, stack/ (compose thật để đọc image nền), pentestcode/
         self.repo = tmp / "repo"
@@ -190,7 +200,7 @@ class Box:
              "PUBLISH_PYTHON": str(self.tmp / "fakepython"), "PUBLISH_WORK_ROOT": str(self.work), "PUBLISH_MIN_FREE_GB": "0",
              "SECAI_DOCKER_DIR": str(self.dockerdir), "SECAI_DATA_ROOT": str(self.tmp / "data"),
              "SECAI_REGISTRY_HELPER": str(self.tmp / "registry-fake"), "SECAI_SEED_BLOB": str(self.tmp / "no-seed.py"),
-             "LANG": "C.UTF-8"}
+             "PUBLISH_KNOWN_SECRETS": f"env:{self.tmp / 'ks.env'}", "LANG": "C.UTF-8"}
         e.update(kw)
         return e
 
@@ -276,11 +286,11 @@ def test_publish_real_order_and_token_only_on_stdin(box):
     assert "--password-stdin" in login and "ghcr.io" in login
 
 
-def test_private_package_stops_before_gates(box):
-    box.set_visibility("public", **{"secai-data": "private"})
+def test_private_image_package_stops_before_gates(box):
+    box.set_visibility("public", **{"secai-pentestcode-vm": "private", "secai-data": "private"})
     r = box.run("publish")
     assert r.returncode == 5
-    assert "secai-data=private" in r.stderr
+    assert "secai-pentestcode-vm=private" in r.stderr and "secai-data" not in r.stderr
     assert not (box.fake / "pytest.calls").exists()
     assert not any(c[0] in ("build", "push", "login") for c in box.docker_calls())
 
@@ -357,14 +367,14 @@ def _tar(path, files):
             ti = tarfile.TarInfo(name); ti.size = len(data); t.addfile(ti, io.BytesIO(data))
 
 
-def make_pkg(d, secret=False):
+def make_pkg(d, secret=False, extra=None):
     """Gói dữ liệu nhỏ đúng định dạng thật: tar.zst cho các cây, snapshot Qdrant là tar, neo4j CSV."""
     (d / "qdrant").mkdir(parents=True)
     (d / "neo4j").mkdir()
     _tar(d / "qdrant" / "cve_kb_hybrid.snapshot", {"0/segments/a.bin": b"\x00payload CVE-2021-44228"})
     (d / "neo4j" / "counts.json").write_text("{}")
     for n in ("exploitdb", "poc", "poc-sources", "exploitdb-mcp-server"):
-        body = b"print('hi')\n" + (b"password=hunter2-real\n" if secret and n == "poc-sources" else b"")
+        body = b"print('hi')\n" + (b"password=hunter2-real\n" if secret and n == "poc-sources" else b"") + (extra or {}).get(n, b"")
         _tar(d / f"{n}.tar", {f"{n}/x.py": body})
         subprocess.run(["zstd", "-q", "--rm", str(d / f"{n}.tar"), "-o", str(d / f"{n}.tar.zst")], check=True)
     (d / "MANIFEST.md").write_text("# SecAI data package\n")
@@ -384,21 +394,65 @@ def test_publish_data_from_pkg(box):
     assert pkg.exists()   # gói có sẵn không bị xoá
 
 
-def test_publish_data_secret_blocks(box):
-    if not (STACK / "lib" / "secret_scan.py").exists():
-        pytest.skip("secret_scan.py chưa có")
+def test_publish_data_corpus_counted_not_blocking(box):
+    # password= trong poc-sources (corpus công khai đã duyệt) chỉ được đếm và ghi vào hồ sơ phát hành
     pkg = box.tmp / "pkg"; make_pkg(pkg, secret=True)
     r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg))
-    assert r.returncode == 1 and "password-assign" in r.stderr and "poc-sources.tar.zst!poc-sources/x.py:2" in r.stderr
+    assert r.returncode == 0, r.stderr
+    rec = json.loads((box.work / "data-2026.11.28" / "data-release.json").read_text())
+    assert rec["secret_scan"]["policy"] == "data"
+    assert rec["secret_scan"]["corpus_counts"] == {"poc-sources": {"password-assign": 1}}
+    assert "hunter2" not in json.dumps(rec) + r.stdout + r.stderr
+    # push dữ liệu được kiểm bằng token gh (private), không ẩn danh
+    assert any(json.loads(l)[:1] == ["--gh-auth"] for l in (box.fake / "reg.log").read_text().splitlines())
+
+
+def test_publish_data_secret_outside_corpus_blocks(box):
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    (pkg / "MANIFEST.md").write_text("# SecAI data package\npassword=hunter2-real\n")
+    sums = "".join(f"{hashlib.sha256((pkg / f).read_bytes()).hexdigest()}  {f}\n"
+                   for f in sorted(str(p.relative_to(pkg)) for p in pkg.rglob("*") if p.is_file() and p.name != "SHA256SUMS"))
+    (pkg / "SHA256SUMS").write_text(sums)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg))
+    assert r.returncode == 1 and "password-assign\tMANIFEST.md:2" in r.stderr
     assert "hunter2" not in r.stdout + r.stderr
     assert not box.pushes() and not any(c[0] == "build" for c in box.docker_calls())
 
 
-def test_publish_data_private_refused(box):
-    box.set_visibility("public", **{"secai-data": "private"})
+def test_publish_data_real_secret_stops_with_6(box):
+    pkg = box.tmp / "pkg"; make_pkg(pkg, extra={"poc-sources": f"leak {REALSECRET}\n".encode()})
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg))
+    assert r.returncode == 6, r.stderr
+    assert "SECRET THẬT" in r.stderr and "poc-sources.tar.zst!poc-sources/x.py" in r.stderr and "ks.env#FAKE_API_KEY" in r.stderr
+    assert REALSECRET not in r.stdout + r.stderr
+    for f in box.work.rglob("*"):
+        if f.is_file():
+            assert REALSECRET not in f.read_text(errors="replace")
+    assert not box.pushes()
+
+
+def test_bundle_real_secret_stops_with_6(box):
+    (box.repo / "stack" / "notes.txt").write_text(f"oops {REALSECRET}\n")
+    git(box.repo, "add", "-A"); git(box.repo, "commit", "-qm", "leak")
+    git(box.repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    r = box.run("publish")
+    assert r.returncode == 6 and "notes.txt:1" in r.stderr and REALSECRET not in r.stdout + r.stderr
+    assert not box.pushes()
+
+
+def test_publish_data_must_stay_private(box):
+    box.set_visibility("public")   # secai-data public => từ chối
     pkg = box.tmp / "pkg"; make_pkg(pkg)
     r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg))
-    assert r.returncode == 5 and not box.pushes()
+    assert r.returncode == 5 and "PRIVATE" in r.stderr and not box.pushes()
+
+
+def test_publish_data_quota_stops_with_7(box):
+    box.set("push_quota")
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg))
+    assert r.returncode == 7 and "quota/billing" in r.stderr and "KHÔNG thử lách" in r.stderr
+    assert len([c for c in box.docker_calls() if c[0] == "push"]) == 1   # không thử lại
 
 
 def test_publish_data_rejects_existing_and_bad_version(box):

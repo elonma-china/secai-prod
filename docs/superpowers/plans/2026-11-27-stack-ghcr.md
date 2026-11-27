@@ -24,8 +24,24 @@
 
 Owner instruction 2026-11-27 (answer to the "make packages public" question): packages are still private. Do all code, tests, docs and dry-runs; do NOT push real images/data and do NOT rent a VM until all four packages are public. Before every real push check `gh api '/users/elonma-china/packages?package_type=container'`; if not all public, stop there, open the PR and report the pending steps.
 
+Owner decisions later on 2026-11-27 (override the spec above where they differ):
+- Visibility: images public (`secai-agent-gateway`, `secai-pentestcode-vm`, `secai-stack`), data **private** (`secai-data`, never
+  to be made public). Real push needs the 3 image packages public and `secai-data` private; `publish-data` refuses when public.
+- Target machines need a GHCR token with `read:packages` only for data: hidden prompt / env / 0600 file, never argv; login into a
+  temporary `DOCKER_CONFIG` for that pull only, removed afterwards. Docs explain how to create a read-only (classic) token.
+- Private packages count against the owner's GitHub Packages quota (Free: 500 MB storage, 1 GB transfer/month). A real data push
+  (~5.5 GB) may be refused until billing is set: try once, on quota/billing errors stop the data part and report; no workaround.
+- Secret scan stays mandatory, two tiers: always block `ghp_`/`gho_`/`github_pat_`, `hf_`, `.env` files and exact matches of real
+  secrets of this machine (gh token, values in `secai-docker/.env`, main checkout `.env`, `stack/.env`, prod compose, CVE-DB
+  `run_sync.sh`, `environment` of `~/secai-releases/*/*.json` with KEY/TOKEN/SECRET/PASS/AUTH names; in memory only, skip values
+  < 12 chars and obvious values, report source + location only, never values). A real-secret match anywhere stops and is reported
+  to the parent agent. Soft rules (`password=`, `api_key=`, private key, AKIA, `sk-`) only count inside a fixed, tested corpus
+  list (exploitdb, poc-sources, poc/store, catalog.db, mcp-server node_modules, Qdrant payload/snapshot); everywhere else they block.
+- VM test without a read-only token: load data with `secai install --data-dir` / `secai data load` from a package copied by rsync.
+
 Facts measured on 2026-11-27:
 - Placeholders `:init` (10 kB, FROM scratch) pushed for the four packages at 12:40Z; all four are private (anonymous token endpoint → 401).
+- Secret scan dry measurement on the source trees (read-only): 7,198 soft-rule findings (exploitdb 2,913, poc-sources 2,829, poc/store 1,456; catalog.db 232; mcp node_modules 40), 0 hard-rule findings. The raw Qdrant snapshot is compressed SST, so payloads are scanned through the API scroll.
 - Docker 29.1.3, containerd snapshotter, no buildx. For a single-manifest image built locally, `.Id` equals the digest GHCR reports after push (verified on the four placeholders).
 - Base images now (registry HEAD): `qdrant/qdrant:v1.10.1` index `sha256:6a34a799…`, `neo4j:5.20-community` `sha256:52d3dec8…`, `redis:7-alpine` moved to `sha256:7f7d30b7…` (local prod copy is older), `elasticsearch:8.15.3` `sha256:01c17320…`.
 - Full pytest on an archive takes ~15 min (3315 passed on 2dcff27c). Gateway FULL build is cached on this host (~35 s); cold ~8 min. pentestcode-vm build 3–12 min, ~800 MB pushed.

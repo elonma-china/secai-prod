@@ -3,13 +3,26 @@
 ## Người vận hành: 3 lệnh
 
 Máy đích cần Linux x86_64, Docker có `docker compose`, `curl`, `python3`, chạy bằng root (hoặc user trong nhóm docker),
-RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git, không cần tài khoản GHCR.
+RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git. Image và bundle kéo không cần đăng nhập; riêng **dữ liệu là
+package private** nên cần một token GitHub chỉ đọc (xem dưới).
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/elonma-china/secai-prod/main/stack/secai -o secai && chmod +x secai
-sudo ./secai install            # bản stable; muốn bản cụ thể: sudo ./secai install 2026.11.27-abcd1234
+sudo SECAI_GHCR_TOKEN_FILE=/root/ghcr-read.token ./secai install   # bản stable; bản cụ thể: ... install 2026.11.27-abcd1234
 sudo ./secai status
 ```
+
+**Token đọc dữ liệu.** Chủ dự án (hoặc người có quyền đọc package `secai-data`) tạo trên GitHub: Settings → Developer settings →
+Personal access tokens → Tokens (classic) → Generate new token (classic), **chỉ** tick `read:packages`, đặt hạn dùng. Lưu vào
+tệp của root, mode 600 (`install -m 600 /dev/null /root/ghcr-read.token`, rồi dán token vào bằng trình soạn thảo, không qua
+`echo` trên dòng lệnh). `secai` nhận token từ `SECAI_GHCR_TOKEN_FILE` (tệp 0600/0400), biến `SECAI_GHCR_TOKEN`, hoặc hỏi ẩn khi
+chạy tay; không bao giờ qua tham số dòng lệnh. Token chỉ dùng để `docker login` vào một `DOCKER_CONFIG` tạm cho đúng lần kéo
+dữ liệu, xoá ngay sau đó; không còn credential nào trong `~/.docker`. User đăng nhập mặc định `elonma-china` (`SECAI_GHCR_USER`).
+Lưu ý quota: mỗi lần kéo dữ liệu (~5,5 GB) tính vào lưu lượng GitHub Packages của chủ package (gói Free chỉ 1 GB/tháng cho
+package private); chưa gắn phương thức thanh toán thì GitHub chặn tải.
+
+Không có token: chép thư mục gói dữ liệu (đầu ra `pack.sh data`) sang máy đích rồi `sudo ./secai install --data-dir <thư mục>`;
+cập nhật dữ liệu sau này bằng `sudo ./secai data load <thư mục> [NGÀY]`.
 
 `install` tự làm hết: kiểm máy (Docker, đĩa, RAM, `vm.max_map_count`), kéo bundle, hỏi đúng các thông tin bắt buộc (URL, tên
 model và khoá của LLM, embedding, rerank, cùng dải lab `VERIFY_ALLOWED_TARGETS`; khoá gõ ẩn, không qua tham số dòng lệnh), kéo
@@ -21,7 +34,8 @@ mọi image theo digest, tải và nạp dữ liệu, bật stack rồi chạy `
 | `./secai status` | bản đang chạy, bộ dữ liệu, trạng thái service, `git_sha` của gateway, image có đúng digest trong manifest không |
 | `./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy |
 | `./secai rollback` | quay về bản liền trước |
-| `./secai data update [NGÀY]` | nạp bộ dữ liệu mới bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `./secai data rollback` |
+| `./secai data update [NGÀY]` | kéo bộ dữ liệu mới (cần token), nạp bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `./secai data rollback` |
+| `./secai data load <thư mục> [NGÀY]` | như `data update` nhưng lấy gói từ thư mục đã chép sẵn (không cần token) |
 | `./secai check` | chạy lại `check.sh all` (sau khi sửa `.env`) |
 | `./secai logs [service]`, `./secai up`, `./secai down` | xem log, bật lại, dừng (không bao giờ xoá volume) |
 
@@ -32,13 +46,13 @@ Bộ phát hành gồm core (gateway, Qdrant, Neo4j, Redis, Elasticsearch) và p
 embedding, rerank) là endpoint ngoài. Profile translation/report/review vẫn có trong compose nhưng không thuộc bộ phát hành,
 `secai` không bật chúng. Phiên bản bộ stack có dạng `YYYY.MM.DD-<sha8>`: gateway, VM và bundle cùng tag, mọi image (kể cả
 qdrant/neo4j/redis/elasticsearch kéo từ registry gốc) ghim theo digest trong `secai-stack.json` của bundle. Dữ liệu có phiên bản
-riêng theo ngày (`secai-data:YYYY.MM.DD`).
+riêng theo ngày (`secai-data:YYYY.MM.DD`, package private).
 
 ## Người phát hành: `publish.sh` (máy dev, lệnh tay)
 
-Chỉ chạy trên máy dev có repo, Docker và `gh` đã đăng nhập (quyền `write:packages`). Bốn package
-`ghcr.io/elonma-china/{secai-agent-gateway,secai-pentestcode-vm,secai-stack,secai-data}` phải Public (package mới luôn private,
-chỉ đổi được trên web GitHub); script kiểm và không push gì nếu chưa public.
+Chỉ chạy trên máy dev có repo, Docker và `gh` đã đăng nhập (quyền `write:packages`). Ba package image
+`ghcr.io/elonma-china/{secai-agent-gateway,secai-pentestcode-vm,secai-stack}` phải **Public** (package mới luôn private, chỉ đổi
+được trên web GitHub); `secai-data` phải **Private**. Script kiểm visibility ngay trước khi push và không push gì nếu sai (mã 5).
 
 ```sh
 stack/publish.sh publish-data [--version 2026.11.27]     # pack.sh data, quét secret toàn bộ gói, push secai-data:<ngày>
@@ -51,11 +65,19 @@ stack/publish.sh publish --dry-run                       # chạy hết trừ lo
   FULL gateway với `GIT_SHA`; import app; `/app/src` == `git archive`; smoke `secai-stack-gateway-smoke-<ngày>` chỉ bind
   127.0.0.1 (`/health` đúng `git_sha`, không dep nào tệ hơn prod, `/ai/v3/translate/languages` 200). Gate trượt thì không push.
 - Image VM dựng từ `git archive <ref> pentestcode stack/images/pentestcode-vm`. Bundle là image `FROM scratch` chứa `stack/`
-  của cùng ref cộng `secai-stack.json`, quét secret trước khi dựng (`secret-scan-allow.txt` liệt kê các phát hiện đã xem xét,
-  như khoá stub công khai). Sau push, digest được đọc lại ẩn danh từ GHCR và phải bằng `.Id` cục bộ.
+  của cùng ref cộng `secai-stack.json`, quét secret trước khi dựng: mọi luật chặn, không có allowlist. Sau push, digest được
+  đọc lại ẩn danh từ GHCR (chứng minh máy đích kéo được) và phải bằng `.Id` cục bộ.
+- **Quét secret** (`lib/secret_scan.py`, chỉ in tên luật + vị trí, không bao giờ in giá trị), hai tầng:
+  - Luôn chặn ở mọi nơi: token `ghp_`/`gho_`/`github_pat_`, `hf_`, tệp `.env`, và **secret thật của máy dev** (so khớp chính
+    xác trong bộ nhớ với: `gh auth token`, các khoá/mật khẩu trong `.env` của `secai-docker` và checkout chính, `stack/.env`,
+    compose prod, `run_sync.sh` của CVE-DB, `environment` trong hồ sơ `~/secai-releases/*/*.json`, khoá Vast và token HF; bỏ
+    giá trị dưới 12 ký tự và giá trị hiển nhiên). Khớp secret thật ở bất kỳ đâu: dừng với mã 6, báo người phụ trách.
+  - Luật mềm (gán `password`/`api_key`, private key, AKIA, `sk-`): chặn ở mọi nơi, trừ các cây corpus công khai cố định trong
+    mã (`DATA_CORPUS`: exploitdb, poc-sources, poc/store, catalog.db, node_modules của exploitdb-mcp-server, payload và snapshot
+    Qdrant `cve_kb_hybrid`), nơi chúng chỉ được đếm theo luật và theo cây vào hồ sơ phát hành `data-release.json`.
 - **Dữ liệu**: từ chối trong 03:00-05:00 và khi còn dưới 45 GB đĩa. Quét mọi tệp của gói, kể cả bên trong `.tar.zst`, tar lồng
-  nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc; có phát hiện thì dừng và chỉ in tên luật cùng vị trí, không in
-  giá trị. Mỗi nhóm COPY là một layer dưới 9,5 GB (GHCR giới hạn khoảng 10 GB mỗi layer).
+  nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc. Mỗi nhóm COPY là một layer dưới 9,5 GB (GHCR giới hạn khoảng
+  10 GB mỗi layer). Package private tính vào quota GitHub Packages: GHCR từ chối vì quota/billing thì dừng (mã 7), không lách.
 - Phiên bản bất biến: tag đã có trên GHCR thì từ chối. Dữ liệu phát hành lại trong ngày dùng `YYYY.MM.DD.2`.
 
 ## Chuyển prod trên máy này sang gói (kế hoạch, chưa làm)
@@ -88,7 +110,7 @@ Làm sau khi gói đã ổn định, là một việc riêng:
 | Đường dẫn | Việc |
 |---|---|
 | `secai` | CLI người vận hành (tải bằng curl): install/status/upgrade/rollback/data update, tự rollback khi check trượt |
-| `publish.sh` | Người phát hành: gate, build, manifest, bundle, `publish-data`, `promote`; push GHCR chỉ khi package public |
+| `publish.sh` | Người phát hành: gate, build, manifest, bundle, `publish-data`, `promote`; push image khi package public, dữ liệu khi package private |
 | `compose.yml` | Toàn bộ service, mạng, volume. Không `container_name`, không `:latest`, không docker.sock. Image nền đọc `QDRANT_IMAGE`, `NEO4J_IMAGE`, `REDIS_IMAGE`, `ES_IMAGE` (`secai` ghim digest) |
 | `.env.example` | Mẫu cấu hình, mỗi biến một chú thích. `.env` thật (0600) và `secrets/` bị gitignore |
 | `bootstrap.sh` | `init` tạo `.env` và sinh secret; `preflight` kiểm `.env`, đường dẫn, quyền, máy chủ |
@@ -98,8 +120,7 @@ Làm sau khi gói đã ổn định, là một việc riêng:
 | `eval-vast.sh`, `destroy-eval.sh` | Chạy thử gói trên một máy Vast thuê rẻ rồi huỷ đúng ID đã ghi. Chỉ cho người vận hành, cần ngân sách do chủ dự án duyệt |
 | `images/` | Dockerfile dựng trên máy đích: `pentestcode-vm`, `converter`, `review-ui`, `tunnel` |
 | `lib/` | `pool.sh` (sinh `IAS_SERVER_POOL`), `netns_watch.py` (worker dịch tự thoát khi mất netns), `image-id.sh` (định danh image theo layer cho `pack.sh images`/`load-images`), `secret_scan.py` (quét secret trước khi push), `registry.py` (đọc digest/tag ẩn danh) |
-| `secret-scan-allow.txt` | Phát hiện đã xem xét trong `stack/` (khoá stub công khai, tài liệu); `publish.sh` dùng khi quét bundle |
-| `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả; `stubs/model_stub.py` (LLM/embedding/rerank giả, chỉ để test), `ghcr-vm-test.sh` (chạy đúng luồng người vận hành trên VM thuê) |
+| `acceptance/`, `ACCEPTANCE.md` | Bộ ca nghiệm thu UI (Playwright) và API, số gốc prod, cách đọc kết quả; `stubs/model_stub.py` (LLM/embedding/rerank giả, chỉ để test), `ghcr-vm-test.sh` (chạy đúng luồng người vận hành trên VM thuê; `eval-vast.sh` với `EVAL_MODE=ghcr` rồi `ghcrtest`) |
 
 ## Dựng tay trên máy mới (5 bước, khi không dùng `secai`)
 

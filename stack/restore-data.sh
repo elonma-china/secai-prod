@@ -5,7 +5,7 @@
 # (3) Neo4j, chỉ khi store chưa có: neo4j-admin import CSV export, chạy container tạm secai-restore-neo4j-<pid> áp
 # schema.cypher, so số đếm với counts.json; marker .secai-restore-started/.secai-restore-complete chặn chạy lại trên
 # lần restore dở; (4) khôi phục snapshot Qdrant (qua API khi có --qdrant-url, nếu không in lệnh).
-# NEO4J_PASSWORD: env, nếu không có thì dòng NEO4J_PASSWORD= cuối cùng trong .env cạnh script (mật khẩu stack sẽ dùng).
+# NEO4J_PASSWORD: env, nếu không có thì dòng NEO4J_PASSWORD cuối cùng trong .env cạnh script (mật khẩu stack sẽ dùng).
 # Cần: zstd, sha256sum, docker (chỉ bước Neo4j), curl (chỉ khi --qdrant-url). Không in secret.
 set -euo pipefail
 
@@ -70,7 +70,7 @@ NEO4J_LOAD=0
 if [ ! -f "$ND/databases/neo4j/neostore" ]; then
   NEO4J_LOAD=1
   if [ -z "${NEO4J_PASSWORD:-}" ] && [ -f "$(dirname "$0")/.env" ]; then
-    NEO4J_PASSWORD=$(sed -n 's/^NEO4J_PASSWORD=//p' "$(dirname "$0")/.env" | tail -1)
+    NEO4J_PASSWORD=$(grep -E '^NEO4J_PASSWORD=' "$(dirname "$0")/.env" | tail -1 | cut -d= -f2- || true)
     NEO4J_PASSWORD=${NEO4J_PASSWORD%$'\r'}
     case $NEO4J_PASSWORD in \"*\"|\'*\') NEO4J_PASSWORD=${NEO4J_PASSWORD:1:-1} ;; esac   # compose chỉ bỏ cặp nháy bao ngoài
   fi

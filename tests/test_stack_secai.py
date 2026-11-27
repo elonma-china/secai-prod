@@ -17,6 +17,7 @@ REG = "ghcr.io/elonma-china"
 V1, V2 = "2026.11.27-aaaaaaaa", "2026.11.28-bbbbbbbb"
 D1, D2 = "2026.11.27", "2026.11.28"
 KEY = "sk-FAKE-SECRET-secai-7731"   # khoá LLM giả: không được xuất hiện ở argv/stdout/stderr
+GTOKEN = "ghp_FAKEreadPackagesToken000000000000xx"   # token GHCR chỉ đọc giả: chỉ được đi qua stdin của docker login
 BASES = {"QDRANT_IMAGE": "qdrant/qdrant:v1.10.1", "NEO4J_IMAGE": "neo4j:5.20-community",
          "REDIS_IMAGE": "redis:7-alpine", "ES_IMAGE": "docker.elastic.co/elasticsearch/elasticsearch:8.15.3"}
 
@@ -79,8 +80,22 @@ if cmd == "compose":
         sys.exit(0)
     if rest[:1] in (["down"], ["logs"]): sys.exit(0)
     fail("compose " + " ".join(rest), 9)
+if cmd == "login":
+    tok = sys.stdin.read()
+    open(os.path.join(F, "login.stdin"), "a").write(tok)
+    cfg = os.environ.get("DOCKER_CONFIG", "")
+    open(os.path.join(F, "login.cfg"), "a").write(cfg + "\n")
+    if not cfg or tok != open(os.path.join(F, "valid_token")).read(): fail("unauthorized")
+    json.dump({"auths": {"ghcr.io": {"auth": "x"}}}, open(os.path.join(cfg, "config.json"), "w")); sys.exit(0)
+if cmd == "logout":
+    cfg = os.environ.get("DOCKER_CONFIG", "")
+    if cfg and os.path.exists(os.path.join(cfg, "config.json")): os.remove(os.path.join(cfg, "config.json"))
+    sys.exit(0)
 if cmd == "pull":
     ref = argv[-1]
+    if "secai-data" in ref:   # package private: cần đăng nhập trong DOCKER_CONFIG tạm
+        cfg = os.environ.get("DOCKER_CONFIG", "")
+        if not (cfg and os.path.exists(os.path.join(cfg, "config.json"))): fail("unauthorized: authentication required")
     if os.path.exists(os.path.join(F, "pull_fail")) and open(os.path.join(F, "pull_fail")).read().strip() in ref:
         fail("pull " + ref)
     k, v = resolve(ref)
@@ -130,6 +145,7 @@ import json, os, sys
 F = "@FAKE@"
 url = [a for a in sys.argv[1:] if a.startswith("http")][-1]
 with open(os.path.join(F, "curl.log"), "a") as f: f.write(json.dumps(sys.argv[1:]) + "\n")
+with open(os.path.join(F, "curl.env"), "a") as f: f.write(json.dumps(sorted(os.environ)) + "\n")
 if url.endswith("/collections"): sys.exit(0)
 if "/collections/" in url:
     print(json.dumps({"result": {"status": "green", "points_count": int(os.environ.get("FAKE_POINTS", "5"))}})); sys.exit(0)
@@ -173,6 +189,9 @@ class Box:
         write_exec(self.bin / "docker", FAKE_DOCKER.replace("@FAKE@", str(self.fake)))
         write_exec(self.bin / "curl", FAKE_CURL.replace("@FAKE@", str(self.fake)))
         (tmp / "mmc").write_text("262144\n")
+        (self.fake / "valid_token").write_text(GTOKEN)
+        self.tokfile = tmp / "ghcr-token"
+        self.tokfile.write_text(GTOKEN + "\n"); self.tokfile.chmod(0o600)
         self.reg = {}
         for k, ref in BASES.items():
             self.reg[ref] = {"digest": dg(ref), "fs": str(tmp)}
@@ -206,7 +225,7 @@ class Box:
         pkg = fs / "secai-data"
         (pkg / "qdrant").mkdir(parents=True)
         (pkg / "qdrant" / "cve_kb_hybrid.snapshot").write_bytes(b"snap" + d.encode())
-        (pkg / "MANIFEST.md").write_text("# SecAI data package\n\n- qdrant collection: cve_kb_hybrid (5 points)\n")
+        (pkg / "MANIFEST.md").write_text("# SecAI data package\n\n- created: 2026-11-26T10:00:00Z\n- qdrant collection: cve_kb_hybrid (5 points)\n")
         sums = "".join(f"{hashlib.sha256((pkg / f).read_bytes()).hexdigest()}  {f}\n" for f in ("qdrant/cve_kb_hybrid.snapshot", "MANIFEST.md"))
         (pkg / "SHA256SUMS").write_text(sums)
         self.reg[f"{REG}/secai-data:{d}"] = {"digest": dg("data" + d), "fs": str(fs)}
@@ -217,7 +236,7 @@ class Box:
     def env(self, **kw):
         e = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": str(self.tmp / "home"), "SECAI_HOME": str(self.home),
              "FAKE_DOCKER_DIR": str(self.fake), "MAX_MAP_COUNT_FILE": str(self.tmp / "mmc"), "SECAI_MIN_FREE_GB": "0",
-             "SECAI_UP_TIMEOUT": "5", "LANG": "C.UTF-8"}
+             "SECAI_UP_TIMEOUT": "5", "LANG": "C.UTF-8", "SECAI_GHCR_TOKEN_FILE": str(self.tokfile)}
         e.update(kw)
         return e
 
@@ -232,6 +251,9 @@ class Box:
     def run(self, *args, env=None):
         return subprocess.run(["bash", str(SECAI), *args], text=True, capture_output=True, env=env or self.env(),
                               stdin=subprocess.DEVNULL, timeout=180)
+
+    def data_pkg(self, d):
+        return self.tmp / f"data-{d}" / "secai-data"
 
     def calls(self):
         p = self.fake / "calls.log"
@@ -523,3 +545,75 @@ def test_disk_guard(box):
     r = box.run("install", V1, env=box.install_env(SECAI_MIN_FREE_GB="999999"))
     assert r.returncode == 1 and "GB trống" in r.stderr
     assert not any(c[0] == "pull" for c in box.calls())
+
+
+
+# ───────────── dữ liệu private: token chỉ đọc, DOCKER_CONFIG tạm, gói có sẵn ─────────────
+def test_data_pull_uses_temp_docker_config_and_cleans_up(box):
+    r = installed(box)
+    logins = (box.fake / "login.cfg").read_text().split()
+    assert logins and all(not Path(c).exists() for c in logins)        # DOCKER_CONFIG tạm đã xoá
+    assert not (box.tmp / "home" / ".docker").exists()                  # không để credential trong ~/.docker
+    assert (box.fake / "login.stdin").read_text() == GTOKEN            # token chỉ đi qua stdin
+    allcalls = (box.fake / "calls.log").read_text() + (box.fake / "curl.log").read_text()
+    assert GTOKEN not in allcalls and GTOKEN not in r.stdout + r.stderr
+    for p in box.home.rglob("*"):
+        if p.is_file():
+            assert GTOKEN not in p.read_text(errors="replace"), p
+    login = [c for c in box.calls() if c[0] == "login"][0]
+    assert login[:4] == ["login", "ghcr.io", "-u", "elonma-china"] and "--password-stdin" in login
+
+
+def test_secret_env_not_inherited_by_direct_children(box):
+    e = box.install_env(SECAI_GHCR_TOKEN=GTOKEN)
+    del e["SECAI_GHCR_TOKEN_FILE"]
+    r = box.run("install", V1, env=e)
+    assert r.returncode == 0, r.stderr
+    for line in (box.fake / "curl.env").read_text().splitlines():
+        keys = json.loads(line)
+        assert "SECAI_GHCR_TOKEN" not in keys and "LLM_API_KEY" not in keys and "EMBEDDING_API_KEY" not in keys
+
+
+def test_token_file_must_be_private(box):
+    box.tokfile.chmod(0o644)
+    r = box.run("install", V1, env=box.install_env())
+    assert r.returncode == 1 and "mode 600/400" in r.stderr
+    assert not box.ups()
+
+
+def test_wrong_token_fails_and_cleans(box):
+    box.tokfile.write_text("ghp_wrong\n")
+    r = box.run("install", V1, env=box.install_env())
+    assert r.returncode == 1 and "token" in r.stderr
+    assert all(not Path(c).exists() for c in (box.fake / "login.cfg").read_text().split())
+    assert "ghp_wrong" not in r.stdout + r.stderr
+
+
+def test_no_token_non_interactive_points_to_data_dir(box):
+    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    r = box.run("install", V1, env=e)
+    assert r.returncode == 1 and "--data-dir" in r.stderr and not box.ups()
+
+
+def test_install_with_data_dir_needs_no_token(box):
+    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    pkg = box.data_pkg(D1)
+    r = box.run("install", V1, "--data-dir", str(pkg), env=e)
+    assert r.returncode == 0, r.stderr
+    assert box.state()["data_version"] == "2026.11.26"      # lấy từ "created" trong MANIFEST.md
+    assert not any(c[0] == "login" for c in box.calls())
+    assert not any(c[0] == "pull" and "secai-data" in c[-1] for c in box.calls())
+    assert pkg.exists() and (pkg / "SHA256SUMS").exists()   # gói của người vận hành không bị xoá
+    marker = json.loads((box.home / "data" / "2026.11.26" / ".secai-data-complete").read_text())
+    assert marker["digest"].startswith("dir:")
+
+
+def test_data_load_from_dir_and_version_arg(box):
+    installed(box)
+    r = box.run("data", "load", str(box.data_pkg(D2)), "2026.11.28.2")
+    assert r.returncode == 0, r.stderr
+    st = box.state()
+    assert st["data_version"] == "2026.11.28.2" and st["previous_data_version"] == D1
+    assert box.envfile()["DATA_ROOT"].endswith("/data/2026.11.28.2")
+    r = box.run("data", "load", str(box.tmp / "nope"))
+    assert r.returncode == 1 and "SHA256SUMS" in r.stderr

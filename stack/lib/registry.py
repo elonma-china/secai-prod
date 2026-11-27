@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""registry.py digest <ref> | tags <repo> - hỏi registry (ẩn danh, chỉ đọc) theo Docker Registry HTTP API v2.
+"""registry.py [--gh-auth USER] digest <ref> | tags <repo> - hỏi registry (chỉ đọc) theo Docker Registry HTTP API v2.
 
   digest ghcr.io/elonma-china/secai-stack:2026.11.27-abcd1234   -> sha256:<hex> (Docker-Content-Digest của manifest/index)
   digest qdrant/qdrant:v1.10.1                                   -> Docker Hub (thêm library/ cho image chính thức)
   tags ghcr.io/elonma-china/secai-data                          -> mỗi tag một dòng
 
-Không dùng khoá nào: tag/manifest không đọc được ẩn danh (package private, sai tên) thì thoát 1. Lỗi mạng/định dạng: thoát 2.
+Mặc định ẩn danh: tag/manifest không đọc được (package private, sai tên) thì thoát 1. Lỗi mạng/định dạng: thoát 2.
+--gh-auth USER (chỉ ghcr.io): xin token đọc bằng `gh auth token` chạy trong chính tiến trình này; token không lên argv/log.
 Không pull, không ghi gì. Dùng cho stack/publish.sh (digest image nền, kiểm digest sau khi push, tìm bản dữ liệu mới nhất).
 """
+import base64
 import json
 import re
+import subprocess
 import sys
 import urllib.error
 import urllib.parse
@@ -22,6 +25,7 @@ ACCEPT = ", ".join([
     "application/vnd.docker.distribution.manifest.v2+json",
 ])
 TIMEOUT = 30
+GH_AUTH_USER = None   # đặt bởi --gh-auth
 
 
 def split_ref(ref):
@@ -59,7 +63,14 @@ def _token(www, repo):
     q = {"scope": f"repository:{repo}:pull"}
     if m.get("service"):
         q["service"] = m["service"]
-    with _open(urllib.request.Request(realm + "?" + urllib.parse.urlencode(q))) as r:
+    hdr = {}
+    if GH_AUTH_USER and realm.startswith("https://ghcr.io/"):
+        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=60, stdin=subprocess.DEVNULL)
+        tok = r.stdout.strip()
+        if r.returncode != 0 or not tok:
+            raise PermissionError("gh auth token không trả token")
+        hdr["Authorization"] = "Basic " + base64.b64encode(f"{GH_AUTH_USER}:{tok}".encode()).decode()
+    with _open(urllib.request.Request(realm + "?" + urllib.parse.urlencode(q), headers=hdr)) as r:
         d = json.load(r)
     return d.get("token") or d.get("access_token")
 
@@ -99,6 +110,10 @@ def tags(name):
 
 
 def main(argv):
+    global GH_AUTH_USER
+    if len(argv) >= 3 and argv[1] == "--gh-auth":
+        GH_AUTH_USER = argv[2]
+        argv = argv[:1] + argv[3:]
     if len(argv) != 3 or argv[1] not in ("digest", "tags"):
         print(__doc__.strip().splitlines()[0], file=sys.stderr)
         return 2

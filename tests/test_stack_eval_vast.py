@@ -1016,6 +1016,152 @@ def test_rsync_e_quotes_ssh_key_path_with_spaces(box):
     assert any(f'-i "{key}"' in x for x in log(box, "rsync"))
 
 
+# ------------------------------------------------------------------ EVAL_MODE=ghcr (may trang nhu nguoi van hanh) + ghcrtest
+
+GHCR_VM_TEST = STACK / "acceptance" / "ghcr-vm-test.sh"
+G_REF = "0123456789abcdef0123456789abcdef01234567"
+G_OK = {"GHCR_TEST_REF": G_REF, "GHCR_TEST_V1": "2026.11.27-0f980c19", "GHCR_TEST_V2": "2026.11.28-1a2b3c4d",
+        "GHCR_TEST_D1": "2026.11.27", "GHCR_TEST_D2": "2026.11.27.2"}
+
+
+def no_env_no_pkg(b) -> dict[str, str]:
+    return {k: v for k, v in b.env.items() if k not in ("EVAL_ENV_FILE", "EVAL_DATA_PKG")}
+
+
+def test_up_ghcr_mode_provisions_docker_only_no_source_no_env(box):
+    r = subprocess.run(["bash", str(EVAL), "up"], env={**no_env_no_pkg(box), "EVAL_MODE": "ghcr"},
+                       text=True, capture_output=True, timeout=60)
+    assert r.returncode == 0, r.stderr + r.stdout
+    st = json.loads((box.sdir / "state.json").read_text())
+    assert st["mode"] == "ghcr" and st["disk_gb"] == 150 and st["id"] == "777"
+    q = lines_with(box, "vastai", "search")[0]
+    assert "cpu_ram>=48 " in q and "disk_space>=150" in q and "--storage 150" in q  # bo phat hanh co profile exploit
+    assert any("--disk 150 " in x for x in lines_with(box, "vastai", "create"))
+    assert log(box, "scp") == [] and log(box, "rsync") == []  # khong git archive, khong goi du lieu
+    assert ".env" not in "\n".join(log(box, "ssh"))
+    script = (box.fake / "ssh.stdin").read_text()
+    for needle in ("get.docker.com", "zstd", "curl", "python3", "iproute2", "mkdir -p /opt/secai-stack/results"):
+        assert needle in script
+    # khong build, khong dang nhap registry, khong dat sysctl: secai install phai tu lam (day la dieu can thu)
+    for bad in ("docker build", "max_map_count", "docker login", "secai-src.tgz", "QWEN"):
+        assert bad not in script
+    assert len(log(box, "systemd-run")) == 2 and destroys(box) == []
+    assert "ghcrtest" in r.stdout and "cảnh báo" not in r.stdout.lower()
+    assert_prod_alive(box)
+
+
+def test_up_ghcr_respects_explicit_ram_and_disk(box):
+    r = sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_MODE": "ghcr", "EVAL_MIN_RAM_GB": "60", "EVAL_DISK_GB": "200"})
+    assert r.returncode == 0, r.stderr
+    q = lines_with(box, "vastai", "search")[0]
+    assert "cpu_ram>=60 " in q and "disk_space>=200" in q and "--storage 200" in q and "--disk 200 " in r.stdout
+    # mode khac van giu mac dinh cu
+    assert sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_MODE": "packtest"}).returncode == 0
+    q = lines_with(box, "vastai", "search")[1]
+    assert "cpu_ram>=32 " in q and "--storage 100" in q
+
+
+def test_up_ghcr_provision_failure_destroys_instance(box):
+    env = {**no_env_no_pkg(box), "EVAL_MODE": "ghcr"}
+    (box.tmp / "bin" / "ssh").write_text(
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_DIR/ssh.log\"\n[ \"$*\" != \"${*%bash -s}\" ] && exit 1\nexit 0\n")
+    r = subprocess.run(["bash", str(EVAL), "up"], env=env, text=True, capture_output=True, timeout=60)
+    assert r.returncode != 0 and "provision ghcr" in r.stderr
+    assert destroys(box) == [D777]
+    assert_prod_alive(box)
+
+
+def test_provision_ghcr_fragment_installs_only_missing_tools(tmp_path):
+    root = tmp_path / "opt"
+    root.mkdir()
+    binp = tmp_path / "bin"
+    for c in ("docker", "curl", "python3"):
+        stub(binp / c, f'echo "$*" >> "{tmp_path}/{c}.log"')
+    stub(binp / "apt-get", f'echo "$*" >> "{tmp_path}/apt.log"')
+    (binp / "mkdir").symlink_to("/bin/mkdir")
+    r = subprocess.run(["/bin/bash", str(remote_script("REMOTE_PROVISION_GHCR", root))], text=True, capture_output=True,
+                       timeout=60, env={"PATH": str(binp)})   # khong zstd, khong ip; khong sysctl (goi la loi)
+    assert r.returncode == 0, r.stderr
+    apt = (tmp_path / "apt.log").read_text().splitlines()
+    assert apt[0] == "update -qq" and apt[1].split()[-2:] == ["zstd", "iproute2"]
+    assert (root / "results").is_dir()
+    assert not (tmp_path / "curl.log").exists()  # da co docker: khong chay get.docker.com
+
+
+def ghcr_state(b, **kw) -> None:
+    now = int(time.time())
+    write_state(b, ssh_host="1.2.3.4", ssh_port=2222, **{"mode": "ghcr", "created_at": now, "deadline": now + 3 * 3600, **kw})
+
+
+def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box):
+    ghcr_state(box)
+    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    assert r.returncode == 0, r.stderr
+    calls = log(box, "ssh")
+    assert len(calls) == 1
+    want = (f"REF={G_REF} V1=2026.11.27-0f980c19 V2=2026.11.28-1a2b3c4d D1=2026.11.27 D2=2026.11.27.2 "
+            "REPO=elonma-china/secai-prod FAILTEST=1 DATA_DIR= bash -s")
+    assert calls[0].endswith("root@1.2.3.4 " + want) and "-p 2222" in calls[0]
+    assert (box.fake / "ssh.stdin").read_text() == GHCR_VM_TEST.read_text()
+    assert "collect" in r.stdout
+
+
+def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box):
+    ghcr_state(box)
+    set_mode(box, "ssh_rc", "5")
+    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_REPO": "me/fork.x", "GHCR_TEST_FAILTEST": "0"})
+    assert r.returncode == 5
+    assert "REPO=me/fork.x FAILTEST=0 DATA_DIR= bash -s" in log(box, "ssh")[0]
+
+
+@pytest.mark.parametrize("bad", [
+    {"GHCR_TEST_REF": ""}, {"GHCR_TEST_REF": "0123abc"}, {"GHCR_TEST_REF": G_REF.upper()}, {"GHCR_TEST_REF": G_REF + "0"},
+    {"GHCR_TEST_REF": G_REF[:-1] + ";"}, {"GHCR_TEST_REF": "main"},
+    {"GHCR_TEST_V1": ""}, {"GHCR_TEST_V1": "2026.11.27"}, {"GHCR_TEST_V1": "2026.11.27-0F980C19"},
+    {"GHCR_TEST_V1": "2026.11.27-0f980c19;reboot"}, {"GHCR_TEST_V2": "stable"}, {"GHCR_TEST_V2": "2026.11.27-0f980c19"},
+    {"GHCR_TEST_D1": ""}, {"GHCR_TEST_D1": "2026-11-27"}, {"GHCR_TEST_D1": "2026.11.27.123"}, {"GHCR_TEST_D2": "latest"},
+    {"GHCR_TEST_D2": "2026.11.27"}, {"GHCR_TEST_D2": "2026.11.27 x"},
+    {"GHCR_TEST_REPO": "noslash"}, {"GHCR_TEST_REPO": "a/b/c"}, {"GHCR_TEST_REPO": "a/b;x"}, {"GHCR_TEST_REPO": "a/b c"},
+    {"GHCR_TEST_FAILTEST": "2"}, {"GHCR_TEST_FAILTEST": "yes"},
+])
+def test_ghcrtest_rejects_bad_inputs_before_ssh(box, bad):
+    ghcr_state(box)
+    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, **bad})
+    assert r.returncode != 0 and log(box, "ssh") == []
+    assert "GHCR_TEST_" in r.stderr
+
+
+@pytest.mark.parametrize("mode", [None, "packtest", "full"])
+def test_ghcrtest_requires_ghcr_state(box, mode):
+    now = int(time.time())
+    kw = {} if mode is None else {"mode": mode}
+    write_state(box, ssh_host="1.2.3.4", ssh_port=2222, created_at=now, deadline=now + 3600, **kw)
+    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    assert r.returncode != 0 and log(box, "ssh") == [] and "ghcr" in r.stderr
+
+
+def test_ghcrtest_refuses_near_deadline(box):
+    ghcr_state(box, deadline=int(time.time()) + 300)
+    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    assert r.returncode != 0 and "deadline" in r.stderr and log(box, "ssh") == []
+
+
+def test_ghcrtest_is_bounded_by_deadline(box):
+    # ssh gia ngu lau: timeout (deadline - 10 phut) phai cat no
+    ghcr_state(box, deadline=int(time.time()) + 602)
+    (box.tmp / "bin" / "ssh").write_text("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$FAKE_DIR/ssh.log\"\nexec sleep 30\n")
+    t0 = time.time()
+    r = sh(EVAL, "ghcrtest", b=box, extra=G_OK)
+    assert r.returncode != 0 and time.time() - t0 < 20 and len(log(box, "ssh")) == 1
+
+
+def test_usage_lists_ghcrtest_and_mode_message(box):
+    r = sh(EVAL, b=box)
+    assert r.returncode == 2 and "ghcrtest" in r.stderr
+    r = sh(EVAL, "up", "--dry-run", b=box, extra={"EVAL_MODE": "ghcr;x"})
+    assert r.returncode != 0 and "full|packtest|ghcr" in r.stderr and not log(box, "vastai")
+
+
 def test_scripts_pass_bash_syntax_check():
     for s in (EVAL, DESTROY):
         assert subprocess.run(["bash", "-n", str(s)], capture_output=True).returncode == 0
@@ -1147,3 +1293,21 @@ def test_remote_run_skip_reasons_follow_real_config(tmp_path, env_lines, tr, poc
     assert tr in reasons["UI-TR-2"] and poc in reasons["UI-POC-1"]
     if "ssh" in env_lines:
         assert "Hy-MT2" not in reasons["UI-TR-2"] and "tắt" not in reasons["UI-POC-1"]
+
+
+
+def test_ghcrtest_rsyncs_data_pkg_and_passes_data_dir(box, tmp_path):
+    ghcr_state(box)
+    pkg = tmp_path / "datapkg"; pkg.mkdir()
+    (pkg / "SHA256SUMS").write_text("x  y\n")
+    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_DATA_PKG": str(pkg)})
+    assert r.returncode == 0, r.stderr
+    rs = log(box, "rsync")
+    assert len(rs) == 1 and f"{pkg}/ root@1.2.3.4:/opt/secai-stack/pkg/" in rs[0] and "--no-links" in rs[0]
+    assert "DATA_DIR=/opt/secai-stack/pkg bash -s" in log(box, "ssh")[0]
+
+
+def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path):
+    ghcr_state(box)
+    r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_DATA_PKG": str(tmp_path / "missing")})
+    assert r.returncode != 0 and log(box, "ssh") == [] and log(box, "rsync") == []

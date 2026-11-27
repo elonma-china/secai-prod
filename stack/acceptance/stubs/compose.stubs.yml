@@ -11,7 +11,7 @@
 #   TRANSLATE_V2_SPECIALIST_BASE_URL=http://127.0.0.1:18868   MULTILANG_SPECIALIST_BASE_URL=http://127.0.0.1:18868
 #   TRANSLATE_V2_OCR_BASE_URL=http://127.0.0.1:18083
 #   TRANSLATE_V2_SPECIALIST_MODEL=MULTILANG_SPECIALIST_MODEL=tencent/Hy-MT2-7B   (stub trả một tên cho cả hai)
-#   TRANSLATE_V2_SPECIALIST_API_KEY=MULTILANG_SPECIALIST_API_KEY=TRANSLATE_V2_OCR_API_KEY=stub-test-key-not-secret
+#   ba khoá TRANSLATE_V2_SPECIALIST_API_KEY, MULTILANG_SPECIALIST_API_KEY, TRANSLATE_V2_OCR_API_KEY đặt bằng stub-test-key-not-secret
 #   (khoá giả cố định; stub KHÔNG đọc khoá từ .env, preflight từ chối khoá khác khi TUNNEL_MODE=direct)
 # Chạy (từ thư mục stack/; đường dẫn tương đối tính theo compose.yml):
 #   docker compose -f compose.yml -f acceptance/stubs/compose.stubs.yml --profile translation up -d

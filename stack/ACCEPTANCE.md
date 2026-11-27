@@ -64,7 +64,7 @@ Gateway chỉ nhận Hy-MT2 và OCR ở `http://127.0.0.1:<cổng>` (chặn SSRF
 | Cách chạy | `.env` | Chứng minh được |
 |---|---|---|
 | **Thật** | `TUNNEL_MODE=ssh`, `TUNNEL_SSH_HOST/PORT/USER`, `secrets/tunnel/key` (0600, chủ = `TUNNEL_UID`) và `secrets/tunnel/known_hosts` (đã đối chiếu fingerprint); image `docker build --build-arg TUNNEL_UID=$(id -u) -t secai-specialist-tunnel:<ngày> images/tunnel` | Đường ống **và** chất lượng dịch/OCR của model thật |
-| **Stub (chỉ để test)** | **`.env` riêng cho lần chạy stub** (không dùng `.env` có khoá thật): `TUNNEL_MODE=direct`, `TUNNEL_DIRECT_ALLOW_TEST=1`, `TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868`, `TUNNEL_DIRECT_OCR=stub-ocr:18083`, hai `*_SPECIALIST_MODEL=tencent/Hy-MT2-7B`, `TRANSLATE_V2_SPECIALIST_API_KEY` = `MULTILANG_SPECIALIST_API_KEY` = `TRANSLATE_V2_OCR_API_KEY` = `stub-test-key-not-secret` (khoá giả cố định, stub không đọc khoá từ `.env`); chạy thêm `-f acceptance/stubs/compose.stubs.yml` (xem đầu tệp đó) | **Chỉ đường ống**: tunnel, chuyển đổi, job, xem trước (`/result`), tệp tải về có tiếng Việt. **Không** chứng minh chất lượng: stub dịch bằng bảng từ cố định có tiền tố `[stub] `, OCR luôn trả chữ cố định của `sample-en.png` |
+| **Stub (chỉ để test)** | **`.env` riêng cho lần chạy stub** (không dùng `.env` có khoá thật): `TUNNEL_MODE=direct`, `TUNNEL_DIRECT_ALLOW_TEST=1`, `TUNNEL_DIRECT_SPECIALIST=stub-specialist:18868`, `TUNNEL_DIRECT_OCR=stub-ocr:18083`, hai `*_SPECIALIST_MODEL=tencent/Hy-MT2-7B`, ba khoá `TRANSLATE_V2_SPECIALIST_API_KEY`, `MULTILANG_SPECIALIST_API_KEY`, `TRANSLATE_V2_OCR_API_KEY` đều đặt bằng khoá stub `stub-test-key-not-secret` (khoá giả cố định, stub không đọc khoá từ `.env`); chạy thêm `-f acceptance/stubs/compose.stubs.yml` (xem đầu tệp đó) | **Chỉ đường ống**: tunnel, chuyển đổi, job, xem trước (`/result`), tệp tải về có tiếng Việt. **Không** chứng minh chất lượng: stub dịch bằng bảng từ cố định có tiền tố `[stub] `, OCR luôn trả chữ cố định của `sample-en.png` |
 
 ```sh
 # Stub (từ stack/):
@@ -76,6 +76,38 @@ acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT> UI-TR-2 UI-TR-3
 Rào chắn của `direct` (vì nó vượt chặn SSRF loopback-only của gateway và gửi Bearer qua TCP thô): preflight và sidecar đều từ chối khi thiếu `TUNNEL_DIRECT_ALLOW_TEST=1` hoặc khi đích không phải `stub-*:<cổng>` / IPv4 private hay loopback; preflight từ chối mọi `*_API_KEY` khác khoá stub giả; `check.sh health` in dòng `WARNING … CHỈ ĐỂ TEST`.
 
 Ghi kết quả UI-TR-2/TR-3 luôn kèm cột "nguồn" (`thật` hoặc `stub`). Kết quả `stub` không thay cho kết quả `thật`.
+
+### LLM, embedding, rerank trên máy test: `model_stub.py` (chỉ để test)
+
+`acceptance/stubs/model_stub.py` là **một** tiến trình Python (chỉ stdlib, `python3 -I`) đóng vai cả LLM, embedding và rerank theo API kiểu OpenAI, cho máy test không có serving model thật (VM thuê, không đưa khoá thật lên). **CHỈ ĐỂ TEST**: nó chứng minh đường ống, không chứng minh chất lượng model.
+
+- `GET /health` (không cần khoá); `GET …/models`; `POST …/chat/completions` (SSE khi `stream:true`, JSON khi không); `POST …/embeddings`; `POST …/rerank`. Đường dẫn gộp `//` và khớp theo đuôi.
+- Bearer phải đúng `STUB_API_KEY` (mặc định `stub-test-key-not-secret`, khoá giả cố định), không thì 401. Tên `model` sai so với vai trò thì 404, nên `check.sh models` vẫn bắt được cấu hình lệch.
+- Chat chọn câu trả lời theo loại request: judge trả JSON `injection=false, scope=in_scope`; báo cáo template trả JSON có tiêu đề `BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN` và đúng các đầu mục được yêu cầu; dịch thay bảng từ cố định (như `specialist_stub.py`), giữ nguyên mọi `⟦Ln⟧`; chat chỉ trích khối `[Ngữ cảnh tra cứu từ KB nội bộ …]` gateway gửi kèm, **không bao giờ** nhắc lại system prompt hay tool schema (prompt tĩnh có sẵn `Log4Shell`, `10.0`; nhắc lại sẽ thành đạt giả). Không có khối KB thì trả một câu `[stub-llm]` trích câu hỏi. Có `tools` vẫn trả văn bản thường, không gọi tool.
+- Embedding: vector tất định từ sha256, `STUB_EMBED_DIM` chiều (mặc định 1024, phải bằng vector `dense` của Qdrant), chuẩn hoá L2. Rerank: điểm = tỉ lệ từ của query có trong tài liệu × 0.98.
+- Tham số: `--host` (mặc định `127.0.0.1`), `--port` (mặc định `18000`; `0` = tự chọn, dòng `model_stub listening on http://H:P` in cổng thật). Biến: `STUB_API_KEY`, `STUB_LLM_MODEL`, `STUB_EMBEDDING_MODEL`, `STUB_RERANK_MODEL`, `STUB_EMBED_DIM`. Mỗi request một dòng stderr (method, path, mã), không ghi body hay khoá. Thoát 2 khi tham số/`STUB_EMBED_DIM` sai, 1 khi không mở được cổng.
+
+Chạy trên **host** của VM, nghe ở địa chỉ `docker0` (thường `172.17.0.1`, xem `ip -4 addr show docker0`). Container gateway tới được IP này của host; `check.sh models` chạy trên host và dùng cùng URL trong `.env`, nên tên service Docker hay `127.0.0.1` không dùng chung được cho cả hai. Không nghe `0.0.0.0`: khoá là khoá giả. Nếu host có firewall, cho mạng Docker vào cổng 18000.
+
+```sh
+# Từ stack/ trên host VM; .env RIÊNG cho lần chạy stub (không dùng .env có khoá thật):
+python3 -I acceptance/stubs/model_stub.py --host 172.17.0.1 --port 18000 2> model-stub.log &
+#   LLM_BASE_URL=http://172.17.0.1:18000/v1          LLM_MODEL=DuyTa/Cyber-F1-AWQ
+#   EMBEDDING_API_URL=http://172.17.0.1:18000        EMBEDDING_MODEL=DuyTa/sec-embedding    (không có /v1)
+#   RERANKER_API_URL=http://172.17.0.1:18000         RERANKER_MODEL=DuyTa/sec-rerank        (không có /v1)
+#   ba khoá LLM_API_KEY, EMBEDDING_API_KEY, RERANKER_API_KEY đều đặt bằng khoá stub stub-test-key-not-secret
+#   INPUT_CLASSIFIER_BLOCK_OFFTOPIC=false (như .env.example: bộ phân loại đầu vào chạy trên vector băm)
+./check.sh models && ./check.sh health
+SKIP_CASES="UI-POC-1 UI-POC-2 UI-POC-3 UI-TR-2 UI-TR-3" acceptance/run-api.sh http://127.0.0.1:<GATEWAY_HOST_PORT>
+```
+
+| Chứng minh được | Không chứng minh |
+|---|---|
+| Gateway nối đúng URL, khoá, tên model của cả ba dịch vụ (`check.sh models`, `/health`); luồng SSE chat, judge, dịch, báo cáo chạy hết đường | Chất lượng câu trả lời, bản dịch, báo cáo: tất cả là chuỗi cố định hoặc bảng từ |
+| Dữ liệu KB khôi phục tới được câu trả lời: UI-CHAT-1 chỉ đạt khi Qdrant có CVE-2021-44228, vì `2.16.0`/`2.15.0` chỉ có trong khối KB | Xếp hạng ngữ nghĩa: vector băm không mang nghĩa, tìm kiếm dense gần như ngẫu nhiên (câu có mã CVE đi đường scroll chính xác nên không phụ thuộc); prompt exploit không có mã CVE bị chặn vì điểm rerank < 0.99 |
+| UI-CHAT-2 (khối KB "Không tìm thấy…"), UI-TR-1, UI-RPT-1 ở mức cấu trúc | UI-POC-1/2: cần LLM thật biết gọi tool (vm-a/vm-b dùng cùng `LLM_BASE_URL`) và lab; trên máy test bỏ cả ba ca UI-POC kèm lý do, ca bỏ qua không bao giờ tính là đạt |
+
+Ghi kết quả chạy với stub kèm nguồn `stub`. Kết quả `stub` không thay cho kết quả với model thật.
 
 ### Kết quả trên stack
 
