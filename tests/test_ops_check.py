@@ -6,6 +6,7 @@ checker gọi vẫn đi qua assert_read_only, nên test cũng chứng minh check
 from __future__ import annotations
 
 import datetime as dt
+import fnmatch
 import hashlib
 import importlib.util
 import io
@@ -62,6 +63,7 @@ class World:
         self.tag = f"secai-agent-gateway:main-{self.sha8}-20261127"
         self.prev = "secai-agent-gateway:main-0ab1c2d3-20261120"
         self.images: dict[str, dict] = {}
+        self.sizes: dict[str, str] = {}           # cột Size của `docker images`
         self.containers: list[dict] = []
         self._releases()
         self._docker()
@@ -154,8 +156,10 @@ class World:
     def write_state(self, **kv: str) -> None:
         (self.rel / "state.env").write_text("".join(f"{k}={v}\n" for k, v in kv.items()))
 
-    def add_image(self, ref: str, created: dt.datetime, labels: dict | None = None, env: list | None = None) -> str:
+    def add_image(self, ref: str, created: dt.datetime, labels: dict | None = None, env: list | None = None,
+                  size: str = "1.5GB") -> str:
         iid = "sha256:" + hid(ref)
+        self.sizes[ref] = size
         self.images[ref] = {"Id": iid, "RepoTags": [ref], "Created": iso(created),
                             "Config": {"Labels": labels if labels is not None else {"org.opencontainers.image.revision": self.sha8},
                                        "Env": env or ["PATH=/usr/bin", "GPG_KEY=7169605F62C751356D054A26A821E680E5FA6305"]}}
@@ -216,9 +220,18 @@ class World:
     def c(self, name: str) -> dict:
         return next(c for c in self.containers if c["Name"] == "/" + name)
 
+    def listed_images(self, pattern: str = oc.GATEWAY_IMAGE) -> list[dict]:
+        """`docker images <pattern>`: repo khớp pattern (docker hiểu `*` như glob)."""
+        out = []
+        for ref, v in self.images.items():
+            repo, tag = ref.rsplit(":", 1)
+            if fnmatch.fnmatchcase(repo, pattern):
+                out.append({"Repository": repo, "Tag": tag, "ID": v["Id"], "CreatedAt": v["Created"],
+                            "Size": self.sizes.get(ref, "1.5GB")})
+        return out
+
     def gw_images(self) -> list[dict]:
-        return [{"Tag": ref.split(":", 1)[1], "ID": v["Id"], "CreatedAt": v["Created"]}
-                for ref, v in self.images.items() if ref.startswith("secai-agent-gateway:")]
+        return self.listed_images(oc.GATEWAY_IMAGE)
 
 
 class FakeRunner(oc.Runner):
@@ -245,7 +258,7 @@ class FakeRunner(oc.Runner):
                 found = [im for ref, im in w.images.items() if im["Id"] in a[2:] or ref in a[2:]]
                 return oc.Proc(0 if found else 1, json.dumps(found), "" if found else "Error: No such image: x")
             if a[0] == "images":
-                return ok("".join(json.dumps(x) + "\n" for x in w.gw_images()))
+                return ok("".join(json.dumps(x) + "\n" for x in w.listed_images(a[2])))
             if a[:2] == ["system", "df"]:
                 return ok("".join(json.dumps(x) + "\n" for x in w.system_df))
         if tool == "systemctl":
@@ -324,6 +337,9 @@ def test_catalog_is_consistent() -> None:
     assert {c.level for c in oc.CHECKS} == {oc.MUST, oc.SHOULD}
     for c in oc.CHECKS:
         assert c.id.startswith(f"OPS-{c.group}-") and c.title
+    for g in oc.GROUPS:  # --list, text và JSON in theo thứ tự đăng ký: phải theo số như bảng trong tài liệu
+        nums = [int(c.id.rsplit("-", 1)[1]) for c in oc.CHECKS if c.group == g]
+        assert nums == sorted(nums), (g, nums)
 
 
 # ------------------------------------------------------------------ BLD / REL
@@ -367,6 +383,19 @@ def test_container_outside_compose_fails(w: World) -> None:
     w.c("secai-translation-converter")["Config"]["Labels"] = {}
     r = one(w, "OPS-REL-5")
     assert r.status == oc.FAIL and "secai-translation-converter" in r.evidence
+
+
+def test_compose_dir_must_track_and_commit_compose(w: World) -> None:
+    git("init", "-q", "-b", "main", cwd=w.docker_dir)
+    r = one(w, "OPS-REL-6")  # chỉ `git init`, chưa add/commit
+    assert r.status == oc.FAIL and "docker-compose.yml" in r.evidence, r.evidence
+    git("add", "docker-compose.yml", cwd=w.docker_dir)
+    git("commit", "-q", "-m", "compose", cwd=w.docker_dir)
+    r = one(w, "OPS-REL-6")
+    assert r.status == oc.PASS, r.evidence
+    w.compose.write_text(w.compose.read_text() + "  redis:\n    image: redis:7.2.5-alpine\n")
+    r = one(w, "OPS-REL-6")  # đã track nhưng đang sửa chưa commit
+    assert r.status == oc.WARN and "chưa commit" in r.evidence, r.evidence
 
 
 def _mount(w: World, name: str, src: Path, dest: str) -> None:
@@ -448,6 +477,7 @@ def test_prod_tag_must_match_latest_release_and_git_sha(w: World) -> None:
 
 @pytest.mark.parametrize("tag,want", [
     ("main-2dcff27c-20261127", "PASS"), ("report-c4c3c80-20261005", "PASS"),
+    ("main-12345678-20261201", "PASS"), ("main-20261130-20261201", "PASS"),  # sha8 toàn chữ số vẫn là sha
     ("review-mvp-20261004", "WARN"), ("review-mvp-20261027b", "WARN"), ("1.3.14-tools", "WARN"),
     ("1", "FAIL"), ("latest", "FAIL"), ("", "FAIL"), ("ab-ui-restyle", "FAIL"),
 ])
@@ -485,6 +515,33 @@ def test_branch_protection_cases(w: World) -> None:
     w.gh[f"repos/{GH}"][1]["permissions"] = {"admin": False}
     r = one(w, "OPS-CI-2")  # không phải admin, nhánh báo protected: không kết luận được
     assert r.status == oc.SKIP and not r.unmeasured
+
+
+def test_branch_protection_gaps_covered_by_ruleset_pass(w: World) -> None:
+    # classic protection chỉ bắt PR; ruleset bổ sung status check + cấm force-push
+    w.gh[f"repos/{GH}/branches/main/protection"] = (0, {"required_status_checks": None,
+                                                      "required_pull_request_reviews": {"required_approving_review_count": 0},
+                                                      "allow_force_pushes": {"enabled": False}})
+    w.gh[f"repos/{GH}/rules/branches/main"] = (0, [{"type": "required_status_checks"}, {"type": "non_fast_forward"}])
+    r = one(w, "OPS-CI-2")
+    assert r.status == oc.PASS, r.evidence
+    w.gh[f"repos/{GH}/rules/branches/main"] = (0, [{"type": "non_fast_forward"}])
+    r = one(w, "OPS-CI-2")
+    assert r.status == oc.FAIL and "status check" in r.evidence
+
+
+def test_non_admin_token_skips_admin_only_fields_softly(w: World) -> None:
+    """security_and_analysis chỉ trả cho admin: thiếu là không đủ quyền đọc (SKIP mềm), không phải FAIL/mã 3."""
+    repo = w.gh[f"repos/{GH}"][1]
+    repo["permissions"] = {"admin": False}
+    del repo["security_and_analysis"]
+    rs = results(w, "OPS-SEC-10", "OPS-CI-5")
+    for cid, r in rs.items():
+        assert r.status == oc.SKIP and not r.unmeasured, (cid, r)
+    rc, out = cli(w, "--group", "SEC")
+    assert rc == 0, out
+    (w.repo / ".github" / "dependabot.yaml").write_text("version: 2\nupdates: []\n")
+    assert one(w, "OPS-CI-5").status == oc.PASS
 
 
 def test_gh_unreadable_repo_is_soft_skip(w: World) -> None:
@@ -554,6 +611,25 @@ def test_restart_policy_and_unbounded_logs(w: World) -> None:
     assert rs["OPS-MON-6"].status == oc.FAIL and "secai-docker-es" in rs["OPS-MON-6"].evidence
 
 
+def test_pool_is_grouped_and_total_counted_in_evidence(w: World) -> None:
+    pool = [c for c in w.containers if oc.POOL_RE.match(c["Name"][1:])]
+    for c in pool:
+        c["HostConfig"]["RestartPolicy"] = {"Name": "no"}
+        c["HostConfig"]["LogConfig"] = {"Type": "json-file", "Config": {}}
+        c["HostConfig"]["Memory"] = 0
+    w.c("secai-docker-es")["HostConfig"]["LogConfig"] = {"Type": "json-file", "Config": {}}
+    w.c("secai-docker-redis")["HostConfig"]["Memory"] = 0
+    w.c("secai-translation-converter")["Config"]["Labels"] = {}
+    rs = results(w, "OPS-MON-3", "OPS-MON-6", "OPS-RES-6", "OPS-REL-5")
+    # tên kèm hậu tố "(no)", "(docker run tay…)" vẫn phải gom thành một mục pool, các container khác không bị giấu sau (+N)
+    assert "pool pentestcode (25)" in rs["OPS-MON-3"].evidence, rs["OPS-MON-3"].evidence
+    assert "secai-translation-converter" in rs["OPS-REL-5"].evidence, rs["OPS-REL-5"].evidence
+    assert "(+" not in rs["OPS-MON-3"].evidence
+    assert rs["OPS-MON-6"].evidence.startswith("json-file không giới hạn: 26 container:"), rs["OPS-MON-6"].evidence
+    assert "secai-docker-es" in rs["OPS-MON-6"].evidence and "pool pentestcode (25)" in rs["OPS-MON-6"].evidence
+    assert "26 container:" in rs["OPS-RES-6"].evidence, rs["OPS-RES-6"].evidence
+
+
 def test_restart_loop_failed_and_noisy_units(w: World) -> None:
     w.units.append({"Id": "secai-translation-ocr-model.service", "ActiveState": "active", "SubState": "running",
                     "NRestarts": "717", "Result": "success"})
@@ -611,6 +687,23 @@ def test_host_network_listener_on_all_interfaces_fails(w: World, ip: str, want: 
         assert "secai-translation-gateway :18185" in r.evidence
 
 
+def test_devspace_unit_port_and_public_tunnel_fail_sec2(w: World) -> None:
+    w.set_listen([(8131, "0.0.0.0"), (5173, "0.0.0.0")])
+    r = one(w, "OPS-SEC-2")  # devspace proxy prod và gắn token review cho request loopback
+    assert r.status == oc.FAIL and "secai-devspace" in r.evidence and ":5173" in r.evidence, r.evidence
+    w.set_listen([(8131, "0.0.0.0"), (5173, "127.0.0.1")])
+    assert one(w, "OPS-SEC-2").status == oc.PASS
+    w.units.append({"Id": "secai-devspace-cloudflare.service", "ActiveState": "active", "SubState": "running",
+                    "NRestarts": "0", "Result": "success",
+                    "ExecStart": "{ path=/usr/local/bin/cloudflared ; argv[]=/usr/local/bin/cloudflared tunnel "
+                                 "--no-autoupdate --url http://127.0.0.1:5173 ; ignore_errors=no ; }"})
+    r = one(w, "OPS-SEC-2")  # tunnel công khai trỏ vào service nội bộ
+    assert r.status == oc.FAIL and "secai-devspace-cloudflare.service" in r.evidence, r.evidence
+    w.units[-1]["ActiveState"], w.units[-1]["SubState"] = "inactive", "dead"
+    r = one(w, "OPS-SEC-2")  # unit còn cài nhưng không chạy
+    assert r.status == oc.WARN and "cloudflared" in r.evidence, r.evidence
+
+
 def plant_secrets(w: World) -> None:
     w.compose.write_text(f"services:\n  neo4j:\n    environment:\n      NEO4J_AUTH: {SECRET_VALUES[1]}\n"
                          f"      NEO4J_PASSWORD: ${{NEO4J_PASSWORD:-{SECRET_VALUES[5]}}}\n"
@@ -663,13 +756,68 @@ def test_compose_reference_without_default_passes_sec4(w: World) -> None:
     assert oc.literal_secret("${X}") is None and oc.literal_secret("neo4j/${X}") is None
 
 
+def test_reading_key_from_env_is_not_plaintext_sec5(w: World) -> None:
+    (w.tmp / "cron" / "sync_nvd.py").write_text(
+        'import os\nNVD_KEY = os.environ.get("NVD_API_KEY", "")\nEMBED_KEY = _ENV.get("EMBED_API_KEY")\n'
+        'headers = {}\nif NVD_KEY:\n    headers["apiKey"] = NVD_KEY\n')
+    (w.tmp / "cron" / "run_sync.sh").write_text("#!/bin/bash\nset -a\n. ~/.config/secai/nvd.env\nset +a\n")
+    assert oc._secret_names((w.tmp / "cron" / "sync_nvd.py").read_text(), make_ctx(w)) == []
+    r = one(w, "OPS-SEC-5")
+    assert r.status == oc.PASS, r.evidence
+
+
+@pytest.mark.parametrize("text,name", [
+    ("export GITHUB_TOKEN_RO=ghp_notreal0123456789abcdef\n", "GITHUB_TOKEN_RO"),
+    ("SECRET_KEY_BASE=notreal-0123456789abcdef\n", "SECRET_KEY_BASE"),
+    ("DB_CREDENTIALS='user:notreal-pass-0123'\n", "DB_CREDENTIALS"),
+    ('{"openai_api_key": "sk-notreal-0123456789"}\n', "openai_api_key"),
+    ("services:\n  neo4j:\n    environment:\n      NEO4J_AUTH: neo4j/literalpassw0rd\n", "NEO4J_AUTH"),
+    ("services:\n  x:\n    environment:\n      - API_TOKEN=notreal-0123456789\n", "API_TOKEN"),
+    ("environment: [API_TOKEN=notreal-0123456789]\n", "API_TOKEN"),
+])
+def test_secret_names_use_same_vocabulary_as_sec4(w: World, text: str, name: str) -> None:
+    """SEC-3/SEC-5 nhận đúng những tên SEC-4 coi là secret, không để key `environment:` nuốt dòng kế tiếp."""
+    assert oc.is_secret_name(name)
+    assert oc._secret_names(text, make_ctx(w)) == [name]
+
+
+def test_secret_names_ignore_references(w: World) -> None:
+    ctx = make_ctx(w)
+    assert oc._secret_names("services:\n  n:\n    environment:\n      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}\n", ctx) == []
+    assert oc._secret_names("NVD_API_KEY=$(cat ~/.config/nvd.key)\nTOKEN_FILE=/run/secrets/tok\n", ctx) == []
+
+
+def test_secret_names_skip_unquoted_lowercase_code_and_prose(w: World) -> None:
+    """Bản sao code Python trong thư mục release: tên thường không ngoặc là code/chú thích, không phải cấu hình
+    (đo trên máy 2026-11-27: technical_tokens.py, worker.py, routes.py, config.py)."""
+    ctx = make_ctx(w)
+    code = ("# Only Latin-script letters stop a token: CJK/Cyrillic/Arabic prose\n"
+            "self.model_context_tokens = settings.specialist_context_tokens\n"
+            "llm_key = s.deepseek_api_key\n"
+            "    ias_server_password=state.settings.ias_server_password):\n")
+    assert oc._secret_names(code, ctx) == []
+    assert oc._secret_names('api_key = "sk-notreal-0123456789"\n', ctx) == ["api_key"]  # có ngoặc: literal thật
+
+
 @pytest.mark.parametrize("fmt", [[], ["--json"]])
 def test_no_secret_value_reaches_output(w: World, fmt: list[str]) -> None:
     plant_secrets(w)
-    rc, out = cli(w, *fmt)
+    _, out = cli(w, *fmt)
     for s in SECRET_VALUES:
         assert s not in out
     assert "NEO4J_AUTH" in out
+
+
+def test_argv_secret_ending_with_equals_is_fail_not_checker_error(w: World) -> None:
+    tunnel_tok = "eyJhIjoiZmFrZSJ9FAKEFAKE="  # giá trị giả, kết thúc bằng padding base64
+    w.units.append({"Id": "secai-x-tunnel.service", "ActiveState": "active", "SubState": "running", "NRestarts": "0",
+                    "Result": "success", "ExecStart": f"{{ path=/usr/bin/x ; argv[]=/usr/bin/x tunnel run --token {tunnel_tok} ; }}"})
+    w.c("secai-review-canary")["Config"]["Cmd"] = ["uvicorn", "app", "--api-key", "ab=cdefgh"]
+    ctx = make_ctx(w)
+    r = next(x.r for x in oc.evaluate(ctx, {"SEC"}) if x.check.id == "OPS-SEC-7")
+    assert r.status == oc.FAIL and not r.unmeasured, r
+    assert "secai-x-tunnel.service" in r.evidence and "secai-review-canary" in r.evidence
+    assert {tunnel_tok, "ab=cdefgh"} <= ctx.secrets  # nhớ đủ giá trị để scrub
 
 
 def test_scrub_removes_remembered_values(w: World) -> None:
@@ -730,6 +878,23 @@ def test_old_unmanaged_gateway_tags_fail(w: World) -> None:
     assert r.status == oc.FAIL and "translate-opt-20261011" in r.evidence and "main-deadbeef" not in r.evidence
 
 
+def test_reclaimable_counts_only_unused_secai_images(w: World) -> None:
+    """Phạm vi là dự án này: image của project khác (cuda, lab, ...) không làm RES-4 FAIL."""
+    w.add_image("nvidia/cuda:12.4.1-devel-ubuntu22.04", NOW - 9 * DAY, size="52.9GB")
+    w.add_image("secai-pentestcode:exp-703711d3-20261120", NOW - 7 * DAY, size="20GB")
+    r = one(w, "OPS-RES-4")
+    assert r.status == oc.PASS and "cuda" not in r.evidence, r.evidence
+    alias = "secai-pentestcode:exp-latest"           # tag thứ hai của cùng image: không cộng hai lần
+    w.images[alias] = dict(w.images["secai-pentestcode:exp-703711d3-20261120"], RepoTags=[alias])
+    w.sizes[alias] = "20GB"
+    assert one(w, "OPS-RES-4").status == oc.PASS
+    w.add_image("secai-kali-executor-browser:latest", NOW - 9 * DAY, size="12GB")
+    r = one(w, "OPS-RES-4")
+    assert r.status == oc.FAIL and "secai-pentestcode:exp-703711d3-20261120" in r.evidence, r.evidence
+    w.containers[-1]["Image"] = w.images["secai-kali-executor-browser:latest"]["Id"]  # có container dùng thì không tính
+    assert one(w, "OPS-RES-4").status == oc.PASS
+
+
 def test_gc_backlog_fails_res5(w: World) -> None:
     c = w.add("secai-docker-gateway-rollback-20261101", w.prev, status="exited")
     c["State"]["FinishedAt"] = iso(NOW - 10 * DAY)
@@ -742,6 +907,19 @@ def test_gc_backlog_fails_res5(w: World) -> None:
     w.write_state(PREV_TAG="secai-agent-gateway:main-deadbeef-20261001", NEW_TAG=w.tag)
     del w.images[w.prev]  # PREV cũ của thế giới tốt giờ không còn là PREV: gc đã xoá
     assert one(w, "OPS-RES-5").status == oc.PASS  # image của lần release liền trước được giữ
+
+
+def test_merged_worktree_with_uncommitted_work_is_not_stale(w: World) -> None:
+    wt = w.tmp / "wt-foo"
+    git("worktree", "add", "-q", "-b", "feat/foo", str(wt), cwd=w.repo)
+    old = (NOW - 2 * DAY).timestamp()
+    os.utime(wt, (old, old))
+    r = one(w, "OPS-GIT-4")
+    assert r.status == oc.FAIL and "wt-foo" in r.evidence  # đã merge (đỉnh = main), sạch, cũ 2 ngày
+    (wt / "README.md").write_text("đang làm dở\n")
+    os.utime(wt, (old, old))  # như máy thật: sửa file có sẵn không đổi mtime thư mục gốc
+    r = one(w, "OPS-GIT-4")  # wt-prune.sh bỏ qua worktree có sửa chưa commit: không được báo là bị bỏ quên
+    assert r.status == oc.PASS and "sửa chưa commit" in r.evidence, r.evidence
 
 
 def test_versions_ledger_is_skipped_when_absent(w: World) -> None:
@@ -772,6 +950,8 @@ def test_versions_ledger_is_skipped_when_absent(w: World) -> None:
     ["git", "--no-optional-locks", "-C", "/r", "worktree", "prune"],
     ["git", "--no-optional-locks", "-C", "/r", "remote", "add", "x", "y"],
     ["git", "--no-optional-locks", "-C", "/r", "config", "core.x", "y"],
+    ["docker", "images", "--no-trunc", "*", "--format", "{{json .}}"],
+    ["docker", "images", "--no-trunc", "secai-*:*", "--format", "{{json .}}"],
     ["rm", "-rf", "/"], ["chmod", "600", "x"], ["curl", "http://x"], [],
 ])
 def test_read_only_guard_rejects(argv: list[str]) -> None:
@@ -783,6 +963,7 @@ def test_read_only_guard_rejects(argv: list[str]) -> None:
     ["docker", "ps", "-a", "--no-trunc", "--format", "{{json .}}"], ["docker", "inspect", "ab" * 32],
     ["docker", "image", "inspect", "secai-agent-gateway:main-2dcff27c-20261127"],
     ["docker", "images", "--no-trunc", "secai-agent-gateway", "--format", "{{json .}}"],
+    ["docker", "images", "--no-trunc", "secai-*", "--format", "{{json .}}"],
     ["docker", "system", "df", "--format", "{{json .}}"], ["gh", "api", "repos/a/b/branches/main/protection"],
     ["df", "-P", "/"], ["systemctl", "--user", "show", "x.service", "--no-pager", "-p", "Id", "-p", "NRestarts"],
     ["systemctl", "list-timers", "--all", "--plain", "--no-legend", "--no-pager"],
@@ -796,12 +977,19 @@ def test_read_only_guard_allows(argv: list[str]) -> None:
     oc.assert_read_only(argv)
 
 
-def test_full_run_issues_only_read_only_commands(w: World) -> None:
+def test_full_run_issues_only_read_only_commands(w: World, monkeypatch: pytest.MonkeyPatch) -> None:
     plant_secrets(w)
+    monkeypatch.delenv("SECAI_BACKUP_DIR", raising=False)
+    globbed: list[str] = []
+    real_glob = oc.glob.glob
+    monkeypatch.setattr(oc.glob, "glob", lambda pat, *a, **k: globbed.append(pat) or real_glob(pat, *a, **k))
     runner = FakeRunner(w)
     out = io.StringIO()
     oc.main(["--repo", str(w.repo), "--docker-dir", str(w.docker_dir), "--releases-dir", str(w.releases),
-             "--data-root", str(w.data), "--gh-repo", GH, "--proc-net", str(w.proc_net)], runner=runner, now=NOW, out=out)
+             "--data-root", str(w.data), "--gh-repo", GH, "--proc-net", str(w.proc_net),
+             "--cron-glob", str(w.tmp / "cron" / "*"), "--backup-dir", str(w.tmp / "backup")],
+            runner=runner, now=NOW, out=out)
+    assert globbed and all(g.startswith(str(w.tmp)) for g in globbed), globbed  # không đọc file cron thật của máy
     tools = {c[0] for c in runner.calls}
     assert tools <= {"docker", "gh", "git", "systemctl", "df", "stat"}, tools
     for c in runner.calls:
@@ -827,6 +1015,8 @@ def test_json_output_shape_and_exit_code(w: World) -> None:
     assert ids == [c.id for c in oc.CHECKS]
     assert {r["status"] for r in doc["results"]} <= {"PASS", "FAIL", "WARN", "SKIP"}
     assert set(doc["summary"]) == set(oc.GROUPS)
+    keys = {g: sorted(v) for g, v in doc["summary"].items()}
+    assert all(k == keys["BLD"] for k in keys.values()) and "unmeasured_must" in keys["BLD"], keys  # khoá giống nhau mọi nhóm
     sec = next(r for r in doc["results"] if r["id"] == "OPS-SEC-1")
     assert sec["status"] == "FAIL" and sec["level"] == "bắt buộc" and sec["fix"] and sec["unmeasured"] is False
 

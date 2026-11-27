@@ -1,4 +1,4 @@
-"""Kiểm tĩnh nội dung repo theo docs/ops/OPS-CRITERIA.md (offline, không cần docker).
+"""Kiểm tĩnh nội dung repo theo docs/criteria/ops.md (offline, không cần docker).
 
 Các tiêu chí chỉ phụ thuộc file trong repo gọi thẳng hàm kiểm của scripts/ops-check.py (một quy tắc,
 một chỗ), với runner cấm mọi lệnh ngoài. Phần còn lại (bash -n, compose, release-prod.sh) kiểm độc lập.
@@ -24,7 +24,7 @@ oc = importlib.util.module_from_spec(_spec)
 sys.modules["ops_check_repo"] = oc
 _spec.loader.exec_module(oc)
 
-DOC = ROOT / "docs" / "ops" / "OPS-CRITERIA.md"
+DOC = ROOT / "docs" / "criteria" / "ops.md"
 
 
 class OpsGap(AssertionError):
@@ -89,12 +89,34 @@ def test_dockerfile_base_pinned_by_digest() -> None:
     gap(r.status == oc.PASS, r.evidence)
 
 
+def final_stage_revision_label(df: str) -> bool | None:
+    """LABEL revision=$GIT_SHA có vào image cuối không. None: stage cuối không khai `ARG GIT_SHA`.
+
+    Docker chỉ giữ LABEL của stage cuối (stage khác không vào image), và $GIT_SHA dùng trước dòng
+    `ARG GIT_SHA` của chính stage đó thành chuỗi rỗng; nên chỉ xét đoạn sau FROM cuối, sau dòng ARG."""
+    last = re.split(r"^\s*FROM\b[^\n]*$", df, flags=re.M | re.I)[-1]
+    arg = re.search(r"^\s*ARG\s+GIT_SHA\b", last, re.M)
+    if not arg:
+        return None
+    return re.search(r"^\s*LABEL\b[^\n]*org\.opencontainers\.image\.revision=\S*\$\{?GIT_SHA",
+                     last[arg.end():], re.M) is not None
+
+
+@pytest.mark.parametrize("snippet,want", [
+    ("FROM py AS deps\nLABEL org.opencontainers.image.revision=$GIT_SHA\nFROM py AS runtime\nARG GIT_SHA\n", False),
+    ("FROM py AS runtime\nLABEL org.opencontainers.image.revision=${GIT_SHA}\nARG GIT_SHA\n", False),
+    ("FROM py AS deps\nFROM py AS runtime\nARG GIT_SHA=\"\"\nLABEL org.opencontainers.image.revision=${GIT_SHA}\n", True),
+    ("FROM py AS runtime\nENV X=1\n", None),
+], ids=["label-in-other-stage", "label-before-arg", "label-after-arg", "no-arg"])
+def test_final_stage_revision_label_follows_docker_scoping(snippet: str, want: bool | None) -> None:
+    assert final_stage_revision_label(snippet) is want
+
+
 @xfail_gap("OPS-VER-4: Dockerfile không có LABEL org.opencontainers.image.revision (chỉ build OVERLAY gắn)")
 def test_dockerfile_labels_revision() -> None:
-    df = oc.dockerfile(repo_ctx())
-    assert "ARG GIT_SHA" in df
-    gap(re.search(r"^\s*LABEL\b[^\n]*org\.opencontainers\.image\.revision=\S*\$\{?GIT_SHA", df, re.M) is not None,
-        "không có LABEL revision lấy từ GIT_SHA")
+    ok = final_stage_revision_label(oc.dockerfile(repo_ctx()))
+    assert ok is not None, "stage cuối của Dockerfile không còn `ARG GIT_SHA`"
+    gap(ok, "stage cuối không có LABEL revision lấy từ GIT_SHA sau dòng ARG GIT_SHA")
 
 
 def test_dockerignore_excludes_secrets_and_data() -> None:
@@ -241,7 +263,7 @@ def _relative_links(md: Path) -> list[tuple[str, Path]]:
     return out
 
 
-@pytest.mark.parametrize("md", ["docs/ops/OPS-CRITERIA.md", "docs/README.md", "scripts/README.md",
+@pytest.mark.parametrize("md", ["docs/criteria/ops.md", "docs/README.md", "scripts/README.md",
                                 "docs/archive/test-results/ops-baseline-20261127.md"])
 def test_ops_docs_links_resolve(md: str) -> None:
     broken = [t for t, p in _relative_links(ROOT / md) if not p.exists()]
@@ -258,20 +280,20 @@ def test_service_table_lists_scope_and_links_exist() -> None:
             assert (DOC.parent / ln).resolve().exists(), f"{name}: link hỏng {ln}"
 
 
-@xfail_gap("OPS-DOC-3: review, converter, pool pentestcode và 4 kho dữ liệu chưa có runbook release/rollback")
+@xfail_gap("OPS-DOC-3: review, converter, pool pentestcode, 4 kho dữ liệu và 2 unit devspace chưa có runbook release/rollback")
 def test_every_service_has_runbook() -> None:
     r = check(oc.doc_service_runbooks)
     assert r.status in (oc.PASS, oc.FAIL), r
     gap(r.status == oc.PASS, r.evidence)
 
 
-@xfail_gap("OPS-DOC-4: chưa có docs/ops/RESTORE.md (stack/restore-data.sh chỉ dựng máy mới từ gói)")
+@xfail_gap(f"OPS-DOC-4: chưa có {oc.RESTORE_DOC} (stack/restore-data.sh chỉ dựng máy mới từ gói)")
 def test_restore_runbook_exists() -> None:
     r = check(oc.doc_restore)
     gap(r.status == oc.PASS, r.evidence)
 
 
-@xfail_gap("OPS-DOC-7: chưa có docs/ops/INCIDENT.md (người nhận cảnh báo, xử lý tunnel/đĩa/health/KB)")
+@xfail_gap(f"OPS-DOC-7: chưa có {oc.INCIDENT_DOC} (người nhận cảnh báo, xử lý tunnel/đĩa/health/KB)")
 def test_incident_runbook_exists() -> None:
     r = check(oc.doc_incident)
     gap(r.status == oc.PASS, r.evidence)
@@ -282,9 +304,20 @@ def test_release_runbook_is_documented() -> None:
 
 
 def test_scripts_readme_lists_ops_scripts() -> None:
-    assert check(oc.doc_scripts_readme).status == oc.PASS
+    r = check(oc.doc_scripts_readme)
+    assert r.status == oc.PASS, r.evidence
 
 
 def test_docs_index_links_ops_criteria() -> None:
     txt = read("docs/README.md")
-    assert "ops/OPS-CRITERIA.md" in txt and "](ops/)" in txt
+    assert f"]({oc.CRITERIA_DOC.removeprefix('docs/')})" in txt and "](operations/container-versions.md)" in txt
+    assert "](ops/" not in txt, "docs/ops/ đã bỏ: tiêu chí ở docs/criteria/, runbook ở docs/operations/"
+
+
+def test_ops_docs_follow_docs_layout() -> None:
+    """docs/README.md: tiêu chí ở docs/criteria/, tài liệu vận hành ở docs/operations/, tên kebab-case."""
+    for rel in (oc.CRITERIA_DOC, oc.RESTORE_DOC, oc.INCIDENT_DOC):
+        folder, name = rel.rsplit("/", 1)
+        assert folder in ("docs/criteria", "docs/operations"), rel
+        assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*\.md", name), rel
+    assert not (ROOT / "docs" / "ops").exists()

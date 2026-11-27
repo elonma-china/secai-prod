@@ -28,7 +28,9 @@ Kết quả benchmark có cấu trúc ở `evals/`, `kpi_bench/` hoặc `evidenc
 | `wt-new.sh`, `wt-rm.sh` | Tạo/xoá worktree kèm stack dev (giữ nhánh) | Worktree của mình |
 | `wt-prune.sh`, `install-wt-prune-timer.sh` | Dọn worktree/nhánh/stack dev của PR đã merge (mặc định dry-run, `--yes` mới xoá); timer hằng giờ, kèm `release-prod.sh gc --yes` | Có, khi `--yes` |
 | `release-prod.sh` | Release `origin/main` lên 3 container gateway: `plan` (xem diff), `gates` (test+build+smoke), `run --yes`, `rollback --yes`, `gc [--yes]`. Quy trình ở mục "Sau khi merge PR" trong [CLAUDE.md](../CLAUDE.md) | `run`/`rollback`/`gc --yes` đổi prod |
-| `ops-check.py` | Chấm trạng thái ops thật theo [tiêu chí](../docs/ops/OPS-CRITERIA.md): PASS/FAIL/WARN/SKIP, `--json`, mã thoát 1 khi có FAIL bắt buộc | Không, chỉ đọc |
+| `ops-check.py` | Chấm trạng thái ops thật theo [tiêu chí](../docs/criteria/ops.md): PASS/FAIL/WARN/SKIP, `--json`, mã thoát 1 khi có FAIL bắt buộc | Không, chỉ đọc |
+| `versions.py` | Sổ phiên bản container: `status` (bản đang chạy và cờ ID trần, tag trôi, lệch image), `history`, `snapshot`, `record` (do `release-prod.sh` gọi), `serve` (trang chỉ xem trên 127.0.0.1:18190). Xem [quản lý phiên bản container](../docs/operations/container-versions.md) | `status`/`history`/`serve` không; `record`/`snapshot`/`backfill --yes` ghi sổ `~/secai-releases/versions.jsonl` |
+| `install-versions-ui.sh` | Cài `systemd --user` cho trang phiên bản (`secai-versions-ui.service`) và snapshot mỗi giờ (`secai-versions-snapshot.timer`), chạy `versions.py` của `origin/main`; gỡ bằng `--remove`. Xem [quản lý phiên bản container](../docs/operations/container-versions.md) | Có: unit systemd của user |
 
 ```sh
 python3 -I scripts/ops-check.py --group VER,SEC     # chỉ đọc, không cần quyền root

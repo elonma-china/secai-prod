@@ -211,17 +211,33 @@ def container_matches(n, c, flt):
 
 
 def parse_labels(dockerfile, buildargs):
-    """LABEL k=v trong Dockerfile (gộp dòng nối), thay $ARG/${ARG} bằng --build-arg."""
+    """LABEL của image cuối như docker build: chỉ stage cuối (sau FROM cuối) cộng label kế thừa từ image
+    base của stage đó. $X/${X} chỉ có giá trị khi stage đó đã khai `ARG X` (--build-arg hoặc mặc định)
+    hay `ENV X` TRƯỚC dòng LABEL; ngược lại thành chuỗi rỗng."""
     text = re.sub(r"\\\n\s*", " ", open(dockerfile).read())
-    out = {}
-    m = re.match(r"\s*FROM\s+(\S+)", text)
-    if m and m.group(1) in I:
-        out.update(I[m.group(1)].get("labels", {}))
-    for line in re.findall(r"^\s*LABEL\s+(.+)$", text, re.M):
-        for k, v in re.findall(r'([\w.-]+)=("[^"]*"|\S+)', line):
-            v = v.strip('"')
-            v = re.sub(r"\$\{?(\w+)\}?", lambda mm: buildargs.get(mm.group(1), ""), v)
-            out[k] = v
+    stages = re.split(r"^\s*FROM\s+", text, flags=re.M)
+    head, _, body = (stages[-1] if len(stages) > 1 else "").partition("\n")
+    base = next((t for t in head.split() if not t.startswith("--")), "")
+    out = dict(I[base].get("labels", {})) if base in I else {}
+    scope = {}
+
+    def sub(v):
+        return re.sub(r"\$\{?(\w+)\}?", lambda mm: scope.get(mm.group(1), ""), v)
+    for line in body.splitlines():
+        m = re.match(r"^\s*(ARG|ENV|LABEL)\s+(.+)$", line)
+        if not m:
+            continue
+        kind, rest = m.groups()
+        if kind == "ARG":
+            name, eq, default = rest.strip().partition("=")
+            scope[name] = buildargs.get(name, sub(default.strip('"')) if eq else "")
+            continue
+        pairs = re.findall(r'([\w.-]+)=("[^"]*"|\S+)', rest)
+        if kind == "ENV" and not pairs:  # dạng cũ `ENV X value`
+            k, _, v = rest.strip().partition(" ")
+            pairs = [(k, v.strip())]
+        for k, v in pairs:
+            (scope if kind == "ENV" else out)[k] = sub(v.strip('"'))
     return out
 
 
@@ -407,6 +423,11 @@ if any(d and d in url for d in os.environ.get("FAKE_CURL_DOWN", "").split(",")):
 C = json.load(open(os.environ["FAKE_STATE"]))["containers"]
 m = re.match(r"https?://[^/:]+:(\d+)(/[^?]*)?", url)
 port, path = (m.group(1), m.group(2) or "/") if m else ("", "/")
+# languages của :8131 hỏng chỉ khi gateway prod đang chạy đúng tag này (sau khi chuyển; smoke không bị ảnh hưởng)
+down_on = os.environ.get("FAKE_8131_LANGUAGES_DOWN_ON")
+gw = C.get("secai-docker-gateway") or {}
+if down_on and port == "8131" and path == "/ai/v3/translate/languages" and gw.get("image") == down_on:
+    sys.exit(22)
 
 
 def sha(name, override):
@@ -420,6 +441,7 @@ def sha(name, override):
 
 
 if path == "/health":
+    llm_ok = True
     if port == "8131":
         g = sha("secai-docker-gateway", "FAKE_GATEWAY_SHA")
     elif port == "18185":
@@ -429,7 +451,8 @@ if path == "/health":
         if not smoke:
             sys.exit(7)
         g = sha(smoke[0], "FAKE_SMOKE_SHA")
-    print(json.dumps({"status": "ok", "git_sha": g, "serving": {"llm": {"ok": True}}, "redis": "ok"}, separators=(",", ":")))
+        llm_ok = os.environ.get("FAKE_SMOKE_LLM_OK", "1") != "0"  # dep OK ở prod mà hỏng ở smoke
+    print(json.dumps({"status": "ok", "git_sha": g, "serving": {"llm": {"ok": llm_ok}}, "redis": "ok"}, separators=(",", ":")))
 else:
     print("{}")
 '''
@@ -671,16 +694,18 @@ def test_plan_flags_full_build_when_deps_change(tmp_path: Path) -> None:
     assert sb.mutating() == []
 
 
-def test_plan_when_prod_already_runs_main(sb: Sandbox) -> None:
+@pytest.mark.parametrize("mode", [["plan"], ["run", "--yes"]])
+def test_plan_when_prod_already_runs_main(sb: Sandbox, mode: list[str]) -> None:
     tag = f"{IMG}:main-{sb.c2[:8]}-20261121"
     sb.add_image(tag)
     for n in TRIO:
         sb.set_image(n, tag)
     sb.save()
-    res = sb.run("plan")
+    res = sb.run(*mode)
     assert res.returncode == 0, res.stderr
     assert "không có gì để release" in res.stdout
     assert sb.mutating() == []
+    assert not list(sb.releases.glob(f"main-{sb.c2[:8]}-*")), "run --yes khi prod đã ở main không được build/tạo release"
 
 
 @pytest.mark.parametrize("mode", ["run", "rollback"])
@@ -792,9 +817,11 @@ def test_run_switches_all_three_and_records_release(sb: Sandbox) -> None:
     assert sb.prod_tag in sb.load()["images"], "image prod cũ phải được giữ để rollback"
 
 
-def test_run_blocks_release_when_pytest_gate_is_red(sb: Sandbox) -> None:
+@pytest.mark.parametrize("pytest_out", ["1 failed, 11 passed in 0.50s", "10 passed, 1 error in 1.00s"],
+                         ids=["failed", "error"])
+def test_run_blocks_release_when_pytest_gate_is_red(sb: Sandbox, pytest_out: str) -> None:
     compose_before = sb.compose.read_text()
-    res = sb.run("run", "--yes", FAKE_PYTEST_OUT="1 failed, 11 passed in 0.50s")
+    res = sb.run("run", "--yes", FAKE_PYTEST_OUT=pytest_out)
     assert res.returncode != 0 and "pytest không xanh" in res.stderr
     assert not [a for a in sb.docker_calls() if a[:1] in (["build"], ["run"])]
     assert_prod_untouched(sb, compose_before)
@@ -805,13 +832,43 @@ def test_run_blocks_release_when_pytest_gate_is_red(sb: Sandbox) -> None:
     ({"FAKE_IMPORT_RC": "1"}, "image mới import lỗi"),
     ({"FAKE_IMGSRC_EXTRA": "1"}, "/app/src của image khác git archive"),
     ({"FAKE_SMOKE_SHA": "deadbeef"}, "smoke: /health sai"),
+    ({"FAKE_SMOKE_LLM_OK": "0"}, "smoke: /health sai"),
     ({"FAKE_CURL_DOWN": "/ai/v3/translate/languages"}, "smoke: /ai/v3/translate/languages không 200"),
-], ids=["import", "imgsrc", "smoke-sha", "smoke-languages"])
+], ids=["import", "imgsrc", "smoke-sha", "smoke-dep-regression", "smoke-languages"])
 def test_run_blocks_release_when_a_build_or_smoke_gate_fails(sb: Sandbox, knob: dict, message: str) -> None:
     compose_before = sb.compose.read_text()
     res = sb.run("run", "--yes", **knob)
     assert res.returncode != 0 and message in res.stderr, res.stderr[-2000:]
     assert not [n for n in sb.load()["containers"] if "-smoke-" in n], "trap EXIT phải xoá container smoke"
+    assert_prod_untouched(sb, compose_before)
+    assert not (sb.releases / "LATEST-PROD").exists()
+
+
+def _two_compose_lines(sb: Sandbox) -> None:
+    sb.compose.write_text(sb.compose.read_text() + f"  gateway-b:\n    image: {sb.prod_tag}\n    container_name: secai-docker-gateway-b\n")
+
+
+def _profile_without_prod_tag(sb: Sandbox) -> None:
+    sb.prev_profile.write_text(sb.prev_profile.read_text().replace(sb.prod_tag, f"{IMG}:main-0ther000-20261101"))
+
+
+def _profile_label_points_nowhere(sb: Sandbox) -> None:
+    for n in TRIO[1:]:
+        sb.state["containers"][n]["labels"]["com.docker.compose.project.config_files"] = str(sb.root / "mất.json")
+    sb.save()
+
+
+@pytest.mark.parametrize("breakage,message", [
+    (_two_compose_lines, "compose có 2 dòng 'image: "),
+    (_profile_without_prod_tag, "profile translation không chứa"),
+    (_profile_label_points_nowhere, "không thấy profile translation hiện tại"),
+], ids=["compose-two-image-lines", "profile-without-prod-tag", "profile-missing"])
+def test_run_stops_before_switch_when_switch_inputs_are_wrong(sb: Sandbox, breakage, message: str) -> None:
+    breakage(sb)
+    compose_before = sb.compose.read_text()
+    res = sb.run("run", "--yes")
+    assert res.returncode != 0 and message in res.stderr, res.stderr[-2000:]
+    assert sb.compose_calls() == [], "đã chuyển prod dù đầu vào của bước switch sai"
     assert_prod_untouched(sb, compose_before)
     assert not (sb.releases / "LATEST-PROD").exists()
 
@@ -845,6 +902,17 @@ def test_run_rolls_back_both_groups_when_translation_step_fails(sb: Sandbox, kno
                for c in sb.compose_calls()), "phải tới được bước chuyển translation"
     assert sb.compose.read_text() == compose_before
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
+
+
+def test_run_rolls_back_when_8131_translate_languages_breaks_after_switch(sb: Sandbox) -> None:
+    compose_before = sb.compose.read_text()
+    res = sb.run("run", "--yes", FAKE_8131_LANGUAGES_DOWN_ON=sb.new_tag)
+    assert res.returncode != 0 and "đã rollback" in res.stderr, res.stderr[-2000:]
+    assert any(c["argv"][:2] == ["compose", "-p"] and str(sb.rel / "translation-main.json") in c["argv"]
+               for c in sb.compose_calls()), "phải tới được bước chuyển translation"
+    assert sb.compose.read_text() == compose_before
+    assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
+    assert_trio_managed_by_compose(sb)
 
 
 # ------------------------------------------------------------------ rollback
@@ -981,6 +1049,22 @@ def test_gc_keeps_image_of_container_created_from_bare_id(sb: Sandbox) -> None:
 
 
 # ------------------------------------------------------------------ build FULL
+@pytest.mark.parametrize("dockerfile,want", [
+    ("FROM python:3.12-slim AS deps\nLABEL org.opencontainers.image.revision=$GIT_SHA\n"
+     "FROM python:3.12-slim AS runtime\nARG GIT_SHA\n", None),
+    ("FROM python:3.12-slim AS runtime\nLABEL org.opencontainers.image.revision=${GIT_SHA}\nARG GIT_SHA\n", ""),
+    ("FROM python:3.12-slim AS runtime\nARG GIT_SHA=\"\"\nLABEL org.opencontainers.image.revision=${GIT_SHA}\n", "abc12345"),
+], ids=["label-in-other-stage", "label-before-arg", "label-after-arg"])
+def test_fake_docker_build_labels_follow_stage_and_arg_scope(sb: Sandbox, dockerfile: str, want: str | None) -> None:
+    """docker giả phải xử lý LABEL như docker thật, để một cách sửa OPS-VER-4 sai không XPASS."""
+    ctx = sb.root / "build-ctx"
+    ctx.mkdir()
+    (ctx / "Dockerfile").write_text(dockerfile)
+    subprocess.run([str(sb.bin / "docker"), "build", "-q", "--build-arg", "GIT_SHA=abc12345", "-t", "probe:x", str(ctx)],
+                   env=sb.env, check=True, capture_output=True, text=True)
+    assert sb.load()["images"]["probe:x"]["labels"].get(REV) == want
+
+
 @xfail_gap("OPS-VER-4: build FULL (deps đổi) không gắn label org.opencontainers.image.revision; chỉ build OVERLAY có")
 def test_full_build_labels_revision(tmp_path: Path) -> None:
     sb = Sandbox(tmp_path, deps_change=True)
