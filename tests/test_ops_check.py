@@ -70,6 +70,7 @@ class World:
         self._docker()
         self.df_pct = 50
         self.docker_err: str | None = None       # đặt để mọi lệnh docker lỗi
+        self.tailscale: tuple[int, str, str] | None = None  # (rc, stdout, stderr) của `tailscale serve status --json`; None: không có tailscale
         self.systemctl_user_rc = 0                # khác 0: bus của user không truy cập được
         self.system_df = [{"Type": "Images", "Size": "40GB", "Reclaimable": "2.5GB (6%)"},
                           {"Type": "Build Cache", "Size": "1.2GB", "Reclaimable": "1.2GB"}]
@@ -282,6 +283,8 @@ class FakeRunner(oc.Runner):
             return oc.Proc(rc, json.dumps(data), "" if rc == 0 else "gh: error")
         if tool == "df":
             return ok(f"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/x 100 50 50 {w.df_pct}% /\n")
+        if tool == "tailscale" and w.tailscale is not None:
+            return oc.Proc(*w.tailscale)
         return oc.Proc(127, "", "not found")
 
 
@@ -729,6 +732,70 @@ def test_devspace_unit_port_and_public_tunnel_fail_sec2(w: World) -> None:
     assert r.status == oc.WARN and "cloudflared" in r.evidence, r.evidence
 
 
+TS_HOST = "box.tailnet-example.ts.net"  # tên máy giả
+
+
+def ts_serve(w: World, cfg: dict) -> None:
+    w.tailscale = (0, json.dumps(cfg), "")
+
+
+def test_tailscale_funnel_into_scope_port_fails_sec2(w: World) -> None:
+    ts_serve(w, {"TCP": {"443": {"HTTPS": True}}, "AllowFunnel": {f"{TS_HOST}:443": True},
+                 "Web": {f"{TS_HOST}:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:5173"}}}}})
+    r = one(w, "OPS-SEC-2")
+    assert r.status == oc.FAIL and "tailscale funnel :443/ -> http://127.0.0.1:5173" in r.evidence, r.evidence
+    assert TS_HOST not in r.evidence + r.fix and "tailscale funnel reset" in r.fix
+
+
+@pytest.mark.parametrize("cfg,want", [
+    # funnel TCP forward vào translation gateway
+    ({"TCP": {"8443": {"TCPForward": "127.0.0.1:18185"}}, "AllowFunnel": {f"{TS_HOST}:8443": True}}, oc.FAIL),
+    # phiên foreground (`tailscale funnel 5174` không --bg)
+    ({"Foreground": {"sess1": {"TCP": {"443": {"HTTPS": True}}, "AllowFunnel": {f"{TS_HOST}:443": True},
+                               "Web": {f"{TS_HOST}:443": {"Handlers": {"/": {"Proxy": "http://localhost:5174"}}}}}}}, oc.FAIL),
+    # funnel vào cổng ngoài phạm vi
+    ({"AllowFunnel": {f"{TS_HOST}:443": True},
+      "Web": {f"{TS_HOST}:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:3773"}}}}}, oc.PASS),
+    # serve chỉ trong tailnet vào frontend dịch: peer loopback -> WARN
+    ({"Web": {f"{TS_HOST}:5179": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:5179"}}}}}, oc.WARN),
+    # serve trong tailnet vào gateway (đã public) hay cổng khác: PASS
+    ({"Web": {f"{TS_HOST}:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8131"}}},
+              f"{TS_HOST}:5733": {"Handlers": {"/": {"Proxy": "http://localhost:5733"}}}}}, oc.PASS),
+    # funnel chỉ bật cho lối vào khác, không phải lối vào trỏ tới devspace
+    ({"AllowFunnel": {f"{TS_HOST}:8443": True},
+      "Web": {f"{TS_HOST}:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:5173"}}},
+              f"{TS_HOST}:8443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:3773"}}}}}, oc.WARN),
+    ({}, oc.PASS),
+], ids=["funnel-tcp-18185", "funnel-foreground-5174", "funnel-out-of-scope", "serve-5179", "serve-8131",
+        "funnel-other-entry", "empty"])
+def test_tailscale_serve_cases_sec2(w: World, cfg: dict, want: str) -> None:
+    ts_serve(w, cfg)
+    r = one(w, "OPS-SEC-2")
+    assert r.status == want, r.evidence
+    assert TS_HOST not in r.evidence
+    assert not r.unmeasured
+
+
+@pytest.mark.parametrize("ts,want,unmeasured,text", [
+    (None, oc.PASS, False, "tailscale: không có trên máy"),
+    ((1, "", "failed to connect to local tailscaled; it doesn't appear to be running"), oc.PASS, False, "không có trên máy"),
+    ((1, "", "Access denied: serve config denied"), oc.WARN, True, "tailscale serve status"),
+    ((0, "not json", ""), oc.WARN, True, "JSON lỗi"),
+], ids=["no-binary", "daemon-down", "error", "bad-json"])
+def test_tailscale_missing_is_soft_skip_sec2(w: World, ts, want: str, unmeasured: bool, text: str) -> None:
+    w.tailscale = ts
+    r = one(w, "OPS-SEC-2")
+    assert (r.status, r.unmeasured) == (want, unmeasured) and text in r.evidence, r.evidence
+
+
+def test_target_port_parsing() -> None:
+    assert oc._target_port("http://127.0.0.1:5173") == 5173
+    assert oc._target_port("localhost:5733") == 5733
+    assert oc._target_port("5179") == 5179
+    assert oc._target_port("https+insecure://[::1]:8131/") == 8131
+    assert oc._target_port("http://127.0.0.1") == 80
+
+
 def plant_secrets(w: World) -> None:
     w.compose.write_text(f"services:\n  neo4j:\n    environment:\n      NEO4J_AUTH: {SECRET_VALUES[1]}\n"
                          f"      NEO4J_PASSWORD: ${{NEO4J_PASSWORD:-{SECRET_VALUES[5]}}}\n"
@@ -789,6 +856,62 @@ def test_reading_key_from_env_is_not_plaintext_sec5(w: World) -> None:
     assert oc._secret_names((w.tmp / "cron" / "sync_nvd.py").read_text(), make_ctx(w)) == []
     r = one(w, "OPS-SEC-5")
     assert r.status == oc.PASS, r.evidence
+
+
+def test_get_with_literal_default_fails_sec5(w: World) -> None:
+    lit = "fake-literal-pw-0123"
+    (w.tmp / "cron" / "sync_kb.py").write_text(
+        "import os\n"
+        f'NEO4J_PW = os.environ.get("NEO4J_PASSWORD", "{lit}")\n'
+        'LLM_KEY = os.environ.get("LLM_API_KEY", "sk-placeholder")\n'
+        'NVD = os.environ.get("NVD_API_KEY", "")\n'
+        "URL = os.environ.get('QDRANT_URL', 'http://127.0.0.1:6333')\n")
+    r = one(w, "OPS-SEC-5")
+    assert r.status == oc.FAIL and "NEO4J_PASSWORD" in r.evidence, r.evidence
+    assert "LLM_API_KEY" not in r.evidence and "NVD_API_KEY" not in r.evidence and lit not in r.evidence
+    ctx = make_ctx(w)
+    assert oc._secret_names(f"t = getenv('API_TOKEN', '{lit}')\n", ctx) == ["API_TOKEN"] and lit in ctx.secrets
+    _, out = cli(w)
+    assert lit not in out
+
+
+def test_compose_with_only_references_is_not_a_leak_sec3(w: World, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Compose prod 664 chỉ còn ${VAR}/${VAR:?thông báo}: không tính là file lộ secret (đo trên máy 2026-11-27:
+    thông báo của `:?` từng bị coi là giá trị literal)."""
+    monkeypatch.setattr(oc, "world_readable", lambda p: bool(Path(p).stat().st_mode & 0o004))
+    w.compose.write_text("services:\n  neo4j:\n    environment:\n"
+                         "      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD chua set trong .env}\n"
+                         "      ADMIN_API_KEY: ${ADMIN_API_KEY}\n      BASIC_AUTH: ${BASIC_AUTH:-}\n")
+    w.compose.chmod(0o664)
+    rs = results(w, "OPS-SEC-3", "OPS-SEC-4")
+    assert rs["OPS-SEC-3"].status == oc.PASS and rs["OPS-SEC-4"].status == oc.PASS, rs
+    # mặc định ${X:-lit} và giá trị thay thế ${X:+lit} là literal nằm thẳng trong file
+    for line in ("NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-LiteralDefault-99}",
+                 "NEO4J_AUTH: ${NEO4J_PASSWORD:+neo4j/LiteralAlt-99}"):
+        w.compose.write_text(f"services:\n  neo4j:\n    environment:\n      {line}\n")
+        r = one(w, "OPS-SEC-3")
+        assert r.status == oc.FAIL and "NEO4J_PASSWORD" in r.evidence and "Literal" not in r.evidence, (line, r.evidence)
+
+
+def test_placeholders_are_not_literal_secrets() -> None:
+    for v in ("sk-placeholder", "change-me", "CHANGEME", "<mật-khẩu-mạnh>", "xxxxxxxx", "sk-xxxxxxxx",
+              "${OPENAI_API_KEY:-sk-placeholder}"):
+        assert oc.literal_secret(v) is None, v
+    # chỉ miễn khi CẢ giá trị là placeholder: mật khẩu chứa chuỗi con 'changeme'/'placeholder' vẫn là secret
+    for v in ("sk-live-0123456789", "Changeme2026!Prod", "${NEO4J_PASSWORD:-Changeme#Prod2026}",
+              "neo4j/MyPlaceholderPw99", "sk-live-abcdef1234567890  # placeholder until rotation"):
+        assert oc.literal_secret(v), v
+
+
+def test_secret_containing_placeholder_word_is_reported(w: World) -> None:
+    w.compose.write_text("services:\n  gw:\n    environment:\n"
+                         "      OPENAI_API_KEY: sk-live-abcdef1234567890  # placeholder until rotation\n")
+    r = one(w, "OPS-SEC-4")
+    assert r.status == oc.FAIL and "OPENAI_API_KEY" in r.evidence and "abcdef" not in r.evidence, r.evidence
+    ctx = make_ctx(w)
+    assert oc._secret_names("NEO4J_PASSWORD=Changeme2026!Prod\n", ctx) == ["NEO4J_PASSWORD"]
+    assert oc._secret_names('pw = os.environ.get("NEO4J_PASSWORD", "ChangeMe-Prod-2026")\n', ctx) == ["NEO4J_PASSWORD"]
+    assert oc._secret_names('k = os.environ.get("LLM_API_KEY", "sk-placeholder")\n', ctx) == []
 
 
 @pytest.mark.parametrize("text,name", [
@@ -978,6 +1101,8 @@ def test_versions_ledger_is_skipped_when_absent(w: World) -> None:
     ["docker", "images", "--no-trunc", "*", "--format", "{{json .}}"],
     ["docker", "images", "--no-trunc", "secai-*:*", "--format", "{{json .}}"],
     ["rm", "-rf", "/"], ["chmod", "600", "x"], ["curl", "http://x"], [],
+    ["tailscale", "funnel", "5173"], ["tailscale", "serve", "reset"], ["tailscale", "serve", "--bg", "5173"],
+    ["tailscale", "serve", "status", "--json", "--set-path", "/x"], ["tailscale", "up"], ["tailscale", "funnel", "reset"],
 ])
 def test_read_only_guard_rejects(argv: list[str]) -> None:
     with pytest.raises(oc.ReadOnlyViolation):
@@ -997,6 +1122,7 @@ def test_read_only_guard_rejects(argv: list[str]) -> None:
     ["git", "--no-optional-locks", "-C", "/r", "worktree", "list", "--porcelain"],
     ["git", "--no-optional-locks", "-C", "/r", "diff", "--quiet", "--no-ext-diff", "--no-textconv", "a1b2", "c3d4", "--", "uv.lock"],
     ["git", "--no-optional-locks", "-C", "/r", "cat-file", "-e", "c4c3c80^{commit}"],
+    ["tailscale", "serve", "status", "--json"],
 ])
 def test_read_only_guard_allows(argv: list[str]) -> None:
     oc.assert_read_only(argv)
@@ -1016,7 +1142,7 @@ def test_full_run_issues_only_read_only_commands(w: World, monkeypatch: pytest.M
             runner=runner, now=NOW, out=out)
     assert globbed and all(g.startswith(str(w.tmp)) for g in globbed), globbed  # không đọc file cron thật của máy
     tools = {c[0] for c in runner.calls}
-    assert tools <= {"docker", "gh", "git", "systemctl", "df", "stat"}, tools
+    assert tools <= {"docker", "gh", "git", "systemctl", "df", "stat", "tailscale"}, tools
     for c in runner.calls:
         oc.assert_read_only(c)
 
@@ -1113,6 +1239,7 @@ elif a[:2] == ["system", "df"]:
     (fb / "gh").write_text("#!/bin/sh\necho 'gh: not logged in' >&2\nexit 4\n")
     (fb / "systemctl").write_text("#!/bin/sh\nexit 0\n")
     (fb / "df").write_text("#!/bin/sh\necho 'Filesystem 1024-blocks Used Available Capacity Mounted on'\necho '/dev/x 1 1 1 42% /'\n")
+    (fb / "tailscale").write_text("#!/bin/sh\necho '{}'\n")  # không đọc cấu hình tailscale thật của máy
     for f in fb.iterdir():
         f.chmod(0o755)
     env = {**os.environ, "PATH": f"{fb}:{os.environ['PATH']}", "FAKE_WORLD": str(state)}

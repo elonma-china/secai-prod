@@ -89,7 +89,7 @@ Bản demo dùng bộ chuyển **Demo → Người dùng thường / Admin** tro
 
 Chức năng đăng nhập demo cần **static proxy `serve_static.py`**, không chạy qua `npm run dev` hoặc `npm run preview` trực tiếp. Vite chỉ chuyển tiếp `X-Review-Role`; gateway yêu cầu Bearer và không tự coi header này là quyền truy cập. Static proxy ánh xạ role sang credential riêng theo chính sách kết nối cho phép.
 
-Sau khi quản trị đã cấu hình credential reviewer/admin trong `.review-devspace-tokens.local`, cấu hình quyền kết nối local/tailnet của proxy và gateway review đang chạy:
+Sau khi quản trị đã cấu hình credential reviewer/admin trong `.review-devspace-tokens.local`, cấu hình quyền kết nối local/tailnet của proxy và gateway review đang chạy. Loopback cần file `.review-loopback.local` (hoặc `DEVSPACE_REVIEW_ALLOW_LOOPBACK=true`); tailnet mặc định tắt, chỉ bật bằng `DEVSPACE_REVIEW_ALLOW_TAILNET=true`:
 
 ```bash
 npm run build

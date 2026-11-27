@@ -41,3 +41,30 @@ def test_review_shortcut_loads_only_configured_roles(tmp_path, monkeypatch):
     assert server._review_token("other") is None
     path.unlink()
     assert server._review_token("admin") is None
+
+
+def test_tailnet_shortcut_is_opt_in(monkeypatch, tmp_path):
+    """Nhánh tin tailnet chỉ bật khi DEVSPACE_REVIEW_ALLOW_TAILNET=true; nhánh loopback giữ điều kiện file marker."""
+    server = _server()
+    monkeypatch.setattr(server, "REVIEW_LOOPBACK_FILE", tmp_path / "missing")
+    monkeypatch.setattr(server, "REVIEW_ALLOW_LOOPBACK", False)
+    monkeypatch.setattr(server, "REVIEW_ALLOW_TAILNET", False)
+    assert not server._review_connection("100.92.150.53", "100.74.146.12")
+    assert not server._review_connection("127.0.0.1", "127.0.0.1")
+    monkeypatch.setattr(server, "REVIEW_ALLOW_TAILNET", True)
+    assert server._review_connection("100.92.150.53", "100.74.146.12")
+    assert not server._review_connection("192.168.1.4", "100.74.146.12")
+    assert not server._review_connection("127.0.0.1", "127.0.0.1")  # tailnet bật không mở loopback
+    marker = tmp_path / ".review-loopback.local"
+    marker.write_text("")
+    monkeypatch.setattr(server, "REVIEW_LOOPBACK_FILE", marker)
+    monkeypatch.setattr(server, "REVIEW_ALLOW_TAILNET", False)
+    assert server._review_connection("127.0.0.1", "127.0.0.1")  # loopback chỉ cần file marker
+    assert not server._review_connection("100.92.150.53", "100.74.146.12")
+
+
+def test_tailnet_flag_reads_env(monkeypatch):
+    monkeypatch.delenv("DEVSPACE_REVIEW_ALLOW_TAILNET", raising=False)
+    assert _server().REVIEW_ALLOW_TAILNET is False
+    monkeypatch.setenv("DEVSPACE_REVIEW_ALLOW_TAILNET", "true")
+    assert _server().REVIEW_ALLOW_TAILNET is True

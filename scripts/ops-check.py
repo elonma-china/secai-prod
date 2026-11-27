@@ -18,6 +18,7 @@ danh sách trắng đúng dạng (cờ lạ, kể cả dạng dính liền như 
   git --no-optional-locks -C <dir> rev-parse|merge-base --is-ancestor|cat-file -e|ls-files -z|
       diff --quiet --no-ext-diff --no-textconv|status --porcelain|worktree list|branch (liệt kê)|
       remote get-url origin|rev-list --count     (không fetch nên origin/main là bản fetch gần nhất)
+  tailscale serve status --json            (đọc cấu hình serve/funnel, không đổi gì)
 Ngoài ra chỉ đọc file thường (Dockerfile, compose, state.env, pip-freeze.diff, /proc/net/tcp…) và os.stat.
 
 Secret: chỉ in tên biến, đường dẫn, quyền file. Giá trị đọc được trong bộ nhớ (env container,
@@ -117,6 +118,12 @@ SECRET_ASSIGN_RE = re.compile(
     r"""(?=(?P<q1>["']?)\b(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b["']?[ \t]*[:=][ \t]*(?P<q2>["']?)(?P<val>[^"'\s,}\]]+))""")
 # Tên khớp SECRET_NAME_RE nhưng không phải secret: đường dẫn/tên file, fingerprint GPG công khai của image python.
 NOT_SECRET_NAME_RE = re.compile(r"(_FILE|_PATH|_DIR|_FILES)$", re.I)
+# `.get("X_PASSWORD", "literal")` / `getenv("X_KEY", "literal")`: mặc định literal nằm thẳng trong script.
+GET_DEFAULT_RE = re.compile(
+    r"""(?:\.get|\bgetenv)\(\s*(?P<q1>["'])(?P<name>[A-Za-z_][A-Za-z0-9_]*)(?P=q1)\s*,\s*(?P<q2>["'])(?P<val>[^"'\n]*)(?P=q2)""")
+# Giá trị giữ chỗ hiển nhiên, không phải secret: sk-placeholder, change-me, <mật-khẩu>, xxxx, ****.
+# So với TOÀN BỘ phần literal (fullmatch): `Changeme2026!` hay `sk-live-… # placeholder` vẫn là secret.
+PLACEHOLDER_RE = re.compile(r"(?i)(?:sk-)?(?:placeholder|change[-_]?me|x{4,}|\*{4,})|<[^<>]*>")
 PUBLIC_ENV_NAMES = {"GPG_KEY"}
 
 
@@ -223,6 +230,8 @@ def assert_read_only(argv: list[str]) -> None:
                 continue
             ok = x in _SYSTEMCTL_FLAGS or (not x.startswith("-") and bool(_UNIT.match(x)))
             i += 1
+    elif tool == "tailscale":
+        ok = a == ["serve", "status", "--json"]
     elif tool == "git":
         ok = (len(a) >= 4 and a[0] == "--no-optional-locks" and a[1] == "-C" and not a[2].startswith("-")
               and _git_shape_ok(a[3], a[4:]))
@@ -578,6 +587,24 @@ class Ctx:
                 names += re.findall(r"(\S+\.timer)", p.out)
             return names
         return self._memo("timers", f)
+
+    # ---- tailscale
+    def tailscale_serve(self) -> dict | None:
+        """Cấu hình `tailscale serve` (ServeConfig JSON). None khi máy không có tailscale/tailscaled."""
+        def f():
+            p = self.r.run(["tailscale", "serve", "status", "--json"], timeout=20)
+            if p.rc == 127:
+                return None
+            if p.rc != 0:
+                if re.search(r"(?i)tailscaled|not running|failed to connect|connection refused|no such file", p.err):
+                    return None
+                raise Unavailable(f"tailscale serve status: {p.err.strip()[:120] or p.rc}")
+            try:
+                cfg = json.loads(p.out or "{}")
+            except json.JSONDecodeError as e:
+                raise Unavailable(f"tailscale serve status: JSON lỗi ({e.msg})") from None
+            return cfg if isinstance(cfg, dict) else {}
+        return self._memo("ts_serve", f)
 
     # ---- df
     def df(self, path: Path) -> tuple[str, int]:
@@ -1496,6 +1523,44 @@ HOST_NET_PORTS = {"secai-translation-gateway": (18185,), "secai-translation-fron
 HOST_UNIT_PORTS = {"secai-devspace.service": (5173,)}
 # ExecStart mở service nội bộ ra Internet (request đi qua tunnel tới service với peer 127.0.0.1).
 PUBLIC_TUNNEL_RE = re.compile(r"\bcloudflared\b[^;]*\btunnel\b|\bngrok\b|\btailscale\b[^;]*\bfunnel\b")
+# Cổng service trong phạm vi (app, devspace, kho dữ liệu). `tailscale serve`/funnel trỏ vào đó thì request
+# tới service qua tailscaled với peer loopback; funnel = mở ra Internet.
+TAILSCALE_SCOPE_PORTS = frozenset({8131, 18183, 18185, 8189, 5173, 5174, 5179, 6333, 6334, 7474, 7687, 6379, 9200})
+# Devspace (5173) và frontend dịch (5179) tin request loopback (gắn token): serve trong tailnet vào đó là WARN.
+TAILSCALE_WARN_PORTS = frozenset({5173, 5179})
+
+
+def _target_port(target: str) -> int | None:
+    """Cổng đích của Proxy/TCPForward: 'http://127.0.0.1:5173', 'localhost:5733', '5173', 'https+insecure://h'."""
+    t = (target or "").strip()
+    if t.isdigit():
+        return int(t)
+    m = re.match(r"^(?:(?P<scheme>[A-Za-z][A-Za-z0-9+.-]*)://)?(?P<host>\[[^\]]*\]|[^/:]*)(?::(?P<port>\d+))?", t)
+    if m and m["port"]:
+        return int(m["port"])
+    return {"http": 80, "https": 443}.get(((m and m["scheme"]) or "").split("+")[0].lower())
+
+
+def tailscale_serve_entries(cfg: dict) -> list[tuple[str, bool, int | None, str]]:
+    """(lối vào ':<cổng>[path]', có funnel?, cổng đích, đích) của mọi handler Proxy và TCPForward trong
+    ServeConfig của `tailscale serve status --json`, kể cả phiên Foreground và Services. Không trả tên máy."""
+    out: list[tuple[str, bool, int | None, str]] = []
+    funnel = {k for k, v in (cfg.get("AllowFunnel") or {}).items() if v}
+    funnel_ports = {k.rsplit(":", 1)[-1] for k in funnel}
+    for hp, web in (cfg.get("Web") or {}).items():
+        port = str(hp).rsplit(":", 1)[-1]
+        for path, h in ((web or {}).get("Handlers") or {}).items():
+            tgt = (h or {}).get("Proxy") if isinstance(h, dict) else None
+            if tgt:
+                out.append((f":{port}{path}", hp in funnel, _target_port(tgt), tgt))
+    for port, t in (cfg.get("TCP") or {}).items():
+        fwd = (t or {}).get("TCPForward") if isinstance(t, dict) else None
+        if fwd:
+            out.append((f":{port}", str(port) in funnel_ports, _target_port(fwd), fwd))
+    for sub in [*(cfg.get("Foreground") or {}).values(), *(cfg.get("Services") or {}).values()]:
+        if isinstance(sub, dict):
+            out += tailscale_serve_entries(sub)
+    return out
 
 
 def listening_any(proc_net: Path) -> dict[int, set[str]]:
@@ -1546,13 +1611,32 @@ def sec_app_ports(ctx: Ctx) -> R:
         gaps.append(f"unit: {e}")
     if tunnels:
         bad.append("tunnel công khai đang chạy: " + ", ".join(tunnels))
+    ts_warn, ts_note, ts = [], "", None
+    try:
+        ts = ctx.tailscale_serve()
+        if ts is None:
+            ts_note = "; tailscale: không có trên máy (bỏ qua)"
+    except Unavailable as e:
+        gaps.append(str(e))
+    if ts is not None:
+        entries = tailscale_serve_entries(ts)
+        for entry, is_funnel, port, tgt in entries:
+            if is_funnel and port in TAILSCALE_SCOPE_PORTS:
+                bad.append(f"tailscale funnel {entry} -> {tgt} (Internet vào cổng nội bộ :{port})")
+            elif not is_funnel and port in TAILSCALE_WARN_PORTS:
+                ts_warn.append(f"{entry} -> {tgt}")
+        ts_note = f"; tailscale serve: {len(entries)} lối vào, không funnel nào vào cổng trong phạm vi"
     note = f"; network=host chưa biết cổng (kiểm tay `ss -ltnp`): {short(unknown, 4)}" if unknown else ""
     note += f"; unit còn cài tunnel cloudflared/ngrok/tailscale funnel (không chạy): {', '.join(idle)}" if idle else ""
+    note += (f"; tailscale serve trong tailnet vào devspace/frontend dịch (request tới với peer loopback): "
+             f"{', '.join(ts_warn)}") if ts_warn else ""
     note += ("; không đọc được " + "; ".join(gaps)) if gaps else ""
-    fix = "bind 127.0.0.1 hoặc IP LAN; public chỉ :8131; gỡ tunnel trỏ vào service nội bộ"
+    fix = ("bind 127.0.0.1 hoặc IP LAN; public chỉ :8131; gỡ tunnel trỏ vào service nội bộ "
+           "(`tailscale funnel reset` / `tailscale serve reset`)")
     if bad:
         return R(FAIL, "nghe trên mọi interface hoặc mở qua tunnel: " + "; ".join(bad) + note, fix)
-    if idle:
+    note += ts_note if not ts_warn else ""
+    if idle or ts_warn:
         return R(WARN, "không service nào ngoài :8131 nghe trên mọi interface" + note, fix)
     if gaps:
         return R(WARN, "không service nào ngoài :8131 nghe trên mọi interface" + note, unmeasured=True)
@@ -1566,14 +1650,16 @@ def literal_secret(v: str) -> str | None:
     """Phần literal của giá trị gán cho biến secret: cả giá trị nếu không có ${...}; giá trị mặc định
     của ${X:-lit} (mặc định nằm thẳng trong file nên cũng là secret lộ). None nếu chỉ tham chiếu."""
     v = (v or "").strip().strip("'\"")
-    if not v or v.lower() in ("changeme", "required", "optional", "none", "null", "false", "true"):
+    if not v or v.lower() in ("required", "optional", "none", "null", "false", "true"):
         return None
     defaults = [d.strip("}") for d in DEFAULT_RE.findall(v) if d.strip("}")]
     if defaults:
-        return defaults[0]
-    if "$" in v or v.startswith(("<", "{")) or "(" in v or "[" in v:  # tham chiếu, lời gọi hàm, subscript
+        lit = defaults[0]
+    elif "$" in v or v.startswith(("<", "{")) or "(" in v or "[" in v:  # tham chiếu, lời gọi hàm, subscript
         return None
-    return v
+    else:
+        lit = v
+    return None if PLACEHOLDER_RE.fullmatch(lit.strip().strip("'\"")) else lit
 
 
 def _secret_names(text: str, ctx: Ctx) -> list[str]:
@@ -1582,6 +1668,12 @@ def _secret_names(text: str, ctx: Ctx) -> list[str]:
         name, val = m["name"], m["val"]
         if not is_secret_name(name):
             continue
+        if text[max(0, m.start("name") - 2):m.start("name")] == "${":
+            # Tham chiếu ${NAME...}: ${NAME:?msg} chỉ là thông báo, không phải literal; mặc định của
+            # ${NAME:-x}/${NAME:=x} và giá trị thay thế của ${NAME:+x} nằm thẳng trong file nên vẫn xét.
+            if val[:1] == "?":
+                continue
+            val = val.lstrip("+-=")
         # Tên chữ thường không có ngoặc ở tên lẫn giá trị là code/chú thích (`llm_key = s.x`, `a token: …`),
         # không phải cấu hình; env/compose/shell dùng tên viết hoa, JSON/Python literal có ngoặc.
         if not name.isupper() and not (m["q1"] or m["q2"]):
@@ -1592,6 +1684,11 @@ def _secret_names(text: str, ctx: Ctx) -> list[str]:
         ctx.remember_secret(lit)
         ctx.remember_secret(val)
         names.append(name)
+    for m in GET_DEFAULT_RE.finditer(text):
+        lit = literal_secret(m["val"]) if is_secret_name(m["name"]) else None
+        if lit and len(lit) >= 8:
+            ctx.remember_secret(lit)
+            names.append(m["name"])
     return sorted(set(names))
 
 

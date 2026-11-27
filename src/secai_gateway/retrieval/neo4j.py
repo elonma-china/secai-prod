@@ -47,6 +47,13 @@ def _neo4j_http_url() -> str:
     return f"{proto}://{host}:{NEO4J_HTTP_PORT}"
 
 
+def neo4j_configured() -> bool:
+    """NEO4J_PASSWORD trống = Neo4j chưa cấu hình (code không có mật khẩu mặc định). Khi đó mọi
+    lời gọi đồ thị trả rỗng/lỗi mềm mà không gửi request: đăng nhập với mật khẩu rỗng chỉ tạo
+    lỗi 401 và có thể làm Neo4j khoá tạm tài khoản (auth_max_failed_attempts)."""
+    return bool(NEO4J_PASSWORD)
+
+
 def _auth_header() -> str:
     token = base64.b64encode(f"{NEO4J_USER}:{NEO4J_PASSWORD}".encode()).decode()
     return f"Basic {token}"
@@ -60,7 +67,7 @@ async def cve_exists_in_kb(cve_id: str) -> bool:
     of whether a PoC artifact exists for it. Never raises — any transport/query error is
     treated as "not confirmed" (fail-closed to the safer "not found" tier, not to synthesis)."""
     cve_id = (cve_id or "").strip().upper()
-    if not cve_id:
+    if not cve_id or not neo4j_configured():
         return False
     body = {"statements": [{
         "statement": "MATCH (c:CVE {id: $id}) RETURN count(c) AS n",
@@ -94,7 +101,7 @@ async def cve_cwe_refs(cve_id: str) -> list[str]:
     query error, or the CVE simply not existing/having no HAS_WEAKNESS edge, all fail-closed
     to `[]` — same "absence is not an error" contract `cve_exists_in_kb` uses for `False`."""
     cve_id = (cve_id or "").strip().upper()
-    if not cve_id:
+    if not cve_id or not neo4j_configured():
         return []
     body = {"statements": [{
         "statement": "MATCH (c:CVE {id: $id})-[:HAS_WEAKNESS]->(w:CWE) RETURN DISTINCT w.id AS id",
@@ -117,6 +124,13 @@ async def cve_cwe_refs(cve_id: str) -> list[str]:
 
 
 async def _neo4j_search(query: str, ctx: ToolContext, depth: int = 3) -> ToolResult:
+    if not neo4j_configured():
+        # Cùng loại với "Neo4j request failed" (is_error) để hook KB không coi là đã tra cứu.
+        return ToolResult(
+            content="Neo4j graph is not configured (NEO4J_PASSWORD unset); use qdrant_search instead.",
+            summary=f"neo4j_search({query}) not_configured",
+            is_error=True,
+        )
     depth = max(1, min(depth or 3, 5))
     mode = "count" if COUNT_RE.search(query or "") else "list"
     # Prefer an explicit entity ID; otherwise fall back to a product-name entry point.

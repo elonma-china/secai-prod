@@ -208,7 +208,10 @@ class Settings(BaseSettings):
     # ── Neo4j graph ────────────────────────────────────────────────────────────
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
-    neo4j_password: str = "secai2026"
+    # Bắt buộc đặt NEO4J_PASSWORD qua env/.env (repo public: không để mật khẩu trong code).
+    # Rỗng = Neo4j coi như chưa cấu hình: tính năng đồ thị trả rỗng/lỗi mềm, không gửi
+    # request (retrieval/neo4j.py::neo4j_configured), /health báo neo4j ok=false.
+    neo4j_password: str = ""
     neo4j_database: str = "neo4j"
     neo4j_http_port: str = "7474"
 
