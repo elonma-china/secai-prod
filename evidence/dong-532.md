@@ -29,8 +29,8 @@ Việc hệ thống chạy Hybrid Search (Vector + Keyword/BM25) và các mô h�
 ```
 EMBEDDING_API_URL=http://<IP>:<port2>     # EMBED URL
 RERANKER_API_URL=http://<IP>:<port3>      # RERANK URL
-EMBEDDING_API_KEY=sk-secai2026
-RERANKER_API_KEY=sk-secai2026
+EMBEDDING_API_KEY=sk-placeholder
+RERANKER_API_KEY=sk-placeholder
 NEO4J_PASSWORD=<mật-khẩu-mạnh>            # không giữ giá trị mặc định 'change-me'
 ADMIN_API_KEY=<khóa-quản-trị>
 ```

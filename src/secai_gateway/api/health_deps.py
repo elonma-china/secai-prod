@@ -177,9 +177,11 @@ async def _check_qdrant(s: Any) -> dict[str, Any]:
 
 
 async def _check_neo4j(s: Any) -> dict[str, Any]:
-    from ..retrieval.neo4j import _auth_header, _neo4j_http_url
+    from ..retrieval.neo4j import _auth_header, _neo4j_http_url, neo4j_configured
 
     base = _neo4j_http_url()
+    if not neo4j_configured():
+        return {"role": "neo4j", "ok": False, "detail": "chưa cấu hình NEO4J_PASSWORD", "endpoint": _hostport(base)}
     return await _timed("neo4j", _http_probe(
         "POST", f"{base}/db/{s.neo4j_database}/tx/commit",
         headers={"Authorization": _auth_header()},

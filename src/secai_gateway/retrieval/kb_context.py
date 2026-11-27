@@ -35,6 +35,8 @@ RETURN properties(c) AS cve, cwe_refs, capec_entries,
 
 
 async def _graph_context(client: httpx.AsyncClient, cve_id: str) -> list[dict[str, Any]]:
+    if not neo4j.neo4j_configured():  # không có đồ thị: chỉ Qdrant, không tính là lỗi dịch vụ
+        return []
     response = await client.post(
         f"{neo4j._neo4j_http_url()}/db/{neo4j.NEO4J_DATABASE}/tx/commit",
         json={"statements": [{"statement": _CYPHER, "parameters": {"id": cve_id}}]},
