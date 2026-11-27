@@ -176,7 +176,7 @@ def test_config_allows_home_path_in_bind_sources(tmp_path):
 def test_config_flags_rendered_container_name(tmp_path):
     d = _stack_copy(tmp_path)
     c = d / "compose.yml"
-    c.write_text(c.read_text().replace("  qdrant:\n    image: qdrant/qdrant:v1.10.1\n", "  qdrant:\n    image: qdrant/qdrant:v1.10.1\n    container_name: fixed\n", 1))
+    c.write_text(c.read_text().replace("  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}\n", "  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}\n    container_name: fixed\n", 1))
     r = _config(tmp_path, d)
     assert r.returncode != 0 and "container_name" in r.stderr and "FAIL" in r.stderr
 
@@ -455,7 +455,7 @@ def test_all_stops_at_config_stage_when_env_passes(tmp_path):
     d = _stack_copy(tmp_path)
     (d / "bootstrap.sh").write_text("#!/usr/bin/env bash\necho preflight stub OK >&2\n")   # env qua
     c = d / "compose.yml"
-    c.write_text(c.read_text().replace("  qdrant:\n    image: qdrant/qdrant:v1.10.1\n", "  qdrant:\n    image: qdrant/qdrant:v1.10.1\n    container_name: fixed\n", 1))
+    c.write_text(c.read_text().replace("  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}\n", "  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}\n    container_name: fixed\n", 1))
     r = subprocess.run(["bash", str(d / "check.sh"), "all"], text=True, capture_output=True,
                        env={**os.environ, "STACK_DIR": str(d), "STACK_ENV": "/dev/null", "NEO4J_PASSWORD": FAKE})
     assert r.returncode == 1
@@ -498,7 +498,7 @@ def test_config_flags_network_mode_outside_tunnel_rule(tmp_path, svc, mode):
         t = t.replace("    network_mode: service:translation-gateway\n    depends_on:\n      translation-gateway: { condition: service_started, restart: true }\n    # Chỉ biến",
                       "    network_mode: host\n    # Chỉ biến", 1)
     else:
-        anchor = {"qdrant": "  qdrant:\n    image: qdrant/qdrant:v1.10.1\n",
+        anchor = {"qdrant": "  qdrant:\n    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}\n",
                   "review-frontend": "  review-frontend:\n"}[svc]
         t = t.replace(anchor, anchor + f"    network_mode: {mode}\n", 1)
         if svc == "qdrant":

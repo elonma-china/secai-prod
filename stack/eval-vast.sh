@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# eval-vast.sh up|run|collect|down|status - chạy thử gói stack trên MỘT máy Vast VM thuê rẻ, rồi huỷ. Luồng:
+# eval-vast.sh up|run|packtest|ghcrtest|collect|down|status - chạy thử gói stack trên MỘT máy Vast VM thuê rẻ, rồi huỷ. Luồng:
 #   up [--dry-run] [--i-accept-higher]   tìm offer rẻ nhất hợp lệ, thuê, GHI ID NGAY, đặt deadline, dựng image + nạp dữ liệu
 #   run       bootstrap init/preflight + restore Qdrant + compose up + check.sh all + acceptance/run-api.sh (trên instance)
 #   packtest  (sau up với EVAL_MODE=packtest) pack + restore gói dữ liệu THẬT ngay trên VM, đo thời gian/đĩa; xem cmd_packtest
+#   ghcrtest  (sau up với EVAL_MODE=ghcr) chạy acceptance/ghcr-vm-test.sh trên VM: curl stack/secai -> install/upgrade/rollback/data update
+#             từ GHCR như người vận hành, model là stub; xem cmd_ghcrtest
 #   collect   kéo log/JSON kết quả về $STACK_EVAL_DIR/results-<ts>/ (KHÔNG .env, KHÔNG dữ liệu) và kiểm sha256
 #   (review độc lập bên ngoài script)
 #   down      destroy-eval.sh --yes  (huỷ đúng ID trong state.json)
@@ -10,11 +12,13 @@
 # Ngân sách chủ dự án: giá <= $0.30/h (chặn cứng ở search), tối đa 3 giờ. Cờ --i-accept-higher mới cho EVAL_MAX_DPH > 0.30 / EVAL_MAX_HOURS > 3.
 # Biến: EVAL_ENV_FILE (BẮT BUỘC cho up; .env do operator chỉ định, script không đọc .env prod), EVAL_DATA_PKG (thư mục gói dữ liệu từ
 #   pack.sh data, BẮT BUỘC), EVAL_SSH_KEY (~/.ssh/id_ed25519), EVAL_MAX_DPH (0.30), EVAL_MAX_HOURS (3), EVAL_MIN_RAM_GB (32; 48 nếu
-#   EVAL_EXPLOIT=1), EVAL_EXPLOIT=1 (bật profile exploit + build image VM), EVAL_CONTAINER_API_KEY (khoá GIỚI HẠN THEO INSTANCE cho lớp A;
+#   EVAL_EXPLOIT=1 hoặc EVAL_MODE=ghcr), EVAL_EXPLOIT=1 (bật profile exploit + build image VM), EVAL_CONTAINER_API_KEY (khoá GIỚI HẠN THEO INSTANCE cho lớp A;
 #   không có thì bỏ lớp A), EVAL_TEMPLATE (98fff0d0a96048e83c19da789fe7a979, VM Ubuntu), STACK_EVAL_DIR (local/stack-eval),
-#   EVAL_REPO_ROOT (nguồn git archive), EVAL_POLL_SLEEP (15), EVAL_DISK_GB (100; 20..600, tính vào giá search),
-#   EVAL_MODE (full | packtest: không .env/gói dữ liệu/build image, chỉ docker+zstd+rsync+time+image qdrant/neo4j). Riêng run: EVAL_SKIP_CASES (mặc định UI-POC-1..3 UI-TR-2 UI-TR-3:
-#   máy thuê không có lab/profile exploit, không có Hy-MT2/OCR), STACK_HAS_OCR (0). Ca bỏ qua được ghi kèm lý do (không tính là đạt).
+#   EVAL_REPO_ROOT (nguồn git archive), EVAL_POLL_SLEEP (15), EVAL_DISK_GB (100, ghcr 150; 20..600, tính vào giá search),
+#   EVAL_MODE (full | packtest: không .env/gói dữ liệu/build image, chỉ docker+zstd+rsync+time+image qdrant/neo4j | ghcr: máy trắng
+#   như người vận hành, chỉ docker+zstd+curl+python3+iproute2, không mã nguồn/.env/đăng nhập registry). Riêng ghcrtest: GHCR_TEST_*
+#   (xem cmd_ghcrtest). Riêng run: EVAL_SKIP_CASES (mặc định UI-POC-1..3 UI-TR-2 UI-TR-3: máy thuê không có lab/profile exploit,
+#   không có Hy-MT2/OCR), STACK_HAS_OCR (0). Ca bỏ qua được ghi kèm lý do (không tính là đạt).
 # Deadline: lớp B = timer systemd-run --user +max_hours; lớp D = timer dự phòng +10 phút; lớp EXIT = trap huỷ khi `up` lỗi sau khi đã thuê;
 #   lớp A = tự huỷ trên instance (chỉ khi có khoá instance). Mọi lớp huỷ đều đi qua destroy-eval.sh. Không bao giờ đưa khoá API TÀI KHOẢN
 #   Vast lên máy thuê; secret chỉ đi qua stdin/tệp 0600, không qua argv.
@@ -121,16 +125,17 @@ refuse_if_account_key() {
 cmd_up() {
     local dry=0 higher=0 a
     for a in "$@"; do case "$a" in --dry-run) dry=1 ;; --i-accept-higher) higher=1 ;; *) die "tham số lạ: $a" ;; esac; done
-    local cap="${EVAL_MAX_DPH:-0.30}" hours="${EVAL_MAX_HOURS:-3}" ram="${EVAL_MIN_RAM_GB:-}" disk="${EVAL_DISK_GB:-100}" mode="${EVAL_MODE:-full}"
+    local cap="${EVAL_MAX_DPH:-0.30}" hours="${EVAL_MAX_HOURS:-3}" ram="${EVAL_MIN_RAM_GB:-}" disk="${EVAL_DISK_GB:-}" mode="${EVAL_MODE:-full}"
+    [[ "$mode" =~ ^(full|packtest|ghcr)$ ]] || die "EVAL_MODE phải là full|packtest|ghcr: $mode"
+    [ -n "$disk" ] || { disk=100; [ "$mode" != ghcr ] || disk=150; }   # ghcr: image + hai bản dữ liệu (D1, D2) cùng nằm trên đĩa
     [[ "$disk" =~ ^[1-9][0-9]*$ ]] && [ "$disk" -ge 20 ] && [ "$disk" -le 600 ] || die "EVAL_DISK_GB phải là số nguyên 20..600: $disk"
-    [[ "$mode" =~ ^(full|packtest)$ ]] || die "EVAL_MODE phải là full hoặc packtest: $mode"
     [[ "$cap" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "EVAL_MAX_DPH không hợp lệ: $cap"
     [[ "$hours" =~ ^[1-9][0-9]*$ ]] || die "EVAL_MAX_HOURS phải là số nguyên >= 1: $hours"
     if [ "$higher" != 1 ]; then
         awk -v c="$cap" 'BEGIN { exit !(c <= 0.30) }' || die "EVAL_MAX_DPH=$cap vượt ngân sách chốt \$0.30/h; muốn vượt phải thêm --i-accept-higher"
         [ "$hours" -le 3 ] || die "EVAL_MAX_HOURS=$hours vượt ngân sách chốt 3 giờ; muốn vượt phải thêm --i-accept-higher"
     fi
-    [ -n "$ram" ] || { ram=32; [ "${EVAL_EXPLOIT:-0}" != 1 ] || ram=48; }
+    [ -n "$ram" ] || { ram=32; [ "${EVAL_EXPLOIT:-0}" != 1 ] && [ "$mode" != ghcr ] || ram=48; }   # bộ phát hành ghcr có profile exploit
     need_cmds vastai python3
 
     # Offer rẻ nhất thoả điều kiện; lọc LẠI ở phía client nên giá > cap bị chặn dù vastai trả gì.
@@ -292,6 +297,25 @@ except Exception: pass' 2>/dev/null)"
         say "Layer A (tự huỷ trên instance): BẬT (+5 phút sau deadline B)"
     else
         say "Layer A (tự huỷ trên instance): BỎ - không có EVAL_CONTAINER_API_KEY (khoá giới hạn theo instance, không phải khoá tài khoản). Chỉ còn lớp B, D và EXIT."
+    fi
+
+    if [ "$mode" = ghcr ]; then
+        # Máy trắng như của người vận hành: chỉ Docker + vài công cụ. Không mã nguồn, không .env, không đăng nhập registry (gói công khai),
+        # không đặt vm.max_map_count: `secai install` phải tự làm, đó là một điều cần thử. ghcrtest chạy tiếp trên máy này.
+        rssh "bash -s" <<'REMOTE_PROVISION_GHCR' || die "provision ghcr lỗi"
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+miss=""
+for c in zstd curl python3; do command -v "$c" >/dev/null || miss="$miss $c"; done
+command -v ip >/dev/null || miss="$miss iproute2"
+[ -z "$miss" ] || { apt-get update -qq && apt-get install -y -qq $miss; }
+command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh
+docker info >/dev/null
+mkdir -p /opt/secai-stack/results
+REMOTE_PROVISION_GHCR
+        DONE=1
+        say "xong 'up' (ghcr). Tiếp: eval-vast.sh ghcrtest -> collect -> down"
+        return 0
     fi
 
     # --- đưa mã, dữ liệu, .env; dựng image trên instance
@@ -909,6 +933,72 @@ REMOTE_PACKTEST_RESTORE
         || die "packtest không đạt/lỗi (pack rc=$prc, restore rc=$rrc, dọn snapshot nguồn=$pclean); collect để xem results/packtest-summary.json"
 }
 
+# ---------------------------------------------------------------------------------------------------- ghcrtest
+# Thử gói GHCR trên VM dựng bằng EVAL_MODE=ghcr: gửi acceptance/ghcr-vm-test.sh qua stdin của ssh, tham số chỉ qua env đã kiểm.
+# Biến: GHCR_TEST_REF (SHA commit đủ 40 hex, nơi lấy stack/secai + model stub trên raw GitHub), GHCR_TEST_V1/GHCR_TEST_V2 (hai bản
+#   stack YYYY.MM.DD-<sha8>, khác nhau), GHCR_TEST_D1/GHCR_TEST_D2 (hai bản dữ liệu YYYY.MM.DD[.N], khác nhau),
+#   GHCR_TEST_REPO (elonma-china/secai-prod), GHCR_TEST_FAILTEST (1: thử upgrade hỏng phải tự rollback; 0: bỏ).
+#   Bắt buộc một trong hai: GHCR_TEST_RO_TOKEN_FILE (tệp 0600 token Docker Hub CHỈ ĐỌC cho repo dữ liệu private) hoặc
+#   GHCR_TEST_DATA_PKG (thư mục gói dữ liệu có SHA256SUMS, rsync lên VM).
+# Không chạy quá deadline - 10 phút. Kết quả nằm ở $REMOTE/results (có SHA256SUMS) cho `collect`. rc = rc của script trên VM.
+cmd_ghcrtest() {
+    local ref="${GHCR_TEST_REF:-}" v1="${GHCR_TEST_V1:-}" v2="${GHCR_TEST_V2:-}" d1="${GHCR_TEST_D1:-}" d2="${GHCR_TEST_D2:-}"
+    local repo="${GHCR_TEST_REPO:-elonma-china/secai-prod}" ft="${GHCR_TEST_FAILTEST:-1}" pkg="${GHCR_TEST_DATA_PKG:-}" l rc ddir=""
+    local tok="${GHCR_TEST_RO_TOKEN_FILE:-}" rtok="" mode owner
+    local vre='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}-[0-9a-f]{8}$' dre='^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{1,2})?$'
+    # Các giá trị này lên argv của ssh (shell từ xa): chỉ nhận đúng dạng.
+    [[ "$ref" =~ ^[0-9a-f]{40}$ ]] || die "GHCR_TEST_REF phải là SHA commit đủ 40 ký tự hex thường: '$ref'"
+    [[ "$v1" =~ $vre ]] && [[ "$v2" =~ $vre ]] || die "GHCR_TEST_V1/GHCR_TEST_V2 phải dạng YYYY.MM.DD-<sha8>: '$v1' '$v2'"
+    [ "$v1" != "$v2" ] || die "GHCR_TEST_V1 và GHCR_TEST_V2 phải khác nhau (cần thử upgrade/rollback)"
+    [[ "$d1" =~ $dre ]] && [[ "$d2" =~ $dre ]] || die "GHCR_TEST_D1/GHCR_TEST_D2 phải dạng YYYY.MM.DD hoặc YYYY.MM.DD.N: '$d1' '$d2'"
+    [ "$d1" != "$d2" ] || die "GHCR_TEST_D1 và GHCR_TEST_D2 phải khác nhau (cần thử data update)"
+    [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "GHCR_TEST_REPO phải dạng owner/repo: '$repo'"
+    [[ "$ft" =~ ^[01]$ ]] || die "GHCR_TEST_FAILTEST phải là 0 hoặc 1: '$ft'"
+    # Dữ liệu ở repo Docker Hub private. Hai cách: GHCR_TEST_RO_TOKEN_FILE = token Docker Hub CHỈ ĐỌC (tệp 0600; chép lên VM qua
+    # stdin, xoá ngay sau bài thử; KHÔNG BAO GIỜ token ghi), hoặc GHCR_TEST_DATA_PKG = gói dữ liệu rsync lên VM (data load).
+    if [ -n "$tok" ]; then
+        [ -f "$tok" ] || die "GHCR_TEST_RO_TOKEN_FILE không tồn tại"
+        read -r mode owner <<<"$(stat -L -c '%a %u' "$tok")"
+        [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] || die "GHCR_TEST_RO_TOKEN_FILE phải thuộc user này, mode 600/400"
+        case "$(basename "$tok")" in *rw*|*write*) die "GHCR_TEST_RO_TOKEN_FILE trông như token GHI ('$(basename "$tok")'); chỉ dùng token chỉ đọc trên VM" ;; esac
+        [ -z "${SECAI_DOCKERHUB_TOKEN_FILE:-}" ] || ! cmp -s "$tok" "$SECAI_DOCKERHUB_TOKEN_FILE" \
+            || die "GHCR_TEST_RO_TOKEN_FILE trùng nội dung SECAI_DOCKERHUB_TOKEN_FILE (token ghi); không đưa lên VM"
+        rtok=/root/.dockerhub-ro.token
+    elif [ -n "$pkg" ]; then
+        [ -d "$pkg" ] && [ -s "$pkg/SHA256SUMS" ] || die "GHCR_TEST_DATA_PKG phải là thư mục gói dữ liệu có SHA256SUMS: '$pkg'"
+        ddir=/opt/secai-stack/pkg
+    else
+        die "đặt GHCR_TEST_RO_TOKEN_FILE (token Docker Hub chỉ đọc) hoặc GHCR_TEST_DATA_PKG (gói dữ liệu): dữ liệu là repo private"
+    fi
+    [ -f "$HERE/acceptance/ghcr-vm-test.sh" ] || die "thiếu $HERE/acceptance/ghcr-vm-test.sh"
+    need_cmds ssh timeout; load_conn
+    [ "$(sget mode)" = ghcr ] || die "ghcrtest cần instance dựng bằng EVAL_MODE=ghcr eval-vast.sh up"
+    DL="$(sget deadline)"; [[ "$DL" =~ ^[0-9]+$ ]] || die "state thiếu deadline"
+    l="$(left)"; [ "$l" -gt 0 ] || die "ghcrtest: còn < 10 phút tới deadline; không bắt đầu"
+    if [ -n "$ddir" ]; then
+        need_cmds rsync
+        say "ghcrtest: rsync gói dữ liệu $pkg -> $ddir (tối đa ${l}s)"
+        timeout --kill-after=30 "$l" rsync -a --no-links --delete -e "$(rsh_cmd)" "$pkg"/ "root@$HOST:$ddir/" \
+            || die "rsync gói dữ liệu lên VM lỗi"
+        l="$(left)"; [ "$l" -gt 0 ] || die "ghcrtest: sát deadline sau rsync; không chạy tiếp"
+    fi
+    if [ -n "$rtok" ]; then
+        rssh "umask 077; cat > $rtok && chmod 600 $rtok" <"$tok" || die "chép token chỉ đọc lên VM lỗi"
+    fi
+    say "ghcrtest: $v1 -> $v2, dữ liệu $d1 -> $d2 (${ddir:+gói $ddir}${rtok:+Docker Hub, token chỉ đọc}), secai từ $repo@$ref; tối đa ${l}s"
+    timeout --kill-after=30 "$l" ssh "${SSHO[@]}" -p "$PORT" "root@$HOST" \
+        "REF=$ref V1=$v1 V2=$v2 D1=$d1 D2=$d2 REPO=$repo FAILTEST=$ft DATA_DIR=$ddir SECAI_DOCKERHUB_TOKEN_FILE=$rtok bash -s" \
+        <"$HERE/acceptance/ghcr-vm-test.sh"
+    rc=$?
+    if [ -n "$rtok" ]; then   # xoá token khỏi VM ngay, trước collect/down
+        rssh "shred -u $rtok 2>/dev/null || rm -f $rtok; test ! -e $rtok" && say "đã xoá token chỉ đọc trên VM" \
+            || echo "eval-vast: CẢNH BÁO: chưa xoá được $rtok trên VM; xoá tay trước khi down" >&2
+    fi
+    [ "$rc" != 124 ] || echo "eval-vast: ghcrtest bị cắt vì sát deadline" >&2
+    [ "$rc" = 0 ] && say "ghcrtest ĐẠT. Tiếp: collect -> down" || echo "eval-vast: ghcrtest KHÔNG ĐẠT/lỗi (rc=$rc); vẫn chạy collect rồi down" >&2
+    return "$rc"
+}
+
 cmd_down() { exec env STACK_EVAL_DIR="$SD" "$HERE/destroy-eval.sh" --yes; }
 
 cmd_status() {
@@ -930,8 +1020,9 @@ case "${1:-}" in
     up) shift; cmd_up "$@" ;;
     run) cmd_run ;;
     packtest) cmd_packtest ;;
+    ghcrtest) cmd_ghcrtest ;;
     collect) cmd_collect ;;
     down) cmd_down ;;
     status) cmd_status ;;
-    *) echo "usage: eval-vast.sh up [--dry-run] [--i-accept-higher] | run | packtest | collect | down | status" >&2; exit 2 ;;
+    *) echo "usage: eval-vast.sh up [--dry-run] [--i-accept-higher] | run | packtest | ghcrtest | collect | down | status" >&2; exit 2 ;;
 esac

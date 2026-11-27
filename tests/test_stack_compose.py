@@ -17,10 +17,11 @@ def services(profile=None):
 def test_core_services_and_pinned_images():
     core = services()
     assert set(core) == {"gateway", "qdrant", "neo4j", "redis", "es"}
-    assert core["qdrant"]["image"] == "qdrant/qdrant:v1.10.1"
-    assert core["neo4j"]["image"] == "neo4j:5.20-community"
-    assert core["redis"]["image"] == "redis:7-alpine"
-    assert core["es"]["image"].endswith("elasticsearch:8.15.3")
+    # Tag gốc là mặc định; bản phát hành (secai/publish.sh) ghi <tag>@sha256:<digest> vào .env qua các biến này.
+    assert core["qdrant"]["image"] == "${QDRANT_IMAGE:-qdrant/qdrant:v1.10.1}"
+    assert core["neo4j"]["image"] == "${NEO4J_IMAGE:-neo4j:5.20-community}"
+    assert core["redis"]["image"] == "${REDIS_IMAGE:-redis:7-alpine}"
+    assert core["es"]["image"] == "${ES_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:8.15.3}"
     assert core["gateway"]["image"] == "${GATEWAY_IMAGE:?set GATEWAY_IMAGE}"
 
 
