@@ -15,7 +15,7 @@ scripts/dev.sh test tests/test_backup_sqlite.py  # test offline, docker/systemct
 
 Tham số: `--backup-dir` (mặc định `$SECAI_BACKUP_DIR`, không có thì `~/secai-backups`), `--containers a,b` (hoặc `SECAI_BACKUP_CONTAINERS`), `--image` (hoặc `SECAI_BACKUP_IMAGE`), `--keep-days 7`, `--min-free-gb 5` (từ chối sao một DB nếu sau khi sao đích còn ít hơn ngần ấy), `--timeout` (giây, mặc định 2 giờ).
 
-Mã thoát: 0 đủ; 1 có DB hay container lỗi (DB khác vẫn được sao và công bố, nhưng **không dọn** bản cũ); 2 sai tham số hay thiếu docker. Unit `secai-sqlite-backup.service` lỗi thì OPS-MON-5 báo `failed`.
+Mã thoát: 0 đủ; 1 có DB hay container lỗi (DB khác vẫn được sao và công bố, nhưng **không dọn** bản cũ; không sao được DB nào thì không tạo thư mục trong `sqlite/`, manifest nằm lại ở `.staging/`); 2 sai tham số hay thiếu docker. Unit `secai-sqlite-backup.service` lỗi thì OPS-MON-5 báo `failed`.
 
 ## DB nào được sao
 
@@ -34,7 +34,7 @@ Kết quả lần chạy thật 2026-11-27 23:55 (`~/secai-backups/sqlite/202611
 | `report/reports.sqlite`, `report/gateway.sqlite` | bind `~/secai-workspaces/secai-report-devspace/{data,docker-report/gateway-data}` | 36 KB mỗi file |
 | `review-canary/reviews.sqlite`, `gateway.sqlite`, `sessions.sqlite` | volume `secai-review-data`, thư mục `canary/` | 164 KB, 36 KB, 86 KB |
 
-`translation/jobs.sqlite` có 165 786/165 795 trang trống (dữ liệu thật vài chục KB): bản sao giữ nguyên trang để đúng từng byte với nguồn, không VACUUM (VACUUM có thể đổi `rowid` của bảng không có `INTEGER PRIMARY KEY`). Giữ 7 ngày (7–8 bản, tuỳ giờ chạy ngẫu nhiên) tốn khoảng 6–7 GB; VACUUM chính DB prod trong một lần bảo trì sẽ giảm còn vài trăm MB.
+`translation/jobs.sqlite` có 165 786/165 795 trang trống (dữ liệu thật vài chục KB): bản sao giữ nguyên các trang như nguồn, không VACUUM (VACUUM có thể đổi `rowid` của bảng không có `INTEGER PRIMARY KEY`). Giữ 7 ngày (7–8 bản, tuỳ giờ chạy ngẫu nhiên) tốn khoảng 6–7 GB; VACUUM chính DB prod trong một lần bảo trì sẽ giảm còn vài trăm MB.
 
 ## Bố cục đích và lưu giữ
 
