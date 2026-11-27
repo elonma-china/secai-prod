@@ -32,6 +32,7 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 - Chat/session: [API chung](api/api-guide.md), [project/session](api/session-project-api-guide.md).
 - PoC: [API](api/poc-api-guide.md), [verify](design/poc-verify-architecture.md).
 - Vận hành: [tiêu chí ops](criteria/ops.md), chấm bằng `scripts/ops-check.py` (chỉ đọc), kết quả đo [baseline 2026-11-27](archive/test-results/ops-baseline-20261127.md); [quản lý phiên bản container](operations/container-versions.md) bằng `scripts/versions.py`.
+- Backup SQLite hằng ngày và khôi phục: [sqlite-backup](operations/sqlite-backup.md) (`scripts/backup-sqlite.py`, timer `scripts/install-backup-timer.sh`).
 
 ## Triển khai và kiểm chứng hiện tại
 

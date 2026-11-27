@@ -124,7 +124,7 @@ Trong pytest, hành vi hiện tại chưa đạt tiêu chí được đánh `xfa
 
 ## Backup và khôi phục dữ liệu (BAK)
 
-Quy ước đích backup: một thư mục khai báo qua `SECAI_BACKUP_DIR` (hoặc `--backup-dir`), mỗi kho một thư mục con `qdrant/`, `neo4j/`, `sqlite/` (DB gateway, session, review, report, translate).
+Quy ước đích backup: một thư mục khai báo qua `SECAI_BACKUP_DIR` (hoặc `--backup-dir`; không khai báo thì `~/secai-backups`, cùng mặc định với `scripts/backup-sqlite.py`), mỗi kho một thư mục con `qdrant/`, `neo4j/`, `sqlite/` (DB gateway, session, review, report, translate). SQLite: [backup hằng ngày và khôi phục](../operations/sqlite-backup.md).
 
 | ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
 | --- | --- | --- | --- | --- |

@@ -5,6 +5,7 @@ checker gọi vẫn đi qua assert_read_only, nên test cũng chứng minh check
 """
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import fnmatch
 import hashlib
@@ -305,7 +306,8 @@ def cli(w: World, *args: str) -> tuple[int, str]:
     out = io.StringIO()
     rc = oc.main(["--repo", str(w.repo), "--docker-dir", str(w.docker_dir), "--releases-dir", str(w.releases),
                   "--data-root", str(w.data), "--gh-repo", GH, "--cron-glob", str(w.tmp / "cron" / "*"),
-                  "--proc-net", str(w.proc_net), *args], runner=FakeRunner(w), now=NOW, out=out)
+                  "--proc-net", str(w.proc_net), "--backup-dir", str(w.tmp / "no-backup"), *args],
+                 runner=FakeRunner(w), now=NOW, out=out)
     return rc, out.getvalue()
 
 
@@ -577,6 +579,19 @@ def test_backup_schedule_must_cover_each_store(w: World) -> None:
     assert r.status == oc.FAIL and "neo4j" in r.evidence and "sqlite" in r.evidence
     w.timers = ["dpkg-db-backup.timer"]
     assert one(w, "OPS-BAK-1").status == oc.FAIL  # timer hệ thống không phải backup của secai
+    w.timers = ["secai-sqlite-backup.timer"]  # scripts/install-backup-timer.sh: chỉ phủ SQLite
+    r = one(w, "OPS-BAK-1")
+    assert r.status == oc.FAIL and r.evidence.endswith("chưa phủ: qdrant, neo4j")
+
+
+def test_backup_dir_defaults_to_backup_sqlite_destination(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("SECAI_BACKUP_DIR", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    a = argparse.Namespace(repo=str(tmp_path), backup_dir=None, docker_dir=None, releases_dir=None, data_root=None,
+                           gh_repo=None, no_gh=True, cron_glob=None, proc_net="/proc/net")
+    assert oc.build_config(a, oc.Runner()).backup_dir == tmp_path / "secai-backups"  # --no-gh: không gọi lệnh nào
+    monkeypatch.setenv("SECAI_BACKUP_DIR", "/mnt/bk")
+    assert oc.build_config(a, oc.Runner()).backup_dir == Path("/mnt/bk")
 
 
 def test_backup_freshness_and_device(w: World, tmp_path: Path) -> None:
