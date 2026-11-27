@@ -617,3 +617,75 @@ def test_data_load_from_dir_and_version_arg(box):
     assert box.envfile()["DATA_ROOT"].endswith("/data/2026.11.28.2")
     r = box.run("data", "load", str(box.tmp / "nope"))
     assert r.returncode == 1 and "SHA256SUMS" in r.stderr
+
+
+# ───────────── sửa sau review: không để trạng thái lẫn lộn, dữ liệu trùng nhãn, ký tự nguy hiểm ─────────────
+def stack_version(box):
+    return json.loads((box.home / "stack" / "secai-stack.json").read_text())["version"]
+
+
+def test_rollback_pull_failure_changes_nothing(box):
+    installed(box)
+    assert box.run("upgrade", V2).returncode == 0
+    # image của V1 không còn cục bộ và kéo lỗi
+    local = json.loads((box.fake / "local.json").read_text())
+    (box.fake / "local.json").write_text(json.dumps([x for x in local if V1 not in x]))
+    box.set("pull_fail", f"secai-agent-gateway:{V1}")
+    n = len(box.ups())
+    r = box.run("rollback")
+    assert r.returncode == 1 and "KHÔNG đổi gì" in r.stderr
+    assert box.state()["version"] == V2 and stack_version(box) == V2 and box.envfile()["SECAI_VERSION"] == V2
+    assert len(box.ups()) == n
+
+
+def test_upgrade_preflight_failure_restores_files(box):
+    installed(box)
+    # bản V2 hỏng preflight: bootstrap.sh của V2 trả lỗi ở preflight
+    bs = box.tmp / f"bundle-{V2}" / "stack" / "bootstrap.sh"
+    bs.write_text(bs.read_text().replace('    preflight) preflight ;;', '    preflight) echo "FAIL: giả" >&2; exit 1 ;;'))
+    n = len(box.ups())
+    r = box.run("upgrade", V2)
+    assert r.returncode == 1, r.stderr
+    assert stack_version(box) == V1 and box.envfile()["SECAI_VERSION"] == V1 and box.state()["version"] == V1
+    assert len(box.ups()) == n
+
+
+def test_upgrade_same_version_repairs_inconsistent_files(box):
+    installed(box)
+    shutil.copy(box.tmp / f"bundle-{V2}" / "stack" / "secai-stack.json", box.home / "stack" / "secai-stack.json")
+    r = box.run("upgrade", V1)
+    assert r.returncode == 0, r.stderr
+    assert "khôi phục" in r.stderr and stack_version(box) == V1 and box.ups()[-1]["SECAI_VERSION"] == V1
+
+
+def test_data_load_same_label_different_content_refused(box):
+    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    assert box.run("install", V1, "--data-dir", str(box.data_pkg(D1)), env=e).returncode == 0
+    # gói khác (D2) nhưng cùng nhãn ngày MANIFEST -> phải từ chối, không im lặng dùng bản cũ
+    other = box.tmp / "other"
+    shutil.copytree(box.data_pkg(D2), other)
+    r = box.run("data", "load", str(other))
+    assert r.returncode == 1 and "nội dung khác" in r.stderr
+    r = box.run("data", "load", str(other), "2026.11.26.2")
+    assert r.returncode == 0, r.stderr
+
+
+@pytest.mark.parametrize("val", ["ab$Cd1234567890", "ab'cd1234567890", 'ab"cd1234567890', "ab`cd1234567890", "ab\\cd1234567890"])
+def test_settings_with_shell_special_chars_rejected(box, val):
+    r = box.run("install", V1, env=box.install_env(LLM_API_KEY=val))
+    assert r.returncode == 1 and "LLM_API_KEY" in r.stderr and not box.ups()
+    assert val not in r.stdout + r.stderr
+
+
+def test_install_does_not_print_review_token(box):
+    r = installed(box)
+    assert "REVIEW_ADMIN_TOKEN" not in r.stdout + r.stderr
+
+
+def test_optional_project_name(box):
+    r = box.run("install", V1, env=box.install_env(COMPOSE_PROJECT_NAME="secai-next", POC_LABS_EXTERNAL="true"))
+    assert r.returncode == 0, r.stderr
+    env = box.envfile()
+    assert env["COMPOSE_PROJECT_NAME"] == "secai-next" and env["POC_LABS_EXTERNAL"] == "true"
+    r = box.run("install", V1, env=box.install_env(COMPOSE_PROJECT_NAME="Bad Name"))
+    assert r.returncode == 1

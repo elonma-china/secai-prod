@@ -1020,8 +1020,12 @@ def test_rsync_e_quotes_ssh_key_path_with_spaces(box):
 
 GHCR_VM_TEST = STACK / "acceptance" / "ghcr-vm-test.sh"
 G_REF = "0123456789abcdef0123456789abcdef01234567"
+import tempfile  # noqa: E402
+
+_G_PKG = Path(tempfile.mkdtemp(prefix="ghcr-test-pkg-"))   # gói dữ liệu giả cho ghcrtest (secai-data private, VM không có token)
+(_G_PKG / "SHA256SUMS").write_text("x  y\n")
 G_OK = {"GHCR_TEST_REF": G_REF, "GHCR_TEST_V1": "2026.11.27-0f980c19", "GHCR_TEST_V2": "2026.11.28-1a2b3c4d",
-        "GHCR_TEST_D1": "2026.11.27", "GHCR_TEST_D2": "2026.11.27.2"}
+        "GHCR_TEST_D1": "2026.11.27", "GHCR_TEST_D2": "2026.11.27.2", "GHCR_TEST_DATA_PKG": str(_G_PKG)}
 
 
 def no_env_no_pkg(b) -> dict[str, str]:
@@ -1100,7 +1104,7 @@ def test_ghcrtest_runs_vm_script_with_validated_env_on_ssh(box):
     calls = log(box, "ssh")
     assert len(calls) == 1
     want = (f"REF={G_REF} V1=2026.11.27-0f980c19 V2=2026.11.28-1a2b3c4d D1=2026.11.27 D2=2026.11.27.2 "
-            "REPO=elonma-china/secai-prod FAILTEST=1 DATA_DIR= bash -s")
+            "REPO=elonma-china/secai-prod FAILTEST=1 DATA_DIR=/opt/secai-stack/pkg bash -s")
     assert calls[0].endswith("root@1.2.3.4 " + want) and "-p 2222" in calls[0]
     assert (box.fake / "ssh.stdin").read_text() == GHCR_VM_TEST.read_text()
     assert "collect" in r.stdout
@@ -1111,7 +1115,7 @@ def test_ghcrtest_custom_repo_and_failtest_and_propagates_rc(box):
     set_mode(box, "ssh_rc", "5")
     r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_REPO": "me/fork.x", "GHCR_TEST_FAILTEST": "0"})
     assert r.returncode == 5
-    assert "REPO=me/fork.x FAILTEST=0 DATA_DIR= bash -s" in log(box, "ssh")[0]
+    assert "REPO=me/fork.x FAILTEST=0 DATA_DIR=/opt/secai-stack/pkg bash -s" in log(box, "ssh")[0]
 
 
 @pytest.mark.parametrize("bad", [
@@ -1311,3 +1315,10 @@ def test_ghcrtest_rejects_bad_data_pkg_before_ssh(box, tmp_path):
     ghcr_state(box)
     r = sh(EVAL, "ghcrtest", b=box, extra={**G_OK, "GHCR_TEST_DATA_PKG": str(tmp_path / "missing")})
     assert r.returncode != 0 and log(box, "ssh") == [] and log(box, "rsync") == []
+
+
+
+def test_ghcrtest_requires_data_pkg(box):
+    ghcr_state(box)
+    r = sh(EVAL, "ghcrtest", b=box, extra={k: v for k, v in G_OK.items() if k != "GHCR_TEST_DATA_PKG"})
+    assert r.returncode != 0 and "GHCR_TEST_DATA_PKG" in r.stderr and log(box, "ssh") == []

@@ -96,6 +96,19 @@ start_stub() {
     wait_stub
 }
 
+# Sau khi stub sống lại, /health của gateway còn cache 30 s kết quả "embedding/rerank hỏng": chờ gateway thấy lại stub
+# (serving.embedding.ok và serving.reranker.ok) rồi mới check, tối đa GW_WAIT_SECS (90) giây.
+wait_gateway_deps() {
+    local i url="${GW_HEALTH_URL:-http://127.0.0.1:8131/health}" n=$(( ${GW_WAIT_SECS:-90} / 3 + 1 ))
+    for i in $(seq 1 "$n"); do
+        curl -sS --max-time 6 "$url" 2>/dev/null | python3 -I -c 'import json,sys
+h = json.load(sys.stdin); s = h.get("serving") or {}
+sys.exit(0 if (s.get("embedding") or {}).get("ok") and (s.get("reranker") or {}).get("ok") else 1)' 2>/dev/null && { echo "gateway thấy stub sau ~$(( (i - 1) * 3 ))s"; return 0; }
+        sleep 3
+    done
+    echo "gateway chưa thấy stub sau ${GW_WAIT_SECS:-90}s"; return 1
+}
+
 # Cấu hình chỉ cho lệnh install, qua env đã export (không trên dòng lệnh), như người vận hành export trước khi chạy.
 install_v1() (
     STUBKEY=stub-test-key-not-secret   # khoá stub công khai, không phải secret
@@ -225,6 +238,7 @@ main() {
         step failtest failtest
         step status5 check_status 5 version="$V1"
         step stub_restart start_stub
+        step gw_deps wait_gateway_deps
         step check3 "$SECAI_BIN" check
     fi
     stop_stub

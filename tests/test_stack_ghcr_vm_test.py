@@ -20,7 +20,7 @@ V1, V2, D1, D2 = "2026.11.27-0f980c19", "2026.11.28-1a2b3c4d", "2026.11.27", "20
 STUBKEY = "stub-test-key-not-secret"
 LEAK = "TOKMARK_51e7"
 ALL_STEPS = ["facts", "fetch", "stub", "install", "status1", "check1", "acceptance", "upgrade", "status2", "rollback", "status3",
-             "dataupdate", "status4", "check2", "failtest", "status5", "stub_restart", "check3"]
+             "dataupdate", "status4", "check2", "failtest", "status5", "stub_restart", "gw_deps", "check3"]
 ENV_KEYS = ("SECAI_HOME", "SECAI_YES", "LLM_BASE_URL", "LLM_MODEL", "LLM_API_KEY", "EMBEDDING_API_URL", "EMBEDDING_MODEL",
             "EMBEDDING_API_KEY", "RERANKER_API_URL", "RERANKER_MODEL", "RERANKER_API_KEY", "VERIFY_ALLOWED_TARGETS", "GATEWAY_BIND",
             "SECAI_DATA_VERSION")
@@ -90,6 +90,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 case "$url" in
+    *:8131/health) p=$(cat "$FAKE_PIDF" 2>/dev/null) && kill -0 "$p" 2>/dev/null \
+        && { echo '{"serving":{"embedding":{"ok":true},"reranker":{"ok":true}}}'; exit 0; }; echo '{"serving":{}}'; exit 0 ;;
     */health) p=$(cat "$FAKE_PIDF" 2>/dev/null) && kill -0 "$p" 2>/dev/null && { echo '{"ok":true}'; exit 0; }; exit 7 ;;
 esac
 [ -f "$FAKE_DIR/fetch_fail" ] && exit 22

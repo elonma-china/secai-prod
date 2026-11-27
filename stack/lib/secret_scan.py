@@ -51,7 +51,8 @@ HEAD = 8192     # có NUL trong 8 KiB đầu => nhị phân, vị trí theo @off
 MAX_DEPTH = 12  # archive lồng sâu hơn => lỗi (zip tự chứa chính nó)
 
 # Giá trị gán: không rỗng, không mở đầu bằng biểu thức shell/template ($ % { < ( [), có thể nằm trong nháy.
-_VAL = rb"""(?=["'`]?[ \t]*=[ \t]*["'`]?(?![$%{<(\[])[^\s"'`&;,)])"""
+_VAL = rb"""(?=["'`]?[ \t]*=[ \t]*["'`]?(?![$%{<(\[])(?!(?:[a-z_][a-z0-9_]*\.)*(?:passw(?:or)?d|api[_-]?key)\b)[^\s"'`&;,)])"""
+# (giá trị là tham chiếu tới biến/thuộc tính cùng tên, vd `self.password = password`, `api_key=args.api_key`: không phải literal)
 # (luật, regex, quét trên bản chữ thường). Mỗi regex mở đầu bằng chữ cố định để re tìm nhanh (~1 GB/s mỗi luật,
 # một regex gộp chỉ ~30 MB/s); lookbehind đặt sau tiền tố nhưng vẫn xét ký tự đứng trước tiền tố.
 RULES = (
@@ -83,7 +84,16 @@ SOFT_RULES = frozenset(("password-assign", "api-key-assign", "private-key", "aws
 POLICIES = ("strict", "data")
 
 # Tên khoá mang secret; giá trị "hiển nhiên" và giá trị ngắn hơn MIN_SECRET bị bỏ (chủ dự án 2026-11-27).
-SECRET_NAME = re.compile(r"KEY|TOKEN|SECRET|PASS|PWD|AUTH|CREDENTIAL|PRIVATE", re.I)
+# So theo TỪNG ĐOẠN của tên khoá (tách _ . - và camelCase): TOKENIZER, *_TOKENS (số đếm) không phải secret; tên trỏ tới
+# tệp/đường dẫn/băm/khoá công khai (REVIEW_CREDENTIALS_FILE, *_SHA256, GPG_KEY...) cũng không.
+SECRET_NAME = re.compile(r"(?:^|_)(?:API_?KEY|APIKEY|KEYS?|TOKEN|SECRETS?|PASSWORD|PASSWD|PASS|PWD|AUTH|CREDENTIALS?|PRIVATE_?KEY)(?:_|$)")
+NOT_SECRET_NAME = re.compile(r"_(?:FILE|PATH|DIR|URL|SHA256|SHA|HASH|DIGEST|REVISION|JSON|FINGERPRINT|PUBKEY|PUBLIC_?KEY)$|^GPG_KEY$")
+
+
+def is_secret_name(name):
+    n = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", str(name))
+    n = re.sub(r"[.\-\s]+", "_", n).upper()
+    return bool(SECRET_NAME.search(n)) and not NOT_SECRET_NAME.search(n)
 MIN_SECRET, MAX_SECRET = 12, 1024
 OBVIOUS = frozenset(("true", "false", "yes", "no", "on", "off", "null", "none", "changeme", "placeholder"))
 _URL = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://")
@@ -231,7 +241,8 @@ def _unquote(v):
 
 
 def _keep(v):
-    return MIN_SECRET <= len(v) <= MAX_SECRET and v.lower() not in OBVIOUS and not re.fullmatch(r"[0-9.:,_-]+", v)
+    return (MIN_SECRET <= len(v) <= MAX_SECRET and v.lower() not in OBVIOUS and not re.fullmatch(r"[0-9.:,_-]+", v)
+            and not re.match(r"(?:/|\./|~/)[^\s]*$", v))   # đường dẫn tệp không phải secret
 
 
 def secret_candidates(v, secret_name=True):
@@ -251,7 +262,7 @@ def _src_env(path):
         for line in f:
             m = re.match(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$", line.rstrip("\r\n"))
             if m:
-                yield m.group(1), secret_candidates(m.group(2), bool(SECRET_NAME.search(m.group(1))))
+                yield m.group(1), secret_candidates(m.group(2), is_secret_name(m.group(1)))
 
 
 def _src_compose(path):
@@ -261,10 +272,10 @@ def _src_compose(path):
             if t.startswith("#"):
                 continue
             for var, default in re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*):?-([^}]*)\}", t):
-                if SECRET_NAME.search(var):
+                if is_secret_name(var):
                     yield var, secret_candidates(default)
             m = re.match(r"-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(.+)$", t)
-            if m and SECRET_NAME.search(m.group(1)) and "${" not in m.group(2):
+            if m and is_secret_name(m.group(1)) and "${" not in m.group(2):
                 v = _unquote(m.group(2))
                 if m.group(1).upper().endswith("AUTH") and "/" in v:   # NEO4J_AUTH: user/password
                     v = v.split("/", 1)[1]
@@ -275,30 +286,43 @@ def _src_shell(path):
     with open(path, encoding="utf-8", errors="surrogateescape") as f:
         text = f.read()
     for m in re.finditer(r"(?:^|[\s;])(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\"[^\"]*\"|'[^']*'|[^\s;]+)", text):
-        if SECRET_NAME.search(m.group(1)) and "$" not in m.group(2):
+        if is_secret_name(m.group(1)) and "$" not in m.group(2):
             yield m.group(1), secret_candidates(m.group(2))
     for m in re.finditer(r"(?i)(api[-_]?key|x-api-key|authorization|token)\s*:\s*(?:bearer\s+)?([A-Za-z0-9._~+/=-]{12,})", text):
         yield m.group(1), secret_candidates(m.group(2))
 
 
+JSON_UNREADABLE = []
+
+
 def _src_json(pattern):
+    """environment (dict hoặc list K=V), Env của docker inspect (list K=V), và mọi cặp khoá-chuỗi có tên secret ở mọi độ sâu."""
     import glob
     for path in sorted(glob.glob(pattern)):
         try:
             with open(path, encoding="utf-8") as f:
                 doc = json.load(f)
-        except (OSError, ValueError):
-            continue   # tệp hồ sơ hỏng không chứa được secret đọc được
+        except ValueError:
+            continue   # không phải JSON: không chứa giá trị đọc được
+        except OSError:
+            JSON_UNREADABLE.append(path)   # báo trong tổng kết, không im lặng
+            continue
+        lab = f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}"
         todo = [doc]
         while todo:
             o = todo.pop()
             if isinstance(o, dict):
-                env = o.get("environment")
-                items = env.items() if isinstance(env, dict) else \
-                    [(x.split("=", 1) + [""])[:2] for x in env if isinstance(x, str)] if isinstance(env, list) else []
-                for k, v in items:
-                    if isinstance(v, str) and SECRET_NAME.search(str(k)):
-                        yield f"{os.path.basename(os.path.dirname(path))}/{os.path.basename(path)}#{k}", secret_candidates(v)
+                for key in ("environment", "Env", "env"):
+                    env = o.get(key)
+                    if isinstance(env, list):
+                        for x in env:
+                            if isinstance(x, str) and "=" in x:
+                                k, v = x.split("=", 1)
+                                if is_secret_name(k):
+                                    yield f"{lab}#{k}", secret_candidates(v)
+                for k, v in o.items():
+                    if isinstance(v, str) and is_secret_name(k):
+                        yield f"{lab}#{k}", secret_candidates(v)
                 todo.extend(o.values())
             elif isinstance(o, list):
                 todo.extend(o)
@@ -341,7 +365,8 @@ def load_known(specs, err=sys.stderr):
                 if b not in found:
                     found[b] = lab
                     n += 1
-        counts.append(f"{label}={n}")
+        counts.append(f"{label}={n}" + (f" (không đọc được {len(JSON_UNREADABLE)} tệp)" if kind == "json" and JSON_UNREADABLE else ""))
+        JSON_UNREADABLE.clear()
     # Payload Qdrant được quét ở dạng JSON: thêm biến thể đã escape nếu khác.
     for b, lab in list(found.items()):
         esc = json.dumps(b.decode("utf-8", "surrogateescape"), ensure_ascii=False)[1:-1].encode("utf-8", "surrogateescape")
@@ -556,7 +581,13 @@ class Scanner:
             if not m.isreg() or self.member_excluded(name):
                 continue
             self.member(f"{loc}!{clean(name)}", name, lambda m=m: tf.extractfile(m), m.size, depth + 1)
-        _drain(f)  # đọc nốt để zstd/gzip kiểm tra được phần đuôi
+        # Phần sau dấu kết thúc tar (tar nối nhau, polyglot, dữ liệu gắn đuôi) vẫn được giao đi: quét nốt, không vứt.
+        rest = _Reader(bytes(getattr(tf.fileobj, "buf", b"") or b""), f)
+        head = _read_full(rest, self.chunk)
+        if head.strip(b"\0"):
+            self.scan_data(f"{loc}!<sau-EOF-tar>", head, rest.read, len(head) < self.chunk)
+        else:
+            _drain(rest)
 
     def zip(self, loc, f, size, depth, seekable):
         if size is not None and size > ZIP_MAX:
@@ -788,6 +819,7 @@ def main(argv=None):
     if a.qdrant_url:
         s.scan_qdrant(a.qdrant_url, a.qdrant_collection)
     s.report()
+    write_err = False
     if a.summary_json:
         try:
             with open(a.summary_json, "w", encoding="utf-8") as f:
@@ -795,8 +827,8 @@ def main(argv=None):
                 f.write("\n")
         except OSError as e:
             print(f"secret_scan: không ghi được --summary-json: {_errmsg(e)}", file=sys.stderr)
-            return 2
-    return 3 if s.known_hits else 2 if s.errors else 1 if s.findings else 0
+            write_err = True
+    return 3 if s.known_hits else 2 if (s.errors or write_err) else 1 if s.findings else 0
 
 
 if __name__ == "__main__":
@@ -809,6 +841,6 @@ if __name__ == "__main__":
         rc = 2
     try:
         sys.stdout.flush()
-    except BrokenPipeError:
-        pass
+    except OSError:
+        rc = 3 if rc == 3 else 2
     sys.exit(rc)

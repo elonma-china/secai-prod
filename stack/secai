@@ -20,7 +20,9 @@
 #   Không có token: `secai install --data-dir DIR` / `secai data load DIR` dùng gói dữ liệu đã chép sẵn.
 #   Biến bắt buộc lần đầu có thể đặt sẵn trong môi trường (không bao giờ qua tham số dòng lệnh): LLM_BASE_URL LLM_MODEL
 #   LLM_API_KEY EMBEDDING_API_URL EMBEDDING_MODEL EMBEDDING_API_KEY RERANKER_API_URL RERANKER_MODEL RERANKER_API_KEY
-#   VERIFY_ALLOWED_TARGETS; tuỳ chọn GATEWAY_BIND GATEWAY_HOST_PORT VM_SLOTS VM_MEM_LIMIT.
+#   VERIFY_ALLOWED_TARGETS; tuỳ chọn GATEWAY_BIND GATEWAY_HOST_PORT VM_SLOTS VM_MEM_LIMIT COMPOSE_PROJECT_NAME POC_LABS_NETWORK
+#   POC_LABS_EXTERNAL. Chạy bằng sudo: sudo xoá môi trường; dùng `sudo -i` hoặc `sudo --preserve-env=TÊN,...`, KHÔNG BAO GIỜ
+#   `sudo KHOÁ=giá-trị ./secai` (giá trị nằm trên argv và trong log của sudo).
 # Không bao giờ `docker compose down -v`: volume giữ DB báo cáo/phiên/review.
 # Mã thoát upgrade / data update / data rollback: 0 đạt; 1 lỗi trước khi chuyển (không đổi gì);
 #   3 check trượt và đã quay về bản trước; 4 đã quay về nhưng check sau khi quay về vẫn trượt.
@@ -39,7 +41,7 @@ RELEASE_PROFILES=exploit                       # bộ phát hành: core + exploi
 IMAGE_KEYS=(GATEWAY_IMAGE VM_IMAGE QDRANT_IMAGE NEO4J_IMAGE REDIS_IMAGE ES_IMAGE)
 REQUIRED=(LLM_BASE_URL LLM_MODEL LLM_API_KEY EMBEDDING_API_URL EMBEDDING_MODEL EMBEDDING_API_KEY
           RERANKER_API_URL RERANKER_MODEL RERANKER_API_KEY VERIFY_ALLOWED_TARGETS)
-OPTIONAL=(GATEWAY_BIND GATEWAY_HOST_PORT VM_SLOTS VM_MEM_LIMIT)
+OPTIONAL=(GATEWAY_BIND GATEWAY_HOST_PORT VM_SLOTS VM_MEM_LIMIT COMPOSE_PROJECT_NAME POC_LABS_NETWORK POC_LABS_EXTERNAL)
 declare -A PROMPT=(
     [LLM_BASE_URL]="URL LLM (OpenAI-compatible, kèm /v1)"
     [LLM_MODEL]="Tên model LLM (đúng như serving công bố)"
@@ -94,10 +96,12 @@ envget() {   # giá trị cuối cùng của KEY trong .env (như compose), bỏ
 envset() {
     case "$2" in *$'\n'*|*$'\r'*) die "giá trị của $1 không được chứa xuống dòng" ;; esac
     local tmp; tmp="$(umask 077; mktemp "$ENVF.XXXXXX")"
-    K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; done = 0 }
+    if ! K="$1" V="$2" awk 'BEGIN { k = ENVIRON["K"]; v = ENVIRON["V"]; done = 0 }
         index($0, k "=") == 1 { if (!done) { print k "=" v; done = 1 }; next } { print }
-        END { if (!done) print k "=" v }' "$ENVF" >"$tmp"
-    chmod 600 "$tmp" && mv "$tmp" "$ENVF" || die "không ghi được $ENVF"
+        END { if (!done) print k "=" v }' "$ENVF" >"$tmp" || [ ! -s "$tmp" ]; then
+        rm -f "$tmp"; die "không ghi được $ENVF (giữ nguyên tệp cũ)"
+    fi
+    chmod 600 "$tmp" && mv "$tmp" "$ENVF" || { rm -f "$tmp"; die "không ghi được $ENVF"; }
 }
 st_get() {
     [ -f "$STATE" ] || { printf ''; return 0; }
@@ -274,7 +278,12 @@ pull_images() {   # kéo mọi image của bộ phát hành theo pin trong .env
 # ───────────────────────────── hỏi cấu hình ─────────────────────────────
 interactive() { [ "$ASSUME_YES" != 1 ] && [ -t 0 ]; }
 valid_setting() {   # valid_setting KEY VALUE -> 0 nếu hợp lệ
+    # compose nội suy $ trong .env không nháy; nháy/escape bị bỏ khi đọc: không nhận các ký tự này ở mọi giá trị.
+    [[ "$2" != *[\$\"\'\\\`]* ]] || return 1
     case "$1" in
+        COMPOSE_PROJECT_NAME) [[ "$2" =~ ^[a-z0-9][a-z0-9_-]*$ ]] ;;
+        POC_LABS_NETWORK) [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] ;;
+        POC_LABS_EXTERNAL) [[ "$2" =~ ^(true|false)$ ]] ;;
         *_URL) [[ "$2" =~ ^https?://[^[:space:]]+$ ]] ;;
         VERIFY_ALLOWED_TARGETS) [[ "$2" =~ ^[A-Za-z0-9.:/_,-]+$ ]] ;;
         GATEWAY_HOST_PORT) [[ "$2" =~ ^[0-9]{1,5}$ ]] ;;
@@ -308,15 +317,20 @@ ask_required() {
                 read -r -p "  $k - ${PROMPT[$k]}: " v </dev/tty
             fi
             valid_setting "$k" "$v" && break
-            echo "  giá trị không hợp lệ, nhập lại" >&2
+            echo "  giá trị không hợp lệ (không chứa khoảng trắng, \$, nháy, \\ hay \`), nhập lại" >&2
         done
         envset "$k" "$v"
     done
-    [ ${#missing[@]} -eq 0 ] || die "thiếu biến bắt buộc: ${missing[*]} (đặt trong môi trường, hoặc chạy không có SECAI_YES/--yes để được hỏi)"
+    [ ${#missing[@]} -eq 0 ] || die "thiếu biến bắt buộc: ${missing[*]} (đặt trong môi trường, hoặc chạy không có SECAI_YES/--yes để được hỏi; sudo xoá môi trường: dùng 'sudo -i' hoặc 'sudo --preserve-env=...', không 'sudo KHOÁ=...')"
 }
 
 # ───────────────────────────── dữ liệu ─────────────────────────────
 data_root() { printf '%s/data/%s' "$SECAI_HOME" "$1"; }
+data_content() {   # sha256 của SHA256SUMS của gói đã nạp vào data/<ver> (giống nhau dù lấy từ GHCR hay thư mục)
+    python3 -I -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("content", ""))
+except Exception: print("")' "$(data_root "$1")/.secai-data-complete"
+}
 data_complete() { [ -f "$(data_root "$1")/.secai-data-complete" ]; }
 
 # fix_poc_perms ROOT: gateway (uid 10001, nhóm VM_SHARED_GID) phải ghi được poc và poc/store; dùng chính image gateway (root).
@@ -398,7 +412,12 @@ manifest_date() {
 data_prepare() {
     local dv="$1" src="${2:-}" root dg pkg
     root="$(data_root "$dv")"
-    if data_complete "$dv"; then say "dữ liệu $dv đã có ($root)"; return 0; fi
+    if data_complete "$dv"; then
+        if [ -n "$src" ] && [ "$(data_content "$dv")" != "$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)" ]; then
+            die "đã có dữ liệu $dv với NỘI DUNG KHÁC gói $src; chọn phiên bản dữ liệu khác (vd $dv.2)"
+        fi
+        say "dữ liệu $dv đã có ($root)"; return 0
+    fi
     if [ -n "$src" ]; then
         pkg="$(cd "$src" 2>/dev/null && pwd)" || die "không có thư mục gói dữ liệu $src"
         [ -s "$pkg/SHA256SUMS" ] || die "$pkg không phải gói dữ liệu (thiếu SHA256SUMS)"
@@ -420,7 +439,8 @@ data_prepare() {
     env_run DATA_ROOT="$root" NEO4J_IMAGE="$(envget NEO4J_IMAGE)" bash "$STACK/restore-data.sh" "$pkg" || die "restore-data.sh lỗi"
     qdrant_recover "$root" "$pkg"
     fix_poc_perms "$root"
-    printf '{"version":"%s","digest":"%s"}\n' "$dv" "$dg" >"$root/.secai-data-complete"
+    printf '{"version":"%s","digest":"%s","content":"%s"}\n' "$dv" "$dg" "$(sha256sum "$pkg/SHA256SUMS" | cut -d' ' -f1)" \
+        >"$root/.secai-data-complete"
     if [ -z "$src" ]; then
         rm -rf "$pkg"
         dk image rm "$DATA_REPO:$dv" "$DATA_REPO@$dg" >/dev/null 2>&1 || true   # gỡ image dữ liệu (đã nạp) cho đỡ chỗ
@@ -473,12 +493,26 @@ backup_env() {
     (umask 077; cp "$ENVF" "$SECAI_HOME/env-backups/env-$(date +%Y%m%d-%H%M%S)-$1")
 }
 
-# switch_release VERSION: tệp + pin + kéo image (chưa đổi container). Trả 1 nếu kéo image lỗi.
-switch_release() {
-    activate "$1"
-    env_run bash "$STACK/bootstrap.sh" init >/dev/null 2>&1 || die "bootstrap.sh init lỗi"   # điền secret mới (nếu bản mới thêm)
-    write_pins "$1"
-    pull_images
+# prefetch_release VERSION: kéo mọi image theo manifest của bản đó, KHÔNG đổi tệp nào (lỗi mạng => chưa có gì thay đổi).
+prefetch_release() {
+    local lines k ref dg
+    lines="$(man_images "$SECAI_HOME/releases/$1/secai-stack.json")" || return 1
+    while IFS=$'\t' read -r k ref dg; do
+        dk image inspect "$ref@$dg" >/dev/null 2>&1 && continue
+        say "kéo $ref@$dg"
+        dk pull -q "$ref@$dg" >/dev/null || return 1
+    done <<<"$lines"
+}
+# switch_files VERSION: tệp bundle + init (secret mới nếu có) + pin trong .env; chạy trong subshell để mọi lỗi (die) chỉ trả
+# mã khác 0 cho người gọi khôi phục, không bỏ dở giữa chừng. Không đổi container.
+switch_files() {
+    ( activate "$1"
+      env_run bash "$STACK/bootstrap.sh" init >/dev/null || die "bootstrap.sh init của $1 lỗi"
+      write_pins "$1" )
+}
+# release_consistent VERSION: tệp trong stack/ và pin trong .env đúng là bản VERSION
+release_consistent() {
+    [ "$(man_field "$STACK/secai-stack.json" version 2>/dev/null)" = "$1" ] && [ "$(envget SECAI_VERSION)" = "$1" ]
 }
 
 # start_and_check: up + chờ + check.sh all. 0 đạt, 1 trượt.
@@ -515,7 +549,18 @@ cmd_install() {
     fi
     chmod 600 "$ENVF"
     apply_optional
-    env_run bash "$STACK/bootstrap.sh" init || die "bootstrap.sh init lỗi"
+    # Mạng lab đã có sẵn (do stack khác tạo) mà để compose tự tạo thì `up` lỗi nhãn: dùng external.
+    local net nproj
+    net="$(envget POC_LABS_NETWORK)"; net="${net:-poc-labs-internal}"
+    if [ -z "${INPUT[POC_LABS_EXTERNAL]:-}" ] && dk network inspect "$net" >/dev/null 2>&1; then
+        nproj="$(dk network inspect -f '{{index .Labels "com.docker.compose.project"}}' "$net" 2>/dev/null || true)"
+        if [ "$nproj" != "$(envget COMPOSE_PROJECT_NAME)" ]; then
+            say "mạng $net đã có trên máy (không thuộc project này): đặt POC_LABS_EXTERNAL=true"
+            envset POC_LABS_EXTERNAL true
+        fi
+    fi
+    # stdout của init có token review admin (profile review không thuộc bộ phát hành): không in ra.
+    env_run bash "$STACK/bootstrap.sh" init >/dev/null || die "bootstrap.sh init lỗi"
     ask_required
     if [ -n "$datadir" ]; then dv="${INPUT_DATA_VERSION:-$(manifest_date "$datadir")}"
     else dv="${INPUT_DATA_VERSION:-$(man_field "$man" data_default)}"; fi
@@ -546,17 +591,20 @@ cmd_upgrade() {
     local cur; cur="$(st_get version)"
     fetch_bundle "$want"
     local new="$B_VERSION" dg="$B_DIGEST"
-    if [ "$new" = "$cur" ]; then say "đang ở bản $cur, không có gì để nâng"; return 0; fi
-    logline "upgrade $cur -> $new"
-    backup_env "$cur"
-    if ! switch_release "$new"; then
-        say "kéo image của $new lỗi; giữ nguyên $cur"
-        switch_release "$cur" >/dev/null 2>&1 || true
-        exit 1
+    if [ "$new" = "$cur" ]; then
+        if release_consistent "$cur"; then say "đang ở bản $cur, không có gì để nâng"; return 0; fi
+        say "tệp/pin trong $STACK lệch bản đang ghi ($cur): khôi phục"
+        prefetch_release "$cur" || die "kéo image của $cur lỗi"
+        switch_files "$cur" || die "không khôi phục được tệp của $cur"
+        start_and_check || exit 4
+        return 0
     fi
-    if ! preflight; then
-        say "preflight của $new trượt; giữ nguyên $cur"
-        switch_release "$cur" || true
+    logline "upgrade $cur -> $new"
+    prefetch_release "$new" || { say "kéo image của $new lỗi; KHÔNG đổi gì, vẫn $cur"; exit 1; }
+    backup_env "$cur"
+    if ! switch_files "$new" || ! preflight; then
+        say "chuẩn bị/preflight của $new trượt; giữ nguyên $cur"
+        switch_files "$cur" || say "CẢNH BÁO: không khôi phục được tệp của $cur; chạy lại 'secai upgrade $cur'"
         exit 1
     fi
     if start_and_check; then
@@ -569,7 +617,7 @@ cmd_upgrade() {
     say "check.sh all trượt trên $new: TỰ QUAY VỀ $cur"
     logline "upgrade $cur -> $new: check trượt, quay về"
     st_set last_failed_upgrade="$new"
-    switch_release "$cur" || die "không kéo lại được image của $cur"
+    if ! switch_files "$cur"; then say "không khôi phục được tệp của $cur"; exit 4; fi
     if start_and_check; then say "đã quay về $cur, check đạt"; exit 3; fi
     say "đã quay về $cur nhưng check.sh all vẫn trượt (xem ở trên)"; exit 4
 }
@@ -581,9 +629,12 @@ cmd_rollback() {
     [ -n "$prev" ] || die "không có bản trước để quay về"
     [ -f "$SECAI_HOME/releases/$prev/secai-stack.json" ] || die "không còn bản $prev trong $SECAI_HOME/releases"
     logline "rollback $cur -> $prev"
+    prefetch_release "$prev" || die "kéo image của $prev lỗi; KHÔNG đổi gì, vẫn $cur"
     backup_env "$cur"
-    switch_release "$prev" || die "kéo image của $prev lỗi"
-    preflight || die "preflight của $prev trượt"
+    if ! switch_files "$prev" || ! preflight; then
+        switch_files "$cur" || say "CẢNH BÁO: không khôi phục được tệp của $cur"
+        die "chuẩn bị/preflight của $prev trượt; giữ nguyên $cur"
+    fi
     local pdg; pdg="$(cat "$SECAI_HOME/releases/$prev/.bundle-digest" 2>/dev/null || true)"
     if start_and_check; then
         st_set version="$prev" bundle_digest="$pdg" previous_version="$cur" previous_bundle_digest="$(st_get bundle_digest)"
@@ -635,7 +686,12 @@ data_update() {   # data_update SRC_DIR(rỗng = GHCR) [DATA_VERSION]
     cur="$(st_get data_version)"
     [ -n "$want" ] || want="$(man_field "$STACK/secai-stack.json" data_default)"
     [[ "$want" =~ $DATA_RE ]] || die "phiên bản dữ liệu '$want' không hợp lệ (YYYY.MM.DD)"
-    if [ "$want" = "$cur" ]; then say "đang dùng dữ liệu $cur"; return 0; fi
+    if [ "$want" = "$cur" ]; then
+        if [ -n "$src" ] && [ "$(data_content "$cur")" != "$(sha256sum "$src/SHA256SUMS" | cut -d' ' -f1)" ]; then
+            die "đang dùng dữ liệu $cur nhưng gói $src có nội dung khác; nạp với phiên bản khác: secai data load $src $cur.2"
+        fi
+        say "đang dùng dữ liệu $cur"; return 0
+    fi
     data_complete "$want" && host_checks 5 || host_checks 40
     take_lock
     logline "data update $cur -> $want"

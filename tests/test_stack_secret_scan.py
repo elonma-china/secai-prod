@@ -630,3 +630,71 @@ def test_known_secret_in_qdrant_payload_blocks_even_in_corpus(qdrant: str, tmp_p
             "--qdrant-collection", "cve_kb_hybrid")
     assert p.returncode == 3, p.stderr
     assert findings(p.stdout) == [("known-secret", "qdrant:cve_kb_hybrid#7")]   # password= trong payload chỉ được đếm
+
+
+
+def test_assignment_from_same_named_variable_is_not_a_literal(tmp_path: Path) -> None:
+    write(tmp_path / "a.py", f"self.{PW} = {PW}\n{PW}=args.{PW}\napi_key = self.api_key\nAPI_KEY=api_key\n")
+    write(tmp_path / "b.py", f"{PW}={PW}123{MARK}\n{PW} = {PW}_x{MARK}\napi_key=api_key2{MARK}\n")
+    assert run(str(tmp_path / "a.py")).returncode == 0
+    p = run(str(tmp_path / "b.py"))
+    assert sorted(findings(p.stdout)) == [("api-key-assign", "b.py:3"), ("password-assign", "b.py:1"), ("password-assign", "b.py:2")]
+
+
+def test_secret_name_segments() -> None:
+    yes = ["QWEN_API_KEY", "NEO4J_PASSWORD", "AUTOSCAN_PASS", "NEO4J_AUTH", "LOGS_UI_SESSION_SECRET", "REWARD_SERVICE_TOKEN",
+           "TRANSLATE_V2_CONVERTER_TOKEN", "apiKey", "accessToken", "STUB_API_KEYS", "db.password", "x-api-key"]
+    no = ["MULTILANG_SPECIALIST_TOKENIZER_JSON", "MULTILANG_SPECIALIST_TOKENIZER_SHA256", "MULTILANG_SPECIALIST_TOKENIZER_REVISION",
+          "TRANSLATE_V2_SPECIALIST_CONTEXT_TOKENS", "MAX_OUTPUT_TOKENS", "REVIEW_CREDENTIALS_FILE", "REPORT_KEY_FILE", "GPG_KEY",
+          "EMBEDDING_API_URL", "KEYBOARD", "PASSPORT_ID", "AUTHOR", "SECRETARY"]
+    assert [n for n in yes if not ss.is_secret_name(n)] == []
+    assert [n for n in no if ss.is_secret_name(n)] == []
+    assert ss.secret_candidates("/app/translation-tokenizer/tokenizer.json") == []
+
+
+def test_real_stack_scans_clean_with_translation_profile_style_sources(tmp_path: Path) -> None:
+    # Hồ sơ release chứa tên TOKENIZER + băm + đường dẫn y như stack/compose.yml: không được bị coi là secret thật.
+    comp = (Path(SCRIPT).parents[1] / "compose.yml").read_text()
+    envd = {k: v for k, v in (l.strip().split(": ", 1) for l in comp.splitlines() if "MULTILANG_SPECIALIST_TOKENIZER" in l and ": " in l)}
+    assert len(envd) >= 4
+    envd["GPG_KEY"] = "7169605F62C751356D054A26A821E680E5FA6305"
+    envd["REVIEW_CREDENTIALS_FILE"] = "/app/review-credentials.json"
+    envd["REAL_API_KEY"] = MARK + "notInStack1"
+    write(tmp_path / "rel" / "r" / "translation-release.json", json.dumps({"services": [{"environment": envd}],
+                                                                         "Config": {"Env": [f"DOCKER_ENV_TOKEN={MARK}envList9"]}}))
+    got = {lab for _, lab in ss.load_known([f"json:{tmp_path / 'rel'}/*/*.json"], err=io.StringIO())}
+    assert got == {"json:r/translation-release.json#REAL_API_KEY", "json:r/translation-release.json#DOCKER_ENV_TOKEN"}
+    p = run("--known-secrets", f"json:{tmp_path / 'rel'}/*/*.json", str(Path(SCRIPT).parents[1]))
+    assert p.returncode == 0, p.stdout + p.stderr
+
+
+def test_unreadable_json_record_is_reported(tmp_path: Path) -> None:
+    write(tmp_path / "rel" / "a" / "ok.json", json.dumps({"environment": {"X_TOKEN": MARK + "abcdefgh"}}))
+    bad = write(tmp_path / "rel" / "a" / "locked.json", "{}")
+    bad.chmod(0)
+    err = io.StringIO()
+    try:
+        got = ss.load_known([f"json:{tmp_path / 'rel'}/*/*.json"], err=err)
+    finally:
+        bad.chmod(0o600)
+    if os.geteuid() != 0:
+        assert "không đọc được 1 tệp" in err.getvalue()
+    assert len(got) == 1 and MARK not in err.getvalue()
+
+
+def test_data_after_tar_eof_is_scanned(tmp_path: Path) -> None:
+    a = tar_bytes({"a.txt": b"clean\n"})
+    b = tar_bytes({"b.txt": f"tok {GH}\n".encode()})
+    write(tmp_path / "cat.tar", a + b)
+    write(tmp_path / "tail.tar", a + f"\n{HF}\n".encode())
+    p = run(str(tmp_path / "cat.tar"))
+    assert p.returncode == 1 and findings(p.stdout)[0][1].startswith("cat.tar!<sau-EOF-tar>")
+    p = run(str(tmp_path / "tail.tar"))
+    assert p.returncode == 1 and findings(p.stdout) == [("hf-token", "tail.tar!<sau-EOF-tar>:2")] or findings(p.stdout)[0][0] == "hf-token"
+
+
+def test_summary_write_failure_keeps_exit_3(tmp_path: Path) -> None:
+    write(tmp_path / "k.env", f"A_API_KEY={MARK}zzzzzz\n")
+    write(tmp_path / "f.txt", f"x {MARK}zzzzzz\n")
+    p = run("--known-secrets", f"env:{tmp_path / 'k.env'}", "--summary-json", str(tmp_path / "nodir" / "s.json"), str(tmp_path / "f.txt"))
+    assert p.returncode == 3

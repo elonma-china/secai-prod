@@ -12,10 +12,13 @@ sudo SECAI_GHCR_TOKEN_FILE=/root/ghcr-read.token ./secai install   # bản stabl
 sudo ./secai status
 ```
 
+Biến trên dòng `sudo` ở đây chỉ là đường dẫn tệp, không phải secret. **Không bao giờ** viết `sudo LLM_API_KEY=... ./secai`:
+giá trị nằm trên argv (ai cũng thấy qua `ps`) và trong log của sudo.
+
 **Token đọc dữ liệu.** Chủ dự án (hoặc người có quyền đọc package `secai-data`) tạo trên GitHub: Settings → Developer settings →
 Personal access tokens → Tokens (classic) → Generate new token (classic), **chỉ** tick `read:packages`, đặt hạn dùng. Lưu vào
 tệp của root, mode 600 (`install -m 600 /dev/null /root/ghcr-read.token`, rồi dán token vào bằng trình soạn thảo, không qua
-`echo` trên dòng lệnh). `secai` nhận token từ `SECAI_GHCR_TOKEN_FILE` (tệp 0600/0400), biến `SECAI_GHCR_TOKEN`, hoặc hỏi ẩn khi
+`echo` trên dòng lệnh): `sudo install -m 600 /dev/null /root/ghcr-read.token && sudo nano /root/ghcr-read.token`. `secai` nhận token từ `SECAI_GHCR_TOKEN_FILE` (tệp 0600/0400), biến `SECAI_GHCR_TOKEN`, hoặc hỏi ẩn khi
 chạy tay; không bao giờ qua tham số dòng lệnh. Token chỉ dùng để `docker login` vào một `DOCKER_CONFIG` tạm cho đúng lần kéo
 dữ liệu, xoá ngay sau đó; không còn credential nào trong `~/.docker`. User đăng nhập mặc định `elonma-china` (`SECAI_GHCR_USER`).
 Lưu ý quota: mỗi lần kéo dữ liệu (~5,5 GB) tính vào lưu lượng GitHub Packages của chủ package (gói Free chỉ 1 GB/tháng cho
@@ -27,17 +30,22 @@ cập nhật dữ liệu sau này bằng `sudo ./secai data load <thư mục> [N
 `install` tự làm hết: kiểm máy (Docker, đĩa, RAM, `vm.max_map_count`), kéo bundle, hỏi đúng các thông tin bắt buộc (URL, tên
 model và khoá của LLM, embedding, rerank, cùng dải lab `VERIFY_ALLOWED_TARGETS`; khoá gõ ẩn, không qua tham số dòng lệnh), kéo
 mọi image theo digest, tải và nạp dữ liệu, bật stack rồi chạy `check.sh all`. Mọi thứ nằm trong `/opt/secai` (đổi bằng
-`SECAI_HOME`); cấu hình ở `/opt/secai/stack/.env` (0600). Cài không hỏi: đặt sẵn các biến đó trong môi trường rồi thêm `--yes`.
+`SECAI_HOME`); cấu hình ở `/opt/secai/stack/.env` (0600). Giá trị không được chứa khoảng trắng, `$`, nháy, `\` hay `` ` ``.
+
+Cài không hỏi (sudo xoá môi trường, nên làm trong shell root): `sudo -i`, rồi `read -rs LLM_API_KEY` (gõ ẩn) cho từng khoá,
+`export LLM_API_KEY EMBEDDING_API_KEY RERANKER_API_KEY LLM_BASE_URL=... LLM_MODEL=...` (đủ các biến bắt buộc), sau đó
+`SECAI_GHCR_TOKEN_FILE=/root/ghcr-read.token ./secai install --yes`. Từ shell user thường thì dùng
+`sudo --preserve-env=LLM_BASE_URL,LLM_MODEL,LLM_API_KEY,...` (liệt kê tường minh, không dùng `sudo -E`).
 
 | Lệnh | Việc |
 |---|---|
-| `./secai status` | bản đang chạy, bộ dữ liệu, trạng thái service, `git_sha` của gateway, image có đúng digest trong manifest không |
-| `./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy |
-| `./secai rollback` | quay về bản liền trước |
-| `./secai data update [NGÀY]` | kéo bộ dữ liệu mới (cần token), nạp bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `./secai data rollback` |
-| `./secai data load <thư mục> [NGÀY]` | như `data update` nhưng lấy gói từ thư mục đã chép sẵn (không cần token) |
-| `./secai check` | chạy lại `check.sh all` (sau khi sửa `.env`) |
-| `./secai logs [service]`, `./secai up`, `./secai down` | xem log, bật lại, dừng (không bao giờ xoá volume) |
+| `sudo ./secai status` | bản đang chạy, bộ dữ liệu, trạng thái service, `git_sha` của gateway, image có đúng digest trong manifest không |
+| `sudo ./secai upgrade [VERSION]` | lên bản mới (mặc định stable); `check.sh all` trượt thì tự quay về bản đang chạy |
+| `sudo ./secai rollback` | quay về bản liền trước |
+| `sudo ./secai data update [NGÀY]` | kéo bộ dữ liệu mới (cần token), nạp bên cạnh bộ cũ rồi mới chuyển; trượt thì quay lại. Bộ cũ vẫn giữ: `sudo ./secai data rollback` |
+| `sudo ./secai data load <thư mục> [NGÀY]` | như `data update` nhưng lấy gói từ thư mục đã chép sẵn (không cần token) |
+| `sudo ./secai check` | chạy lại `check.sh all` (sau khi sửa `.env`) |
+| `sudo ./secai logs [service]`, `sudo ./secai up`, `sudo ./secai down` | xem log, bật lại, dừng (không bao giờ xoá volume) |
 
 Mã thoát của `upgrade` và `data update`: 0 đạt; 1 lỗi trước khi chuyển (không có gì thay đổi); 3 check trượt và đã tự quay về;
 4 đã quay về nhưng check vẫn trượt (thường do endpoint model, xem `./secai check`).
@@ -84,8 +92,10 @@ stack/publish.sh publish --dry-run                       # chạy hết trừ lo
 
 Làm sau khi gói đã ổn định, là một việc riêng:
 
-1. Cài song song: `SECAI_HOME=/opt/secai-next` với `COMPOSE_PROJECT_NAME=secai-next`, `GATEWAY_BIND=127.0.0.1`, cổng khác
-   8131; `secai install` kéo bộ dữ liệu mới nhất. Prod `secai-docker` vẫn chạy nguyên.
+1. Cài song song trong shell root, với các biến tuỳ chọn mà `secai install` nhận từ môi trường: `SECAI_HOME=/opt/secai-next`,
+   `COMPOSE_PROJECT_NAME=secai-next`, `GATEWAY_BIND=127.0.0.1`, `GATEWAY_HOST_PORT=18131`, `POC_LABS_EXTERNAL=true` (mạng
+   `poc-labs-internal` đã có trên máy này; `secai` cũng tự phát hiện và đặt `true`). Đĩa cần thêm khoảng 25 GB cho dữ liệu.
+   Prod `secai-docker` vẫn chạy nguyên.
 2. So sánh: `/health`, `check.sh all`, `acceptance/run-api.sh` trên cổng mới với số gốc của prod (`ACCEPTANCE.md`).
 3. Chuyển (cần chủ dự án duyệt): theo quy trình release (lock, sao lưu compose) dừng gateway prod bằng compose của
    `secai-docker`, không `docker stop` tay; đổi `GATEWAY_BIND`/`GATEWAY_HOST_PORT` của stack mới sang `0.0.0.0:8131`,

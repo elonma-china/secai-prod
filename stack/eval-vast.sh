@@ -953,10 +953,10 @@ cmd_ghcrtest() {
     [[ "$ft" =~ ^[01]$ ]] || die "GHCR_TEST_FAILTEST phải là 0 hoặc 1: '$ft'"
     # Dữ liệu là package PRIVATE: không chép token gh (có quyền ghi) lên VM. Chưa có token chỉ-đọc thì đẩy gói dữ liệu bằng rsync
     # (GHCR_TEST_DATA_PKG, thư mục pack.sh data có SHA256SUMS) và VM dùng `secai install --data-dir` / `secai data load`.
-    if [ -n "$pkg" ]; then
-        [ -d "$pkg" ] && [ -s "$pkg/SHA256SUMS" ] || die "GHCR_TEST_DATA_PKG phải là thư mục gói dữ liệu có SHA256SUMS: '$pkg'"
-        ddir=/opt/secai-stack/pkg
-    fi
+    # Chưa có đường truyền token chỉ-đọc lên VM: không có gói thì install chắc chắn chết ở bước kéo dữ liệu private.
+    [ -n "$pkg" ] || die "đặt GHCR_TEST_DATA_PKG = thư mục gói dữ liệu (pack.sh data): secai-data là package private, VM không có token đọc"
+    [ -d "$pkg" ] && [ -s "$pkg/SHA256SUMS" ] || die "GHCR_TEST_DATA_PKG phải là thư mục gói dữ liệu có SHA256SUMS: '$pkg'"
+    ddir=/opt/secai-stack/pkg
     [ -f "$HERE/acceptance/ghcr-vm-test.sh" ] || die "thiếu $HERE/acceptance/ghcr-vm-test.sh"
     need_cmds ssh timeout; load_conn
     [ "$(sget mode)" = ghcr ] || die "ghcrtest cần instance dựng bằng EVAL_MODE=ghcr eval-vast.sh up"

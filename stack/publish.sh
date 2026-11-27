@@ -5,8 +5,9 @@
 #       gate (pytest toàn bộ trên git archive REF, build FULL, import app, /app/src == archive, smoke *-smoke-<ngày> trên
 #       127.0.0.1) -> image VM -> digest image nền -> secai-stack.json -> bundle FROM scratch (đã quét secret) -> kiểm 3 package
 #       image public -> push gateway, vm, bundle (cùng tag YYYY.MM.DD-<sha8>), kiểm digest ẩn danh. --stable: dời tag stable.
-#   publish-data [--version YYYY.MM.DD[.N]] [--src-root D] [--mcp-dir D] [--from-pkg D] [--neo4j-password-file F]
-#                [--keep] [--dry-run]
+#   publish-data [--version YYYY.MM.DD[.N]] [--src-root D] [--mcp-dir D] [--from-pkg D --qdrant-url URL]
+#                [--neo4j-password-file F] [--keep] [--dry-run]
+#       (--from-pkg: gói có sẵn; bắt buộc --qdrant-url của collection nguồn để quét payload, số điểm phải khớp MANIFEST)
 #       pack.sh data (hoặc gói có sẵn) -> quét secret toàn bộ nội dung gói (+ payload Qdrant, chính sách corpus cố định
 #       trong lib/secret_scan.py, secret thật của máy này) -> image FROM scratch -> kiểm secai-data PRIVATE -> push.
 #   promote VERSION     dời tag stable của bundle sang VERSION (bản đó phải đã có trên GHCR).
@@ -21,7 +22,8 @@
 #   PUBLISH_MIN_FREE_GB (45), SECAI_GHCR_OWNER (elonma-china), SECAI_DOCKER_DIR (thư mục .env prod cho smoke),
 #   SECAI_DATA_ROOT (dữ liệu nguồn), SECAI_REGISTRY_HELPER (lib/registry.py), SECAI_SEED_BLOB (seed_blob.py của secai-serving),
 #   QDRANT_URL (http://127.0.0.1:6333), NEO4J_PASSWORD (hoặc --neo4j-password-file),
-#   PUBLISH_KNOWN_SECRETS (thay danh sách nguồn secret thật, mỗi dòng một spec của secret_scan.py --known-secrets; cho test).
+#   PUBLISH_KNOWN_SECRETS (thay danh sách nguồn secret thật, mỗi dòng một spec của secret_scan.py --known-secrets; cho test),
+#   PUBLISH_NO_FETCH=1 (bỏ `git fetch origin`; chỉ cho test/offline).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -106,28 +108,51 @@ ghcr_login() {
 
 local_id() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null; }
 
+take_lock() {   # một lần phát hành tại một thời điểm (cùng WORK, cùng tag cục bộ, cùng smoke)
+    mkdir -p "$WORK_ROOT"
+    exec 8>"$WORK_ROOT/publish.lock"
+    flock -n 8 || die "một publish.sh khác đang chạy ($WORK_ROOT/publish.lock)"
+}
+
+# tag_absent REF [auth]: 0 nếu tag CHƯA có trên GHCR; tag đã có => die (phiên bản bất biến); không kiểm được => die (fail closed).
+tag_absent() {
+    local rc=0
+    if [ "${2:-}" = auth ]; then regq_auth digest "$1" >/dev/null 2>&1 || rc=$?; else regq digest "$1" >/dev/null 2>&1 || rc=$?; fi
+    case "$rc" in
+        0) die "$1 đã có trên GHCR (phiên bản bất biến)" ;;
+        1) return 0 ;;
+        *) die "không kiểm được $1 trên GHCR (rc=$rc); thử lại sau, KHÔNG push" ;;
+    esac
+}
+
 # push_ref REF BASE_REPO: push, đối chiếu digest push in ra với .Id cục bộ (containerd store: .Id == digest manifest).
 # NotFound content digest (blob nền thiếu trong content store) -> seed blob từ Docker Hub bằng seed_blob.py rồi thử lại một lần.
 push_ref() {   # push_ref REF SEED_SRC_REPO [auth]
-    local ref="$1" srcrepo="$2" mode="${3:-}" out d want try dst
+    local ref="$1" srcrepo="$2" mode="${3:-}" out d want try dst ok=0 seeded=" " msg
     want="$(local_id "$ref")" || die "không có image cục bộ $ref"
-    for try in 1 2; do
-        if out="$(docker push "$ref" 2>&1)"; then break; fi
+    for try in 1 2 3 4 5 6 7 8 9 10 11 12; do
+        if out="$(docker push "$ref" 2>&1)"; then ok=1; break; fi
         d="$(grep -oE 'content digest sha256:[0-9a-f]{64}' <<<"$out" | head -n1 | awk '{ print $3 }')" || d=""
-        if [ "$try" = 1 ] && [ -n "$d" ] && [ -n "$srcrepo" ] && [ -f "$SEED_BLOB" ]; then
+        if [ -n "$d" ] && [ -n "$srcrepo" ] && [ -f "$SEED_BLOB" ] && [[ "$seeded" != *" $d "* ]]; then
             log "blob nền $d thiếu trong content store: seed từ $srcrepo"
             dst="${ref#"$REGISTRY"/}"; dst="$OWNER/${dst%%[:@]*}"
             python3 -I "$SEED_BLOB" "$d" "$srcrepo" "$dst" >&2 || die "seed_blob $d thất bại"
+            seeded+="$d "
             continue
         fi
+        break
+    done
+    if [ "$ok" != 1 ]; then
         printf '%s\n' "$out" | tail -n 5 >&2
-        if grep -qiE 'quota|billing|payment|spending limit|storage limit|exceed|insufficient|402' <<<"$out"; then
+        # bỏ dòng tiến trình (12 hex:) và digest trước khi so, để mã hex không khớp nhầm
+        msg="$(sed -E '/^[0-9a-f]{12}: /d; s/sha256:[0-9a-f]{64}//g' <<<"$out")"
+        if grep -qiE 'quota|billing|payment required|spending limit|storage limit|\b402\b' <<<"$msg"; then
             echo "publish: GHCR từ chối $ref vì quota/billing (package private tính vào quota GitHub Packages): cần chủ dự án gắn phương thức thanh toán/budget. KHÔNG thử lách." >&2
             [ -z "$WORK" ] || printf '%s QUOTA: %s\n' "$(date '+%F %T')" "$ref" >>"$WORK/publish.log"
             exit 7
         fi
         die "docker push $ref thất bại"
-    done
+    fi
     d="$(grep -oE 'digest: sha256:[0-9a-f]{64}' <<<"$out" | tail -n1 | awk '{ print $2 }')" || d=""
     [ "$d" = "$want" ] || die "push $ref: digest in ra '$d' khác .Id cục bộ '$want'"
     verify_remote "$ref" "$want" "$mode"
@@ -259,6 +284,22 @@ with open(sys.argv[1], "w") as f:
 PY
 }
 
+check_manifest() {   # cùng các kiểm của stack/secai (man_images): bundle hỏng thì không dựng
+    python3 -I - "$1" "$VERSION" "$2" <<'PY' || die "secai-stack.json không hợp lệ; KHÔNG dựng bundle"
+import json, re, sys
+m = json.load(open(sys.argv[1])); dry = sys.argv[3] == "1"
+keys = ["GATEWAY_IMAGE", "VM_IMAGE", "QDRANT_IMAGE", "NEO4J_IMAGE", "REDIS_IMAGE", "ES_IMAGE"]
+assert m.get("schema") == 1 and m.get("version") == sys.argv[2], "schema/version"
+assert sorted(m["images"]) == sorted(keys), "images keys"
+for k in keys:
+    e = m["images"][k]
+    assert re.fullmatch(r"[a-z0-9][a-z0-9._/:-]*", e["ref"]) and "@" not in e["ref"] and ":latest" not in e["ref"], k
+    assert re.fullmatch(r"sha256:[0-9a-f]{64}", e["digest"]), k
+dv = m["data"]["default_version"]
+assert (dry and dv == "") or re.fullmatch(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{1,2})?", dv), "data.default_version"
+PY
+}
+
 scan_tree() {   # scan_tree DIR NAME [scanner args...]: secret thật + luật; chỉ in luật + vị trí, không bao giờ giá trị
     local dir="$1" name="$2" rc=0 spec ks=(); shift 2
     while IFS= read -r spec; do [ -z "$spec" ] || ks+=(--known-secrets "$spec"); done < <(known_secret_specs)
@@ -285,7 +326,9 @@ cmd_publish() {
             *) die "tham số lạ: $1" ;;
         esac
     done
-    need_cmds git docker python3 curl tar diff
+    need_cmds git docker python3 curl tar diff flock
+    take_lock
+    [ "${PUBLISH_NO_FETCH:-0}" = 1 ] || git -C "$REPO" fetch -q origin || die "git fetch origin lỗi; không phát hành từ ref có thể đã cũ"
     SHA="$(git -C "$REPO" rev-parse --verify "$ref^{commit}")" || die "ref không tồn tại: $ref"
     S8="${SHA:0:8}"
     VERSION="$(date +%Y.%m.%d)-$S8"
@@ -294,12 +337,9 @@ cmd_publish() {
     [ "$SHA" = "$(git -C "$REPO" rev-parse --verify -q origin/main 2>/dev/null)" ] \
         || { BRANCH="$(printf '%s' "${ref#origin/}" | tr -c 'A-Za-z0-9._-' '-')"; echo "publish: CẢNH BÁO: $ref ($S8) không phải origin/main" >&2; }
     mkdir -p "$WORK_ROOT"; WORK="$WORK_ROOT/stack-$VERSION"; mkdir -p "$WORK"; chmod 700 "$WORK"
-    log "phát hành $VERSION từ $ref ($SHA)$([ "$dry" = 0 ] || echo ' (dry-run)')"
+    log "phát hành $VERSION từ $ref ($SHA: $(git -C "$REPO" log -1 --format='%s' "$SHA"))$([ "$dry" = 0 ] || echo ' (dry-run)')"
     check_disk
-    if regq digest "$REGISTRY/$PKG_STACK:$VERSION" >/dev/null 2>&1; then
-        [ "$dry" = 1 ] || die "$REGISTRY/$PKG_STACK:$VERSION đã có trên GHCR (phiên bản bất biến)"
-        echo "publish: (dry-run) $VERSION đã có trên GHCR" >&2
-    fi
+    tag_absent "$REGISTRY/$PKG_STACK:$VERSION"   # cả dry-run: không dựng đè tag cục bộ của bản đã phát hành
     [ "$dry" = 1 ] || require_public "$PKG_GATEWAY" "$PKG_VM" "$PKG_STACK"   # dừng sớm, trước 15 phút pytest
 
     local tree="$WORK/tree"
@@ -315,10 +355,11 @@ cmd_publish() {
     local k r d
     IMAGES_TSV="GATEWAY_IMAGE	$REGISTRY/$PKG_GATEWAY:$VERSION	$(local_id "$gw")
 VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
+    local bi; bi="$(base_images "$tree")" || die "compose.yml của $S8 thiếu mặc định \${KEY:-...} cho image nền"
     while IFS=$'\t' read -r k r; do
         d="$(regq digest "$r")" || die "không lấy được digest của $r"
         IMAGES_TSV+=$'\n'"$k"$'\t'"$r"$'\t'"$d"
-    done < <(base_images "$tree")
+    done <<<"$bi"
     [ -n "$data_version" ] || data_version="$(latest_data_version)" || data_version=""
     DATA_VERSION="$data_version"; DATA_DIGEST=""
     if [ -n "$DATA_VERSION" ]; then
@@ -335,6 +376,7 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
     rm -rf "$bdir"; mkdir -p "$bdir"
     git -C "$REPO" archive "$SHA" stack | tar -x -C "$bdir"
     write_manifest "$bdir/stack/secai-stack.json"
+    check_manifest "$bdir/stack/secai-stack.json" "$dry"
     scan_tree "$bdir/stack" bundle   # bundle là image public: mọi luật đều chặn, không allowlist
     printf 'FROM scratch\nCOPY stack /stack\n' >"$WORK/Dockerfile.bundle"
     docker build -q -f "$WORK/Dockerfile.bundle" --label org.opencontainers.image.source="$SOURCE_URL" \
@@ -349,6 +391,7 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
         return 0
     fi
     require_public "$PKG_GATEWAY" "$PKG_VM" "$PKG_STACK"
+    tag_absent "$REGISTRY/$PKG_GATEWAY:$VERSION"; tag_absent "$REGISTRY/$PKG_VM:$VERSION"; tag_absent "$bundle"
     ghcr_login
     push_ref "$gw" library/python
     push_ref "$vm" oven/bun
@@ -361,10 +404,10 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
 promote_to_stable() {
     local v="$1" want
     want="$(regq digest "$REGISTRY/$PKG_STACK:$v")" || die "không đọc được $REGISTRY/$PKG_STACK:$v trên GHCR"
-    docker image inspect "$REGISTRY/$PKG_STACK:$v" >/dev/null 2>&1 || docker pull -q "$REGISTRY/$PKG_STACK:$v" >/dev/null \
-        || die "không kéo được $REGISTRY/$PKG_STACK:$v"
-    [ "$(local_id "$REGISTRY/$PKG_STACK:$v")" = "$want" ] || die "bundle cục bộ $v khác GHCR"
-    docker tag "$REGISTRY/$PKG_STACK:$v" "$REGISTRY/$PKG_STACK:stable"
+    # kéo đúng digest trên GHCR (không tin tag cục bộ có thể đã bị dựng lại)
+    docker pull -q "$REGISTRY/$PKG_STACK@$want" >/dev/null || die "không kéo được $REGISTRY/$PKG_STACK@$want"
+    docker tag "$REGISTRY/$PKG_STACK@$want" "$REGISTRY/$PKG_STACK:stable"
+    [ "$(local_id "$REGISTRY/$PKG_STACK:stable")" = "$want" ] || die "tag stable cục bộ không trỏ đúng $want"
     ghcr_login
     push_ref "$REGISTRY/$PKG_STACK:stable" ""
     log "stable -> $v ($want)"
@@ -373,39 +416,45 @@ promote_to_stable() {
 cmd_promote() {
     local v="${1:-}"
     [[ "$v" =~ $VERSION_RE ]] || die "dùng: publish.sh promote YYYY.MM.DD-<sha8>"
-    need_cmds docker python3
+    need_cmds docker python3 flock
+    take_lock
     require_public "$PKG_STACK"
     promote_to_stable "$v"
 }
 
 cmd_publish_data() {
-    local version="" src="$DATA_SRC" mcp="" frompkg="" pwfile="" keep=0 dry=0
+    local version="" src="$DATA_SRC" mcp="" frompkg="" pwfile="" keep=0 dry=0 qurl=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --version) version="$2"; shift 2 ;;
             --src-root) src="$2"; shift 2 ;;
             --mcp-dir) mcp="$2"; shift 2 ;;
             --from-pkg) frompkg="$2"; shift 2 ;;
+            --qdrant-url) qurl="$2"; shift 2 ;;
             --neo4j-password-file) pwfile="$2"; shift 2 ;;
             --keep) keep=1; shift ;;
             --dry-run) dry=1; shift ;;
             *) die "tham số lạ: $1" ;;
         esac
     done
-    need_cmds docker python3 zstd sha256sum du
+    need_cmds docker python3 zstd sha256sum du flock
+    take_lock
     version="${version:-$(date +%Y.%m.%d)}"
     [[ "$version" =~ $DATA_RE ]] || die "version dữ liệu '$version' không hợp lệ (YYYY.MM.DD hoặc YYYY.MM.DD.N)"
     local ref="$REGISTRY/$PKG_DATA:$version"
     mkdir -p "$WORK_ROOT"; WORK="$WORK_ROOT/data-$version"; mkdir -p "$WORK"; chmod 700 "$WORK"
     log "phát hành dữ liệu $version$([ "$dry" = 0 ] || echo ' (dry-run)')"
     check_disk
-    if regq_auth digest "$ref" >/dev/null 2>&1; then die "$ref đã có trên GHCR (bất biến); chọn $version.2 ..."; fi
+    tag_absent "$ref" auth
     [ "$dry" = 1 ] || require_visibility private "$PKG_DATA"
     local pkg qargs=()
     if [ -n "$frompkg" ]; then
         pkg="$(cd "$frompkg" && pwd)"
         [ -s "$pkg/SHA256SUMS" ] || die "$pkg không phải gói dữ liệu (thiếu SHA256SUMS)"
-        [ -z "${QDRANT_URL_SCAN:-}" ] || qargs=(--qdrant-url "$QDRANT_URL_SCAN" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
+        # Snapshot là SST nén: quét thô không thấy hết payload. Bắt buộc quét payload qua API của collection nguồn
+        # (số điểm phải khớp MANIFEST để chắc là cùng dữ liệu).
+        [ -n "$qurl" ] || die "--from-pkg cần --qdrant-url <collection nguồn> để quét payload Qdrant (fail closed)"
+        qargs=(--qdrant-url "$qurl" --qdrant-collection "${QDRANT_COLLECTION:-cve_kb_hybrid}")
     else
         local hh; hh="$(date +%H)"
         [ "$hh" != 03 ] && [ "$hh" != 04 ] || die "03:00-05:00: autoscan ghi Neo4j, export sẽ lệch số đếm; chạy giờ khác"
@@ -416,7 +465,7 @@ cmd_publish_data() {
         [ -n "${NEO4J_PASSWORD:-}" ] || die "cần NEO4J_PASSWORD (env) hoặc --neo4j-password-file để xuất Neo4j"
         export NEO4J_PASSWORD
         pkg="$WORK/pkg"
-        [ ! -e "$pkg" ] || die "$pkg đã có (lần chạy dở?); xoá hoặc dùng --from-pkg $pkg"
+        [ ! -e "$pkg" ] || die "$pkg đã có (lần chạy dở?); xoá hoặc dùng --from-pkg $pkg --qdrant-url <collection nguồn>"
         log "pack.sh data $src -> $pkg (snapshot Qdrant tạo rồi xoá trên máy nguồn; Neo4j chỉ đọc)"
         bash "$HERE/pack.sh" data ${mcp:+--mcp-dir "$mcp"} "$src" "$pkg" >&2 || die "pack.sh data lỗi"
         unset NEO4J_PASSWORD
@@ -424,6 +473,12 @@ cmd_publish_data() {
     fi
     (cd "$pkg" && sha256sum -c --strict --quiet SHA256SUMS) || die "SHA256SUMS của gói không khớp"
     scan_tree "$pkg" data --policy data --exclude .git ${qargs[@]+"${qargs[@]}"}
+    python3 -I - "$WORK/scan-data.json" "$pkg/MANIFEST.md" <<'PY' || die "số điểm Qdrant đã quét payload khác MANIFEST: collection nguồn đã đổi so với gói; KHÔNG push"
+import json, re, sys
+got = json.load(open(sys.argv[1])).get("qdrant_points")
+want = sum(int(n) for n in re.findall(r"- qdrant collection: \S+ \((\d+) points\)", open(sys.argv[2], encoding="utf-8").read()))
+sys.exit(0 if got == want and want > 0 else 1)
+PY
     # GHCR giới hạn ~10 GB mỗi layer; mỗi nhóm COPY là một layer.
     local grp sz
     for grp in qdrant neo4j "exploitdb.tar.zst poc.tar.zst poc-sources.tar.zst exploitdb-mcp-server.tar.zst"; do
@@ -447,6 +502,7 @@ EOF
         return 0
     fi
     require_visibility private "$PKG_DATA"
+    tag_absent "$ref" auth
     ghcr_login
     push_ref "$ref" "" auth
     python3 -I - "$WORK/scan-data.json" "$version" "$(local_id "$ref")" "$WORK/data-release.json" <<'PY'
