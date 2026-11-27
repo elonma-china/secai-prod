@@ -4,18 +4,7 @@
   python3 -I scripts/backup-sqlite.py --dry-run     # chỉ docker inspect + in kế hoạch, không chạy container
   python3 -I scripts/backup-sqlite.py               # backup thật vào $SECAI_BACKUP_DIR/sqlite/<YYYYMMDD-HHMM>/
 
-Đích: $SECAI_BACKUP_DIR (mặc định ~/secai-backups)/sqlite/<YYYYMMDD-HHMM>/<service>/<db>.sqlite, kèm SHA256SUMS
-và MANIFEST.json; thư mục 0700, file 0600. Thư mục con `sqlite/` theo quy ước OPS-BAK-2 (docs/criteria/ops.md).
-Giữ 7 ngày: chỉ xoá thư mục khớp đúng mẫu YYYYMMDD-HHMM trong sqlite/, và chỉ sau một lần backup đủ.
-
-Cách lấy DB: `docker inspect` các container (chỉ đọc biến *_DB_PATH, mount, WorkingDir, Pid; không in biến
-nào khác), đường dẫn mặc định của config.py khi biến không đặt. Bản sao chạy trong container tạm
-`secai-sqlite-backup-<YYYYMMDD-HHMM>` (--rm, --network none, rootfs read-only) từ image gateway đang có trên máy,
-mount volume/bind của prod **read-only**; Python sqlite3 `Connection.backup` (không cp file đang chạy) rồi
-`PRAGMA integrity_check` trên bản sao. Không docker exec/stop/restart container prod.
-Chi tiết, lý do an toàn và cách khôi phục: docs/operations/sqlite-backup.md.
-
-Mã thoát: 0 đủ; 1 có DB/container lỗi (bản sao các DB còn lại vẫn được giữ, không dọn bản cũ); 2 sai tham số/môi trường.
+DB nào được sao, cách sao, lưu giữ, mã thoát và khôi phục: docs/operations/sqlite-backup.md.
 """
 from __future__ import annotations
 
@@ -39,7 +28,7 @@ from pathlib import Path
 
 DEFAULT_CONTAINERS = (
     "secai-docker-gateway", "secai-translation-gateway", "secai-translation-worker",
-    "secai-report-backend", "secai-review-canary", "secai-review-frontend",
+    "secai-report-backend", "secai-review-canary",
 )
 SERVICE_NAMES = {
     "secai-docker-gateway": "gateway",
@@ -47,7 +36,6 @@ SERVICE_NAMES = {
     "secai-translation-worker": "translation",
     "secai-report-backend": "report",
     "secai-review-canary": "review-canary",
-    "secai-review-frontend": "review-frontend",
 }
 # Mặc định khi biến không đặt: src/secai_gateway/config.py và translation/settings.py (tính từ WorkingDir).
 # DB theo mặc định chỉ được backup khi file có thật; DB khai báo rõ bằng biến mà không có file là lỗi.
@@ -131,7 +119,7 @@ def backup_one(job: dict, uid: int, gid: int, min_free: int, stat_fn=_sig, sleep
         res["error"] = "không phải file SQLite (header)"
         return res
     wal_mode = hdr[18] == 2 or hdr[19] == 2
-    side = {s: os.path.exists(src + s) for s in ("-wal", "-shm", "-journal")}
+    side = {s: os.path.exists(src + s) for s in ("-wal", "-shm")}
     res["source_journal"] = "wal" if wal_mode else "rollback"
     res["source_bytes"] = st.st_size
     vfs = os.statvfs(os.path.dirname(dst))
@@ -354,10 +342,14 @@ def build_plan(found: dict[str, dict], order: list[str], proc: Path) -> tuple[li
     used: dict[str, set[str]] = {}
     for e in plan:
         names = used.setdefault(e.service, set())
-        base = re.sub(r"\.(db|sqlite3?|sqlite)$", "", os.path.basename(e.rel)) or "db"
+        base = re.sub(r"\.(db|sqlite3?)$", "", os.path.basename(e.rel)) or "db"
         name = f"{base}.sqlite"
-        if name in names:
-            name = re.sub(r"[^A-Za-z0-9._-]+", "_", re.sub(r"\.(db|sqlite3?)$", "", e.rel)) + ".sqlite"
+        if name in names:  # trùng tên trong service: lấy cả thư mục trong mount, vẫn trùng thì đánh số
+            base = re.sub(r"[^A-Za-z0-9._-]+", "_", re.sub(r"\.(db|sqlite3?)$", "", e.rel))
+            name, n = f"{base}.sqlite", 1
+            while name in names:
+                n += 1
+                name = f"{base}-{n}.sqlite"
         names.add(name)
         e.name = name
     return plan, notes, errs
@@ -390,25 +382,39 @@ def ensure_dir(p: Path) -> None:
     os.chmod(p, 0o700)
 
 
+def _complete(d: Path) -> bool:
+    """Bản đủ: MANIFEST.json của lần chạy ghi errors rỗng."""
+    try:
+        return json.loads((d / "MANIFEST.json").read_text()).get("errors") == []
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def prune(sqlite_dir: Path, staging_dir: Path, keep_days: int, now: dt.datetime, keep: set[str]) -> list[str]:
-    """Xoá thư mục khớp đúng YYYYMMDD-HHMM trong sqlite/ cũ hơn keep_days (tính theo tên), và staging
-    sqlite-YYYYMMDD-HHMM sót lại quá 1 ngày. Bỏ qua symlink, file, tên khác mẫu, ngày không hợp lệ."""
+    """Xoá thư mục khớp đúng YYYYMMDD-HHMM trong sqlite/ cũ hơn keep_days (tính theo tên), trừ bản đủ mới nhất
+    (lỗi kéo dài thì đó là bản cuối còn mọi DB), và staging sqlite-YYYYMMDD-HHMM sót lại quá 1 ngày.
+    Bỏ qua symlink, file, tên khác mẫu, ngày không hợp lệ."""
     removed = []
     for base, rx, max_age, fmt_prefix in ((sqlite_dir, STAMP_RE, dt.timedelta(days=keep_days), ""),
                                           (staging_dir, STAGING_RE, dt.timedelta(days=1), "sqlite-")):
         if not base.is_dir():
             continue
+        dirs = []
         for p in sorted(base.iterdir()):
-            if not rx.match(p.name) or p.name in keep:
+            if not rx.match(p.name):
                 continue
             try:
                 when = dt.datetime.strptime(p.name[len(fmt_prefix):], "%Y%m%d-%H%M")
             except ValueError:
                 continue
-            st = os.lstat(p)
-            if not stat.S_ISDIR(st.st_mode):
-                continue
-            if now - when > max_age:
+            if stat.S_ISDIR(os.lstat(p).st_mode):
+                dirs.append((p, when))
+        protect = set(keep)
+        if base == sqlite_dir:
+            complete = [p.name for p, _ in dirs if _complete(p)]  # tên YYYYMMDD-HHMM: thứ tự tên = thứ tự thời gian
+            protect |= set(complete[-1:])
+        for p, when in dirs:
+            if p.name not in protect and now - when > max_age:
                 shutil.rmtree(p)
                 removed.append(str(p))
     return removed
@@ -510,7 +516,7 @@ def run_backup(a: argparse.Namespace) -> int:
         out = staging / rel_out
         item = {"file": rel_out, "service": e.service, "mount": dataclasses.asdict(e.mount), "path_in_mount": e.rel,
                 "used_by": [{"container": c, "var": v, "path": p_, "explicit": x} for c, v, p_, x in e.refs],
-                **{k: v for k, v in r.items() if k not in ("id",)}}
+                **{k: v for k, v in r.items() if k != "id"}}
         if r.get("ok"):
             st = os.stat(out)
             if st.st_uid != os.getuid():
@@ -558,12 +564,12 @@ def run_backup(a: argparse.Namespace) -> int:
     for msg in manifest["errors"]:
         warn(msg)
     log(f"backup-sqlite: {len(sums)} bản sao, {total} byte -> {final} ({manifest['seconds']}s)")
-    if manifest["errors"]:
-        warn("có lỗi: giữ nguyên các bản cũ (không dọn)")
-        return 1
-    removed = prune(sqlite_dir, staging_root, a.keep_days, now, {stamp})
-    for r in removed:
+    # Dọn cả khi có lỗi: lỗi kéo dài (vd container trong danh sách bị gỡ) không được làm đầy dần đĩa prod.
+    for r in prune(sqlite_dir, staging_root, a.keep_days, now, {stamp}):
         log(f"  dọn {r}")
+    if manifest["errors"]:
+        warn("có lỗi: bản đủ (không lỗi) mới nhất được giữ cả khi quá hạn")
+        return 1
     return 0
 
 
@@ -581,10 +587,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--timeout", type=int, default=RUN_TIMEOUT, help="giây tối đa cho container tạm")
     ap.add_argument("--proc-root", default="/proc", help=argparse.SUPPRESS)
     ap.add_argument("--inner", action="store_true", help=argparse.SUPPRESS)
-    try:
-        a = ap.parse_args(argv)
-    except SystemExit as e:
-        return int(e.code or 0) and 2
+    a = ap.parse_args(argv)
     if a.inner:
         return inner_main()
     os.umask(0o077)

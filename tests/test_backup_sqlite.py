@@ -10,6 +10,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import re
@@ -100,6 +101,21 @@ def count(path: Path, table: str = "t") -> int:
         db.close()
 
 
+def drop_backup_env(env: dict[str, str]) -> None:
+    """Test kín: SECAI_BACKUP_* của shell chạy test (vd SECAI_BACKUP_IMAGE để chạy tay) không được lọt vào."""
+    for k in [k for k in env if k.startswith("SECAI_BACKUP_")]:
+        del env[k]
+
+
+def old_run(sq: Path, days: float, errors: list[str] | None) -> str:
+    """Thư mục backup giả cũ `days` ngày; errors=None thì không có MANIFEST.json."""
+    name = (dt.datetime.now() - dt.timedelta(days=days)).strftime("%Y%m%d-%H%M")
+    (sq / name).mkdir(parents=True)
+    if errors is not None:
+        (sq / name / "MANIFEST.json").write_text(json.dumps({"errors": errors}))
+    return name
+
+
 def container(name: str, env: dict[str, str], mounts: list[dict], pid: int = 0) -> dict:
     return {"Name": "/" + name, "Image": "sha256:" + "ab" * 32, "State": {"Running": True, "Pid": pid},
             "Config": {"Image": IMAGE, "WorkingDir": "/app", "Cmd": ["uvicorn", "secai_gateway.app:app"],
@@ -167,7 +183,7 @@ class World:
         (self.bin / "docker").chmod(0o755)
         self.env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "FAKE_DOCKER_STATE": str(self.state_file),
                     "FAKE_DOCKER_LOG": str(self.log), "HOME": str(tmp / "home")}
-        self.env.pop("SECAI_BACKUP_DIR", None)
+        drop_backup_env(self.env)
 
     def run(self, *args: str, containers: list[str] | None = None) -> subprocess.CompletedProcess[str]:
         self.state_file.write_text(json.dumps({"containers": self.containers, "volumes": self.volumes}))
@@ -325,22 +341,36 @@ def test_retention_removes_only_matching_old_dirs(w: World) -> None:
     assert len(new) == 1 and (sq / new.pop() / "gateway" / "gateway.sqlite").is_file()
 
 
-def test_failed_db_keeps_others_and_skips_retention(w: World) -> None:
+def test_failed_db_keeps_others_and_newest_complete_backup(w: World) -> None:
     (w.tr / "translate-v2" / "jobs.sqlite3").write_bytes(b"not a database" * 10)
     sq = w.backup / "sqlite"
-    sq.mkdir(parents=True)
-    old = (dt.datetime.now() - dt.timedelta(days=30)).strftime("%Y%m%d-%H%M")
-    (sq / old).mkdir()
+    old = old_run(sq, 30, [])
     p = w.run()
     assert p.returncode == 1
     assert "translation/jobs.sqlite" in p.stderr and "header" in p.stderr
-    assert (sq / old).is_dir()  # lỗi thì không dọn bản cũ
+    assert (sq / old).is_dir()  # bản đủ mới nhất (còn jobs.sqlite) được giữ dù quá hạn
     run = [r for r in w.runs() if r.name != old][0]
     assert not (run / "translation" / "jobs.sqlite").exists()
     assert count(run / "gateway/gateway.sqlite") == 75
     man = json.loads((run / "MANIFEST.json").read_text())
     assert any("translation/jobs.sqlite" in e for e in man["errors"])
     assert "translation/jobs.sqlite" not in (run / "SHA256SUMS").read_text()
+
+
+def test_persistent_error_still_prunes_but_keeps_newest_complete_backup(w: World) -> None:
+    """Lỗi kéo dài (vd container trong danh sách đã bị gỡ) không được làm đĩa prod đầy dần: bản quá hạn vẫn bị
+    dọn, chỉ giữ thêm bản đủ (MANIFEST errors rỗng) mới nhất làm lưới an toàn."""
+    sq = w.backup / "sqlite"
+    complete_old = old_run(sq, 20, [])
+    complete_newest = old_run(sq, 12, [])
+    partial_old = [old_run(sq, d, ["không thấy container secai-review-canary"]) for d in (8, 9, 10, 11)]
+    no_manifest = old_run(sq, 9.5, None)
+    partial_recent = old_run(sq, 3, ["x"])
+    p = w.run(containers=[*w.containers, "secai-review-canary"])
+    assert p.returncode == 1 and "không thấy container secai-review-canary" in p.stderr
+    left = {r.name for r in w.runs()}
+    assert {complete_newest, partial_recent} < left and len(left) == 3
+    assert not {complete_old, no_manifest, *partial_old} & left
 
 
 def test_missing_explicit_db_and_missing_container_are_errors(w: World) -> None:
@@ -356,9 +386,10 @@ def test_missing_explicit_db_and_missing_container_are_errors(w: World) -> None:
 def test_nothing_copied_publishes_nothing(w: World) -> None:
     """Không DB nào sao được thì không tạo thư mục trong sqlite/ (OPS-BAK-2 sẽ tưởng backup còn hạn)."""
     (w.report_real / "reports.db").write_bytes(b"garbage" * 20)
+    old = old_run(w.backup / "sqlite", 30, None)
     p = w.run(containers=["secai-report-backend"])
     assert p.returncode == 1 and "không sao được DB nào" in p.stderr
-    assert w.runs() == []
+    assert [r.name for r in w.runs()] == [old]  # không công bố gì thì cũng không dọn gì
     [staging] = (w.backup / ".staging").iterdir()
     assert "report/reports.sqlite" in json.loads((staging / "MANIFEST.json").read_text())["errors"][0]
 
@@ -367,6 +398,85 @@ def test_dsn_like_db_path_is_ignored(w: World) -> None:
     w.containers["secai-docker-gateway"]["Config"]["Env"].append("ANALYTICS_DB_PATH=postgres://u@h/db")
     p = w.run("--dry-run", containers=["secai-docker-gateway"])
     assert p.returncode == 0 and "ANALYTICS_DB_PATH" not in p.stdout + p.stderr and "postgres" not in p.stdout
+
+
+def test_same_db_name_on_two_mounts_gets_two_files(w: World) -> None:
+    """Hai container cùng service `translation`, mỗi container một volume có gateway.db ở gốc: hai file riêng."""
+    trw = w.tmp / "vol-trw"
+    make_db(w.tr / "gateway.db", "DELETE", 3)
+    make_db(trw / "gateway.db", "DELETE", 4)
+    w.volumes["trw"] = str(trw)
+    for name, vol in (("secai-translation-gateway", "tr"), ("secai-translation-worker", "trw")):
+        w.containers[name] = container(name, {"GATEWAY_DB_PATH": "/app/data/gateway.db"},
+                                       [{"Type": "volume", "Name": vol, "Source": "/x", "Destination": "/app/data"}])
+    p = w.run(containers=["secai-translation-gateway", "secai-translation-worker"])
+    assert p.returncode == 0, p.stdout + p.stderr
+    [run] = w.runs()
+    man = json.loads((run / "MANIFEST.json").read_text())
+    gw = {d["mount"]["source"]: d for d in man["databases"] if d["path_in_mount"] == "gateway.db"}
+    assert gw["tr"]["file"] != gw["trw"]["file"]
+    assert count(run / gw["tr"]["file"]) == 3 and count(run / gw["trw"]["file"]) == 4
+    assert gw["tr"]["sha256"] != gw["trw"]["sha256"]
+    files = [ln.split("  ", 1)[1] for ln in (run / "SHA256SUMS").read_text().splitlines()]
+    assert len(files) == len(set(files))
+
+
+def test_plan_names_are_unique_per_service() -> None:
+    vol = lambda v: [{"Type": "volume", "Name": v, "Source": "/x", "Destination": "/d"}]
+    found = {"secai-x": container("secai-x", {"A_DB_PATH": "/d/a/jobs.db", "B_DB_PATH": "/d/jobs.db",
+                                              "C_DB_PATH": "/d/a_jobs.db"}, vol("v1")),
+             "secai-translation-gateway": container("secai-translation-gateway", {"GATEWAY_DB_PATH": "/d/g.db"}, vol("v2")),
+             "secai-translation-worker": container("secai-translation-worker", {"GATEWAY_DB_PATH": "/d/g.db"}, vol("v3"))}
+    plan, _, errs = bs.build_plan(found, list(found), Path("/nonexistent-proc"))
+    assert errs == [] and len(plan) == 5
+    names = [(e.service, e.name) for e in plan]
+    assert len(names) == len(set(names)), names
+    assert all(n.endswith(".sqlite") and "/" not in n for _, n in names)
+
+
+def test_integrity_failure_is_an_error_and_not_published(w: World) -> None:
+    """Header và trang đúng nhưng bảng lệch index: chỉ PRAGMA integrity_check trên bản sao bắt được."""
+    src = w.gw / "reviews.db"
+    db = sqlite3.connect(src, isolation_level=None)
+    db.execute("CREATE TABLE iv(id INTEGER PRIMARY KEY, v TEXT)")
+    db.executemany("INSERT INTO iv(v) VALUES (?)", [(f"value-{i:06d}",) for i in range(200)])
+    db.execute("CREATE INDEX iv_v ON iv(v)")  # trang index cấp sau trang bảng: lần xuất hiện đầu là trong bảng
+    db.close()
+    data = bytearray(src.read_bytes())
+    i = data.find(b"value-000100")
+    data[i:i + 12] = b"value-000999"
+    src.write_bytes(bytes(data))
+    p = w.run()
+    assert p.returncode == 1, p.stdout + p.stderr
+    [run] = w.runs()
+    man = json.loads((run / "MANIFEST.json").read_text())
+    assert any(e.startswith("gateway/reviews.sqlite: integrity_check: ") for e in man["errors"]), man["errors"]
+    [item] = [d for d in man["databases"] if d["file"] == "gateway/reviews.sqlite"]
+    assert item["ok"] is False and "missing from index" in item["integrity"] and "sha256" not in item
+    assert not (run / "gateway" / "reviews.sqlite").exists()
+    assert "gateway/reviews.sqlite" not in (run / "SHA256SUMS").read_text()
+    assert count(run / "gateway/gateway.sqlite") == 75
+    assert src.read_bytes() == bytes(data)  # nguồn không bị đụng
+
+
+def test_malformed_db_is_reported_per_db_not_crash(tmp_path: Path) -> None:
+    """Hỏng nặng hơn: integrity_check ném DatabaseError; DB đó báo lỗi, DB khác vẫn sao được."""
+    bad, good = tmp_path / "bad.db", tmp_path / "good.db"
+    make_db(bad, "DELETE", 50)
+    make_db(good, "DELETE", 5)
+    data = bytearray(bad.read_bytes())
+    ps = int.from_bytes(data[16:18], "big")
+    data[100:ps] = b"\xff" * (ps - 100)  # header 100 byte còn đúng, trang 1 (sqlite_schema) hỏng
+    bad.write_bytes(bytes(data))
+    out = tmp_path / "out"
+    out.mkdir()
+    jobs = [{"id": i, "src": str(s), "dst": str(out / f"{s.stem}.sqlite")} for i, s in enumerate((bad, good))]
+    buf = io.StringIO()
+    spec = {"jobs": jobs, "uid": os.getuid(), "gid": os.getgid(), "min_free": 0}
+    assert bs.inner_main(io.StringIO(json.dumps(spec)), buf) == 0
+    r_bad, r_good = json.loads(buf.getvalue())["results"]
+    assert r_bad["ok"] is False and r_bad["error"].startswith("DatabaseError: ") and "malformed" in r_bad["error"]
+    assert r_good["ok"] is True and r_good["integrity"] == "ok" and count(out / "good.sqlite") == 5
 
 
 def test_concurrent_run_is_refused(w: World) -> None:
@@ -436,7 +546,7 @@ class TimerSandbox:
         env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                "GIT_COMMITTER_EMAIL": "t@t", "HOME": str(self.home), "PATH": f"{self.bin}:{os.environ['PATH']}",
                "GIT_CONFIG_NOSYSTEM": "1"}
-        env.pop("SECAI_BACKUP_DIR", None)
+        drop_backup_env(env)
         self.env = env
         self.origin, self.main = tmp / "origin.git", tmp / "main"
         run = lambda *a, cwd=tmp: subprocess.run(a, cwd=cwd, env=env, check=True, capture_output=True, text=True)
@@ -465,7 +575,7 @@ def test_install_timer_writes_units_without_touching_real_systemd(tmp_path: Path
     timer = (units / "secai-sqlite-backup.timer").read_text()
     runner = sb.home / ".local" / "bin" / "secai-sqlite-backup-run"
     assert f"ExecStart={runner}" in service
-    assert f"Environment=SECAI_BACKUP_DIR={sb.home}/secai-backups" in service
+    assert "SECAI_BACKUP_DIR" not in service  # đích chỉ đặt một chỗ: runner (biến môi trường thắng)
     cal = re.search(r"^OnCalendar=\*-\*-\* (\d\d):(\d\d):00$", timer, re.M)
     delay = int(re.search(r"^RandomizedDelaySec=(\d+)min$", timer, re.M).group(1))
     start = int(cal.group(1)) * 60 + int(cal.group(2))
@@ -483,6 +593,16 @@ def test_install_timer_writes_units_without_touching_real_systemd(tmp_path: Path
     lib = sb.home / ".local" / "lib" / "secai-sqlite-backup" / "scripts" / "backup-sqlite.py"
     assert lib.read_bytes() == SCRIPT.read_bytes()
     assert r.returncode == 1 and "không thấy container secai-docker-gateway" in r.stderr
+    assert "secai-review-frontend" not in r.stderr  # frontend tĩnh không mount gì: không nằm trong danh sách mặc định
+    # đích: mặc định là SECAI_BACKUP_DIR lúc cài; drop-in `systemctl --user edit` (Environment=) hay shell thắng
+    fakepy = tmp_path / "fakepy"
+    fakepy.mkdir()
+    (fakepy / "python3").write_text('#!/bin/sh\necho "dest=$SECAI_BACKUP_DIR"\n')
+    (fakepy / "python3").chmod(0o755)
+    dest = lambda **kw: subprocess.run([str(runner)], env={**sb.env, "PATH": f"{fakepy}:{sb.env['PATH']}", **kw},
+                                       capture_output=True, text=True).stdout.strip()
+    assert dest() == f"dest={sb.home}/secai-backups"
+    assert dest(SECAI_BACKUP_DIR="/mnt/bk") == "dest=/mnt/bk"
     p = sb.install("--remove")
     assert p.returncode == 0, p.stderr
     assert not (units / "secai-sqlite-backup.timer").exists() and not runner.exists() and not lib.exists()

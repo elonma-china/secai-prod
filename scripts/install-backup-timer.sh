@@ -4,15 +4,8 @@
 #   scripts/install-backup-timer.sh            # cài + bật secai-sqlite-backup.timer
 #   scripts/install-backup-timer.sh --remove   # tắt + gỡ unit/runner (bản backup đã có giữ nguyên)
 #
-# Giờ chạy tránh 03:00–05:00 (cron đồng bộ CVE lúc 03:00). Persistent=false: máy bật lại lúc 03–05 thì không
-# chạy bù vào khung đó; lỡ một đêm thì OPS-BAK-2 (≤ 26 giờ) báo FAIL, chạy tay:
-# systemctl --user start secai-sqlite-backup.service.
-# Runner (~/.local/bin/secai-sqlite-backup-run) mỗi lần chạy lấy scripts/backup-sqlite.py từ origin/main MỚI NHẤT
-# (git archive) vào ~/.local/lib/secai-sqlite-backup/, nên không phụ thuộc checkout chính đang ở commit nào và
-# không đụng file của nó; git fetch lỗi thì dùng origin/main đang có.
-# Đích: SECAI_BACKUP_DIR lúc cài (mặc định ~/secai-backups, trùng mặc định của scripts/ops-check.py), DB vào <đích>/sqlite/.
-# Chỉ cài được sau khi backup-sqlite.py đã nằm trên origin/main. Cần `loginctl enable-linger $USER` (đã bật) và
-# user thuộc nhóm docker. Chi tiết: docs/operations/sqlite-backup.md.
+# Chỉ cài được sau khi backup-sqlite.py đã nằm trên origin/main. Giờ chạy, runner, đích, điều kiện (linger, nhóm
+# docker): docs/operations/sqlite-backup.md.
 set -euo pipefail
 
 UNIT=secai-sqlite-backup
@@ -54,7 +47,7 @@ git fetch -q origin || echo "secai-sqlite-backup-run: git fetch lỗi, dùng ori
 rm -rf "$LIB.new"; mkdir -p "$LIB.new"
 git archive origin/main scripts/backup-sqlite.py | tar -x -C "$LIB.new"
 rm -rf "$LIB"; mv "$LIB.new" "$LIB"
-export SECAI_BACKUP_DIR="$BACKUP_DIR"
+export SECAI_BACKUP_DIR="\${SECAI_BACKUP_DIR:-$BACKUP_DIR}"  # mặc định lúc cài; drop-in Environment= thắng
 exec python3 -I "$LIB/scripts/backup-sqlite.py" "\$@"
 EOF
 chmod 755 "$RUNNER"
@@ -66,7 +59,6 @@ Description=Backup SQLite hằng ngày của service secai (report/review/gatewa
 [Service]
 Type=oneshot
 ExecStart=$RUNNER
-Environment=SECAI_BACKUP_DIR=$BACKUP_DIR
 TimeoutStartSec=3h
 NoNewPrivileges=yes
 Nice=10

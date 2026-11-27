@@ -15,14 +15,25 @@ scripts/dev.sh test tests/test_backup_sqlite.py  # test offline, docker/systemct
 
 Tham số: `--backup-dir` (mặc định `$SECAI_BACKUP_DIR`, không có thì `~/secai-backups`), `--containers a,b` (hoặc `SECAI_BACKUP_CONTAINERS`), `--image` (hoặc `SECAI_BACKUP_IMAGE`), `--keep-days 7`, `--min-free-gb 5` (từ chối sao một DB nếu sau khi sao đích còn ít hơn ngần ấy), `--timeout` (giây, mặc định 2 giờ).
 
-Mã thoát: 0 đủ; 1 có DB hay container lỗi (DB khác vẫn được sao và công bố, nhưng **không dọn** bản cũ; không sao được DB nào thì không tạo thư mục trong `sqlite/`, manifest nằm lại ở `.staging/`); 2 sai tham số hay thiếu docker. Unit `secai-sqlite-backup.service` lỗi thì OPS-MON-5 báo `failed`.
+Mã thoát:
+
+- 0: đủ mọi DB.
+- 1, có công bố: một số DB hay container lỗi; các DB khác vẫn được sao vào `sqlite/<stamp>/`, `MANIFEST.json` ghi lỗi, bản cũ vẫn được dọn theo tuổi (xem "Bố cục đích và lưu giữ").
+- 1, không công bố gì trong `sqlite/` và không dọn gì: không sao được DB nào (manifest nằm lại ở `.staging/sqlite-<stamp>/`), container tạm lỗi, trả output không đọc được hay quá `--timeout` (staging dở dang giữ ở `.staging/`), đang có lần backup khác giữ khoá, trùng phút với lần chạy trước, `docker inspect` lỗi, hoặc không có DB nào trong kế hoạch. `--dry-run` trả 1 khi kế hoạch có lỗi.
+- 2: sai tham số, thiếu docker, không tìm thấy image, đường dẫn có dấu phẩy.
+
+Unit `secai-sqlite-backup.service` thoát khác 0 thì OPS-MON-5 báo `failed`.
+
+Timer: chạy 01:30 + ngẫu nhiên tới 15 phút, tránh 03:00–05:00 (cron đồng bộ CVE lúc 03:00). `Persistent=false`: máy bật lại lúc 03–05 thì không chạy bù vào khung đó; lỡ một đêm thì OPS-BAK-2 (≤ 26 giờ) báo FAIL, chạy tay. Runner `~/.local/bin/secai-sqlite-backup-run` mỗi lần chạy lấy `scripts/backup-sqlite.py` từ `origin/main` mới nhất (`git archive`) vào `~/.local/lib/secai-sqlite-backup/`, không phụ thuộc checkout chính đang ở commit nào; `git fetch` lỗi thì dùng `origin/main` đang có. Cần `loginctl enable-linger $USER` và user thuộc nhóm docker.
+
+Đích của timer: `SECAI_BACKUP_DIR` lúc cài (mặc định `~/secai-backups`), ghi trong runner làm giá trị mặc định. Đổi đích (vd sang đĩa khác) không cần cài lại: `systemctl --user edit secai-sqlite-backup.service`, thêm `[Service]` / `Environment=SECAI_BACKUP_DIR=/đích/mới`; biến môi trường luôn thắng mặc định của runner. Khi đó chạy `ops-check.py` với cùng `SECAI_BACKUP_DIR` để OPS-BAK-2 đo đúng chỗ.
 
 ## DB nào được sao
 
-Script đọc `docker inspect` của `secai-docker-gateway`, `secai-translation-gateway`, `secai-translation-worker`, `secai-report-backend`, `secai-review-canary`, `secai-review-frontend`. Từ env **chỉ lấy biến `*_DB_PATH`** (giá trị là đường dẫn), không in hay ghi biến nào khác; thêm đường dẫn mặc định của `config.py`/`translation/settings.py` cho biến không đặt (tính từ `WorkingDir`). Mỗi đường dẫn được gắn với volume/bind chứa nó; cùng volume + cùng file chỉ sao một lần dù nhiều container dùng (`MANIFEST.json` ghi đủ container/biến dùng file đó).
+Script đọc `docker inspect` của `secai-docker-gateway`, `secai-translation-gateway`, `secai-translation-worker`, `secai-report-backend`, `secai-review-canary`. Container nào trong danh sách không có là lỗi (mã 1); gỡ hẳn một container (vd canary) thì bỏ nó khỏi danh sách bằng `SECAI_BACKUP_CONTAINERS` (drop-in `Environment=` như trên) để lần chạy về mã 0. Từ env **chỉ lấy biến `*_DB_PATH`** (giá trị là đường dẫn), không in hay ghi biến nào khác; thêm đường dẫn mặc định của `config.py`/`translation/settings.py` cho biến không đặt (tính từ `WorkingDir`). Mỗi đường dẫn được gắn với volume/bind chứa nó; cùng volume + cùng file chỉ sao một lần dù nhiều container dùng (`MANIFEST.json` ghi đủ container/biến dùng file đó).
 
 - Biến khai báo rõ mà không có file: lỗi (mã thoát 1). Đường dẫn mặc định không có file: bỏ qua, ghi `skipped` trong manifest.
-- Đường dẫn không nằm dưới volume/bind (lớp container): không sao được, in cảnh báo. Hiện có `REVIEW_DB_PATH=/app/review-data/reviews.db` của hai container dịch (không mount `/app/review-data`) và `GATEWAY_DB_PATH` của `secai-review-frontend` (chỉ phục vụ static, không mount gì).
+- Đường dẫn không nằm dưới volume/bind (lớp container): không sao được, in cảnh báo. Hiện có `REVIEW_DB_PATH=/app/review-data/reviews.db` của hai container dịch (không mount `/app/review-data`). `secai-review-frontend` không nằm trong danh sách: chỉ phục vụ static, không mount gì, nên không có DB nào để sao.
 - Không thuộc phạm vi: DB không qua biến `*_DB_PATH` (catalog PoC `POC_CATALOG_DB`, `poc.sqlite3`/`catalog.db` cũ), Qdrant, Neo4j.
 
 Kết quả lần chạy thật 2026-11-27 23:55 (`~/secai-backups/sqlite/20261127-2355`, 13 DB, 891 MB, 8,4 s, mọi `integrity_check` = `ok`):
@@ -48,7 +59,9 @@ Kết quả lần chạy thật 2026-11-27 23:55 (`~/secai-backups/sqlite/202611
     └── <service>/<db>.sqlite        0600, chủ là user chạy backup; file tự đủ (journal_mode=DELETE, không cần -wal)
 ```
 
-Dọn: chỉ sau một lần chạy **không lỗi**; chỉ xoá thư mục trong `sqlite/` có tên khớp đúng `^\d{8}-\d{4}$`, là thư mục thật (không symlink, không file) và có thời điểm trong tên cũ hơn 7 ngày; thêm staging `.staging/sqlite-YYYYMMDD-HHMM` sót lại quá 1 ngày. Không đụng gì khác trong `~/secai-backups`.
+Tên file là tên DB bỏ đuôi `.db`/`.sqlite`/`.sqlite3`, thêm `.sqlite`. Hai DB cùng service trùng tên (vd hai container dịch mỗi bên một volume có `gateway.db`, hay `a/jobs.db` với `jobs.db`) thì DB sau lấy cả thư mục trong mount (`a_jobs.sqlite`), vẫn trùng thì đánh số (`gateway-2.sqlite`). Nguồn của từng file luôn tra trong `MANIFEST.json`, không suy từ tên.
+
+Dọn: sau mỗi lần có công bố thư mục mới trong `sqlite/`, **kể cả khi lần đó có lỗi**, để một lỗi kéo dài (vd container trong danh sách bị gỡ) không làm đầy dần đĩa prod (mỗi bản ~0,9 GB). Chỉ xoá thư mục trong `sqlite/` có tên khớp đúng `^\d{8}-\d{4}$`, là thư mục thật (không symlink, không file) và có thời điểm trong tên cũ hơn 7 ngày, **trừ bản đủ mới nhất** (`MANIFEST.json` có `errors` rỗng): lỗi kéo dài bao lâu thì bản đủ cuối cùng vẫn còn, nên tối đa là 7–8 bản trong hạn cộng một bản đủ cũ. Thêm staging `.staging/sqlite-YYYYMMDD-HHMM` sót lại quá 1 ngày. Lần chạy không công bố gì thì không dọn. Không đụng gì khác trong `~/secai-backups`.
 
 ## Cách sao: nhất quán và không đụng prod
 
