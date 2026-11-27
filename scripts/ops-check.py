@@ -9,15 +9,16 @@
 Mã thoát: 1 khi có FAIL ở tiêu chí bắt buộc; 3 khi không có FAIL nhưng có tiêu chí bắt buộc tự động
 không đo được (docker/systemctl lỗi, lỗi checker; thiếu GitHub không tính); 2 khi sai tham số; 0 còn lại.
 
-Checker không ghi, không restart, không đổi gì. Lệnh ngoài duy nhất được gọi (kiểm bằng
-`assert_read_only` trước MỌI lần gọi, sai là dừng hẳn):
-  docker ps | inspect | images | image inspect | system df
-  gh api <path>        (chỉ GET: không -X/--method/-f/-F/--input)
-  df, systemctl [--user] show | list-*, stat
-  git chỉ đọc (rev-parse, merge-base, cat-file, ls-files, log, diff, status --porcelain,
-  worktree list, branch -r/--merged/--show-current, remote get-url, rev-list), luôn kèm
-  --no-optional-locks; không fetch nên origin/main có thể cũ.
-Ngoài ra chỉ đọc file (Dockerfile, compose, state.env, pip-freeze.diff...) và os.stat.
+Checker không ghi, không restart, không đổi gì. `assert_read_only` kiểm MỌI lệnh trước khi chạy theo
+danh sách trắng đúng dạng (cờ lạ, kể cả dạng dính liền như -iXDELETE hay --output=, đều bị từ chối):
+  docker ps -a --no-trunc --format '{{json .}}' | inspect <id>… | image inspect <ref>…
+         | images --no-trunc <repo> --format '{{json .}}' | system df --format '{{json .}}'
+  gh api repos/<owner>/<repo>[/…]          (GET, không cờ nào khác)
+  df -P <path>, stat, systemctl [--user] show <unit>… -p <Prop> | list-units | list-timers
+  git --no-optional-locks -C <dir> rev-parse|merge-base --is-ancestor|cat-file -e|ls-files -z|
+      diff --quiet --no-ext-diff --no-textconv|status --porcelain|worktree list|branch (liệt kê)|
+      remote get-url origin|rev-list --count     (không fetch nên origin/main là bản fetch gần nhất)
+Ngoài ra chỉ đọc file thường (Dockerfile, compose, state.env, pip-freeze.diff, /proc/net/tcp…) và os.stat.
 
 Secret: chỉ in tên biến, đường dẫn, quyền file. Giá trị đọc được trong bộ nhớ (env container,
 compose, script cron) được ghi vào một tập và xoá khỏi mọi dòng output trước khi in.
