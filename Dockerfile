@@ -100,9 +100,10 @@ COPY kpi_bench ./kpi_bench
 # Writable state dir + mountpoints for the secai-data bundle, owned by the non-root user.
 # /srv/poc is bind-mounted read-write at runtime: PocCatalog opens sqlite with
 # `PRAGMA journal_mode=WAL`, which needs to create catalog.db-wal/-shm next to catalog.db.
-RUN mkdir -p /app/data /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/poc-store \
+# /srv/reports + /app/review-data: named volumes of stack/compose.yml inherit this ownership (otherwise root-only, app cannot write).
+RUN mkdir -p /app/data /app/review-data /srv/reports /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/poc-store \
  && chmod +x /app/bin/searchsploit \
- && chown -R app:app /app /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/poc-store
+ && chown -R app:app /app /srv/exploitdb /srv/bm25 /srv/poc /srv/poc-sources /srv/poc-store /srv/reports
 
 # --- from here on, layers depend on src/ ---
 

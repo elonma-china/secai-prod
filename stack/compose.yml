@@ -1,0 +1,448 @@
+# SecAI stack - core (gateway + qdrant + neo4j + redis + es) + profile exploit (vm-a, vm-b), translation, report, review.
+# Tên project lấy từ COMPOSE_PROJECT_NAME (mặc định secai-stack); `-p` ghi đè.
+name: ${COMPOSE_PROJECT_NAME:-secai-stack}
+
+x-vm-data:
+  - &vm-data-1 ${DATA_ROOT:?set DATA_ROOT}/exploitdb:/srv/secai-data/exploitdb:ro
+  - &vm-data-2 ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/secai-data/poc:ro
+  - &vm-data-3 ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/secai-data/poc-sources:ro
+  - &vm-data-4 ${DATA_ROOT:?set DATA_ROOT}/exploitdb-mcp-server:/srv/secai-data/exploitdb-mcp-server:ro
+
+# Auth engine: Basic, user mặc định `ias` (pentestcode/packages/opencode/src/server/auth.ts).
+x-vm: &vm
+  # Không dùng :? ở đây: compose nội suy cả service ngoài profile, `config` sẽ lỗi khi profile exploit tắt.
+  # Thiếu VM_IMAGE thì pull thất bại ở tag MISSING-set-VM_IMAGE; up.sh phải kiểm VM_IMAGE khi bật exploit.
+  image: ${VM_IMAGE:-secai-pentestcode-vm:MISSING-set-VM_IMAGE}
+  profiles: [exploit]
+  restart: unless-stopped
+  cap_drop: [ALL]
+  cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETUID, SETGID, KILL]   # supervisor tạo user + chạy engine bằng user riêng
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: ${VM_MEM_LIMIT:-48g}
+  pids_limit: ${VM_PIDS_LIMIT:-16384}
+  networks: [secai-net, poc-labs-internal]
+  environment: &vmenv
+    VM_SLOTS: ${VM_SLOTS:-12}
+    VM_HOME_ROOT: /ias-pool-home
+    VM_SHARED_GID: ${VM_SHARED_GID:-10100}
+    OPENCODE_AUTO_UPDATE: "false"
+    OPENCODE_ENABLE_QUESTION_TOOL: "true"
+    OPENCODE_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
+    ORCAROUTER_API_KEY: ${ORCAROUTER_API_KEY:-}
+    # LLM_* là tên chuẩn (config.py, PR #44); QWEN_* cũ vẫn nhận, LLM_* thắng. `:-` của compose rơi về QWEN_* khi LLM_X
+    # RỖNG, còn gateway (pydantic) thì không: lệch nhau chỉ khi có dòng `LLM_X=` rỗng, và preflight/check.sh từ chối trường hợp đó.
+    ORCA_LOCAL_BASE_URL: ${LLM_BASE_URL:-${QWEN_BASE_URL:-}}
+    ORCA_LOCAL_API_KEY: ${LLM_API_KEY:-${QWEN_API_KEY:-}}
+    ORCA_LOCAL_MODEL_ID: ${LLM_MODEL:-${QWEN_MODEL:-}}
+    ORCA_LOCAL_CONTEXT: ${LLM_CONTEXT_WINDOW:-${QWEN_CONTEXT_WINDOW:-131072}}
+    NUCLEI_TEMPLATES: /srv/secai-data/poc-sources/nuclei-templates
+  healthcheck:
+    test: ["CMD-SHELL", 'if [ -n "$$OPENCODE_SERVER_PASSWORD" ]; then curl -fsS -u "ias:$$OPENCODE_SERVER_PASSWORD" http://127.0.0.1:$$VM_PORT_BASE/global/health; else curl -fsS http://127.0.0.1:$$VM_PORT_BASE/global/health; fi']
+    interval: 10s
+    timeout: 5s
+    retries: 12
+    start_period: 60s
+
+# Env chung gateway/worker dịch. Endpoint + tên model + khoá API lấy từ .env chung (env_file); ở đây chỉ giới hạn/đường dẫn.
+# Giá trị chép từ runtime prod (bản 033b2aa3); bỏ SHOWCASE_*/REWARD_*/retraining/TensorBoard.
+x-translation-env: &translation-env
+  AIRGAP: "true"
+  ALLOWED_ORIGINS: "*"
+  QDRANT_URL: http://qdrant:6333
+  NEO4J_URI: bolt://neo4j:7687
+  ELASTICSEARCH_URL: http://es:9200
+  EXEC_ENABLED: "false"
+  VERIFY_ENABLED: "false"
+  WEB_SEARCH_ENABLED: "false"
+  REVIEW_ENABLED: "false"   # .env chung có thể bật review; chỉ gateway mount review-credentials.json
+  MULTILANG_BACKEND: specialist
+  MULTILANG_ENABLE_AR: "true"
+  MULTILANG_ENABLE_DE: "true"
+  MULTILANG_ENABLE_EN: "true"
+  MULTILANG_ENABLE_ES: "true"
+  MULTILANG_ENABLE_FR: "true"
+  MULTILANG_ENABLE_JA: "true"
+  MULTILANG_ENABLE_KO: "true"
+  MULTILANG_ENABLE_RU: "true"
+  MULTILANG_ENABLE_ZH: "true"
+  MULTILANG_SPECIALIST_PROFILE: hymt2_7b_gguf
+  MULTILANG_SPECIALIST_CONTEXT_TOKENS: "4096"
+  MULTILANG_SPECIALIST_MAX_OUTPUT_TOKENS: "512"
+  MULTILANG_SPECIALIST_TIMEOUT_SECONDS: "120"
+  MULTILANG_SPECIALIST_CHAT_TEMPLATE_SHA256: 788ac16c5d7bfefc28655928ad524c8f378a44cb24d24fb125d6a5859b167677
+  MULTILANG_SPECIALIST_TOKENIZER_JSON: /app/translation-tokenizer/tokenizer.json
+  MULTILANG_SPECIALIST_TOKENIZER_SHA256: 4185389a69284fdd3ebf737c6120bbeee36cbed9763151fa5bac5986a39e05d4
+  MULTILANG_SPECIALIST_TOKENIZER_CONFIG_JSON: /app/translation-tokenizer/tokenizer_config.json
+  MULTILANG_SPECIALIST_TOKENIZER_CONFIG_SHA256: 1fffdb809549222938f4a732645dd984c7c0b2973d592c2d01e05425274317da
+  MULTILANG_SPECIALIST_TOKENIZER_REVISION: 9b0eb4e8f001def3e5ff6469a0ac96fdb39ec223
+  MULTILANG_SPECIALIST_API_KEY: ${MULTILANG_SPECIALIST_API_KEY:-}
+  TRANSLATE_V2_ENABLED: "true"
+  TRANSLATE_V2_CONVERTER_URL: http://translation-converter:18091
+  TRANSLATE_V2_CONVERTER_TOKEN: ${TRANSLATE_V2_CONVERTER_TOKEN:-}
+  TRANSLATE_V2_DB_PATH: /app/data/translate-v2/jobs.sqlite3
+  TRANSLATE_V2_ARTIFACT_DIR: /app/data/translate-v2/artifacts
+  TRANSLATE_V2_WORKER_DB_PATH: /app/data/translation-worker.db
+  TRANSLATE_V2_OCR_ENABLED: "true"
+  TRANSLATE_V2_OCR_API_KEY: ${TRANSLATE_V2_OCR_API_KEY:-}
+  TRANSLATE_V2_OCR_CORRECTION_SUPPORTED: "false"
+  TRANSLATE_V2_OCR_MAX_RETRIES: "0"
+  TRANSLATE_V2_OCR_UPSCALE_ENABLED: "false"
+  TRANSLATE_V2_SPECIALIST_API_KEY: ${TRANSLATE_V2_SPECIALIST_API_KEY:-}
+  TRANSLATE_V2_SPECIALIST_CONTEXT_TOKENS: "4096"
+  TRANSLATE_V2_SPECIALIST_TIMEOUT_SECONDS: "30"
+  TRANSLATE_CHUNK_CONCURRENCY: "12"
+  TRANSLATE_V2_BLOCK_CONCURRENCY: "8"
+  TRANSLATE_V2_JOB_DEADLINE_SECONDS: "7200"
+  TRANSLATE_V2_LOOKUP_RATE_PER_MINUTE: "1200"
+  TRANSLATE_V2_UPLOAD_RATE_PER_MINUTE: "60"
+  TRANSLATE_V2_MAX_ACTIVE_PER_IP: "40"
+  TRANSLATE_V2_MAX_BLOCKS: "100000"
+  TRANSLATE_V2_MAX_CHUNKS: "20000"
+  TRANSLATE_V2_MAX_LLM_CALLS: "16"
+  TRANSLATE_V2_MAX_OCR_CALLS: "1"
+  TRANSLATE_V2_MAX_QUEUED_JOBS: "60"
+  TRANSLATE_V2_MAX_RUNNING_JOBS: "6"
+  TRANSLATE_V2_MAX_REQUEST_BYTES: "105906176"
+  TRANSLATE_V2_MAX_UPLOAD_BYTES: "104857600"
+  TRANSLATE_V2_MAX_TEXT_CODEPOINTS: "3000000"
+  TRANSLATE_V2_PDF_MAX_OCR_PAGES: "200"
+  TRANSLATE_V2_PDF_MAX_PAGES: "600"
+  TRANSLATE_V2_PDF_OCR_CONCURRENCY: "16"
+  TRANSLATE_V2_XLSX_MAX_CELLS: "20000"
+
+# Tokenizer HY-MT2 (tokenizer.json, tokenizer_config.json) nằm ngoài image; bootstrap.sh phải kiểm TOKENIZER_DIR khi bật translation
+# (bind mount thư mục thiếu sẽ bị Docker tạo rỗng). Mặc định ./tokenizer chỉ để `config` không lỗi khi profile tắt.
+x-translation-tokenizer: &translation-tokenizer ${TOKENIZER_DIR:-./tokenizer}:/app/translation-tokenizer:ro
+
+x-translation-health: &translation-health
+  test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:18185/health',timeout=5).status==200 else 1)\""]
+  interval: 30s
+  timeout: 6s
+  start_period: 20s
+  retries: 3
+
+services:
+  gateway:
+    image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
+    restart: unless-stopped
+    group_add: ["${VM_SHARED_GID:-10100}"]   # nhóm chung với VM để dọn HOME slot; không phụ thuộc gid chính của user app trong image
+    command: ["uvicorn", "secai_gateway.unified_app:app", "--host", "0.0.0.0", "--port", "8131"]
+    env_file:
+      - { path: .env, required: false }
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      NEO4J_URI: bolt://neo4j:7687
+      REDIS_URL: redis://redis:6379
+      ELASTICSEARCH_URL: http://es:9200
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      SESSION_STORE_BACKEND: sqlite
+      SESSION_DB_PATH: /app/data/sessions.db
+      EXPLOITDB_ROOT: /srv/exploitdb
+      POC_CATALOG_DB: /srv/poc/catalog.db
+      POC_ARTIFACT_STORE: /srv/poc-store
+      POC_SOURCES_ROOT: /srv/poc-sources
+      REWARD_SERVICE_URL: ""
+      SHOWCASE_RETRAINING_UPSTREAM: ""
+      SHOWCASE_TENSORBOARD_UPSTREAM: ""
+      TRANSLATION_UPSTREAM_URL: ${TRANSLATION_UPSTREAM_URL:-}   # http://translation-gateway:18185 khi bật profile translation
+      REVIEW_ENABLED: ${REVIEW_ENABLED:-false}
+      REVIEW_CREDENTIALS_FILE: /app/review-credentials.json
+      REVIEW_DB_PATH: /app/review-data/reviews.db
+      # Pool tường minh (stack/lib/pool.sh); rỗng khi không bật profile exploit. Không dùng pool động (sinh tên pentestcode-N).
+      IAS_SERVER_POOL: ${IAS_SERVER_POOL:-}
+      IAS_POOL_GPU_COUNT: ${IAS_POOL_GPU_COUNT:-0}
+      IAS_SERVER_PASSWORD: ${IAS_SERVER_PASSWORD:-}
+    ports:
+      - "${GATEWAY_BIND:-0.0.0.0}:${GATEWAY_HOST_PORT:-8131}:8131"
+    volumes:
+      - gw-data:/app/data
+      - ${DATA_ROOT:?set DATA_ROOT}/exploitdb:/srv/exploitdb:ro
+      - ${DATA_ROOT:?set DATA_ROOT}/poc:/srv/poc
+      - ${DATA_ROOT:?set DATA_ROOT}/poc/store:/srv/poc-store
+      - ${DATA_ROOT:?set DATA_ROOT}/poc-sources:/srv/poc-sources:ro
+      # HOME slot: supervisor đặt nhóm VM_SHARED_GID (gateway có nhóm này qua group_add), mode 2770, quét .ias mỗi 2 s, để gateway dọn được engagements.
+      - pool-home-a:/ias-pool-home-a
+      - pool-home-b:/ias-pool-home-b
+      # Bind mount tệp thiếu làm Docker tạo THƯ MỤC và gateway không khởi động: `bootstrap.sh init` luôn tạo tệp này trước `up`.
+      - ./secrets/review-credentials.json:/app/review-credentials.json:ro
+      - review-data:/app/review-data
+    # Không depends_on vm-*: profile exploit tùy chọn, depends_on vào service ngoài profile làm config lỗi.
+    depends_on:
+      qdrant: { condition: service_healthy }
+      neo4j: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [secai-net, poc-labs-internal]
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    restart: unless-stopped
+    ulimits:                               # collection lớn mở nhiều file RocksDB .sst
+      nofile: { soft: 262144, hard: 262144 }
+    volumes:
+      - ${DATA_ROOT:?set DATA_ROOT}/_state/qdrant_storage:/qdrant/storage
+      - ${DATA_ROOT:?set DATA_ROOT}/qdrant:/qdrant/snapshots
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/6333' 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 15s
+
+  neo4j:
+    image: neo4j:5.20-community
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 2g
+    volumes:
+      - ${DATA_ROOT:?set DATA_ROOT}/_state/neo4j_data:/data
+      - ${DATA_ROOT:?set DATA_ROOT}/_state/neo4j_logs:/logs
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "no"]
+    volumes:
+      - redis-data:/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"       # chỉ nội bộ secai-net, không publish cổng
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+      bootstrap.memory_lock: "true"
+      cluster.routing.allocation.disk.watermark.low: "92%"
+      cluster.routing.allocation.disk.watermark.high: "95%"
+      cluster.routing.allocation.disk.watermark.flood_stage: "97%"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile: { soft: 65536, hard: 65536 }
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # Engine pentestcode: mỗi container VM_SLOTS slot, mỗi slot 1 user Linux + HOME riêng. Cổng chỉ trong secai-net.
+  vm-a:
+    <<: *vm
+    environment: {<<: *vmenv, VM_PORT_BASE: "5101"}
+    volumes: [pool-home-a:/ias-pool-home, *vm-data-1, *vm-data-2, *vm-data-3, *vm-data-4]
+  vm-b:
+    <<: *vm
+    environment: {<<: *vmenv, VM_PORT_BASE: "5201"}
+    volumes: [pool-home-b:/ias-pool-home, *vm-data-1, *vm-data-2, *vm-data-3, *vm-data-4]
+
+  # ---- profile translation: gateway dịch (multilang_app) + worker + converter .doc, tất cả trong secai-net ----
+  translation-gateway:
+    image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
+    profiles: [translation]
+    restart: unless-stopped
+    command: ["uvicorn", "secai_gateway.multilang_app:app", "--host", "0.0.0.0", "--port", "18185"]
+    env_file:
+      - { path: .env, required: false }
+    environment:
+      <<: *translation-env
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      SESSION_STORE_BACKEND: sqlite
+      SESSION_DB_PATH: /app/data/sessions.db
+      REDIS_URL: redis://redis:6379
+      MULTILANG_ENABLED: "true"
+      MULTILANG_MAX_ACTIVE_REQUESTS: "32"
+      MULTILANG_MAX_CONCURRENT_MODEL_CALLS: "16"
+      MULTILANG_MAX_TEXT_CHARS: "6000"
+      MULTILANG_RATE_LIMIT_PER_MINUTE: "120"
+      MULTILANG_SPECIALIST_CHUNK_INPUT_TOKENS: "128"
+    volumes:
+      - translation-data:/app/data
+      - *translation-tokenizer
+    depends_on:
+      qdrant: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [secai-net]
+    healthcheck: *translation-health
+
+  translation-worker:
+    image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
+    profiles: [translation]
+    restart: unless-stopped
+    # netns_watch: translation-gateway khởi động lại thì netns chung mất; worker thoát để Docker cho nó nhập netns mới.
+    command: ["python", "-I", "/opt/stack/netns_watch.py", "python", "-m", "secai_gateway.translation.worker"]
+    env_file:
+      - { path: .env, required: false }
+    environment:
+      <<: *translation-env
+      GATEWAY_DB_PATH: /app/data/translation-worker.db
+      SESSION_STORE_BACKEND: memory
+      REDIS_URL: ""
+      MULTILANG_ENABLED: "false"
+      MULTILANG_MAX_CONCURRENT_MODEL_CALLS: "2"
+      MULTILANG_SPECIALIST_CHUNK_INPUT_TOKENS: "1024"
+    volumes:
+      - translation-data:/app/data
+      - *translation-tokenizer
+      - ./lib/netns_watch.py:/opt/stack/netns_watch.py:ro
+    # Chung netns với translation-gateway: thấy cùng đầu tunnel 127.0.0.1:18868/18083 (specialist-tunnel), vẫn gọi
+    # translation-converter qua DNS secai-net. Worker không mở cổng nên không đụng cổng của gateway dịch.
+    network_mode: service:translation-gateway
+    depends_on:
+      translation-gateway: { condition: service_started, restart: true }
+    # Worker không mở cổng HTTP: HEALTHCHECK của image (127.0.0.1:8131) luôn trượt trên bridge. Tiến trình chết thì
+    # container thoát và restart, nên trạng thái container là đủ.
+    healthcheck: {disable: true}
+
+  # Gateway chỉ nhận dịch vụ chuyên dụng ở http://127.0.0.1 (chặn SSRF trong src/). Sidecar này chung netns với
+  # translation-gateway (và worker) và mở 127.0.0.1:18868 (Hy-MT2) + 127.0.0.1:18083 (OCR) tới máy model:
+  #   TUNNEL_MODE=ssh    ssh -L tới loopback máy model (khoá + known_hosts trong TUNNEL_SECRETS_DIR, tự nối lại)
+  #   TUNNEL_MODE=off    không làm gì (URL dịch là https://<IP private> trực tiếp)
+  #   TUNNEL_MODE=direct CHỈ ĐỂ TEST: socat tới host:port trong secai-net (stub, acceptance/stubs/compose.stubs.yml)
+  # Docker tự khởi động lại translation-gateway thì netns cũ chỉ còn lo: sidecar và worker (netns_watch) tự thoát để restart
+  # policy cho chúng nhập netns mới; check.sh health bắt được nếu chưa hồi phục.
+  specialist-tunnel:
+    # Không dùng :? (compose nội suy cả khi profile tắt); bootstrap.sh kiểm TUNNEL_IMAGE khi bật translation.
+    image: ${TUNNEL_IMAGE:-secai-specialist-tunnel:MISSING-set-TUNNEL_IMAGE}
+    profiles: [translation]
+    restart: unless-stopped
+    user: ${TUNNEL_UID:-10002}   # phải là chủ tệp khoá (ssh không đọc được khoá 0600 của uid khác); image dựng với cùng uid
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:size=8m"]
+    network_mode: service:translation-gateway
+    depends_on:
+      translation-gateway: { condition: service_started, restart: true }
+    # Chỉ biến tunnel, không env_file (.env có khoá API). Thư mục (không phải tệp): bind tệp thiếu làm Docker tạo thư mục root.
+    environment:
+      TUNNEL_MODE: ${TUNNEL_MODE:-ssh}
+      TUNNEL_SSH_HOST: ${TUNNEL_SSH_HOST:-}
+      TUNNEL_SSH_PORT: ${TUNNEL_SSH_PORT:-22}
+      TUNNEL_SSH_USER: ${TUNNEL_SSH_USER:-}
+      TUNNEL_REMOTE_SPECIALIST_PORT: ${TUNNEL_REMOTE_SPECIALIST_PORT:-18868}
+      TUNNEL_REMOTE_OCR_PORT: ${TUNNEL_REMOTE_OCR_PORT:-18083}
+      TUNNEL_DIRECT_SPECIALIST: ${TUNNEL_DIRECT_SPECIALIST:-}
+      TUNNEL_DIRECT_OCR: ${TUNNEL_DIRECT_OCR:-}
+      TUNNEL_DIRECT_ALLOW_TEST: ${TUNNEL_DIRECT_ALLOW_TEST:-}
+    volumes:
+      - ${TUNNEL_SECRETS_DIR:-./secrets/tunnel}:/run/tunnel:ro
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tunnel-health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+  # .doc -> .docx bằng LibreOffice; image dựng từ stack/images/converter. Không cổng publish: chỉ gateway/worker gọi qua secai-net.
+  translation-converter:
+    # Không dùng :? (compose nội suy cả khi profile tắt); bootstrap.sh phải kiểm CONVERTER_IMAGE khi bật translation.
+    image: ${CONVERTER_IMAGE:-secai-doc-convert:MISSING-set-CONVERTER_IMAGE}
+    profiles: [translation]
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: ["/tmp:size=1g"]
+    environment:
+      CONVERTER_HOST: 0.0.0.0
+      CONVERTER_PORT: "18091"
+      # Rỗng thì converter từ chối mọi yêu cầu (401); bootstrap.sh kiểm token khi bật translation.
+      CONVERTER_TOKEN: ${TRANSLATE_V2_CONVERTER_TOKEN:-}
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "/opt/v/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18091/health',timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+
+  # ---- profile report: backend báo cáo (cùng image gateway), DB trong named volume report-data ----
+  report-backend:
+    image: ${GATEWAY_IMAGE:?set GATEWAY_IMAGE}
+    profiles: [report]
+    restart: unless-stopped
+    command: ["uvicorn", "secai_gateway.app:app", "--host", "0.0.0.0", "--port", "8131"]
+    env_file:
+      - { path: .env, required: false }
+    environment:
+      AIRGAP: "true"
+      REPORT_FEATURE_ENABLED: "true"
+      REVIEW_ENABLED: "false"   # xem x-translation-env
+      REPORT_DB_PATH: /srv/reports/reports.db
+      REPORT_API_KEY: ${REPORT_API_KEY:-}
+      GATEWAY_DB_PATH: /app/data/gateway.db
+      SESSION_STORE_BACKEND: memory
+      REDIS_URL: ""
+    ports:
+      - "${REPORT_BIND:-127.0.0.1}:${REPORT_HOST_PORT:-18183}:8131"
+    volumes:
+      - report-data:/srv/reports
+      - report-gw-data:/app/data
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8131/health',timeout=5).status==200 else 1)\""]
+      interval: 30s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+
+  # ---- profile review: UI tĩnh + proxy tới gateway (REVIEW_ENABLED=true ở .env để gateway phục vụ /review-api) ----
+  review-frontend:
+    # Không dùng :? (xem translation-converter); bootstrap.sh kiểm REVIEW_UI_IMAGE khi bật review.
+    image: ${REVIEW_UI_IMAGE:-secai-review-ui:MISSING-set-REVIEW_UI_IMAGE}
+    profiles: [review]
+    restart: unless-stopped
+    command: ["python", "/app/review-ui/serve_static.py"]
+    environment:
+      FE_HOST: 0.0.0.0
+      FE_PORT: "5174"
+      VITE_GATEWAY_PROXY: http://gateway:8131
+    ports:
+      - "${REVIEW_BIND:-127.0.0.1}:${REVIEW_HOST_PORT:-5174}:5174"
+    networks: [secai-net]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5174/',timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+
+networks:
+  secai-net:
+    driver: bridge
+  poc-labs-internal:
+    name: ${POC_LABS_NETWORK:-poc-labs-internal}
+    external: ${POC_LABS_EXTERNAL:-false}
+
+volumes:
+  gw-data:
+  redis-data:
+  es-data:
+  pool-home-a:
+  pool-home-b:
+  translation-data:
+  report-data:
+  report-gw-data:
+  review-data:

@@ -22,17 +22,20 @@ class IasClientError(PocError):
 
 class IasClient:
     def __init__(self, base_url: str, *, timeout_s: float = 600.0,
-                 client: httpx.AsyncClient | None = None) -> None:
+                 client: httpx.AsyncClient | None = None, password: str = "") -> None:
         self.base_url = (base_url or "").rstrip("/")
         if not self.base_url:
             raise PocBadRequest("IAS_SERVER_URL trống")
         self.timeout_s = timeout_s
         self._client = client
+        self._password = password
         self._owns_client = client is None
 
     async def _http(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout_s)
+            # Engine mặc định user `ias` (OPENCODE_SERVER_USERNAME) — packages/opencode/src/server/auth.ts.
+            auth = ("ias", self._password) if self._password else None
+            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout_s, auth=auth)
         return self._client
 
     async def aclose(self) -> None:

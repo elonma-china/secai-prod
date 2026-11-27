@@ -1,0 +1,648 @@
+import subprocess
+import pytest
+from pathlib import Path
+
+STACK = Path(__file__).resolve().parents[1] / "stack"
+
+
+def run(*a, **kw):
+    return subprocess.run(a, text=True, capture_output=True, **kw)
+
+
+def test_pool_string_24_slots():
+    r = run("bash", str(STACK / "lib/pool.sh"), "12")
+    assert r.returncode == 0
+    out = r.stdout.strip()
+    items = out.split(",")
+    assert len(items) == 24 and not out.endswith(",")
+    assert items[0] == "http://vm-a:5101|/ias-pool-home-a/slot1"
+    assert items[11] == "http://vm-a:5112|/ias-pool-home-a/slot12"
+    assert items[12] == "http://vm-b:5201|/ias-pool-home-b/slot1"
+    assert items[23] == "http://vm-b:5212|/ias-pool-home-b/slot12"
+
+
+def test_pool_rejects_bad_slots():
+    for bad in ("0", "-1", "abc", "1.5", "", "08", "09", "100", "007"):
+        r = run("bash", str(STACK / "lib/pool.sh"), bad)
+        assert r.returncode != 0 and "slots" in r.stderr and not r.stdout, bad
+    assert run("bash", str(STACK / "lib/pool.sh")).returncode != 0
+
+
+def test_pool_accepts_1_to_99():
+    for ok, n in (("1", 2), ("9", 18), ("10", 20), ("99", 198)):
+        r = run("bash", str(STACK / "lib/pool.sh"), ok)
+        assert r.returncode == 0 and len(r.stdout.strip().split(",")) == n, ok
+
+
+# ---- bootstrap.sh / .env.example (Task 6) ----
+import json
+import os
+import re
+import shutil
+import stat
+import tempfile
+
+GENERATED = (
+    "NEO4J_PASSWORD", "ADMIN_API_KEY", "LOGS_UI_PASSWORD", "LOGS_UI_SESSION_SECRET",
+    "REPORT_API_KEY", "IAS_SERVER_PASSWORD", "TRANSLATE_V2_CONVERTER_TOKEN",
+)
+
+
+def _stack(tmp_path):
+    d = Path(tempfile.mkdtemp(dir=tmp_path)) / "stack"    # mỗi lần gọi một thư mục riêng
+    shutil.copytree(STACK, d, ignore=shutil.ignore_patterns(".env", "secrets", "tokenizer", "acceptance", "images", "__pycache__"))
+    (d / "images/tunnel").mkdir(parents=True)                              # bootstrap.sh source luật direct dùng chung
+    shutil.copy(STACK / "images/tunnel/direct_target.sh", d / "images/tunnel/direct_target.sh")
+    return d
+
+
+def _env(d, **extra):
+    return {**os.environ, "STACK_DIR": str(d), **extra}
+
+
+def _bs(d, cmd, **extra):
+    return run("bash", str(d / "bootstrap.sh"), cmd, env=_env(d, **extra))
+
+
+def _get(d, key):
+    vals = [l.split("=", 1)[1] for l in (d / ".env").read_text().splitlines() if l.startswith(key + "=")]
+    return vals[-1] if vals else None
+
+
+def _set(d, **kv):
+    lines = (d / ".env").read_text().splitlines()
+    for k, v in kv.items():
+        lines = [f"{k}={v}" if l.startswith(k + "=") else l for l in lines]
+        if not any(l.startswith(k + "=") for l in lines):
+            lines.append(f"{k}={v}")
+    (d / ".env").write_text("\n".join(lines) + "\n")
+
+
+def _ready(tmp_path, profiles="exploit,translation,report,review"):
+    """Stack đã init + cấu hình hợp lệ đầy đủ; mỗi test phá một chỗ."""
+    d = _stack(tmp_path)
+    assert _bs(d, "init").returncode == 0
+    tmp_path = d.parent
+    root = tmp_path / "data"
+    for s in ("exploitdb", "poc", "poc/store", "poc-sources", "exploitdb-mcp-server"):
+        (root / s).mkdir(parents=True)
+    (root / "poc").chmod(0o775)          # nhóm của thư mục = gid hiện tại = VM_SHARED_GID (đặt bên dưới)
+    (root / "poc/store").chmod(0o775)
+    tok = tmp_path / "tok"
+    tok.mkdir()
+    (tok / "tokenizer.json").write_text("{}")
+    (tok / "tokenizer_config.json").write_text("{}")
+    mm = tmp_path / "max_map_count"
+    mm.write_text("262144\n")
+    _set(d, COMPOSE_PROFILES=profiles, DATA_ROOT=root, VM_SHARED_GID=os.getgid(), TOKENIZER_DIR=tok,
+         LLM_BASE_URL="http://llm/v1", LLM_API_KEY="k", LLM_MODEL="m",
+         EMBEDDING_API_URL="http://e", EMBEDDING_API_KEY="k", EMBEDDING_MODEL="m",
+         RERANKER_API_URL="http://r", RERANKER_API_KEY="k", RERANKER_MODEL="m",
+         GATEWAY_IMAGE="secai-agent-gateway:main-abc12345", VM_IMAGE="secai-pentestcode-vm:abc",
+         CONVERTER_IMAGE="secai-doc-convert:abc", REVIEW_UI_IMAGE="secai-review-ui:abc",
+         TRANSLATE_V2_OCR_BASE_URL="http://o", TRANSLATE_V2_OCR_MODEL="m",
+         TRANSLATE_V2_SPECIALIST_BASE_URL="http://127.0.0.1:18868", TRANSLATE_V2_SPECIALIST_MODEL="m",
+         MULTILANG_SPECIALIST_BASE_URL="http://127.0.0.1:18868", MULTILANG_SPECIALIST_MODEL="m",
+         VERIFY_ALLOWED_TARGETS="192.168.96.0/20")
+    _tunnel_ready(d)
+    return d, {"MAX_MAP_COUNT_FILE": str(mm)}
+
+
+def _tunnel_ready(d):
+    """Tunnel ssh hợp lệ: khoá 0600 của chính uid đang chạy, known_hosts có máy model."""
+    t = d.parent / "tunnel"
+    t.mkdir(mode=0o700)
+    (t / "key").write_text("-----BEGIN OPENSSH PRIVATE KEY-----\nfake\n")
+    (t / "key").chmod(0o600)
+    (t / "known_hosts").write_text("[10.0.0.9]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIfake\n")
+    _set(d, TUNNEL_IMAGE="secai-specialist-tunnel:abc", TUNNEL_MODE="ssh", TUNNEL_SSH_HOST="10.0.0.9",
+         TUNNEL_SSH_PORT="2222", TUNNEL_SSH_USER="tunnel", TUNNEL_SECRETS_DIR=t, TUNNEL_UID=os.getuid())
+    return t
+
+
+def test_init_generates_secrets_once(tmp_path):
+    d = _stack(tmp_path)
+    r = _bs(d, "init")
+    assert r.returncode == 0, r.stderr
+    first = (d / ".env").read_text()
+    assert stat.S_IMODE((d / ".env").stat().st_mode) == 0o600
+    for k in GENERATED:
+        assert re.fullmatch(r"[0-9a-f]{64}", _get(d, k) or ""), k
+    assert len({_get(d, k) for k in GENERATED}) == len(GENERATED)
+    assert _get(d, "IAS_SERVER_POOL").count(",") == 23
+    assert _get(d, "REVIEW_ENABLED") == "true"
+    assert _get(d, "TRANSLATION_UPSTREAM_URL") == "http://translation-gateway:18185"
+    assert (d / "tokenizer").is_dir()
+    r2 = _bs(d, "init")
+    assert r2.returncode == 0, r2.stderr
+    assert (d / ".env").read_text() == first            # lần 2 không ghi đè
+
+
+def test_init_fills_only_empty_secrets(tmp_path):
+    d = _stack(tmp_path)
+    shutil.copy(d / ".env.example", d / ".env")
+    _set(d, ADMIN_API_KEY="giu-nguyen", QWEN_API_KEY="tay")
+    assert _bs(d, "init").returncode == 0
+    assert _get(d, "ADMIN_API_KEY") == "giu-nguyen" and _get(d, "QWEN_API_KEY") == "tay"
+    assert len(_get(d, "NEO4J_PASSWORD")) == 64
+    assert stat.S_IMODE((d / ".env").stat().st_mode) == 0o600
+
+
+def test_init_review_credentials_once_and_token_not_stored(tmp_path):
+    d = _stack(tmp_path)
+    r = _bs(d, "init")
+    cred = d / "secrets/review-credentials.json"
+    assert stat.S_IMODE(cred.stat().st_mode) == 0o644 and stat.S_IMODE(cred.parent.stat().st_mode) == 0o755
+    data = json.loads(cred.read_text())
+    assert set(data) == {"credentials"} and len(data["credentials"]) == 1
+    rec = data["credentials"][0]
+    assert rec["role"] == "admin" and rec["actor_id"] and re.fullmatch(r"[0-9a-f]{64}", rec["token_sha256"])
+    raw = re.findall(r"\b[0-9a-f]{64}\b", r.stdout)
+    assert len(raw) == 1 and hashlib_sha(raw[0]) == rec["token_sha256"]
+    first = cred.read_text()
+    r2 = _bs(d, "init")
+    assert cred.read_text() == first and not re.search(r"\b[0-9a-f]{64}\b", r2.stdout)
+    for f in d.rglob("*"):
+        if f.is_file():
+            assert raw[0] not in f.read_text(), f
+    # schema thật của gateway chấp nhận tệp
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from secai_gateway.api.review_auth import load_credentials
+    assert load_credentials(cred)[rec["token_sha256"]].role == "admin"
+
+
+def hashlib_sha(s):
+    import hashlib
+    return hashlib.sha256(s.encode()).hexdigest()
+
+
+def test_init_refuses_credentials_directory(tmp_path):
+    d = _stack(tmp_path)
+    (d / "secrets/review-credentials.json").mkdir(parents=True)
+    r = _bs(d, "init")
+    assert r.returncode != 0 and "review-credentials.json" in r.stderr
+
+
+def test_preflight_names_missing_vars(tmp_path):
+    d = _stack(tmp_path)
+    _bs(d, "init")
+    r = _bs(d, "preflight")
+    assert r.returncode != 0
+    for k in ("LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL",
+              "RERANKER_API_URL", "RERANKER_API_KEY", "RERANKER_MODEL", "GATEWAY_IMAGE", "DATA_ROOT",
+              "VM_IMAGE", "CONVERTER_IMAGE", "REVIEW_UI_IMAGE", "TRANSLATE_V2_OCR_MODEL", "TRANSLATE_V2_SPECIALIST_MODEL",
+              "MULTILANG_SPECIALIST_MODEL", "TUNNEL_IMAGE", "TUNNEL_SSH_HOST", "TUNNEL_SSH_USER"):   # URL dịch có mặc định đầu tunnel
+        assert k in r.stderr, k
+    assert not re.search(r"\b[0-9a-f]{64}\b", r.stderr + r.stdout)     # không in secret
+
+
+def test_preflight_ok_when_configured(tmp_path):
+    d, extra = _ready(tmp_path)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+
+
+def _fails(tmp_path, needle, mutate=None, profiles="exploit,translation,report,review", **kv):
+    d, extra = _ready(tmp_path, profiles)
+    if kv:
+        _set(d, **kv)
+    if mutate:
+        mutate(d)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and needle in r.stderr, r.stderr
+    return r
+
+
+def test_preflight_rejects_placeholder_and_latest_images(tmp_path):
+    _fails(tmp_path, "VM_IMAGE", VM_IMAGE="secai-pentestcode-vm:MISSING-set-VM_IMAGE")
+    _fails(tmp_path, "CONVERTER_IMAGE", CONVERTER_IMAGE="secai-doc-convert:MISSING-set-CONVERTER_IMAGE")
+    _fails(tmp_path, "GATEWAY_IMAGE", GATEWAY_IMAGE="secai-agent-gateway:latest")
+    _fails(tmp_path, "GATEWAY_IMAGE", GATEWAY_IMAGE="secai-agent-gateway")
+    _fails(tmp_path, "VM_IMAGE", VM_IMAGE="vm:latest")
+
+
+def test_preflight_profile_gating(tmp_path):
+    # profile tắt thì không đòi biến của profile đó
+    d, extra = _ready(tmp_path, "report")
+    _set(d, VM_IMAGE="", CONVERTER_IMAGE="", REVIEW_UI_IMAGE="", TRANSLATE_V2_OCR_BASE_URL="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_empty_report_key(tmp_path):
+    r = _fails(tmp_path, "REPORT_API_KEY", REPORT_API_KEY="")
+    assert "404" in r.stderr
+
+
+def test_preflight_empty_converter_token(tmp_path):
+    _fails(tmp_path, "TRANSLATE_V2_CONVERTER_TOKEN", TRANSLATE_V2_CONVERTER_TOKEN="")
+
+
+def test_preflight_credentials_path_is_directory(tmp_path):
+    def mutate(d):
+        (d / "secrets/review-credentials.json").unlink()
+        (d / "secrets/review-credentials.json").mkdir()
+    _fails(tmp_path, "review-credentials.json", mutate)
+
+
+def test_preflight_missing_mcp_server_dir(tmp_path):
+    def mutate(d):
+        shutil.rmtree(Path(_get(d, "DATA_ROOT")) / "exploitdb-mcp-server")
+    r = _fails(tmp_path, "exploitdb-mcp-server", mutate)
+    assert "data package" in r.stderr
+
+
+def test_preflight_data_root_problems(tmp_path):
+    _fails(tmp_path, "DATA_ROOT", DATA_ROOT=str(tmp_path / "khong-co"))
+    _fails(tmp_path, "poc-sources", lambda d: shutil.rmtree(Path(_get(d, "DATA_ROOT")) / "poc-sources"))
+
+
+def test_preflight_poc_not_writable(tmp_path):
+    r = _fails(tmp_path, "poc", lambda d: (Path(_get(d, "DATA_ROOT")) / "poc").chmod(0o755))
+    assert "10001" in r.stderr
+
+
+def test_preflight_tokenizer_dir(tmp_path):
+    _fails(tmp_path, "TOKENIZER_DIR", lambda d: (Path(_get(d, "TOKENIZER_DIR")) / "tokenizer.json").unlink())
+
+
+def test_preflight_pool_and_map_count(tmp_path):
+    _fails(tmp_path, "IAS_SERVER_POOL", IAS_SERVER_POOL="")
+    d, extra = _ready(tmp_path)
+    Path(extra["MAX_MAP_COUNT_FILE"]).write_text("65530\n")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and "vm.max_map_count" in r.stderr and "sysctl -w vm.max_map_count=262144" in r.stderr
+
+
+def test_env_example_has_no_secret_values_or_model_names():
+    sections = 0
+    seen = set()
+    for line in (STACK / ".env.example").read_text().splitlines():
+        if line.startswith("# ──"):
+            sections += 1
+        if "=" in line and not line.startswith("#"):
+            k, v = line.split("=", 1)
+            seen.add(k)
+            if k.endswith(("_KEY", "_PASSWORD", "_SECRET", "_TOKEN")):   # không bắt *_TOKENS (số)
+                assert v == "", k
+            if k.endswith("_MODEL"):
+                assert v == "", k                                       # check.sh bắt lệch tên model
+    assert sections == 5
+    exp = {"IAS_POOL_GPU_COUNT": "0", "COMPOSE_PROFILES": "exploit,translation,report,review", "VM_SLOTS": "12",
+           "QDRANT_COLLECTION": "cve_kb_hybrid", "AIRGAP": "true", "VERIFY_ENABLED": "false", "EXEC_ENABLED": "false",
+           "RATE_LIMIT_ENABLED": "false", "LLM_CONTEXT_WINDOW": "131072", "INPUT_CLASSIFIER_ENABLED": "true",
+           "INPUT_CLASSIFIER_BLOCK_OFFTOPIC": "false", "WEB_SEARCH_ENABLED": "false",
+           "AGENT_POC_SOURCES_PATH": "/srv/secai-data/poc-sources"}
+    got = {l.split("=", 1)[0]: l.split("=", 1)[1] for l in (STACK / ".env.example").read_text().splitlines()
+           if "=" in l and not l.startswith("#")}
+    for k, v in exp.items():
+        assert got.get(k) == v, k
+
+
+def test_env_example_covers_compose_variables():
+    compose = (STACK / "compose.yml").read_text()
+    names = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)", compose))
+    declared = {l.split("=", 1)[0] for l in (STACK / ".env.example").read_text().splitlines()
+                if "=" in l and not l.startswith("#")}
+    internal = {"COMPOSE_PROJECT_NAME"}   # có thể bỏ trống: compose có mặc định
+    internal |= {f"QWEN_{x}" for x in ("BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW")}   # tên cũ, chỉ là dự phòng của LLM_*
+    assert names - declared - internal == set()
+
+
+def _poc_dirs(d):
+    root = Path(_get(d, "DATA_ROOT"))
+    return root / "poc", root / "poc/store"
+
+
+def test_preflight_poc_store_required_and_checked(tmp_path):
+    r = _fails(tmp_path, "poc/store", lambda d: shutil.rmtree(_poc_dirs(d)[1]))
+    assert "poc/store" in r.stderr
+    _fails(tmp_path, "poc/store", lambda d: _poc_dirs(d)[1].chmod(0o755))
+
+
+def test_preflight_group_branch(tmp_path):
+    # nhóm ghi được chỉ khi gid là VM_SHARED_GID (hoặc 999): gid hiện tại khác thì lỗi, trùng thì qua
+    _fails(tmp_path, "poc", VM_SHARED_GID=os.getgid() + 12345)
+    d, extra = _ready(tmp_path)
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_other_writable_is_warning_only(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, VM_SHARED_GID=os.getgid() + 12345)
+    for p in _poc_dirs(d):
+        p.chmod(0o757)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    assert "WARNING" in r.stderr and "chown -R 10001:" in r.stderr
+
+
+def test_preflight_unwritable_hint(tmp_path):
+    r = _fails(tmp_path, "poc/store", lambda d: _poc_dirs(d)[1].chmod(0o755))
+    assert "chown -R 10001:" in r.stderr and "o+w" in r.stderr
+
+
+def test_preflight_requires_ias_server_password(tmp_path):
+    _fails(tmp_path, "IAS_SERVER_PASSWORD", IAS_SERVER_PASSWORD="")
+    d, extra = _ready(tmp_path, "report")
+    _set(d, IAS_SERVER_PASSWORD="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_crlf_env_is_normalised_and_empty_detected(tmp_path):
+    d = _stack(tmp_path)
+    (d / ".env").write_bytes((d / ".env.example").read_bytes().replace(b"\n", b"\r\n"))
+    assert _bs(d, "init").returncode == 0
+    raw = (d / ".env").read_bytes()
+    assert b"\r" not in raw and re.fullmatch(r"[0-9a-f]{64}", _get(d, "NEO4J_PASSWORD"))
+    # CRLF chưa chuẩn hoá: KEY=\r vẫn là trống khi preflight
+    d2, extra = _ready(tmp_path)
+    (d2 / ".env").write_bytes((d2 / ".env").read_bytes().replace(b"REPORT_API_KEY=" + _get(d2, "REPORT_API_KEY").encode(), b"REPORT_API_KEY=").replace(b"\n", b"\r\n"))
+    r = _bs(d2, "preflight", **extra)
+    assert r.returncode != 0 and "REPORT_API_KEY" in r.stderr
+
+
+def test_profiles_with_spaces_and_unknown_warning(tmp_path):
+    d = _stack(tmp_path)
+    shutil.copy(d / ".env.example", d / ".env")
+    _set(d, COMPOSE_PROFILES="exploit, translation ,report, review, bogus")
+    r = _bs(d, "init")
+    assert r.returncode == 0
+    assert _get(d, "IAS_SERVER_POOL").count(",") == 23 and _get(d, "REVIEW_ENABLED") == "true"
+    assert _get(d, "TRANSLATION_UPSTREAM_URL") and "bogus" in r.stderr and "WARNING" in r.stderr
+    p = _bs(d, "preflight")
+    assert "bogus" in p.stderr and "VM_IMAGE" in p.stderr and "REVIEW_UI_IMAGE" in p.stderr
+
+
+def test_preflight_symlinked_dirs_judged_on_target(tmp_path):
+    def link_to(target_mode):
+        def mutate(d):
+            store = _poc_dirs(d)[1]
+            tgt = store.parent.parent / "tgt"
+            tgt.mkdir()
+            tgt.chmod(target_mode)
+            shutil.rmtree(store)
+            store.symlink_to(tgt)       # liên kết mode 777 nhưng đích mới là thứ Docker mount
+        return mutate
+    r = _fails(tmp_path, "poc/store", link_to(0o755))
+    assert "tgt" not in r.stderr or "uid" in r.stderr
+    d, extra = _ready(tmp_path)
+    link_to(0o775)(d)
+    assert _bs(d, "preflight", **extra).returncode == 0
+    # symlink treo vẫn là "thiếu"
+    _fails(tmp_path, "poc/store", lambda d: (shutil.rmtree(_poc_dirs(d)[1]), _poc_dirs(d)[1].symlink_to("/khong/co")))
+
+
+def test_preflight_owner_class_only(tmp_path):
+    # chủ uid 10001 chỉ xét quyền chủ (không rơi sang nhóm/others); không tạo được tệp uid 10001 nên dùng STAT_FAKE
+    for fake, ok in (("10001 5 557", False), ("10001 5 755", True), ("10001 999 070", False),
+                     ("5 999 070", True), ("5 999 707", False), ("5 77 002", True), ("5 77 770", False)):
+        d, extra = _ready(tmp_path)
+        r = _bs(d, "preflight", STAT_FAKE=fake, **extra)
+        assert (r.returncode == 0) == ok, (fake, r.stderr)
+
+
+def test_preflight_specialist_url_shape(tmp_path):
+    # Gateway (translation/specialist.py, multilang/provider.py) chỉ nhận http loopback hoặc https IP private, có cổng;
+    # khác đi thì translation-gateway/worker chết lúc khởi động (smoke 2026-11-23 với http://172.17.0.1:18868).
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        for bad in ("http://172.17.0.1:18868", "https://example.com:443", "http://127.0.0.1", "http://u:p@127.0.0.1:1",
+                    "http://127.0.0.1:18868/v1"):
+            r = _fails(tmp_path, k, **{k: bad})
+            assert "u:p" not in r.stderr
+
+
+def test_preflight_exploit_needs_target_allowlist(tmp_path):
+    # Thiếu VERIFY_ALLOWED_TARGETS (và VERIFY_ALLOW_ALL khác true) thì gateway trả 403 cho MỌI yêu cầu exploit-v2
+    # (routes._exploit_v2_authz, fail-closed) — smoke 2026-11-23 UI-POC-3 403.
+    _fails(tmp_path, "VERIFY_ALLOWED_TARGETS", VERIFY_ALLOWED_TARGETS="")
+    d, extra = _ready(tmp_path)
+    _set(d, VERIFY_ALLOWED_TARGETS="", VERIFY_ALLOW_ALL="true")
+    assert _bs(d, "preflight", **extra).returncode == 0
+    d, extra = _ready(tmp_path, "report")
+    _set(d, VERIFY_ALLOWED_TARGETS="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+# ---- Task 8d: sidecar specialist-tunnel ----
+def test_init_prepares_tunnel_dir_and_uid(tmp_path):
+    d = _stack(tmp_path)
+    assert _bs(d, "init").returncode == 0
+    t = d / "secrets/tunnel"
+    assert t.is_dir() and stat.S_IMODE(t.stat().st_mode) == 0o700   # chỉ chủ (= TUNNEL_UID) vào được
+    assert _get(d, "TUNNEL_UID") == str(os.getuid())
+
+
+def test_preflight_tunnel_ssh_requires_settings(tmp_path):
+    for k in ("TUNNEL_SSH_HOST", "TUNNEL_SSH_USER", "TUNNEL_IMAGE"):
+        _fails(tmp_path, k, **{k: ""})
+    _fails(tmp_path, "TUNNEL_SSH_PORT", TUNNEL_SSH_PORT="22x")
+    _fails(tmp_path, "TUNNEL_REMOTE_OCR_PORT", TUNNEL_REMOTE_OCR_PORT="70000")
+    _fails(tmp_path, "TUNNEL_MODE", TUNNEL_MODE="sshh")
+
+
+def test_preflight_tunnel_key_must_be_private_and_owned_by_tunnel_uid(tmp_path):
+    _fails(tmp_path, "0600", mutate=lambda d: (d.parent / "tunnel/key").chmod(0o640))
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID=os.getuid() + 1)
+    _fails(tmp_path, "key", mutate=lambda d: (d.parent / "tunnel/key").unlink())
+
+
+def test_preflight_tunnel_known_hosts_must_pin_host(tmp_path):
+    _fails(tmp_path, "known_hosts", mutate=lambda d: (d.parent / "tunnel/known_hosts").write_text(""))
+    _fails(tmp_path, "known_hosts", TUNNEL_SSH_HOST="10.0.0.10")     # không có dòng cho máy này
+    _fails(tmp_path, "known_hosts", TUNNEL_SSH_PORT="22")            # cổng khác 22 thì dòng phải là [host]:port
+    d, extra = _ready(tmp_path)
+    (d.parent / "tunnel/known_hosts").write_text("|1|abc=|def= ssh-ed25519 AAAA\n")   # dạng băm (HashKnownHosts)
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_tunnel_on_needs_loopback_urls_on_tunnel_ports(tmp_path):
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        _fails(tmp_path, k, **{k: "https://10.0.0.5:18868"})
+        _fails(tmp_path, k, **{k: "http://127.0.0.1:18869"})
+    _fails(tmp_path, "TRANSLATE_V2_OCR_BASE_URL", TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18084")
+    d, extra = _ready(tmp_path)
+    _set(d, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+def test_preflight_tunnel_off_rejects_loopback_and_skips_ssh(tmp_path):
+    # Trên bridge, không tunnel thì 127.0.0.1 là chính container: không có gì nghe.
+    _fails(tmp_path, "TUNNEL_MODE=off", TUNNEL_MODE="off")
+    d, extra = _ready(tmp_path)
+    _set(d, TUNNEL_MODE="off", TUNNEL_SSH_HOST="", TUNNEL_SSH_USER="",
+         TRANSLATE_V2_SPECIALIST_BASE_URL="https://10.0.0.5:18868", MULTILANG_SPECIALIST_BASE_URL="https://10.0.0.5:18868")
+    (d.parent / "tunnel/key").unlink()
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+
+
+def test_preflight_tunnel_direct_is_test_only(tmp_path):
+    _fails(tmp_path, "TUNNEL_DIRECT_SPECIALIST", TUNNEL_MODE="direct", TUNNEL_DIRECT_ALLOW_TEST="1")
+    d, extra = _ready(tmp_path)
+    _set(d, TUNNEL_MODE="direct", TUNNEL_SSH_HOST="", TUNNEL_DIRECT_SPECIALIST="stub-specialist:18868", TUNNEL_DIRECT_ALLOW_TEST="1")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    assert "CHỈ ĐỂ TEST" in r.stderr
+    _set(d, TUNNEL_DIRECT_SPECIALIST="stub-specialist")              # thiếu cổng
+    assert "TUNNEL_DIRECT_SPECIALIST" in _bs(d, "preflight", **extra).stderr
+
+
+def test_preflight_tunnel_ignored_without_translation_profile(tmp_path):
+    d, extra = _ready(tmp_path, "report")
+    _set(d, TUNNEL_MODE="ssh", TUNNEL_SSH_HOST="", TUNNEL_IMAGE="")
+    assert _bs(d, "preflight", **extra).returncode == 0
+
+
+# ---- 8d review ----
+def _direct(tmp_path, **kv):
+    d, extra = _ready(tmp_path)
+    _set(d, **{"TUNNEL_MODE": "direct", "TUNNEL_SSH_HOST": "", "TUNNEL_DIRECT_ALLOW_TEST": "1",
+               "TUNNEL_DIRECT_SPECIALIST": "stub-specialist:18868", **kv})
+    return _bs(d, "preflight", **extra)
+
+
+def test_preflight_direct_needs_explicit_test_opt_in(tmp_path):
+    # I1: direct vượt chặn SSRF loopback-only và gửi khoá Bearer qua TCP thô: chỉ khi bật tường minh.
+    r = _direct(tmp_path, TUNNEL_DIRECT_ALLOW_TEST="")
+    assert r.returncode != 0 and "TUNNEL_DIRECT_ALLOW_TEST" in r.stderr
+    assert _direct(tmp_path, TUNNEL_DIRECT_ALLOW_TEST="yes").returncode != 0
+
+
+def test_preflight_direct_target_restricted_to_stub_or_private(tmp_path):
+    for bad in ("example.com:443", "8.8.8.8:18868", "api.openai.com:80", "stubby.example.com:1", "172.32.0.1:1"):
+        r = _direct(tmp_path, TUNNEL_DIRECT_SPECIALIST=bad)
+        assert r.returncode != 0 and "TUNNEL_DIRECT_SPECIALIST" in r.stderr, bad
+    assert _direct(tmp_path, TUNNEL_DIRECT_OCR="1.1.1.1:18083").returncode != 0
+    for ok in ("stub-specialist:18868", "10.231.0.7:18868", "192.168.1.5:1", "172.16.0.2:9", "127.0.0.1:9"):
+        r = _direct(tmp_path, TUNNEL_DIRECT_SPECIALIST=ok)
+        assert r.returncode == 0, (ok, r.stderr)
+
+
+def test_preflight_direct_loopback_ocr_needs_direct_ocr_target(tmp_path):
+    # M4
+    r = _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="")
+    assert r.returncode != 0 and "TUNNEL_DIRECT_OCR" in r.stderr
+    assert _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="stub-ocr:18083").returncode == 0
+
+
+def test_preflight_tunnel_urls_must_be_exact(tmp_path):
+    # M3: đúng http://127.0.0.1:18868 / :18083; không [::1], localhost, https.
+    for k in ("TRANSLATE_V2_SPECIALIST_BASE_URL", "MULTILANG_SPECIALIST_BASE_URL"):
+        for bad in ("http://localhost:18868", "http://[::1]:18868", "https://127.0.0.1:18868", "http://127.0.0.2:18868"):
+            _fails(tmp_path, k, **{k: bad})
+    for bad in ("http://localhost:18083", "http://[::1]:18083", "https://127.0.0.1:18083"):
+        _fails(tmp_path, "TRANSLATE_V2_OCR_BASE_URL", TRANSLATE_V2_OCR_BASE_URL=bad)
+
+
+FAKE_DOCKER_USER = """#!/bin/sh
+case "$*" in *"image inspect"*) [ -n "$FAKE_USER" ] || exit 1; echo "$FAKE_USER" ;; *) exit 9 ;; esac
+"""
+
+
+def test_preflight_tunnel_uid_numeric_nonroot_and_matches_image(tmp_path):
+    # M5
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID="abc")
+    _fails(tmp_path, "TUNNEL_UID", TUNNEL_UID="0")
+    b = tmp_path / "fakebin"
+    b.mkdir()
+    (b / "docker").write_text(FAKE_DOCKER_USER)
+    (b / "docker").chmod(0o755)
+    path = f"{b}:{os.environ['PATH']}"
+    d, extra = _ready(tmp_path)
+    r = _bs(d, "preflight", PATH=path, FAKE_USER="4242", **extra)
+    assert r.returncode != 0 and "TUNNEL_UID" in r.stderr and "4242" in r.stderr
+    assert _bs(d, "preflight", PATH=path, FAKE_USER=str(os.getuid()), **extra).returncode == 0
+    r = _bs(d, "preflight", PATH=path, FAKE_USER="", **extra)          # image chưa có: bỏ qua, có thông báo
+    assert r.returncode == 0 and "TUNNEL_IMAGE" in r.stderr
+
+
+def test_preflight_direct_refuses_real_api_keys(tmp_path):
+    # M10/I1: direct gửi Bearer qua TCP thô -> chỉ khoá stub giả cố định.
+    for k in ("TRANSLATE_V2_SPECIALIST_API_KEY", "MULTILANG_SPECIALIST_API_KEY", "TRANSLATE_V2_OCR_API_KEY"):
+        ocr = {"TRANSLATE_V2_OCR_BASE_URL": "http://127.0.0.1:18083", "TUNNEL_DIRECT_OCR": "stub-ocr:18083"}   # OCR qua đầu tunnel
+        r = _direct(tmp_path, **{**ocr, k: "sk-real-looking"})
+        assert r.returncode != 0 and k in r.stderr and "sk-real-looking" not in r.stderr
+    assert _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY="stub-test-key-not-secret",
+                   MULTILANG_SPECIALIST_API_KEY="stub-test-key-not-secret",
+                   TRANSLATE_V2_OCR_API_KEY="stub-test-key-not-secret").returncode == 0
+
+
+# ---- Task 8e: LLM_* chuẩn, QWEN_* cũ. Ngữ nghĩa giống pydantic AliasChoices: dòng LLM_X có mặt (kể cả rỗng) là tên
+# đang dùng; gateway KHÔNG rơi về QWEN_X khi LLM_X rỗng. _ready dùng LLM_* (như init sinh). ----
+LLM_KEYS = ("BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW")
+
+
+def _del(d, *keys):
+    lines = [l for l in (d / ".env").read_text().splitlines() if l.split("=", 1)[0] not in keys]
+    (d / ".env").write_text("\n".join(lines) + "\n")
+
+
+def _qwen_only(tmp_path):
+    d, extra = _ready(tmp_path)
+    _del(d, *(f"LLM_{x}" for x in LLM_KEYS))
+    _set(d, QWEN_BASE_URL="http://q/v1", QWEN_API_KEY="k", QWEN_MODEL="m", QWEN_CONTEXT_WINDOW="4096")
+    return d, extra
+
+
+def test_init_env_has_llm_lines_and_preflight_names_them(tmp_path):
+    d = _stack(tmp_path)
+    assert _bs(d, "init").returncode == 0
+    assert _get(d, "LLM_BASE_URL") == "" and _get(d, "LLM_CONTEXT_WINDOW") == "131072" and _get(d, "QWEN_BASE_URL") is None
+
+
+def test_preflight_qwen_only_without_llm_lines_passes(tmp_path):
+    d, extra = _qwen_only(tmp_path)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0 and "LLM_" not in r.stderr, r.stderr
+
+
+@pytest.mark.parametrize("x", ["BASE_URL", "API_KEY", "MODEL", "CONTEXT_WINDOW"])
+def test_preflight_empty_llm_line_shadowing_qwen_fails(tmp_path, x):
+    d, extra = _qwen_only(tmp_path)
+    _set(d, **{f"LLM_{x}": ""})
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and f"LLM_{x}" in r.stderr and "xoá dòng" in r.stderr, r.stderr
+
+
+def test_preflight_llm_context_window_must_be_int(tmp_path):
+    for bad in ("", "abc", "0"):
+        _fails(tmp_path, "LLM_CONTEXT_WINDOW", LLM_CONTEXT_WINDOW=bad)
+
+
+def test_preflight_llm_only(tmp_path):
+    d, extra = _ready(tmp_path)
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0 and "QWEN_" not in r.stderr, r.stderr
+    _set(d, LLM_MODEL="")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode != 0 and "LLM_MODEL" in r.stderr
+
+
+def test_preflight_both_same_no_warning(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, QWEN_BASE_URL="http://llm/v1", QWEN_API_KEY="k", QWEN_MODEL="m")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0 and "WARNING: LLM_" not in r.stderr, r.stderr
+
+
+def test_preflight_both_different_warns_llm_wins_without_values(tmp_path):
+    d, extra = _ready(tmp_path)
+    _set(d, LLM_BASE_URL="http://new/v1", LLM_API_KEY="sk-new-secret-xyz", LLM_MODEL="new-m",
+         QWEN_BASE_URL="http://old/v1", QWEN_API_KEY="sk-old-secret-abc", QWEN_MODEL="old-m")
+    r = _bs(d, "preflight", **extra)
+    assert r.returncode == 0, r.stderr
+    for x in ("BASE_URL", "API_KEY", "MODEL"):
+        assert f"WARNING: LLM_{x}" in r.stderr and f"QWEN_{x}" in r.stderr, x
+    assert "sk-new-secret-xyz" not in r.stderr and "sk-old-secret-abc" not in r.stderr
+
+
+# ---- M2: khoá stub cho OCR chỉ khi OCR đi qua đầu tunnel ----
+def test_preflight_direct_real_ocr_key_ok_when_ocr_not_tunnelled(tmp_path):
+    k = "stub-test-key-not-secret"
+    r = _direct(tmp_path, TRANSLATE_V2_SPECIALIST_API_KEY=k, MULTILANG_SPECIALIST_API_KEY=k,
+                TRANSLATE_V2_OCR_BASE_URL="http://10.0.0.7:18083", TRANSLATE_V2_OCR_API_KEY="real-ocr-key")
+    assert r.returncode == 0, r.stderr
+    r = _direct(tmp_path, TRANSLATE_V2_OCR_BASE_URL="http://127.0.0.1:18083", TUNNEL_DIRECT_OCR="stub-ocr:18083",
+                TRANSLATE_V2_OCR_API_KEY="real-ocr-key")
+    assert r.returncode != 0 and "TRANSLATE_V2_OCR_API_KEY" in r.stderr

@@ -1,0 +1,227 @@
+{
+ "_doc": "expect_all: mỗi phần tử phải xuất hiện (không phân biệt hoa thường); 'a|b' = một trong các lựa chọn; 're:<regex>' = regex. expect_none: không phần tử nào được xuất hiện (cùng cú pháp). Chuỗi trong fields là placeholder hoặc nhãn của ô nhập.",
+ "cases": [
+  {
+   "id": "UI-CHAT-1",
+   "kind": "chat",
+   "page": "/ai/chat-bot",
+   "fields": {
+    "Nhập nội dung...": "CVE-2021-44228 là lỗ hổng gì? Nêu sản phẩm bị ảnh hưởng, điểm CVSS và cách khắc phục."
+   },
+   "click": "Gửi",
+   "expect_all": [
+    "Log4Shell|Log4j",
+    "10.0",
+    "2.16.0|2.15.0"
+   ],
+   "expect_none": [
+    "ProviderError",
+    "Connection error"
+   ],
+   "min_chars": 500,
+   "timeout_s": 90
+  },
+  {
+   "id": "UI-CHAT-2",
+   "kind": "chat",
+   "page": "/ai/chat-bot",
+   "fields": {
+    "Nhập nội dung...": "CVE-2099-99999 là lỗ hổng gì?"
+   },
+   "click": "Gửi",
+   "expect_all": [
+    "không tìm thấy|không có dữ liệu|không có thông tin|không tồn tại|chưa có"
+   ],
+   "expect_none": [
+    "re:CVSS[^\\n]{0,30}\\d+\\.\\d",
+    "ProviderError",
+    "Connection error"
+   ],
+   "timeout_s": 90
+  },
+  {
+   "id": "UI-TR-1",
+   "kind": "translate_text",
+   "page": "/ai/translate",
+   "tab": "Dịch trực tiếp",
+   "source": "English",
+   "target": "Việt Nam",
+   "fields": {
+    "Nội dung cần dịch": "A remote code execution vulnerability in Apache Log4j2 allows an unauthenticated attacker to run arbitrary code on the server. Default credentials are admin / P@ssw0rd123."
+   },
+   "click": "Dịch",
+   "output_field": "Kết quả dịch",
+   "expect_all": [
+    "lỗ hổng",
+    "máy chủ",
+    "Apache Log4j2",
+    "admin / P@ssw0rd123"
+   ],
+   "expect_none": [],
+   "timeout_s": 60
+  },
+  {
+   "id": "UI-TR-2",
+   "kind": "translate_file",
+   "page": "/ai/translate",
+   "tab": "Dịch tệp và hình ảnh",
+   "source": "English",
+   "target": "Việt Nam",
+   "source_value": "en",
+   "target_value": "vi",
+   "input": "fixtures/sample-en.docx",
+   "click": "Chọn tệp",
+   "expect_all": [
+    "re:[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]",
+    "lỗ hổng"
+   ],
+   "expect_none": [
+    "Dịch thất bại",
+    "TRANSLATION_UNAVAILABLE"
+   ],
+   "timeout_s": 300
+  },
+  {
+   "id": "UI-TR-3",
+   "kind": "translate_file",
+   "page": "/ai/translate",
+   "tab": "Dịch tệp và hình ảnh",
+   "source": "English",
+   "target": "Việt Nam",
+   "source_value": "en",
+   "target_value": "vi",
+   "input": "fixtures/sample-en.png",
+   "click": "Chọn tệp",
+   "requires": "ocr",
+   "skip_message": "bỏ qua, chưa cấu hình OCR",
+   "expect_all": [
+    "re:[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]"
+   ],
+   "expect_none": [
+    "Dịch thất bại",
+    "TRANSLATION_UNAVAILABLE"
+   ],
+   "timeout_s": 300
+  },
+  {
+   "id": "UI-RPT-1",
+   "kind": "report",
+   "page": "/ai/report",
+   "fields": {
+    "Đối tượng quét": "Thiết bị",
+    "Định dạng file tải": "docx",
+    "Mẫu template báo cáo": "1. Tổng quan, 2. Chi tiết"
+   },
+   "click": "Phân tích thông minh",
+   "download": "Tải báo cáo",
+   "expect_all": [
+    "BÁO CÁO ĐÁNH GIÁ AN TOÀN THÔNG TIN",
+    "1. Tổng quan",
+    "2. Chi tiết"
+   ],
+   "expect_none": [
+    "Connection error"
+   ],
+   "timeout_s": 120
+  },
+  {
+   "id": "UI-POC-1",
+   "kind": "exploit",
+   "page": "/ai/exploit",
+   "fields": {
+    "Nhập CVE": "CVE-2022-22963",
+    "Nhập target": "192.168.96.7:8080"
+   },
+   "click": "Sinh PoC",
+   "expect_all": [
+    "[check_cve]",
+    "tìm thấy",
+    "[check_target]",
+    "reachable",
+    "[pool]",
+    "Khởi tạo engine",
+    "[init]",
+    "session ses_",
+    "Khai thác THÀNH CÔNG|Kết quả phiên chạy",
+    "re:(File exploit[\\s\\S]*Cách chạy|Run ID[\\s\\S]*Code[\\s\\S]*Reason)"
+   ],
+   "expect_none": [],
+   "timeout_s": 1800,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target",
+     "pool",
+     "init"
+    ],
+    "steps_none": [],
+    "final": "ok có code+run_instructions; ok=false có reason; luôn có run_id"
+   }
+  },
+  {
+   "id": "UI-POC-2",
+   "kind": "exploit",
+   "page": "/ai/exploit",
+   "fields": {
+    "Nhập CVE": "CVE-2026-27944",
+    "Nhập target": "192.168.96.21:9000"
+   },
+   "click": "Sinh PoC",
+   "expect_all": [
+    "[check_cve]",
+    "tìm thấy",
+    "[check_target]",
+    "reachable",
+    "[pool]",
+    "Khởi tạo engine",
+    "[init]",
+    "session ses_",
+    "Khai thác THÀNH CÔNG|Kết quả phiên chạy",
+    "re:(File exploit[\\s\\S]*Cách chạy|Run ID[\\s\\S]*Code[\\s\\S]*Reason)"
+   ],
+   "expect_none": [],
+   "timeout_s": 1800,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target",
+     "pool",
+     "init"
+    ],
+    "steps_none": [],
+    "final": "ok có code+run_instructions; ok=false có reason; luôn có run_id"
+   }
+  },
+  {
+   "id": "UI-POC-3",
+   "kind": "exploit",
+   "page": "/ai/exploit",
+   "fields": {
+    "Nhập CVE": "CVE-2022-22963",
+    "Nhập target": "192.168.96.250:9"
+   },
+   "click": "Sinh PoC",
+   "expect_all": [
+    "[check_target]",
+    "không kết nối|không thể kết nối|unreachable|không reach"
+   ],
+   "expect_none": [
+    "Khởi tạo engine",
+    "[init]"
+   ],
+   "timeout_s": 60,
+   "api": {
+    "steps": [
+     "check_cve",
+     "check_target"
+    ],
+    "steps_none": [
+     "pool",
+     "init"
+    ],
+    "final": "ok=false, reason không rỗng, run_id rỗng",
+    "check_target_status": "error"
+   }
+  }
+ ]
+}

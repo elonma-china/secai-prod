@@ -1,0 +1,6 @@
+acceptance/node_modules
+.env
+secrets/
+acceptance/test-results/
+acceptance/playwright-report/
+tokenizer/

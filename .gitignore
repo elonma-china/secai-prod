@@ -36,3 +36,6 @@ output/*.png
 **/node_modules
 **/test-results/
 pentestcode/packages/opencode/js/
+
+# Thư mục làm việc cục bộ (gói dữ liệu eval, .env eval có khoá API) - không commit
+/local/

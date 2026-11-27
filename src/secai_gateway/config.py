@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     qdrant_howto_collection: str = "ias_howto_kb"
     qdrant_bm25_vector: str = "bm25"
     bm25_model: str = "Qdrant/bm25"
+    # Empty = stopwords dir bundled in retrieval/bm25_model (env BM25_LOCAL_MODEL_DIR).
+    bm25_local_model_dir: str = ""
     # Knowledge KB (cheat sheets, ASVS, CWE/CAPEC/ATT&CK mitigations): docs/plans/kb-knowledge-grounding.md.
     # Off by default: chat then routes exactly as before. knowledge_min_rerank 0 = no cut-off (sec-rerank scores saturate near 1: relevant hits >=0.97, measured 2026-10-06).
     chat_knowledge_grounding_enabled: bool = False
@@ -219,6 +221,9 @@ class Settings(BaseSettings):
     # Cloned source repos (metasploit-framework, nuclei-templates, vulhub, advisory-database,
     # PoC-in-GitHub) live under here; each collector reads its own subdir.
     poc_sources_root: str = "/srv/poc-sources"
+    # Path to the poc-sources tree AS SEEN BY THE ENGINE (named in the exploit-v2 prompt). Default is the
+    # host path prod mounts; the stack package sets /srv/secai-data/poc-sources.
+    agent_poc_sources_path: str = "/home/ict/AIEngines/secai/secai-data/poc-sources"
     # Content-addressed store for artifacts fetched from link-only sources (GitHub PoCs),
     # so serving is fully offline (no runtime internet).
     poc_artifact_store: str = "/srv/poc-store"
@@ -394,6 +399,8 @@ class Settings(BaseSettings):
     # tái dùng verify_allow_all/verify_allowed_targets, giống mọi exploit endpoint khác.
     ias_server_url: str = ""
     ias_server_timeout_s: int = 900
+    # Mật khẩu Basic auth của engine (OPENCODE_SERVER_PASSWORD phía engine). Rỗng = không gửi auth (prod hiện tại).
+    ias_server_password: str = ""
     # ── pool nhiều instance @ias/server để chạy nhiều exploit-v2 ĐỒNG THỜI ─────
     # Rỗng = 1 slot duy nhất dùng ias_server_url (hành vi cũ, không đổi). Có giá trị =
     # "url|home" cách nhau bằng dấu phẩy, mỗi slot là 1 process bun riêng với HOME riêng

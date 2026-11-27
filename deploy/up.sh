@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# ═══ DEPRECATED (2026-11-24): dùng `stack/` (xem stack/README.md) cho máy mới. Script này giữ nguyên hành vi, chỉ để tham chiếu/rollback. ═══
 # ═══════════════════════════════════════════════════════════════════════════════
 #  up.sh — build + khởi động bộ Docker thống nhất `secai-docker`
 #          (gateway + qdrant + neo4j + redis), rồi in danh sách container của dự án.
