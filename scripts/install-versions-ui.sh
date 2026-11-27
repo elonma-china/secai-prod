@@ -7,7 +7,7 @@
 # Runner (~/.local/bin/secai-versions-run) mỗi lần chạy lấy scripts/versions.py + deploy/services.json từ
 # origin/main MỚI NHẤT (git archive) vào ~/.local/lib/secai-versions/<lệnh>/, nên không phụ thuộc checkout chính
 # đang ở commit nào và không đụng file của nó. Cờ behind-main dùng git của checkout chính (SECAI_REPO).
-# UI chỉ bind 127.0.0.1:18190; xem từ máy khác: ssh -L 18190:127.0.0.1:18190 <máy>. Chi tiết: docs/ops/VERSIONS.md.
+# UI chỉ bind 127.0.0.1:18190; xem từ máy khác: ssh -L 18190:127.0.0.1:18190 <máy>. Chi tiết: docs/operations/container-versions.md.
 # Chỉ cài được sau khi versions.py đã nằm trên origin/main. Cần `loginctl enable-linger $USER` (đã bật).
 set -euo pipefail
 

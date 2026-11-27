@@ -1,12 +1,11 @@
 {
-  "_doc": "Catalog service/container của secai-agent-gateway cho scripts/versions.py (docs/ops/VERSIONS.md). Không chứa secret, không đường dẫn tuyệt đối. role: prod|canary|dependency|dev. Các container của một service phải chạy cùng image; 'group' mở rộng ràng buộc đó sang các service cùng giá trị group.",
+  "_doc": "Catalog service/container của secai-agent-gateway cho scripts/versions.py (docs/operations/container-versions.md). Không chứa secret, không đường dẫn tuyệt đối. role: prod|canary|dependency|dev. Các container của một service phải chạy cùng image.",
   "services": [
     {
       "id": "gateway",
       "title": "Gateway prod: :8131, gateway dịch :18185 và worker dịch",
       "containers": ["secai-docker-gateway", "secai-translation-gateway", "secai-translation-worker"],
       "role": "prod",
-      "group": "gateway-main",
       "built_from_repo": true,
       "upgrade": "scripts/release-prod.sh plan  # xem diff, rồi: scripts/release-prod.sh run --yes",
       "rollback": "scripts/release-prod.sh rollback --yes"

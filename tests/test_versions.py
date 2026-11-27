@@ -11,7 +11,7 @@ import importlib.util
 import json
 import os
 import re
-import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -101,7 +101,7 @@ def container(name: str, ref: str, image: str, *, env=(), labels=None, running=T
 
 
 def image(iid: str, tags, *, created="2026-11-27T06:40:01.979808192Z", labels=None, env=()):
-    return {"Id": iid, "RepoTags": list(tags), "RepoDigests": [t.split(":")[0] + "@" + hid("f") for t in tags[:1]],
+    return {"Id": iid, "RepoTags": list(tags), "RepoDigests": [t.rsplit(":", 1)[0] + "@" + iid for t in tags[:1]],
             "Created": created, "Config": {"Labels": labels, "Env": [f"HF_TOKEN={SECRET}", *env]}}
 
 
@@ -294,6 +294,32 @@ def test_missing_container_and_stopped_container(sb: Sandbox) -> None:
     assert s["report-backend"]["running"] == 0
 
 
+def test_restarting_or_paused_container_is_missing(sb: Sandbox) -> None:
+    """Docker để Running=true cho container đang crash-loop (restarting) hay bị pause."""
+    sb.cont("secai-translation-converter")["State"].update(Status="restarting", Running=True, Restarting=True, Pid=0)
+    sb.cont("secai-report-backend")["State"].update(Status="paused", Running=True, Paused=True)
+    sb.save()
+    s = sb.status()
+    assert s["translation-converter"]["flags"] == ["floating-tag", "missing"]
+    assert "missing" in s["report-backend"]["flags"]
+
+
+def test_health_counts_only_containers_with_a_healthcheck() -> None:
+    h = load_versions().health
+    assert h([{"health": "healthy"}, {"health": None}]) == "healthy 1/1"
+    assert h([{"health": "healthy"}, {"health": "healthy"}, {"health": "starting"}]) == "starting 2/3"
+    assert h([{"health": "unhealthy"}, {"health": "starting"}]) == "unhealthy 0/2"
+
+
+def test_digest_pinned_ref_is_clean(sb: Sandbox) -> None:
+    """Ghim `repo@sha256:<Id>` (containerd store: RepoDigests = repo@<Id>) là bất biến, không phải tag-moved."""
+    sb.cont("secai-docker-redis")["Config"]["Image"] = "redis@" + hid("a")
+    sb.save()
+    assert sb.status()["redis"]["flags"] == []
+    sb.run("record", "--service", "redis", "--action", "release", "--from", "redis:7-alpine", "--to", "redis@" + hid("a"))
+    assert sb.entries()[-1]["to"]["image_id"] == hid("a")
+
+
 def test_behind_main_only_with_git(sb: Sandbox) -> None:
     sb.git_counts({"2dcff27c": 5})
     assert sb.status()["gateway"]["flags"] == ["behind-main:5"]
@@ -385,15 +411,6 @@ def load_versions():
     return mod
 
 
-def test_group_drift_across_services_sharing_a_group() -> None:
-    v = load_versions()
-    rows = [{"group": "g", "flags": [], "containers": [{"running": True, "image_id": hid("1")}]},
-            {"group": "g", "flags": [], "containers": [{"running": True, "image_id": hid("2")}]},
-            {"group": None, "flags": [], "containers": [{"running": True, "image_id": hid("3")}]}]
-    v.mark_group_drift(rows)
-    assert [r["flags"] for r in rows] == [["group-drift"], ["group-drift"], []]
-
-
 def test_dev_role_only_on_request(sb: Sandbox) -> None:
     assert "secai-gw-dev" not in sb.run("status").stdout
     s = sb.status("--role", "dev")
@@ -436,6 +453,36 @@ def test_ledger_is_0600_and_append_only(sb: Sandbox) -> None:
     assert rb["action"] == "rollback" and re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", rb["ts"])
 
 
+def test_ledger_symlink_is_refused(sb: Sandbox, tmp_path: Path) -> None:
+    other = tmp_path / "other.txt"
+    other.write_text("keep\n")
+    other.chmod(0o644)
+    sb.ledger.symlink_to(other)
+    sb.run("record", "--service", "gateway", "--action", "release", "--from", "a:1", "--to", GW_TAG, code=1)
+    assert other.read_text() == "keep\n" and stat.S_IMODE(other.stat().st_mode) == 0o644
+
+
+def test_record_without_docker_still_writes_the_ref(sb: Sandbox) -> None:
+    (sb.root / "empty").mkdir()
+    sb.env["PATH"] = str(sb.root / "empty")
+    sb.run("record", "--service", "gateway", "--action", "release", "--from", "a:1", "--to", GW_TAG)
+    (e,) = sb.entries()
+    assert e["to"] == {"ref": GW_TAG, "image_id": None, "revision": None} and len(e["containers"]) == 3
+
+
+def test_record_with_hanging_docker_falls_back_within_its_timeout(sb: Sandbox, monkeypatch) -> None:
+    (sb.bin / "docker").write_text("#!/bin/sh\nexec sleep 30\n")
+    monkeypatch.setenv("PATH", sb.env["PATH"])
+    monkeypatch.setenv("SECAI_RELEASES_DIR", str(sb.releases))
+    v = load_versions()
+    v.RECORD_DOCKER_TIMEOUT = 1
+    t = time.monotonic()
+    assert v.main(["record", "--service", "gateway", "--action", "release", "--from", "a:1", "--to", GW_TAG]) == 0
+    assert time.monotonic() - t < 10
+    (e,) = sb.entries()
+    assert e["to"]["image_id"] is None and len(e["containers"]) == 3
+
+
 def test_record_rejects_unknown_service_and_action(sb: Sandbox) -> None:
     sb.run("record", "--service", "nope", "--action", "release", "--from", "a", "--to", "b", code=2)
     sb.run("record", "--service", "gateway", "--action", "observed", "--from", "a", "--to", "b", code=2)
@@ -462,6 +509,34 @@ def test_snapshot_baseline_then_silent_then_observed(sb: Sandbox) -> None:
     new = sb.entries()[len(first):]
     assert len(new) == 1 and new[0]["action"] == "observed" and new[0]["service"] == "redis"
     assert new[0]["from"]["ref"] == "redis:7-alpine" and new[0]["to"] == {"ref": "redis:7.4.1", "image_id": hid("e"), "revision": None}
+
+
+def test_snapshot_pool_partial_rebuild_and_scale_up(sb: Sandbox) -> None:
+    sb.run("snapshot")
+    n = len(sb.entries())
+    ref = "secai-pentestcode:1.3.14-tools"
+    next(i for i in sb.world["images"] if i["Id"] == hid("7"))["RepoTags"] = []
+    sb.world["images"].append(image(hid("e"), [ref]))  # tag bị dựng lại
+    sb.cont("secai-docker-pentestcode-2")["Image"] = hid("e")  # chỉ -2 được tạo lại từ cùng ref
+    sb.world["containers"].append(container("secai-docker-pentestcode-3", ref, hid("7")))  # scale lên, image cũ
+    sb.save()
+    sb.run("snapshot")
+    new = {tuple(e["containers"]): e for e in sb.entries()[n:]}
+    assert set(new) == {("secai-docker-pentestcode-2",), ("secai-docker-pentestcode-3",)}
+    rebuilt = new[("secai-docker-pentestcode-2",)]
+    assert rebuilt["action"] == "observed" and rebuilt["to"]["image_id"] == hid("e") and rebuilt["from"]["image_id"] == hid("7")
+    assert new[("secai-docker-pentestcode-3",)]["from"] is None
+    # hai container từ hai image khác nhau cùng đổi sang một image: không có `from` chung
+    n = len(sb.entries())
+    sb.world["images"].append(image(hid("0"), ["secai-pentestcode:1.3.15-tools"]))
+    for name in ("secai-docker-pentestcode-2", "secai-docker-pentestcode-3"):
+        c = sb.cont(name)
+        c["Config"]["Image"], c["Image"] = "secai-pentestcode:1.3.15-tools", hid("0")
+    sb.save()
+    sb.run("snapshot")
+    (e,) = sb.entries()[n:]
+    assert e["containers"] == ["secai-docker-pentestcode-2", "secai-docker-pentestcode-3"]
+    assert e["from"] is None and e["to"]["image_id"] == hid("0")
 
 
 def test_snapshot_after_record_sees_no_change(sb: Sandbox) -> None:
@@ -543,6 +618,63 @@ def test_snapshot_skips_while_release_holds_the_deploy_lock(sb: Sandbox) -> None
         assert "đang giữ lock" in r.stderr and not sb.ledger.exists()
     sb.run("snapshot")
     assert sb.entries()
+
+
+def wrap_docker_ps(sb: Sandbox, snippet: str) -> None:
+    """Chạy `snippet` (sh) trước mỗi `docker ps` của docker giả."""
+    real = sb.bin / "docker-real"
+    (sb.bin / "docker").rename(real)
+    (sb.bin / "docker").write_text(f'#!/bin/sh\nif [ "$1" = ps ]; then\n{snippet}\nfi\nexec "{real}" "$@"\n')
+    (sb.bin / "docker").chmod(0o755)
+
+
+HOLD_LOCK = """import fcntl, sys, time
+f = open(sys.argv[1], "w")
+fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+open(sys.argv[2], "w").close()
+time.sleep(60)
+"""
+
+
+def test_snapshot_skips_when_release_takes_the_lock_while_reading_docker(sb: Sandbox) -> None:
+    """Release lấy lock deploy sau lần kiểm đầu, lúc snapshot đang đọc docker: không được ghi `observed`."""
+    sb.run("snapshot")
+    n = len(sb.entries())
+    sb.world["images"].append(image(hid("e"), ["secai-agent-gateway:main-22222222-20261128"]))
+    c = sb.cont("secai-docker-gateway")
+    c["Config"]["Image"], c["Image"] = "secai-agent-gateway:main-22222222-20261128", hid("e")
+    sb.save()
+    holder, ready, pid = sb.root / "hold.py", sb.root / "locked", sb.root / "holder.pid"
+    holder.write_text(HOLD_LOCK)
+    wrap_docker_ps(sb, f'if [ ! -e "{ready}" ]; then\n"{sys.executable}" "{holder}" "{sb.releases}/gateway-deploy.lock" "{ready}" '
+                       f'</dev/null >/dev/null 2>&1 &\necho $! > "{pid}"\nwhile [ ! -e "{ready}" ]; do sleep 0.05; done\nfi')
+    try:
+        r = sb.run("snapshot")
+        assert len(sb.entries()) == n and "bỏ qua lượt này" in r.stderr
+    finally:
+        if pid.exists():
+            os.kill(int(pid.read_text()), signal.SIGTERM)
+
+
+def test_record_does_not_wait_while_snapshot_reads_docker(sb: Sandbox) -> None:
+    """snapshot đọc docker ngoài flock của sổ; sổ đổi trong lúc đó thì snapshot bỏ lượt thay vì ghi theo sổ cũ."""
+    sb.run("snapshot")
+    n = len(sb.entries())
+    started = sb.root / "ps-started"
+    wrap_docker_ps(sb, f'touch "{started}"; sleep 4')
+    p = subprocess.Popen([sys.executable, "-I", str(SCRIPT), "snapshot"], env=sb.env, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.PIPE, text=True)
+    try:
+        deadline = time.monotonic() + 10
+        while not started.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        t = time.monotonic()
+        sb.run("record", "--service", "gateway", "--action", "release", "--from", "a:1", "--to", GW_TAG)
+        assert time.monotonic() - t < 3 and p.poll() is None
+    finally:
+        _, err = p.communicate(timeout=30)
+    assert p.returncode == 0 and "bỏ qua lượt này" in err
+    assert [e["action"] for e in sb.entries()[n:]] == ["release"]
 
 
 def test_history_filters_and_limits(sb: Sandbox) -> None:
@@ -667,6 +799,56 @@ def test_backfill_skips_release_already_recorded(sb: Sandbox) -> None:
     assert gw_to.count(GW_TAG) == 1
 
 
+@pytest.mark.parametrize("state_env", [True, False])
+def test_backfill_skips_release_dir_whose_switch_did_not_finish(sb: Sandbox, state_env: bool) -> None:
+    """release-prod.sh đã ghi translation-main.json (có thể cả state.env) rồi die/revert trước RELEASE-NOTES."""
+    release_dirs(sb)
+    d = sb.releases / "main-bbbbbbb2-20261128"
+    d.mkdir()
+    (d / "pytest.log").write_text("3 passed\n")
+    if state_env:
+        (d / "state.env").write_text(f"PREV_TAG={GW_TAG}\nNEW_TAG=secai-agent-gateway:main-bbbbbbb2-20261128\n")
+    (d / "translation-main.json").write_text(json.dumps({"services": {"gateway": {
+        "image": "secai-agent-gateway:main-bbbbbbb2-20261128", "container_name": "secai-translation-gateway"}}}))
+    assert "main-bbbbbbb2" not in sb.run("backfill").stdout
+
+
+def test_backfill_does_not_repeat_a_recorded_rollback(sb: Sandbox) -> None:
+    """release A→X, rollback X→A (đã ghi, release_dir X), release A→Y: backfill không thêm X→A lần nữa."""
+    a, x, y = ("secai-agent-gateway:main-aaaaaaa1-20261119", "secai-agent-gateway:main-cccccccc-20261120",
+               "secai-agent-gateway:main-dddddddd-20261122")
+    def rel(name: str, prev: str, new: str, iso: str) -> str:
+        d = sb.releases / name
+        d.mkdir()
+        (d / "pytest.log").write_text("3 passed\n")
+        (d / "state.env").write_text(f"PREV_TAG={prev}\nNEW_TAG={new}\n")
+        (d / "RELEASE-NOTES.md").write_text(f"# Release {name} ({iso})\n")
+        return str(d)
+    dx, dy = rel("main-cccccccc-20261120", a, x, "2026-11-20T10:00:00Z"), rel("main-dddddddd-20261122", a, y, "2026-11-22T10:00:00Z")
+    gw = ["secai-docker-gateway", "secai-translation-gateway", "secai-translation-worker"]
+    sb.ledger.write_text("".join(json.dumps({"ts": ts, "service": "gateway", "containers": gw, "action": act, "from": {"ref": f},
+                                             "to": {"ref": t}, "release_dir": d}) + "\n"
+                                 for ts, act, f, t, d in (("2026-11-20T10:00:05Z", "release", a, x, dx),
+                                                          ("2026-11-21T08:00:00Z", "rollback", x, a, dx),
+                                                          ("2026-11-22T10:00:05Z", "release", a, y, dy))))
+    sb.run("backfill", "--yes")
+    assert not [e for e in sb.entries() if e["action"] == "backfill" and (e["from"] or {}).get("ref") == x]
+
+
+def test_ledger_state_is_newest_ts_when_backfill_runs_last(sb: Sandbox) -> None:
+    """Thứ tự hay gặp sau merge: snapshot → record release → backfill --yes (dòng backfill mang ts quá khứ)."""
+    release_dirs(sb)
+    sb.run("snapshot")
+    sb.run("record", "--service", "gateway", "--action", "release", "--from", "secai-agent-gateway:main-033b2aa3-20261123",
+           "--to", GW_TAG, "--release-dir", str(sb.releases / "main-2dcff27c-20261127"))
+    sb.run("backfill", "--yes")
+    assert json.loads(sb.run("history", "gateway", "--json").stdout)[0]["action"] == "release"
+    assert json.loads(sb.run("history", "review-frontend", "--json").stdout)[0]["action"] == "baseline"
+    n = len(sb.entries())
+    sb.run("snapshot")
+    assert len(sb.entries()) == n
+
+
 def test_backfill_extra_dir(sb: Sandbox, tmp_path: Path) -> None:
     extra = tmp_path / "extra" / "old-20261001"
     extra.mkdir(parents=True)
@@ -734,6 +916,8 @@ def get(port: int, path: str, method: str = "GET", headers: dict | None = None) 
 def test_serve_get_only_loopback_only(sb: Sandbox) -> None:
     sb.run("snapshot")
     with serving(sb) as port:
+        n = len(sb.docker_calls())
+        assert get(port, "/api/status?role=bogus")[0] == 400 and len(sb.docker_calls()) == n  # lỗi client, chưa gọi docker
         code, body = get(port, "/")
         assert code == 200 and "<!doctype html>" in body and 'http-equiv="refresh" content="60"' in body
         assert "prefers-color-scheme:dark" in body and "width=device-width" in body

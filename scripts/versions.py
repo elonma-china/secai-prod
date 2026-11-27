@@ -14,7 +14,7 @@ nối thêm, dưới flock. Docker chỉ được đọc (`ps -a`, `inspect`, `i
 GIT_SHA và GIT_BRANCH; từ profile JSON chỉ lấy `image` và `container_name`; không in, không lưu env.
 `serve` chỉ bind 127.0.0.1 và chỉ nhận GET. SECAI_REPO (tuỳ chọn): repo git dùng cho cờ `behind-main`.
 Thoát 0 ok; 1 `status --strict` thấy cờ ở service prod, hoặc không ghi được sổ; 2 lỗi dùng/catalog/docker.
-Tài liệu: docs/ops/VERSIONS.md.
+Tài liệu: docs/operations/container-versions.md.
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ FLAG_HELP = {
     "no-revision": "image dựng từ repo này nhưng không có label revision hay env GIT_SHA",
     "group-drift": "các container phải cùng image nhưng đang chạy image khác nhau",
     "behind-main": "revision đang chạy kém origin/main <n> commit",
-    "missing": "không thấy container hoặc container không chạy",
+    "missing": "không thấy container, hoặc container không chạy (kể cả restarting/paused)",
 }
 DOCKER_TIMEOUT = 60
 RECORD_DOCKER_TIMEOUT = 15  # record chạy dưới `timeout 60` của release-prod.sh: còn kịp ghi ref khi docker treo
@@ -107,10 +107,6 @@ def local(value, fmt: str = "%Y-%m-%d %H:%M") -> str:
 def short_id(image_id: str | None) -> str:
     m = HEX_ID.fullmatch(image_id or "")
     return m.group(1)[:12] if m else (image_id or "-")
-
-
-def short_ref(ref: str | None) -> str:
-    return short_id(ref) if ref and HEX_ID.fullmatch(ref) else (ref or "-")
 
 
 def short_rev(rev: str | None) -> str:
@@ -338,7 +334,7 @@ def analyse(c: dict, images: Images, svc: dict) -> dict:
     revision = from_label or c["env_revision"] or img.get("env_revision")
     if svc["built_from_repo"] and not revision:
         flags.append("no-revision")
-    if not c["running"]:
+    if not c["running"] or c["state"] in ("restarting", "paused"):
         flags.append("missing")
     stable = next((t for t in tags if tag_class(t) == "immutable"), None)
     version = ref if not bare and "tag-moved" not in flags else stable or short_id(c["image_id"])
@@ -376,7 +372,8 @@ def health(running: list[dict]) -> str:
     if not checked:
         return "-"
     ok = sum(1 for c in checked if c["health"] == "healthy")
-    return f"{'healthy' if ok == len(running) else 'unhealthy'} {ok}/{len(running)}"
+    starting = {c["health"] for c in checked} <= {"healthy", "starting"}
+    return f"{'healthy' if ok == len(checked) else 'starting' if starting else 'unhealthy'} {ok}/{len(checked)}"
 
 
 def summarise(svc: dict, conts: list[dict], git_cache: dict) -> dict:
@@ -392,24 +389,14 @@ def summarise(svc: dict, conts: list[dict], git_cache: dict) -> dict:
         n = behind_main(head["revision"], git_cache)
         flags |= {f"behind-main:{n}"} if n else set()
     return {
-        "id": svc["id"], "title": svc["title"], "role": svc["role"], "group": svc.get("group"),
+        "id": svc["id"], "title": svc["title"], "role": svc["role"],
         "built_from_repo": svc["built_from_repo"], "upgrade": svc["upgrade"], "rollback": svc["rollback"],
         "version": head["version"] if one else f"{len(ids)} bản khác nhau" if ids else "-",
         "revision": head.get("revision"), "image_created": head.get("image_created"),
         "started_at": max((c["started_at"] for c in running if c["started_at"]), default=None),
         "running": len(running), "total": len(conts), "health": health(running),
-        "flags": sorted(flags), "containers": conts,
+        "flags": sorted(flags, key=lambda f: (f.startswith("behind-main"), f)), "containers": conts,
     }
-
-
-def mark_group_drift(rows: list[dict]) -> None:
-    groups: dict[str, set] = {}
-    for r in rows:
-        if r["group"]:
-            groups.setdefault(r["group"], set()).update(c["image_id"] for c in r["containers"] if c["running"])
-    for r in rows:
-        if r["group"] and len(groups[r["group"]]) > 1 and "group-drift" not in r["flags"]:
-            r["flags"].append("group-drift")
 
 
 def collect(services: list[dict], roles: set[str] | None = None) -> dict:
@@ -426,9 +413,6 @@ def collect(services: list[dict], roles: set[str] | None = None) -> dict:
     for s in chosen:
         conts = [analyse(facts[n], images, s) if n in facts else missing_container(n) for n in wanted[s["id"]]]
         rows.append(summarise(s, conts, git_cache))
-    mark_group_drift(rows)
-    for r in rows:
-        r["flags"] = sorted(set(r["flags"]), key=lambda f: (f.startswith("behind-main"), f))
     return {"generated_at": now_iso(), "services": rows}
 
 
@@ -608,8 +592,8 @@ def history(services: list[dict], service: str | None, n: int) -> list[dict]:
 def render_history(entries: list[dict]) -> str:
     if not entries:
         return f"Sổ chưa có dòng nào ({ledger_path()})."
-    rows = [[local(e["ts"]), e["service"], e["action"], short_ref((e["from"] or {}).get("ref")),
-             short_ref((e["to"] or {}).get("ref")), short_rev((e["to"] or {}).get("revision")), e["by"] or "-",
+    rows = [[local(e["ts"]), e["service"], e["action"], short_id((e["from"] or {}).get("ref")),
+             short_id((e["to"] or {}).get("ref")), short_rev((e["to"] or {}).get("revision")), e["by"] or "-",
              (e["note"] or "")[:60]] for e in entries]
     return table(["THỜI ĐIỂM", "SERVICE", "HÀNH ĐỘNG", "TỪ", "SANG", "REVISION", "BỞI", "GHI CHÚ"], rows)
 
@@ -625,14 +609,14 @@ def cmd_history(a, services) -> int:
 # ---------------------------------------------------------------- lệnh: snapshot
 
 
-def snapshot_entries(services: list[dict], entries: list[dict]) -> list[dict]:
-    """So image đang chạy với trạng thái cuối trong sổ, theo từng container; bỏ qua role dev.
+def snapshot_entries(rows: list[dict], entries: list[dict]) -> list[dict]:
+    """So image đang chạy (rows của collect(), không gồm role dev) với trạng thái cuối trong sổ, theo container.
 
     Image khác → `observed` (hoặc `baseline` nếu service chưa có trong sổ). Cùng ref nhưng dòng cuối chưa có
     image_id (backfill tag trôi, record lúc docker lỗi) → `baseline` để ghim image_id, nếu không thì về sau
     tag bị dựng lại và container tạo lại từ cùng ref sẽ không ai thấy."""
     out = []
-    for row in collect([s for s in services if s["role"] != "dev"])["services"]:
+    for row in rows:
         known = last_state(entries, row["id"])
         seen = any(e["service"] == row["id"] for e in entries)
         by_image: dict[str, list[dict]] = {}
@@ -676,10 +660,10 @@ def release_in_progress() -> bool:
 
 
 def describe(e: dict) -> str:
-    frm = short_ref((e["from"] or {}).get("ref")) if e["from"] else "∅"
+    frm = short_id((e["from"] or {}).get("ref")) if e["from"] else "∅"
     who = ",".join(e["containers"]) if len(e["containers"]) <= 3 else f"{len(e['containers'])} container"
     where = f" ({e['release_dir']})" if e["release_dir"] else ""
-    return f"{e['action']:<9} {e['service']:<22} {frm} → {short_ref((e['to'] or {}).get('ref'))} [{who}]{where}"
+    return f"{e['action']:<9} {e['service']:<22} {frm} → {short_id((e['to'] or {}).get('ref'))} [{who}]{where}"
 
 
 def write_or_plan(planned_fn, write: bool, label: str, hint: str = "") -> int:
@@ -698,11 +682,29 @@ def write_or_plan(planned_fn, write: bool, label: str, hint: str = "") -> int:
     return 0
 
 
+def ledger_stamp() -> tuple[int | None, int]:
+    try:
+        st = ledger_path().stat()
+    except FileNotFoundError:
+        return None, 0
+    return st.st_ino, st.st_size
+
+
 def cmd_snapshot(a, services) -> int:
     if release_in_progress():  # đang switch: chờ release-prod.sh tự ghi `release`, tránh ghi nhầm `observed`
         print("snapshot: release-prod.sh đang giữ lock deploy, bỏ qua lượt này", file=sys.stderr)
         return 0
-    return write_or_plan(lambda entries: snapshot_entries(services, entries), not a.dry_run, "snapshot")
+    ino, size = ledger_stamp()
+    rows = collect([s for s in services if s["role"] != "dev"])["services"]  # docker chậm: đọc ngoài flock của sổ
+
+    def plan(entries: list[dict]) -> list[dict]:
+        # Trong flock: release vừa lấy lock deploy, hoặc record vừa ghi sổ trong lúc snapshot đọc docker.
+        now_ino, now_size = ledger_stamp()
+        if release_in_progress() or now_size != size or (ino is not None and now_ino != ino):
+            print("snapshot: lock deploy hoặc sổ đổi trong lúc đọc docker, bỏ qua lượt này", file=sys.stderr)
+            return []
+        return snapshot_entries(rows, entries)
+    return write_or_plan(plan, not a.dry_run, "snapshot")
 
 
 # ---------------------------------------------------------------- lệnh: record
@@ -777,6 +779,10 @@ def profile_files(d: Path) -> list[Path]:
 
 
 def dir_observations(d: Path, services: list[dict]) -> list[dict]:
+    # Thư mục của release-prod.sh (pytest.log có từ gate 1) chưa có RELEASE-NOTES: switch chưa xong hoặc đã
+    # revert, profile trong đó (translation-main.json) chưa bao giờ chạy.
+    if ((d / "state.env").is_file() or (d / "pytest.log").is_file()) and not (d / "RELEASE-NOTES.md").is_file():
+        return []
     found = []  # (t, container, ref, là-trạng-thái-trước, nguồn)
     nt = notes_time(d) if (d / "state.env").is_file() else None
     if nt:  # state.env của release-prod.sh chỉ tính khi đã có RELEASE-NOTES (switch xong)
@@ -829,12 +835,15 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
     except Fail:
         images = None
     last: dict[str, dict] = {}
+    seen_at: dict[str, dt.datetime] = {}  # container -> mốc quan sát gần nhất
+    since: dict[int, dt.datetime] = {}  # id() dòng -> mốc quan sát trước sớm nhất của các container của nó
     merged: dict[tuple, dict] = {}
     newest: dict[str, int] = {}  # container -> id() dòng gần nhất của nó
     out = []
     for o in obs:
         to = ref_obj(o["ref"], images.by_ref(o["ref"]) if images and pinned(o["ref"]) else None)
         prev, last[o["container"]] = last.get(o["container"]), to
+        prev_t, seen_at[o["container"]] = seen_at.get(o["container"]), o["t"]
         if same(prev, to):
             continue
         sid = owner_of(services, o["container"])
@@ -849,12 +858,27 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
                                          note=f"backfill từ {o['source']}", ts=iso_utc(o["t"]))
             out.append(e)
         newest[o["container"]] = id(e)
+        if prev_t:
+            since[id(e)] = min(prev_t, since.get(id(e), prev_t))
 
     def key(e: dict) -> tuple:
         return e["service"], Path(e["release_dir"] or "").name, norm_ref((e["to"] or {}).get("ref") or "")
 
+    def ref_pair(e: dict) -> tuple:
+        return tuple(norm_ref((e[k] or {}).get("ref") or "") for k in ("from", "to"))
+
     done = {key(e) for e in existing}
-    return sorted((e for e in out if key(e) not in done), key=lambda e: e["ts"])
+    # Release/rollback đã ghi mà backfill dựng lại từ thư mục khác (rollback ghi release_dir của lần bị rollback):
+    # bỏ dòng backfill cùng service, cùng from→to, nếu dòng đã ghi nằm giữa lần quan sát trước và dòng backfill.
+    recorded = [(x["service"], ref_pair(x), parse_ts(x["ts"])) for x in existing
+                if x["action"] != "backfill" and x["from"]]
+
+    def recorded_between(e: dict) -> bool:
+        lo, hi = since.get(id(e)), parse_ts(e["ts"])
+        return bool(lo and e["from"]) and any(s == e["service"] and p == ref_pair(e) and t and lo <= t <= hi
+                                               for s, p, t in recorded)
+
+    return sorted((e for e in out if key(e) not in done and not recorded_between(e)), key=lambda e: e["ts"])
 
 
 def cmd_backfill(a, services) -> int:
@@ -930,12 +954,12 @@ def render_page(data: dict, hist: dict[str, list[dict]]) -> str:
 
 def service_card(r: dict, entries: list[dict]) -> str:
     conts = "".join(tr(
-        esc(c["name"]), esc(c["state"]), f"<code>{esc(c['ref'] and short_ref(c['ref']))}</code>",
-        f"<code>{esc(c['image_id'] and short_id(c['image_id']))}</code>", esc(c["revision_source"]),
+        esc(c["name"]), esc(c["state"]), f"<code>{esc(short_id(c['ref']))}</code>",
+        f"<code>{esc(short_id(c['image_id']))}</code>", esc(c["revision_source"]),
         "".join(map(flag_html, c["flags"]))) for c in r["containers"])
     hist = "".join(tr(
-        esc(local(e["ts"])), esc(e["action"]), f"<code>{esc(short_ref((e['from'] or {}).get('ref')))}</code>",
-        f"<code>{esc(short_ref((e['to'] or {}).get('ref')))}</code>", esc(e["by"]), esc(e["note"])) for e in entries)
+        esc(local(e["ts"])), esc(e["action"]), f"<code>{esc(short_id((e['from'] or {}).get('ref')))}</code>",
+        f"<code>{esc(short_id((e['to'] or {}).get('ref')))}</code>", esc(e["by"]), esc(e["note"])) for e in entries)
     hist = hist or "<tr><td colspan=6 class=mut>Sổ chưa có dòng nào cho service này.</td></tr>"
     return f"""<details><summary><h2>{esc(r['id'])}</h2> <span class=mut>{esc(r['title'])}</span></summary>
 <div>Nâng cấp:</div><pre>{esc(r['upgrade'])}</pre><div>Rollback:</div><pre>{esc(r['rollback'])}</pre>
@@ -955,7 +979,7 @@ class Cache:
     def status(self) -> dict:
         with self.lock:
             if self.data is None or time.monotonic() - self.at > CACHE_SECONDS:
-                self.data, self.at = collect(self.services, set(ROLES)), time.monotonic()
+                self.data, self.at = collect(self.services), time.monotonic()
             return self.data
 
 
@@ -1003,8 +1027,11 @@ def make_handler(cache: Cache):
                     return self.send_json(200, {"service": q.get("service"), "entries": entries})
                 if url.path not in ("/", "/api/status"):
                     return self.reply(404, "text/plain", b"404\n")
+                try:
+                    roles = parse_roles([q["role"]] if q.get("role") else None)
+                except Fail as e:
+                    return self.send_json(400, {"error": str(e)})
                 data = cache.status()
-                roles = parse_roles([q["role"]] if q.get("role") else None)
                 data = {**data, "services": [r for r in data["services"] if r["role"] in roles]}
                 if url.path == "/api/status":
                     return self.send_json(200, data)
@@ -1012,7 +1039,7 @@ def make_handler(cache: Cache):
                 hist = {r["id"]: [e for e in entries if e["service"] == r["id"]][::-1][:10] for r in data["services"]}
                 return self.reply(200, "text/html", render_page(data, hist).encode())
             except Fail as e:
-                code = 404 if url.path == "/api/history" and e.code == 2 else 400 if "--role" in str(e) else 503
+                code = 404 if url.path == "/api/history" and e.code == 2 else 503
                 return self.send_json(code, {"error": str(e)})
             except ValueError:
                 return self.send_json(400, {"error": "tham số không hợp lệ"})
@@ -1025,7 +1052,6 @@ def make_handler(cache: Cache):
 
 def cmd_serve(a, services) -> int:
     server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(Cache(services)))
-    server.daemon_threads = True
     print(f"versions: phục vụ http://127.0.0.1:{server.server_address[1]}/ (chỉ loopback, chỉ GET; Ctrl-C để dừng)",
           file=sys.stderr, flush=True)
     try:

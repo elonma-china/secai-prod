@@ -18,7 +18,6 @@ Danh sách service nằm trong Git, không chứa secret hay đường dẫn tuy
 | `title` | Mô tả tiếng Việt |
 | `containers` hoặc `container_pattern` | Tên container chính xác, hoặc regex khớp toàn bộ tên (pool pentestcode, stack dev) |
 | `role` | `prod`, `canary`, `dependency` hoặc `dev` |
-| `group` | Tuỳ chọn. Các container của một service luôn phải cùng image; `group` mở rộng ràng buộc đó sang các service cùng giá trị |
 | `built_from_repo` | `true` nếu image dựng từ repo này; khi đó thiếu revision là một cờ cảnh báo |
 | `upgrade`, `rollback` | Lệnh hoặc hướng dẫn dạng chữ. Chỗ nào chưa có script thì ghi thẳng "làm tay, chưa có script" |
 
@@ -36,7 +35,7 @@ Catalog hiện có:
 | `qdrant`, `neo4j`, `redis`, `elasticsearch` | `secai-docker-qdrant`, `-neo4j`, `-redis`, `-es` | dependency | làm tay, compose `secai-docker` |
 | `dev-stacks` | `secai-gw-dev-*` | dev | `scripts/dev.sh`; chỉ hiện khi hỏi (`--role dev` hoặc `all`) |
 
-Thêm service: thêm một mục vào catalog, chạy `scripts/dev.sh test tests/test_versions.py`.
+Thêm service: thêm một mục vào catalog, thêm container và image giả tương ứng vào `world()` trong `tests/test_versions.py` (service `prod` thì thêm cả vào `clean_prod`), rồi chạy `scripts/dev.sh test tests/test_versions.py`.
 
 ## Lệnh
 
@@ -79,9 +78,9 @@ Revision lấy từ label `org.opencontainers.image.revision` (của container h
 | `floating-tag` | Tag không bất biến: `latest`, `7-alpine`, `5.20-community`, `1`, `review-mvp-20261004`, ... | có |
 | `floating-tag:minor` | Semver đủ ba số kèm hậu tố (`1.3.14-tools`): gần bất biến nhưng vẫn ghi đè được | không |
 | `no-revision` | Image dựng từ repo này nhưng không có label revision lẫn env `GIT_SHA` | có |
-| `group-drift` | Các container lẽ ra cùng image (cùng service hoặc cùng `group`) đang chạy image khác nhau | có |
+| `group-drift` | Các container lẽ ra cùng image (cùng service) đang chạy image khác nhau | có |
 | `behind-main:<n>` | Revision đang chạy kém `origin/main` n commit. Chỉ có khi có git và commit đó có trong repo | không |
-| `missing` | Không thấy container, hoặc container không chạy | có |
+| `missing` | Không thấy container, hoặc container không chạy (kể cả đang `restarting` hay `paused`) | có |
 
 Tag được coi là bất biến khi có dạng `…-<sha 7–40 hex>-<yyyymmdd>…` (ví dụ `main-2dcff27c-20261127`, `056ed5db-20261123`), ghim `@sha256:`, hoặc là semver đủ ba số như `v1.10.1`, `8.15.3`.
 
@@ -89,7 +88,7 @@ Tag được coi là bất biến khi có dạng `…-<sha 7–40 hex>-<yyyymmdd
 
 ## Sổ phiên bản
 
-`$SECAI_RELEASES_DIR/versions.jsonl`, mặc định `~/secai-releases/versions.jsonl`. Mỗi dòng một JSON, chỉ nối thêm, quyền 0600, ghi dưới `flock` (snapshot đọc, so và ghi trong cùng một khoá). Không mở qua symlink.
+`$SECAI_RELEASES_DIR/versions.jsonl`, mặc định `~/secai-releases/versions.jsonl`. Mỗi dòng một JSON, chỉ nối thêm, quyền 0600, ghi dưới `flock`. Không mở qua symlink. `snapshot` đọc Docker trước khi lấy khoá (Docker chậm không giữ chân `record` của release), rồi trong khoá đọc lại sổ, so và ghi.
 
 ```json
 {"ts": "2026-11-27T07:32:39Z", "service": "gateway",
@@ -111,7 +110,7 @@ Sổ không bao giờ chứa env. Khi đọc, mọi trường lạ trong một d
 
 `image_id` để `null` khi không chắc: image đã bị xoá, hoặc trong backfill ref là tag trôi (gán image hiện tại của tag đó cho quá khứ là sai). Khi một trong hai phía thiếu `image_id`, sổ so sánh theo ref; lần `snapshot` kế tiếp ghi một dòng `baseline` để ghim `image_id` đang chạy, nên về sau tag đó bị dựng lại và container được tạo lại từ cùng ref thì vẫn ra `observed`.
 
-`snapshot` bỏ qua cả lượt chạy (thoát 0, không ghi gì) khi `release-prod.sh` đang giữ `gateway-deploy.lock` hoặc `translation-deploy.lock`, để một lần release đang switch không bị ghi nhầm thành `observed`. Việc kiểm tra đọc `/proc/locks`, không tự lấy lock, nên timer không bao giờ làm `flock -n` của release thất bại.
+`snapshot` bỏ qua cả lượt chạy (thoát 0, không ghi gì) khi `release-prod.sh` đang giữ `gateway-deploy.lock` hoặc `translation-deploy.lock`, để một lần release đang switch không bị ghi nhầm thành `observed`. Nó kiểm hai lần: trước khi đọc Docker, và lại trong khoá sổ ngay trước khi ghi; lần sau cũng bỏ lượt nếu sổ đã đổi (kích thước hoặc inode) trong lúc đọc Docker, ví dụ `record` vừa ghi dòng release. Việc kiểm tra đọc `/proc/locks`, không tự lấy lock, nên timer không bao giờ làm `flock -n` của release thất bại.
 
 ### Nối với `release-prod.sh`
 
@@ -121,11 +120,12 @@ Sau khi ghi `RELEASE-NOTES.md`, `release-prod.sh run` gọi `record --action rel
 
 Quét các thư mục con của `$SECAI_RELEASES_DIR` (và từng `--extra-dir`):
 
-- `state.env` của `release-prod.sh`: chỉ đọc `PREV_TAG` và `NEW_TAG`, và chỉ khi thư mục có `RELEASE-NOTES.md` (switch đã xong). Mốc thời gian lấy từ tiêu đề `# Release … (ISO)`, không có thì mtime của file.
+- Thư mục của `release-prod.sh` (có `state.env` hoặc `pytest.log`) mà chưa có `RELEASE-NOTES.md` bị bỏ cả thư mục: switch chưa xong hoặc đã revert, nên `translation-main.json` trong đó chưa từng chạy.
+- `state.env` của `release-prod.sh`: chỉ đọc `PREV_TAG` và `NEW_TAG`. Mốc thời gian lấy từ tiêu đề `# Release … (ISO)`, không có thì mtime của file.
 - Profile JSON dạng compose ở thư mục release và một tầng con (bỏ `tree/`): chỉ lấy `services.*.image` và `services.*.container_name`, mốc là mtime của file. File lớn hơn 1 MiB và file có tên chứa `credential`, `token`, `secret`, `passw`, `key`, `.env` không được mở. Container không thuộc catalog (canary, candidate, smoke) bị bỏ.
 - Profile có tên kiểu `before`, `prev`, `old`, `rollback`, `backup` là trạng thái trước; nó được xếp ngay trước bản mới của cùng thư mục, và chỉ dùng khi ref là ID hoặc tag bất biến.
 
-Với từng container, các quan sát được xếp theo thời gian; mỗi lần image đổi thành một dòng `backfill`. Các container đổi cùng image trong cùng thư mục, cách nhau không quá 120 s, gộp thành một dòng mang mốc muộn nhất, trừ khi một container trong dòng đó đã đổi tiếp ở giữa. Chạy lại không ghi trùng: dòng có cùng service, cùng tên thư mục release và cùng `to.ref` với một dòng đã có (kể cả dòng `release` do `record` ghi) bị bỏ qua.
+Với từng container, các quan sát được xếp theo thời gian; mỗi lần image đổi thành một dòng `backfill`. Các container đổi cùng image trong cùng thư mục, cách nhau không quá 120 s, gộp thành một dòng mang mốc muộn nhất, trừ khi một container trong dòng đó đã đổi tiếp ở giữa. Chạy lại không ghi trùng: dòng có cùng service, cùng tên thư mục release và cùng `to.ref` với một dòng đã có (kể cả dòng `release` do `record` ghi) bị bỏ qua. Dòng backfill cũng bị bỏ nếu sổ đã có một dòng `release`/`rollback` cùng service, cùng chiều đổi ref, với `ts` nằm giữa lần quan sát trước của các container đó và dòng backfill (rollback ghi `release_dir` của lần bị rollback, còn backfill dựng lại lần đổi đó từ `state.env` của thư mục kế tiếp).
 
 Trên `~/secai-releases` ngày 2026-11-27, kế hoạch backfill có 62 dòng, từ 2026-10-04 tới release `main-2dcff27c` (đã đọc lại output: không có giá trị nào từ `environment`). Backfill chỉ thấy những gì còn lại trong thư mục release; các lần đổi làm tay không để lại profile thì không có trong lịch sử.
 
@@ -145,7 +145,7 @@ Server chỉ bind `127.0.0.1`, không có cờ nào để mở ra ngoài. Chỉ 
 | `/api/status` | JSON giống `status --json` (`?role=` như trên) |
 | `/api/history?service=ID&n=50` | JSON lịch sử; bỏ `service` để lấy mọi service |
 
-`scripts/install-versions-ui.sh` cài hai unit `systemd --user`: `secai-versions-ui.service` (serve) và `secai-versions-snapshot.timer` (snapshot mỗi giờ). Runner lấy `scripts/versions.py` và `deploy/services.json` từ `origin/main` mới nhất mỗi lần chạy, giống timer `wt-prune`. Gỡ bằng `--remove` (sổ giữ nguyên). Script chưa được chạy trên máy prod; cài sau khi PR đã merge. Bản serve đang chạy chỉ nạp code mới khi `systemctl --user restart secai-versions-ui`.
+`scripts/install-versions-ui.sh` cài hai unit `systemd --user`: `secai-versions-ui.service` (serve) và `secai-versions-snapshot.timer` (snapshot mỗi giờ). Runner lấy `scripts/versions.py` và `deploy/services.json` từ `origin/main` mới nhất mỗi lần chạy, giống timer `wt-prune`. Gỡ bằng `--remove` (sổ giữ nguyên). Bản serve đang chạy chỉ nạp code mới khi `systemctl --user restart secai-versions-ui`.
 
 ## Trạng thái đo ngày 2026-11-27
 
@@ -174,7 +174,7 @@ Revision `4c590be8` và `c4c3c802` không có trong repo này (dựng từ nhán
 - `review-frontend`, `review-canary` (tag trôi, không revision): lần dựng tới đặt `--label org.opencontainers.image.revision=<sha>` và tag dạng `review-<sha8>-<ngày>`. Không gắn lại `review-mvp-*` cho image khác nữa.
 - `translation-converter`: chuyển từ `docker run` tay sang compose (đã có service `translation-converter` trong `stack/compose.yml`), image tag theo sha của nguồn (`stack/images/converter/`).
 - `neo4j:5.20-community`, `redis:7-alpine`: ghim bản vá (`neo4j:5.20.0-community`, `redis:7.x.y-alpine`) hoặc ghim `@sha256:` theo digest đang chạy, để lần `pull` sau không âm thầm đổi image.
-- `secai-pentestcode:1.3.14-tools`: thêm sha của repo pentestcode vào tag (`1.3.14-tools-<sha8>`) vì label revision đã có sẵn.
+- `secai-pentestcode:1.3.14-tools`: thêm sha của repo pentestcode và ngày vào tag (`1.3.14-tools-<sha8>-<yyyymmdd>`) vì label revision đã có sẵn.
 - Viết script release có gate cho `translation-frontend` và `review-*` theo khuôn `release-prod.sh`, rồi cho các script đó gọi `versions.py record`.
 
 ## Kiểm chứng
@@ -184,4 +184,4 @@ scripts/dev.sh test tests/test_versions.py
 bash -n scripts/release-prod.sh scripts/install-versions-ui.sh
 ```
 
-Test dùng `docker` và `git` giả trên `PATH`, sổ trong thư mục tạm. Một secret giả đặt trong env container, env image, label, `Cmd`, `environment` của profile JSON và `state.env`; test kiểm nó không xuất hiện trong bất kỳ đầu ra nào (status, history, snapshot, record, backfill, HTTP, sổ). Test cũng phủ: từng cờ strict, ID ngắn, sổ có dòng hỏng hoặc dòng cuối bị cụt, `flock`, ghim `image_id`, snapshot nhường lock release, thứ tự gộp của backfill. `release-prod.sh run --yes` và `rollback --yes` được chạy thật trên docker/git/curl giả, có và không có lỗi ghi sổ, để chắc mã thoát không đổi.
+Test dùng `docker` và `git` giả trên `PATH`, sổ trong thư mục tạm. Một secret giả đặt trong env container, env image, label, `Cmd`, `environment` của profile JSON và `state.env`; test kiểm nó không xuất hiện trong bất kỳ đầu ra nào (status, history, snapshot, record, backfill, HTTP, sổ). Test cũng phủ: từng cờ strict, ID ngắn, sổ có dòng hỏng hoặc dòng cuối bị cụt, `flock`, ghim `image_id`, snapshot nhường lock release, thứ tự gộp của backfill, thư mục release dở dang, rollback đã ghi, pool dựng lại một phần, record khi không có hoặc treo Docker, sổ là symlink. `release-prod.sh run --yes` và `rollback --yes` được chạy thật trên docker/git/curl giả, có và không có lỗi ghi sổ, để chắc mã thoát không đổi.

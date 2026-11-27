@@ -226,7 +226,7 @@ service in [`deploy/services.json`](deploy/services.json) runs, and flags unmana
 floating or moved tag, missing revision, containers that should share an image but drift). `history` reads the
 append-only ledger `~/secai-releases/versions.jsonl` that `scripts/release-prod.sh` writes on release/rollback;
 `serve` is a read-only page on `127.0.0.1:18190` (view via `ssh -L`). Version changes still go only through
-gated release scripts. See [docs/ops/VERSIONS.md](docs/ops/VERSIONS.md).
+gated release scripts. See [docs/operations/container-versions.md](docs/operations/container-versions.md).
 
 **Five-model serving.** `secai-serving-vast/` is a separate Git repository. The rental script
 defaults to `DuyTa/Cyber-F1-AWQ`, `DuyTa/sec-embedding`, `DuyTa/sec-rerank`,
