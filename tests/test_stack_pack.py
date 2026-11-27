@@ -140,6 +140,7 @@ def test_pack_data_refuses_missing_source_dir(tmp_path):
     assert not (tmp_path / "out").exists()
 
 
+@pytest.mark.skipif(not (STACK.parent / ".git").exists(), reason="pack.sh image needs a git checkout; release gate runs on git archive")
 def test_pack_image_never_pushes(tmp_path):
     env, log = stub_docker(tmp_path)
     r = run("bash", str(STACK / "pack.sh"), "image", "HEAD", env=env)
