@@ -58,11 +58,14 @@ FLAG_HELP = {
     "missing": "không thấy container hoặc container không chạy",
 }
 DOCKER_TIMEOUT = 60
+RECORD_DOCKER_TIMEOUT = 15  # record chạy dưới `timeout 60` của release-prod.sh: còn kịp ghi ref khi docker treo
 CACHE_SECONDS = 10
 BACKFILL_MAX_BYTES = 1 << 20
 BACKFILL_SKIP_NAME = re.compile(r"credential|token|secret|passw|\.env|key", re.I)  # không mở các file này
 BACKFILL_BEFORE = re.compile(r"before|prev|old|rollback|backup|bak", re.I)  # profile trạng thái trước
 BACKFILL_MERGE = dt.timedelta(seconds=120)  # các container đổi cùng image trong khoảng này là một lần đổi
+SHORT_HEX = re.compile(r"(?:sha256:)?([0-9a-f]{4,64})")  # docker chấp nhận tiền tố ID ngắn
+RELEASE_LOCKS = ("gateway-deploy.lock", "translation-deploy.lock")  # release-prod.sh giữ trong lúc switch
 NOTES_TS = re.compile(r"\((\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})?)\)")
 
 
@@ -190,16 +193,16 @@ def owner_of(services: list[dict], name: str) -> str | None:
 # ---------------------------------------------------------------- docker (chỉ đọc)
 
 
-def docker(*args: str) -> subprocess.CompletedProcess:
+def docker(*args: str, timeout: float = DOCKER_TIMEOUT) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=DOCKER_TIMEOUT)
+        return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         raise Fail(2, f"không chạy được docker {args[0]}: {type(e).__name__}") from None
 
 
-def docker_json(*args: str) -> list[dict]:
+def docker_json(*args: str, timeout: float = DOCKER_TIMEOUT) -> list[dict]:
     """`docker inspect` in JSON các object tìm thấy và thoát 1 nếu thiếu object: vẫn dùng phần tìm thấy."""
-    r = docker(*args)
+    r = docker(*args, timeout=timeout)
     try:
         data = json.loads(r.stdout or "[]")
     except ValueError:
@@ -207,8 +210,8 @@ def docker_json(*args: str) -> list[dict]:
     return [d for d in data if isinstance(d, dict)] if isinstance(data, list) else []
 
 
-def container_names() -> list[str]:
-    r = docker("ps", "-a", "--format", "{{.Names}}")
+def container_names(timeout: float = DOCKER_TIMEOUT) -> list[str]:
+    r = docker("ps", "-a", "--format", "{{.Names}}", timeout=timeout)
     if r.returncode:
         first = (r.stderr.strip().splitlines() or ["?"])[0][:200]
         raise Fail(2, f"docker ps lỗi: {first}")
@@ -259,9 +262,9 @@ def image_facts(raw: dict) -> dict:
 class Images:
     """Chỉ mục image theo id, tag, digest (đã chuẩn hoá) từ một lần `docker image inspect`."""
 
-    def __init__(self, refs) -> None:
+    def __init__(self, refs, timeout: float = DOCKER_TIMEOUT) -> None:
         refs = sorted({r for r in refs if r and not r.startswith("-")})
-        self.items = [image_facts(d) for d in docker_json("image", "inspect", *refs)] if refs else []
+        self.items = [image_facts(d) for d in docker_json("image", "inspect", *refs, timeout=timeout)] if refs else []
 
     def by_id(self, image_id: str | None) -> dict | None:
         m = HEX_ID.fullmatch(image_id or "")
@@ -303,6 +306,14 @@ def tag_class(ref: str) -> str:
     return "minor" if SEMVER_SUFFIX.fullmatch(tag) else "floating"
 
 
+def is_bare(ref: str, image_id: str) -> bool:
+    """Ref là ID image (đủ hoặc tiền tố ngắn như `docker run 1e0ecf`), không phải tag."""
+    if HEX_ID.fullmatch(ref):
+        return True
+    m = SHORT_HEX.fullmatch(ref)
+    return bool(m) and image_id.removeprefix("sha256:").startswith(m.group(1))
+
+
 def pinned(ref: str) -> bool:
     """Ref đủ chắc để gán image_id hiện tại cho một thời điểm trong quá khứ (backfill)."""
     return bool(HEX_ID.fullmatch(ref)) or tag_class(ref) == "immutable"
@@ -314,7 +325,7 @@ def pinned(ref: str) -> bool:
 def analyse(c: dict, images: Images, svc: dict) -> dict:
     img = images.by_id(c["image_id"]) or {}
     tags, ref, flags = img.get("tags") or [], c["ref"], []
-    bare = bool(HEX_ID.fullmatch(ref))
+    bare = is_bare(ref, c["image_id"])
     if bare:
         flags.append("bare-id")
     else:
@@ -443,20 +454,25 @@ def make_entry(service: str, containers, action: str, frm: dict | None, to: dict
             "from": frm, "to": to, "release_dir": release_dir, "by": user(), "note": note}
 
 
+def text_or_none(v) -> str | None:
+    return v if isinstance(v, str) else None
+
+
 def clean_entry(e: dict) -> dict:
-    """Chỉ các trường đã biết, kể cả khi dòng trong sổ bị sửa tay thêm gì khác."""
-    out = {k: e.get(k) for k in ENTRY_KEYS}
+    """Chỉ các trường đã biết, đúng kiểu, kể cả khi dòng trong sổ bị sửa tay thêm gì khác."""
+    out = {k: text_or_none(e.get(k)) for k in ENTRY_KEYS if k not in ("containers", "from", "to")}
     for k in ("from", "to"):
-        out[k] = {x: out[k].get(x) for x in ("ref", "image_id", "revision")} if isinstance(out[k], dict) else None
-    conts = out["containers"] if isinstance(out["containers"], list) else []
+        v = e.get(k)
+        out[k] = {x: text_or_none(v.get(x)) for x in ("ref", "image_id", "revision")} if isinstance(v, dict) else None
+    conts = e.get("containers") if isinstance(e.get("containers"), list) else []
     out["containers"] = [c for c in conts if isinstance(c, str)]
-    return out
+    return {k: out[k] for k in ENTRY_KEYS}
 
 
 def read_ledger(path: Path | None = None) -> list[dict]:
     path = path or ledger_path()
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        lines = path.read_bytes().splitlines()
     except FileNotFoundError:
         return []
     except OSError as e:
@@ -464,12 +480,13 @@ def read_ledger(path: Path | None = None) -> list[dict]:
     out = []
     for i, line in enumerate(lines, 1):
         try:
-            e = json.loads(line)
-        except ValueError:
-            print(f"versions: bỏ qua dòng {i} hỏng trong {path.name}", file=sys.stderr)
-            continue
+            e = json.loads(line.decode("utf-8")) if line.strip() else None
+        except ValueError:  # gồm UnicodeDecodeError: dòng bị cắt giữa ký tự nhiều byte
+            e = None
         if isinstance(e, dict) and isinstance(e.get("service"), str):
             out.append(clean_entry(e))
+        elif line.strip():
+            print(f"versions: bỏ qua dòng {i} hỏng trong {path.name}", file=sys.stderr)
     return sorted(out, key=lambda e: str(e["ts"] or ""))  # sort ổn định: cùng ts giữ thứ tự ghi
 
 
@@ -479,7 +496,7 @@ def ledger_locked():
     path = ledger_path()
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        fd = os.open(path, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     except OSError as e:
         raise Fail(1, f"không mở được sổ {path}: {e.strerror}") from None
     try:
@@ -494,6 +511,9 @@ def ledger_locked():
 
 def append(fd: int, entries: list[dict]) -> None:
     data = "".join(json.dumps(clean_entry(e), ensure_ascii=False) + "\n" for e in entries).encode()
+    size = os.fstat(fd).st_size
+    if data and size and os.pread(fd, 1, size - 1) != b"\n":
+        data = b"\n" + data  # dòng cuối bị cụt (ghi dở, sửa tay): giữ nó riêng, không nuốt dòng mới
     while data:
         data = data[os.write(fd, data):]
     os.fsync(fd)
@@ -606,11 +626,15 @@ def cmd_history(a, services) -> int:
 
 
 def snapshot_entries(services: list[dict], entries: list[dict]) -> list[dict]:
-    """So image đang chạy với trạng thái cuối trong sổ, theo từng container; bỏ qua role dev."""
+    """So image đang chạy với trạng thái cuối trong sổ, theo từng container; bỏ qua role dev.
+
+    Image khác → `observed` (hoặc `baseline` nếu service chưa có trong sổ). Cùng ref nhưng dòng cuối chưa có
+    image_id (backfill tag trôi, record lúc docker lỗi) → `baseline` để ghim image_id, nếu không thì về sau
+    tag bị dựng lại và container tạo lại từ cùng ref sẽ không ai thấy."""
     out = []
     for row in collect([s for s in services if s["role"] != "dev"])["services"]:
         known = last_state(entries, row["id"])
-        action = "observed" if any(e["service"] == row["id"] for e in entries) else "baseline"
+        seen = any(e["service"] == row["id"] for e in entries)
         by_image: dict[str, list[dict]] = {}
         for c in row["containers"]:
             if c["running"]:
@@ -619,13 +643,36 @@ def snapshot_entries(services: list[dict], entries: list[dict]) -> list[dict]:
             c = conts[0]
             to = {"ref": c["ref"], "image_id": c["image_id"], "revision": c["revision"]}
             changed = [x["name"] for x in conts if not same(known.get(x["name"]), to)]
-            if not changed:
-                continue
-            prev = {json.dumps(known.get(n), sort_keys=True) for n in changed}
-            note = "snapshot: đổi ngoài release đã ghi" if action == "observed" else "snapshot đầu tiên"
-            out.append(make_entry(row["id"], changed, action, known.get(changed[0]) if len(prev) == 1 else None, to,
-                                  note=note))
+            unpinned = [x["name"] for x in conts if x["name"] not in changed and not known[x["name"]].get("image_id")]
+            for names, action, note in ((changed, "observed" if seen else "baseline",
+                                         "snapshot: đổi ngoài release đã ghi" if seen else "snapshot đầu tiên"),
+                                        (unpinned, "baseline", "snapshot: ghim image_id đang chạy")):
+                if names:
+                    prev = {json.dumps(known.get(n), sort_keys=True) for n in names}
+                    frm = known.get(names[0]) if len(prev) == 1 else None
+                    out.append(make_entry(row["id"], names, action, frm, to, note=note))
     return out
+
+
+def release_in_progress() -> bool:
+    """release-prod.sh đang giữ lock deploy? Đọc /proc/locks, không tự lấy lock nên không bao giờ làm release
+    `flock -n` thất bại. So theo inode của các file lock trong thư mục release."""
+    inodes = set()
+    for name in RELEASE_LOCKS:
+        try:
+            inodes.add(str((releases_dir() / name).stat().st_ino))
+        except OSError:
+            continue
+    try:
+        lines = Path("/proc/locks").read_text().splitlines() if inodes else []
+    except OSError:
+        return False
+    for line in lines:  # "1: FLOCK  ADVISORY  WRITE <pid> <maj>:<min>:<inode> 0 EOF"; "->" là tiến trình đang chờ
+        f = line.split()
+        held = [x.rsplit(":", 1)[-1] for x in f if re.fullmatch(r"[0-9a-f]+:[0-9a-f]+:\d+", x)]
+        if "FLOCK" in f and "->" not in f and inodes & set(held):
+            return True
+    return False
 
 
 def describe(e: dict) -> str:
@@ -652,6 +699,9 @@ def write_or_plan(planned_fn, write: bool, label: str, hint: str = "") -> int:
 
 
 def cmd_snapshot(a, services) -> int:
+    if release_in_progress():  # đang switch: chờ release-prod.sh tự ghi `release`, tránh ghi nhầm `observed`
+        print("snapshot: release-prod.sh đang giữ lock deploy, bỏ qua lượt này", file=sys.stderr)
+        return 0
     return write_or_plan(lambda entries: snapshot_entries(services, entries), not a.dry_run, "snapshot")
 
 
@@ -661,8 +711,8 @@ def cmd_snapshot(a, services) -> int:
 def cmd_record(a, services) -> int:
     svc = find_service(services, a.service)
     try:
-        images = Images([a.from_ref, a.to_ref])
-        names = service_names(svc, container_names() if "container_pattern" in svc else [])
+        images = Images([a.from_ref, a.to_ref], timeout=RECORD_DOCKER_TIMEOUT)
+        names = service_names(svc, container_names(RECORD_DOCKER_TIMEOUT) if "container_pattern" in svc else [])
     except Fail as e:  # thiếu docker vẫn ghi được ref
         print(f"versions: cảnh báo: {e} (chỉ ghi ref)", file=sys.stderr)
         images, names = None, list(svc.get("containers") or [])
@@ -780,6 +830,7 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
         images = None
     last: dict[str, dict] = {}
     merged: dict[tuple, dict] = {}
+    newest: dict[str, int] = {}  # container -> id() dòng gần nhất của nó
     out = []
     for o in obs:
         to = ref_obj(o["ref"], images.by_ref(o["ref"]) if images and pinned(o["ref"]) else None)
@@ -789,14 +840,15 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
         sid = owner_of(services, o["container"])
         key = (sid, o["release_dir"], json.dumps(prev, sort_keys=True), json.dumps(to, sort_keys=True))
         e = merged.get(key)
-        if e and o["t"] - parse_ts(e["ts"]) <= BACKFILL_MERGE:
-            # Cùng một lần đổi của nhiều container: lấy mốc muộn nhất để replay theo ts không xếp nó trước
-            # quan sát "trước" của container vào sau.
+        # Cùng một lần đổi của nhiều container: gộp và lấy mốc muộn nhất (để replay theo ts không xếp nó trước
+        # quan sát "trước" của container vào sau), nhưng chỉ khi chưa container nào trong dòng đã đổi tiếp.
+        if e and o["t"] - parse_ts(e["ts"]) <= BACKFILL_MERGE and all(newest[c] == id(e) for c in e["containers"]):
             e["containers"], e["ts"] = sorted({*e["containers"], o["container"]}), iso_utc(o["t"])
-            continue
-        merged[key] = make_entry(sid, [o["container"]], "backfill", prev, to, release_dir=o["release_dir"],
-                                 note=f"backfill từ {o['source']}", ts=iso_utc(o["t"]))
-        out.append(merged[key])
+        else:
+            e = merged[key] = make_entry(sid, [o["container"]], "backfill", prev, to, release_dir=o["release_dir"],
+                                         note=f"backfill từ {o['source']}", ts=iso_utc(o["t"]))
+            out.append(e)
+        newest[o["container"]] = id(e)
 
     def key(e: dict) -> tuple:
         return e["service"], Path(e["release_dir"] or "").name, norm_ref((e["to"] or {}).get("ref") or "")
@@ -964,6 +1016,9 @@ def make_handler(cache: Cache):
                 return self.send_json(code, {"error": str(e)})
             except ValueError:
                 return self.send_json(400, {"error": "tham số không hợp lệ"})
+            except Exception as e:  # không rớt kết nối; chỉ trả tên lỗi, không trả nội dung
+                self.log_error("lỗi %s ở %s", type(e).__name__, url.path)
+                return self.send_json(500, {"error": type(e).__name__})
 
     return Handler
 

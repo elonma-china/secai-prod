@@ -5,7 +5,9 @@
 """
 from __future__ import annotations
 
+import fcntl
 import http.client
+import importlib.util
 import json
 import os
 import re
@@ -299,11 +301,8 @@ def test_behind_main_only_with_git(sb: Sandbox) -> None:
     assert sb.status()["gateway"]["flags"] == []
 
 
-def test_strict_exit_code(sb: Sandbox) -> None:
-    sb.run("status", "--strict", code=1)
-    sb.git_counts({"2dcff27c": 7})  # behind-main chỉ để biết, không làm strict thất bại
-    sb.run("status", "--strict", "--role", "dependency")  # không có service prod nào được xét
-    # Mọi service prod sạch → 0
+def clean_prod(sb: Sandbox) -> None:
+    """Đưa mọi service prod về tag bất biến có revision: `status --strict` phải thoát 0."""
     for name, ref in (("secai-translation-frontend", "secai-agent-gateway:fe-4c590be8-20261007"),
                       ("secai-report-backend", "secai-agent-gateway:report-c4c3c802-20261005"),
                       ("secai-review-frontend", "secai-agent-gateway:review-1234abcd-20261004"),
@@ -313,7 +312,86 @@ def test_strict_exit_code(sb: Sandbox) -> None:
         c["Config"]["Labels"]["org.opencontainers.image.revision"] = "1234abcd"
         next(i for i in sb.world["images"] if i["Id"] == c["Image"])["RepoTags"].append(ref)
     sb.save()
+
+
+def test_strict_exit_code(sb: Sandbox) -> None:
+    sb.run("status", "--strict", code=1)
+    sb.run("status", "--strict", "--role", "dependency")  # không có service prod nào được xét
+    clean_prod(sb)
     sb.run("status", "--strict")
+    sb.git_counts({"2dcff27c": 7})  # behind-main chỉ để biết, không làm strict thất bại
+    assert sb.status("--strict")["gateway"]["flags"] == ["behind-main:7"]
+
+
+def _bare(sb):
+    c = sb.cont("secai-review-frontend")
+    c["Config"]["Image"] = c["Image"]
+
+
+def _floating(sb):
+    c = sb.cont("secai-translation-converter")
+    c["Config"]["Image"] = "secai-doc-convert-svc:1"
+
+
+def _norev(sb):
+    c = sb.cont("secai-report-backend")
+    del c["Config"]["Labels"]["org.opencontainers.image.revision"]
+    next(i for i in sb.world["images"] if i["Id"] == c["Image"])["Config"]["Labels"] = None
+
+
+def _moved(sb):
+    next(i for i in sb.world["images"] if i["Id"] == hid("4"))["RepoTags"] = ["secai-agent-gateway:review-1234abcd-20261004"]
+    sb.cont("secai-review-frontend")["Config"]["Image"] = "secai-agent-gateway:review-99999999-20261004"
+
+
+def _drift(sb):
+    sb.world["images"].append(image(hid("e"), ["secai-agent-gateway:main-033b2aa3-20261123"]))
+    w = sb.cont("secai-translation-worker")
+    w["Config"]["Image"], w["Image"] = "secai-agent-gateway:main-033b2aa3-20261123", hid("e")
+
+
+def _missing(sb):
+    sb.cont("secai-docker-gateway")["State"].update(Status="exited", Running=False)
+
+
+@pytest.mark.parametrize("break_it,flag", [(_bare, "bare-id"), (_floating, "floating-tag"), (_norev, "no-revision"),
+                                           (_moved, "tag-moved"), (_drift, "group-drift"), (_missing, "missing")])
+def test_each_strict_flag_fails_strict(sb: Sandbox, break_it, flag: str) -> None:
+    clean_prod(sb)
+    break_it(sb)
+    sb.save()
+    flags = {f for s in sb.status("--strict", code=1).values() if s["role"] == "prod" for f in s["flags"]}
+    assert flag in flags
+
+
+def test_short_image_id_prefix_is_bare_id(sb: Sandbox) -> None:
+    """`docker run 2222222` lưu Config.Image là tiền tố ID ngắn: phải là bare-id, không phải tag trôi/di chuyển."""
+    sb.cont("secai-translation-frontend")["Config"]["Image"] = "2222222"
+    sb.save()
+    assert sb.status()["translation-frontend"]["flags"] == ["bare-id"]
+
+
+def test_pattern_service_with_no_container_is_missing(sb: Sandbox) -> None:
+    sb.world["containers"] = [c for c in sb.world["containers"] if "pentestcode" not in c["Name"]]
+    sb.save()
+    pool = sb.status()["pentestcode-pool"]
+    assert pool["flags"] == ["missing"] and pool["total"] == 0
+
+
+def load_versions():
+    spec = importlib.util.spec_from_file_location("versions_under_test", SCRIPT)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_group_drift_across_services_sharing_a_group() -> None:
+    v = load_versions()
+    rows = [{"group": "g", "flags": [], "containers": [{"running": True, "image_id": hid("1")}]},
+            {"group": "g", "flags": [], "containers": [{"running": True, "image_id": hid("2")}]},
+            {"group": None, "flags": [], "containers": [{"running": True, "image_id": hid("3")}]}]
+    v.mark_group_drift(rows)
+    assert [r["flags"] for r in rows] == [["group-drift"], ["group-drift"], []]
 
 
 def test_dev_role_only_on_request(sb: Sandbox) -> None:
@@ -399,6 +477,74 @@ def test_snapshot_after_record_sees_no_change(sb: Sandbox) -> None:
     assert len(sb.entries()) == n + 1 and sb.entries()[-1]["action"] == "release"
 
 
+def test_bad_ledger_lines_are_skipped_not_fatal(sb: Sandbox) -> None:
+    sb.run("snapshot")
+    n = len(sb.entries())
+    with sb.ledger.open("ab") as f:  # dòng bị cắt giữa ký tự nhiều byte, rồi một dòng sai kiểu
+        f.write('{"ts": "2026-11-27T13:00:00Z", "service": "gateway", "note": "đầ'.encode()[:-1] + b"\n")
+        f.write(b'{"ts": 5, "service": "gateway", "action": [], "from": {"ref": 1}, "to": {"ref": 2}, "containers": [3]}\n')
+    r = sb.run("history", "gateway")
+    assert "bỏ qua dòng" in r.stderr
+    sb.run("history", "--json")
+    sb.run("snapshot")
+    with serving(sb) as port:
+        assert get(port, "/")[0] == 200 and get(port, "/api/history")[0] == 200
+    assert len([line for line in sb.ledger.read_bytes().splitlines()]) == n + 2
+
+
+def test_append_after_torn_last_line_keeps_the_new_entry(sb: Sandbox) -> None:
+    sb.run("snapshot")
+    with sb.ledger.open("ab") as f:
+        f.write(b'{"ts": "2026-11-27T13:00:00Z", "service": "gate')  # ghi dở, không có \n
+    sb.run("record", "--service", "gateway", "--action", "release", "--from", "a:1", "--to", GW_TAG)
+    hist = json.loads(sb.run("history", "gateway", "--json").stdout)
+    assert hist[0]["action"] == "release"
+
+
+def test_ledger_writes_wait_for_the_flock(sb: Sandbox) -> None:
+    sb.ledger.touch()
+    with sb.ledger.open("a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        p = subprocess.Popen([sys.executable, "-I", str(SCRIPT), "record", "--service", "gateway", "--action", "release",
+                              "--from", "a:1", "--to", GW_TAG], env=sb.env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1.5)
+        assert p.poll() is None and sb.ledger.read_text() == ""
+    assert p.wait(timeout=30) == 0 and len(sb.entries()) == 1
+
+
+def test_snapshot_pins_image_id_after_floating_tag_backfill(sb: Sandbox) -> None:
+    """Backfill để image_id = null cho tag trôi; snapshot phải ghim image_id đang chạy để thấy lần dựng lại sau."""
+    ref = "secai-agent-gateway:review-mvp-20261004"
+    sb.ledger.write_text(json.dumps({"ts": "2026-10-04T11:03:54Z", "service": "review-frontend", "action": "backfill",
+                                     "containers": ["secai-review-frontend"], "from": None,
+                                     "to": {"ref": ref, "image_id": None, "revision": None}}) + "\n")
+    sb.run("snapshot")
+    pin = [e for e in sb.entries() if e["service"] == "review-frontend"][-1]
+    assert pin["action"] == "baseline" and pin["to"]["image_id"] == hid("4") and "ghim" in pin["note"]
+    n = len(sb.entries())
+    sb.run("snapshot")
+    assert len(sb.entries()) == n
+    # tag review-mvp-20261004 dựng lại, container tạo lại từ cùng ref
+    old = next(i for i in sb.world["images"] if i["Id"] == hid("4"))
+    old["RepoTags"] = []
+    sb.world["images"].append(image(hid("e"), [ref]))
+    sb.cont("secai-review-frontend")["Image"] = hid("e")
+    sb.save()
+    sb.run("snapshot")
+    new = sb.entries()[n:]
+    assert len(new) == 1 and new[0]["action"] == "observed" and new[0]["to"]["image_id"] == hid("e")
+
+
+def test_snapshot_skips_while_release_holds_the_deploy_lock(sb: Sandbox) -> None:
+    lock = sb.releases / "gateway-deploy.lock"
+    with lock.open("w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)  # như `exec 8>…; flock -n 8` của release-prod.sh
+        r = sb.run("snapshot")
+        assert "đang giữ lock" in r.stderr and not sb.ledger.exists()
+    sb.run("snapshot")
+    assert sb.entries()
+
+
 def test_history_filters_and_limits(sb: Sandbox) -> None:
     sb.run("history")  # sổ trống vẫn chạy
     sb.run("snapshot")
@@ -478,6 +624,26 @@ def test_backfill_dry_run_writes_nothing_and_second_run_adds_nothing(sb: Sandbox
     # Replay theo ts phải ra đúng image đang chạy: snapshot sau backfill không thấy gateway đổi.
     sb.run("snapshot")
     assert not [e for e in sb.entries()[len(entries):] if e["service"] in ("gateway", "translation-frontend")]
+
+
+def test_backfill_does_not_merge_past_a_later_change(tmp_path: Path) -> None:
+    """gw X→Y (t0), gw Y→Z (t0+50), worker X→Y (t0+100) trong cùng thư mục: replay phải ra gw=Z, worker=Y."""
+    v = load_versions()
+    X, Y, Z = ("sha256:" + c * 64 for c in "abc")
+    t0 = 1_790_000_000.0
+    def put(path: Path, pairs, t):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"services": {n: {"image": img, "container_name": n} for n, img in pairs}}))
+        os.utime(path, (t, t))
+    put(tmp_path / "r1" / "release.json", [("secai-translation-gateway", X), ("secai-translation-worker", X)], t0 - 1000)
+    put(tmp_path / "r2" / "a.json", [("secai-translation-gateway", Y)], t0)
+    put(tmp_path / "r2" / "b.json", [("secai-translation-gateway", Z)], t0 + 50)
+    put(tmp_path / "r2" / "c.json", [("secai-translation-worker", Y)], t0 + 100)
+    services = v.load_catalog()
+    v.Images = lambda refs, timeout=None: None  # không gọi docker
+    entries = sorted(v.backfill_entries(services, [tmp_path], []), key=lambda e: e["ts"])
+    state = v.last_state(entries, "gateway")
+    assert state["secai-translation-gateway"]["ref"] == Z and state["secai-translation-worker"]["ref"] == Y
 
 
 def test_backfill_ignores_floating_tag_in_before_profiles(sb: Sandbox) -> None:
@@ -700,6 +866,8 @@ def test_release_script_ledger_calls_are_guarded() -> None:
     assert len(calls) == 2
     for line in calls:
         assert 'SECAI_RELEASES_DIR="$RELEASES" timeout 60 python3 -I "$(dirname "$0")/versions.py"' in line
+    outer = {int(t) for t in re.findall(r'timeout (\d+) python3 -I "\$\(dirname "\$0"\)/versions\.py"', src)}
+    assert outer == {60} and 2 * load_versions().RECORD_DOCKER_TIMEOUT < 60  # nhánh dự phòng còn kịp ghi ref
     blocks = re.findall(r'versions\.py" record[^\n]*\\\n[^\n]*', src)
     assert len(blocks) == 2 and all('|| log "cảnh báo' in b for b in blocks)
     assert src.index("versions.py\" record --service gateway --action release") > src.index('cat > "$REL/RELEASE-NOTES.md"')
