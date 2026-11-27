@@ -26,7 +26,9 @@ qdrant:
 neo4j:
   image: neo4j:5.20-community
   ports: [7474, 7687]
-  password: secai2026
+  # BẮT BUỘC, không có mặc định: helm install ... --set neo4j.password=<mật khẩu mạnh>.
+  # Gateway đọc cùng giá trị qua NEO4J_PASSWORD trong Secret secai-gateway-env.
+  password: ""
   storage: 20Gi
   heapMax: 2g
 

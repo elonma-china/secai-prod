@@ -18,7 +18,7 @@ hr(){ printf "${D}%s${N}\n" "─────────────────
 # đọc endpoint model từ .env (fallback nếu thiếu)
 # LLM_* là tên chuẩn; QWEN_* (tên cũ) vẫn được đọc khi .env chưa đổi.
 envv(){ grep -E "^$1=" .env 2>/dev/null | tail -n1 | cut -d= -f2-; }
-API_KEY="$(envv LLM_API_KEY)"; API_KEY="${API_KEY:-$(envv QWEN_API_KEY)}"; API_KEY="${API_KEY:-sk-secai2026}"
+API_KEY="$(envv LLM_API_KEY)"; API_KEY="${API_KEY:-$(envv QWEN_API_KEY)}"; API_KEY="${API_KEY:-sk-placeholder}"
 LLM_URL="$(envv LLM_BASE_URL)"; LLM_URL="${LLM_URL:-$(envv QWEN_BASE_URL)}"; LLM_URL="${LLM_URL%/v1}"
 EMB_URL="$(grep -E '^EMBEDDING_API_URL=' .env 2>/dev/null | cut -d= -f2)"
 RRK_URL="$(grep -E '^RERANKER_API_URL=' .env 2>/dev/null | cut -d= -f2)"

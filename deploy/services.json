@@ -1,0 +1,113 @@
+{
+  "_doc": "Catalog service/container của secai-agent-gateway cho scripts/versions.py (docs/operations/container-versions.md). Không chứa secret, không đường dẫn tuyệt đối. role: prod|canary|dependency|dev. Các container của một service phải chạy cùng image.",
+  "services": [
+    {
+      "id": "gateway",
+      "title": "Gateway prod: :8131, gateway dịch :18185 và worker dịch",
+      "containers": ["secai-docker-gateway", "secai-translation-gateway", "secai-translation-worker"],
+      "role": "prod",
+      "built_from_repo": true,
+      "upgrade": "scripts/release-prod.sh plan  # xem diff, rồi: scripts/release-prod.sh run --yes",
+      "rollback": "scripts/release-prod.sh rollback --yes"
+    },
+    {
+      "id": "translation-frontend",
+      "title": "Giao diện dịch Devspace (:5179)",
+      "containers": ["secai-translation-frontend"],
+      "role": "prod",
+      "built_from_repo": true,
+      "upgrade": "làm tay, chưa có script: dựng profile frontend mới trong $SECAI_RELEASES_DIR/<release>/, rồi docker compose -p secai-translation-release -f <profile> up -d --no-deps --no-build frontend",
+      "rollback": "làm tay, chưa có script: docker compose -p secai-translation-release -f $SECAI_RELEASES_DIR/<release>/frontend-rollback.json up -d --no-deps --no-build frontend"
+    },
+    {
+      "id": "report-backend",
+      "title": "Backend báo cáo (:18183)",
+      "containers": ["secai-report-backend"],
+      "role": "prod",
+      "built_from_repo": true,
+      "upgrade": "đổi image trong compose.json của report devspace, rồi deploy/report/switch.py apply (sao lưu DB, chờ readiness, lỗi thì tự quay về)",
+      "rollback": "deploy/report/switch.py rollback (quay về service systemd cũ, cùng DB báo cáo)"
+    },
+    {
+      "id": "review-frontend",
+      "title": "Giao diện expert review",
+      "containers": ["secai-review-frontend"],
+      "role": "prod",
+      "built_from_repo": true,
+      "upgrade": "làm tay, chưa có script: profile compose project secai-review-release trong $SECAI_RELEASES_DIR/<release>/compose.json",
+      "rollback": "làm tay, chưa có script: up lại profile compose trước đó của secai-review-release (--no-deps --no-build frontend)"
+    },
+    {
+      "id": "review-canary",
+      "title": "Canary review (diễn tập rollback)",
+      "containers": ["secai-review-canary"],
+      "role": "canary",
+      "built_from_repo": true,
+      "upgrade": "làm tay, chưa có script: profile canary của compose project secai-review-rollback-rehearsal",
+      "rollback": "làm tay, chưa có script: up lại profile canary trước đó"
+    },
+    {
+      "id": "translation-converter",
+      "title": "Chuyển đổi tài liệu cho worker dịch (:18091)",
+      "containers": ["secai-translation-converter"],
+      "role": "prod",
+      "built_from_repo": false,
+      "upgrade": "làm tay, chưa có script: container chạy bằng docker run tay, không compose (xem stack/compose.yml service translation-converter để chuyển sang compose)",
+      "rollback": "làm tay, chưa có script; chưa có image trước đó được ghi lại"
+    },
+    {
+      "id": "pentestcode-pool",
+      "title": "Pool pentestcode cho exploit-v2 (secai-docker-pentestcode, -1..-24)",
+      "container_pattern": "secai-docker-pentestcode(-[0-9]+)?",
+      "role": "dependency",
+      "built_from_repo": false,
+      "upgrade": "build theo deploy/pentestcode/README.md rồi đổi tag trong compose secai-docker; làm tay, chưa có script",
+      "rollback": "làm tay: đặt lại tag image cũ trong compose secai-docker, up --no-deps --no-build các service pentestcode"
+    },
+    {
+      "id": "qdrant",
+      "title": "Qdrant (vector DB)",
+      "containers": ["secai-docker-qdrant"],
+      "role": "dependency",
+      "built_from_repo": false,
+      "upgrade": "làm tay, chưa có script: sao lưu snapshot/volume, đổi tag trong compose secai-docker, up --no-deps qdrant",
+      "rollback": "làm tay: đặt lại tag cũ trong compose secai-docker (dữ liệu có thể không tương thích ngược, cần snapshot)"
+    },
+    {
+      "id": "neo4j",
+      "title": "Neo4j (đồ thị tri thức)",
+      "containers": ["secai-docker-neo4j"],
+      "role": "dependency",
+      "built_from_repo": false,
+      "upgrade": "làm tay, chưa có script: xuất dữ liệu (stack/neo4j-export.py), đổi tag trong compose secai-docker, up --no-deps neo4j",
+      "rollback": "làm tay: đặt lại tag cũ trong compose secai-docker, khôi phục dữ liệu đã xuất nếu cần"
+    },
+    {
+      "id": "redis",
+      "title": "Redis (session/cache)",
+      "containers": ["secai-docker-redis"],
+      "role": "dependency",
+      "built_from_repo": false,
+      "upgrade": "làm tay, chưa có script: đổi tag trong compose secai-docker, up --no-deps redis",
+      "rollback": "làm tay: đặt lại tag cũ trong compose secai-docker"
+    },
+    {
+      "id": "elasticsearch",
+      "title": "Elasticsearch",
+      "containers": ["secai-docker-es"],
+      "role": "dependency",
+      "built_from_repo": false,
+      "upgrade": "làm tay, chưa có script: sao lưu volume, đổi tag trong compose secai-docker, up --no-deps elasticsearch",
+      "rollback": "làm tay: đặt lại tag cũ trong compose secai-docker (index có thể không đọc ngược được, cần sao lưu)"
+    },
+    {
+      "id": "dev-stacks",
+      "title": "Stack dev theo worktree (scripts/dev.sh)",
+      "container_pattern": "secai-gw-dev-.+",
+      "role": "dev",
+      "built_from_repo": true,
+      "upgrade": "trong worktree: scripts/dev.sh up (hoặc rebuild khi đổi Dockerfile/pyproject)",
+      "rollback": "trong worktree: scripts/dev.sh down"
+    }
+  ]
+}

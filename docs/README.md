@@ -6,9 +6,9 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 | --- | --- | --- |
 | [api/](api/) | Contract và hướng dẫn gọi API: chat/session, PoC, exploit stream, dịch, report, expert review | Cần biết endpoint, request/response |
 | [design/](design/) | Kiến trúc và thiết kế: PoC-Verify, bộ phân loại/sanitize đầu vào | Cần hiểu vì sao hệ thống làm vậy |
-| [operations/](operations/) | Vận hành/triển khai: operator guide review, reward Qwen, dịch chuyên dụng, Docker | Cần chạy, deploy, xử lý sự cố |
+| [operations/](operations/) | Vận hành/triển khai: operator guide review, reward Qwen, dịch chuyên dụng, Docker, phiên bản container | Cần chạy, deploy, xử lý sự cố |
 | [plans/](plans/) | Kế hoạch triển khai | Cần biết dự định/tiêu chí đã chốt |
-| [criteria/](criteria/) | Tiêu chí kiểm chứng và nghiệm thu từng tính năng | Cần biết thế nào là đạt |
+| [criteria/](criteria/) | Tiêu chí kiểm chứng và nghiệm thu từng tính năng, kể cả tiêu chí vận hành (ops) | Cần biết thế nào là đạt |
 | [acceptance/](acceptance/), [nghiem-thu-showcase/](nghiem-thu-showcase/) | Hồ sơ nghiệm thu, validation review MVP, showcase | Cần bằng chứng nghiệm thu |
 | [reports/](reports/) | Báo cáo phân tích, rà soát mã nguồn, kết quả live, báo cáo tính năng | Cần đọc kết quả đã đo |
 | [benchmarks/](benchmarks/), [test-results/](test-results/), [security-tests/](security-tests/) | Benchmark, kết quả test gần đây, kế hoạch/báo cáo test bảo mật | Cần số liệu |
@@ -31,6 +31,8 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 - Reward Qwen3-1.7B: [chuẩn bị dữ liệu, huấn luyện, đánh giá và dịch vụ chấm điểm](operations/reward-qwen-operator.md).
 - Chat/session: [API chung](api/api-guide.md), [project/session](api/session-project-api-guide.md).
 - PoC: [API](api/poc-api-guide.md), [verify](design/poc-verify-architecture.md).
+- Vận hành: [tiêu chí ops](criteria/ops.md), chấm bằng `scripts/ops-check.py` (chỉ đọc), kết quả đo [baseline 2026-11-27](archive/test-results/ops-baseline-20261127.md); [quản lý phiên bản container](operations/container-versions.md) bằng `scripts/versions.py`.
+- Backup SQLite hằng ngày và khôi phục: [sqlite-backup](operations/sqlite-backup.md) (`scripts/backup-sqlite.py`, timer `scripts/install-backup-timer.sh`).
 
 ## Triển khai và kiểm chứng hiện tại
 

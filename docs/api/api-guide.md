@@ -421,6 +421,15 @@ log hệ thống nên gateway **không** in khối bàn giao thành event `log`.
     **code nháp có nhãn "CHƯA chạy ra bằng chứng"** (≤60 dòng), việc nên làm tiếp (đánh số).
 - Gateway **không** tự kết luận "lab sai": dấu vết target chỉ đặt cạnh mô tả CVE để người dùng tự đối chiếu.
 
+**Thời gian và PoC trả về** (chỉ đổi hành vi bên trong, không thêm/bớt trường):
+- Trước khi có engine rảnh có `step` `pool` `running` ("Đang chờ engine rảnh…"), sau đó `pool` `done` như cũ.
+- Một lần gọi tối đa **30 phút tính gộp mọi lần thử lại** (tối đa 3 lần thử; mỗi lần thử ≤ 25 phút và không vượt
+  phần còn lại). Watchdog không cắt phiên khi LLM đang xếp hàng/đầy KV (chờ tối đa 300 s im lặng).
+- Sau khi thấy bằng chứng, gateway chờ agent đóng gói PoC (tối đa 240 s); nếu chưa có script nào chạy ra bằng chứng
+  thì nhắc agent tối đa 2 lần (event `log` `[proof] Nhắc agent đóng gói PoC (lần n).`).
+- `code` ưu tiên **script đã chạy ra bằng chứng**; không bao giờ là JSON/YAML/response HTTP/markdown (không có script
+  hợp lệ thì `null`). `stage` `3.3` chỉ khi chính file trong `code` đã chạy ra bằng chứng, ngược lại `3.2`.
+
 > ⚠️ Stream gửi dòng keepalive `: ka\n\n` (comment SSE, không phải JSON) mỗi 20s khi agent chưa có
 > event mới, để giữ tunnel Cloudflare không timeout ở 100s. Parser FE phải bỏ qua dòng bắt đầu bằng
 > `:` thay vì cố `JSON.parse` nó.

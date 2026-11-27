@@ -31,3 +31,16 @@ def hermetic_env(monkeypatch):
     # mock it. The dedicated test_input_classifier suite monkeypatches classify_input/load_head
     # directly, so it is unaffected. Production is unchanged (it never sets this var).
     monkeypatch.setenv("INPUT_CLASSIFIER_WEIGHTS_PATH", "/nonexistent/hermetic-sanitize-head")
+
+
+@pytest.fixture(autouse=True)
+def neo4j_password_configured(monkeypatch):
+    """config.neo4j_password không còn mặc định trong code (bắt buộc từ env); để trống thì mọi
+    lời gọi Neo4j trả rỗng mà không gửi request. Test mock HTTP của Neo4j cần trạng thái "đã
+    cấu hình" dù máy chạy test không có .env, nên module đã nạp được đặt một giá trị GIẢ (cũng
+    để test không bao giờ gửi mật khẩu thật). Nhánh chưa cấu hình: tests/test_neo4j_unconfigured.py."""
+    import sys
+
+    mod = sys.modules.get("secai_gateway.retrieval.neo4j")
+    if mod is not None:
+        monkeypatch.setattr(mod, "NEO4J_PASSWORD", "hermetic-test-neo4j-not-real")

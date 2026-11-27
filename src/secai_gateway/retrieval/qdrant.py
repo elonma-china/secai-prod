@@ -20,7 +20,7 @@ from .cve_overrides import apply_cve_override
 from .embedding import EMBEDDING_URL, RERANKER_URL, embed, rerank
 from .discovery import DISCOVER_KEV_K, DISCOVER_RERANK_WINDOW, expand_discovery_query
 from .vi_en import expand_for_bm25
-from .neo4j import NEO4J_DATABASE, _auth_header, _neo4j_http_url
+from .neo4j import NEO4J_DATABASE, _auth_header, _neo4j_http_url, neo4j_configured
 from .filters import (ENTITY_ID_RES, KNOWLEDGE_KINDS, boost, build_filter, entity_scope_filter,
                       passes_filter, resolve_scope, scope_ok, upper_list)
 
@@ -212,7 +212,10 @@ async def _graph_reverse_candidates(
     CVEs the knowledge graph links to that class (KEV-first, then CVSS-desc) and fetch their
     core chunks so famous class members enter the rerank window. Pure semantic search buries
     these — a broad weakness class has no distinctive description text. Fail-open: any
-    Neo4j/Qdrant error returns {} and the hybrid pipeline stands alone."""
+    Neo4j/Qdrant error returns {} and the hybrid pipeline stands alone. Neo4j not configured
+    (NEO4J_PASSWORD empty) also returns {} without any request."""
+    if not neo4j_configured():
+        return {}
     rel_by_field = {
         "cwe_id": ("CWE", "HAS_WEAKNESS"),
         "capec_id": ("CAPEC", "MAPS_TO_CAPEC"),

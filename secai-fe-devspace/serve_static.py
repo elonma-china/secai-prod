@@ -29,6 +29,9 @@ REPORT_KEY_FILE = Path(os.environ.get("REPORT_KEY_FILE", str(Path(__file__).reso
 REVIEW_TOKENS_FILE = Path(__file__).resolve().parent / ".review-devspace-tokens.local"
 REVIEW_ALLOW_LOOPBACK = os.environ.get("DEVSPACE_REVIEW_ALLOW_LOOPBACK", "false").lower() == "true"
 REVIEW_LOOPBACK_FILE = Path(__file__).resolve().parent / ".review-loopback.local"
+# Gắn token review/report cho kết nối tailnet chỉ khi bật rõ ràng: mọi node trong tailnet (kể cả máy
+# được chia sẻ vào) đều mang địa chỉ 100.64.0.0/10, địa chỉ đó không chứng minh người dùng tin cậy.
+REVIEW_ALLOW_TAILNET = os.environ.get("DEVSPACE_REVIEW_ALLOW_TAILNET", "false").lower() == "true"
 TAILNET = ipaddress.ip_network("100.64.0.0/10")
 HOST = os.environ.get("FE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FE_PORT", "5173"))
@@ -70,7 +73,7 @@ def _review_token(role: str) -> str | None:
 
 
 def _review_connection(peer: str, local: str) -> bool:
-    if _tailnet_connection(peer, local):
+    if REVIEW_ALLOW_TAILNET and _tailnet_connection(peer, local):
         return True
     if not (REVIEW_ALLOW_LOOPBACK or REVIEW_LOOPBACK_FILE.exists()):
         return False

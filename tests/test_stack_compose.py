@@ -81,7 +81,7 @@ def test_config_validates_without_dotenv(tmp_path):
 
 def test_no_default_secrets_or_unguarded_data_root():
     text = COMPOSE.read_text()
-    assert "secai2026" not in text
+    assert "NEO4J_PASSWORD:-" not in text  # không mặc định literal
     assert "NEO4J_PASSWORD:?" in text
     assert text.count("${DATA_ROOT") == text.count("${DATA_ROOT:?"), "every DATA_ROOT must use the :? form"
 

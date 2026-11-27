@@ -12,6 +12,8 @@
 # (không mount src sống), không docker run/rm tay vào container prod, lock dùng chung với các script
 # release khác, rollback = đổi lại tag image + compose/profile đã sao lưu (image cũ giữ >= 3 ngày).
 set -euo pipefail
+# Mọi file script tạo (bản sao compose, inspect/health/state, profile, log) có thể chứa secret: chỉ chủ sở hữu đọc.
+umask 077
 
 MODE=${1:-plan}; shift || true
 YES=0; for a in "$@"; do [ "$a" = "--yes" ] && YES=1; done
@@ -29,6 +31,9 @@ LATEST_PTR=$RELEASES/LATEST-PROD
 die() { echo "release-prod: $*" >&2; exit 1; }
 log() { echo ">> $*" >&2; }
 need_yes() { [ "$YES" = 1 ] || die "cần --yes để thực hiện (đang ở chế độ xem trước)"; }
+# Tạo/làm rỗng file mode 600 trước khi ghi: umask chỉ áp cho file mới, file cùng tên còn từ lần
+# chạy trước (cùng ngày, cùng sha) giữ mode cũ.
+priv() { local f; for f in "$@"; do : > "$f"; chmod 600 "$f"; done; }
 
 prod_tag() { docker inspect "$1" --format '{{.Config.Image}}' 2>/dev/null; }
 tag_sha() { sed -E 's/^.*:main-([0-9a-f]{8})-.*$/\1/' <<<"$1"; }
@@ -67,9 +72,12 @@ if [ "$MODE" = rollback ]; then
     # shellcheck disable=SC1091
     . "$REL/state.env"
     exec 8>"$RELEASES/gateway-deploy.lock" 9>"$RELEASES/translation-deploy.lock"; flock -n 8 && flock -n 9 || die "đang có release khác giữ lock"
-    cp -p "$COMPOSE_BAK" "$COMPOSE"
+    # Không `cp -p`: bản sao lưu là 600, còn compose prod giữ mode của nó (gateway đọc nó qua mount ro).
+    cp --preserve=timestamps "$COMPOSE_BAK" "$COMPOSE"
     (cd "$DOCKER_DIR" && docker compose up -d --no-deps --no-build gateway)
     docker compose -p "$TRANS_PROJECT" -f "$TRANS_PREV_PROFILE" up -d --no-deps --no-build gateway worker
+    SECAI_RELEASES_DIR="$RELEASES" timeout 60 python3 -I "$(dirname "$0")/versions.py" record --service gateway --action rollback \
+        --from "$NEW_TAG" --to "$PREV_TAG" --release-dir "$REL" || log "cảnh báo: không ghi được sổ phiên bản (versions.py record); rollback vẫn xong"
     echo "rollback xong → $PREV_TAG (kiểm /health 8131 và 18185)"; exit 0
 fi
 
@@ -101,8 +109,9 @@ echo "đổi file cấu hình/env?"; git -C "$REPO" diff --name-only "$CUR_S8" "
 
 # ---------------------------------------------------------------- gates
 REL=$RELEASES/main-$S8-$TODAY; mkdir -p "$REL"; chmod 700 "$REL"
-TREE=$REL/tree; rm -rf "$TREE"; mkdir -p "$TREE"
-git -C "$REPO" archive "$TARGET" | tar -x -C "$TREE"
+TREE=$REL/tree; rm -rf "$TREE"
+# Cây build giữ quyền file như trong git (umask 022) để quyền file trong image không đổi; $REL đã 700.
+(umask 022; mkdir -p "$TREE" && git -C "$REPO" archive "$TARGET" | tar -x -C "$TREE")
 
 log "gate 1/3: pytest toàn bộ trên cây origin/main ($S8)"
 PY=$REPO/.venv/bin/python; [ -x "$PY" ] || die "không thấy $PY"
@@ -156,6 +165,7 @@ for _ in $(seq 1 45); do
     [ -n "$h" ] && { ok=1; break; }; sleep 2
 done
 [ "$ok" = 1 ] || { docker logs --tail 30 "$SMOKE" >&2; die "smoke: /health không lên"; }
+priv "$REL/health-smoke.json" "$REL/health-8131-before.json"
 echo "$h" > "$REL/health-smoke.json"; curl -fsS -m 5 http://127.0.0.1:8131/health > "$REL/health-8131-before.json" 2>/dev/null || true
 python3 - "$REL/health-smoke.json" "$REL/health-8131-before.json" "$S8" <<'PY' || die "smoke: /health sai (xem $REL/health-smoke.json)"
 import json, sys
@@ -179,14 +189,17 @@ flock -n 8 && flock -n 9 || die "đang có release khác giữ lock"
 TRANS_PREV=$(docker inspect secai-translation-gateway --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}')
 [ -f "$TRANS_PREV" ] || die "không thấy profile translation hiện tại ($TRANS_PREV)"
 COMPOSE_BAK=$REL/docker-compose.yml.bak-before-img$S8-$TODAY
-cp -p "$COMPOSE" "$COMPOSE_BAK"
+install -p -m 600 "$COMPOSE" "$COMPOSE_BAK"
 TRANS_NEW=$REL/translation-main.json
 (umask 077; sed "s#$CUR_TAG#$NEW_TAG#g" "$TRANS_PREV" > "$TRANS_NEW")
 grep -q "$NEW_TAG" "$TRANS_NEW" || die "profile translation không chứa $CUR_TAG để thay"
 n=$(grep -c "image: $CUR_TAG\$" "$COMPOSE" || true); [ "$n" = 1 ] || die "compose có $n dòng 'image: $CUR_TAG' (cần đúng 1)"
+priv "$REL/state.env"
 printf 'PREV_TAG=%s\nNEW_TAG=%s\nCOMPOSE_BAK=%s\nTRANS_PREV_PROFILE=%s\nTRANS_NEW_PROFILE=%s\n' "$CUR_TAG" "$NEW_TAG" "$COMPOSE_BAK" "$TRANS_PREV" "$TRANS_NEW" > "$REL/state.env"
 echo "$REL" > "$LATEST_PTR"
-for c in secai-docker-gateway secai-translation-gateway secai-translation-worker; do docker inspect $c > "$REL/inspect-before-$c.json"; done
+for c in secai-docker-gateway secai-translation-gateway secai-translation-worker; do
+    priv "$REL/inspect-before-$c.json"; docker inspect $c > "$REL/inspect-before-$c.json"  # env container: có secret
+done
 
 wait_health() {  # url sha-expected(optional)
     for _ in $(seq 1 45); do
@@ -200,6 +213,7 @@ revert() { log "HEALTH SAI → rollback tự động"; exec 8>&- 9>&-; "$0" roll
 log "switch gateway :8131 → $NEW_TAG"
 sed -i "s#^\(\s*image: \)$CUR_TAG\$#\1$NEW_TAG#" "$COMPOSE"
 (cd "$DOCKER_DIR" && docker compose up -d --no-deps --no-build gateway) || revert
+priv "$REL/health-8131-after.json"
 wait_health http://127.0.0.1:8131/health "$S8" > "$REL/health-8131-after.json" || revert
 
 log "switch translation gateway+worker → $NEW_TAG"
@@ -217,5 +231,7 @@ cat > "$REL/RELEASE-NOTES.md" <<EOF
 - Rollback: \`scripts/release-prod.sh rollback --yes\` (compose bak: $COMPOSE_BAK; profile cũ: $TRANS_PREV)
 - Image cũ giữ ≥ ${KEEP_DAYS} ngày rồi \`release-prod.sh gc --yes\` xoá.
 EOF
+SECAI_RELEASES_DIR="$RELEASES" timeout 60 python3 -I "$(dirname "$0")/versions.py" record --service gateway --action release \
+    --from "$CUR_TAG" --to "$NEW_TAG" --release-dir "$REL" || log "cảnh báo: không ghi được sổ phiên bản (versions.py record); release vẫn thành công"
 log "RELEASE OK $NEW_TAG — ghi chú: $REL/RELEASE-NOTES.md"
 gc || true
