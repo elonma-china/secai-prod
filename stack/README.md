@@ -13,7 +13,7 @@ sudo SECAI_DOCKERHUB_TOKEN_FILE=/root/dockerhub-read.token ./secai install   # b
 sudo ./secai status
 ```
 
-Biến trên dòng `sudo` ở đây chỉ là đường dẫn tệp, không phải secret. **Không bao giờ** viết `sudo LLM_API_KEY=... ./secai`:
+Biến trên dòng `sudo` ở đây chỉ là đường dẫn tệp, không phải secret. **Không bao giờ** đặt khoá ngay trên dòng `sudo` (dạng `sudo TÊN_KHOÁ=giá-trị ./secai`):
 giá trị nằm trên argv (ai cũng thấy qua `ps`) và trong log của sudo.
 
 **Token đọc dữ liệu (Docker Hub).** Chủ repo `secai1999/secai-data` tạo trên hub.docker.com: Account settings → Personal access
