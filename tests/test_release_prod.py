@@ -817,6 +817,42 @@ def test_run_switches_all_three_and_records_release(sb: Sandbox) -> None:
     assert sb.prod_tag in sb.load()["images"], "image prod cũ phải được giữ để rollback"
 
 
+def test_run_writes_secret_bearing_files_owner_only(sb: Sandbox) -> None:
+    """umask 077 + install -m 600: bản sao compose, inspect (env container), health, state đều 600, kể cả
+    khi file cùng tên còn sót (mode 644) từ lần chạy trước cùng ngày; compose prod và cây build giữ mode cũ."""
+    sb.compose.chmod(0o644)
+    sb.rel.mkdir(mode=0o755)
+    stale = ["state.env", "inspect-before-secai-docker-gateway.json", "health-smoke.json", "health-8131-after.json"]
+    for name in stale:
+        (sb.rel / name).write_text("{}\n")
+        (sb.rel / name).chmod(0o644)
+    res = sb.run("run", "--yes")
+    assert res.returncode == 0, res.stderr[-3000:]
+    mode = lambda p: stat.S_IMODE(p.stat().st_mode)  # noqa: E731
+    rel = sb.rel
+    assert mode(rel) == 0o700
+    state = dict(ln.split("=", 1) for ln in (rel / "state.env").read_text().splitlines())
+    owner_only = [Path(state["COMPOSE_BAK"]), rel / "state.env", rel / "translation-main.json",
+                  rel / "health-smoke.json", rel / "health-8131-before.json", rel / "health-8131-after.json",
+                  rel / "RELEASE-NOTES.md", rel / "pytest.log",
+                  *[rel / f"inspect-before-{c}.json" for c in TRIO]]
+    assert {str(p.relative_to(rel)): oct(mode(p)) for p in owner_only if mode(p) != 0o600} == {}
+    assert Path(state["COMPOSE_BAK"]).read_text() == sb.compose.read_text().replace(sb.new_tag, sb.prod_tag)
+    assert mode(sb.compose) == 0o644, "compose prod phải giữ mode (gateway đọc qua mount ro)"
+    assert mode(rel / "tree" / "src" / "secai_gateway" / "__init__.py") == 0o644, "quyền file trong image phải như git"
+
+
+def test_rollback_restores_compose_content_but_keeps_its_mode(sb: Sandbox) -> None:
+    rel = sb.released()
+    bak = next(rel.glob("docker-compose.yml.bak-*"))
+    bak.chmod(0o600)  # bản sao lưu do run tạo ra giờ là 600
+    sb.compose.chmod(0o644)
+    res = sb.run("rollback", "--yes")
+    assert res.returncode == 0, res.stderr
+    assert sb.compose.read_text() == bak.read_text()
+    assert stat.S_IMODE(sb.compose.stat().st_mode) == 0o644
+
+
 @pytest.mark.parametrize("pytest_out", ["1 failed, 11 passed in 0.50s", "10 passed, 1 error in 1.00s"],
                          ids=["failed", "error"])
 def test_run_blocks_release_when_pytest_gate_is_red(sb: Sandbox, pytest_out: str) -> None:
