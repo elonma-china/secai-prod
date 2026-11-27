@@ -1,0 +1,186 @@
+# Tiêu chí vận hành (ops) cho secai-agent-gateway
+
+Tài liệu này định nghĩa thế nào là "vận hành đạt" cho các service chạy image dựng từ repo này và các kho dữ liệu chúng phụ thuộc. Mỗi tiêu chí có ID, mức, cách đo và ngưỡng đạt. Phần lớn đo tự động bằng `scripts/ops-check.py` (chỉ đọc trạng thái thật) hoặc pytest (kiểm nội dung repo, chạy offline). Phần còn lại là kiểm tay, có ghi bước làm.
+
+Tài liệu này không thay cho nghiệm thu tính năng ở [stack/ACCEPTANCE.md](../../stack/ACCEPTANCE.md). Ở đây chỉ chấm phần build, release, phiên bản, dữ liệu, giám sát, bảo mật và dọn dẹp.
+
+## Phạm vi
+
+Chấm như prod:
+
+| Container | Vai trò | Runbook release/rollback |
+| --- | --- | --- |
+| `secai-docker-gateway` | API chính, public :8131. Cùng image với hai container dịch bên dưới | [CLAUDE.md, mục "Sau khi merge PR"](../../CLAUDE.md), [release-prod.sh](../../scripts/release-prod.sh) |
+| `secai-translation-gateway` | Dịch file/ảnh và text v3, :18185 (network host) | [release-prod.sh](../../scripts/release-prod.sh), [translation-release](../../deploy/translation-release/README.md) |
+| `secai-translation-worker` | Worker job dịch | [release-prod.sh](../../scripts/release-prod.sh), [translation-release](../../deploy/translation-release/README.md) |
+| `secai-translation-frontend` | Devspace dịch :5179 (network host) | [translation-release](../../deploy/translation-release/README.md) |
+| `secai-report-backend` | Báo cáo v2, 127.0.0.1:18183 | [deploy/report](../../deploy/report/README.md) |
+| `secai-review-frontend` | Giao diện expert review :5174 | [review-docker-deployment](../operations/review-docker-deployment.md) |
+| `secai-review-canary` | Canary review, 127.0.0.1:8189 | [review-docker-deployment](../operations/review-docker-deployment.md) |
+| `secai-translation-converter` | Chuyển DOC sang DOCX trong sandbox (network host) | chưa có |
+| `secai-docker-pentestcode`, `secai-docker-pentestcode-1` … `-24` | Pool 25 container pentestcode cho exploit/PoC | [deploy/pentestcode](../../deploy/pentestcode/README.md) |
+| `secai-docker-qdrant` | Vector DB (RAG) | [deploy/README.md](../../deploy/README.md) |
+| `secai-docker-neo4j` | Graph DB (RAG) | [deploy/README.md](../../deploy/README.md) |
+| `secai-docker-redis` | Session/cache | [deploy/README.md](../../deploy/README.md) |
+| `secai-docker-es` | Elasticsearch | [deploy/README.md](../../deploy/README.md) |
+
+Ba container đầu là một nhóm: chạy chung một image bất biến `secai-agent-gateway:main-<sha8>-<YYYYMMDD>` và chỉ đổi qua `scripts/release-prod.sh`. Stack dev `secai-gw-dev-*` của từng worktree chỉ dùng để tham chiếu (OPS-RES-7 đếm stack mồ côi), không chấm như prod. Không chấm lab CVE, OpenVAS, ClearML hay project khác trên máy.
+
+Unit systemd `secai-*` (tunnel LLM/serving, OCR, MLOps, timer dọn dẹp) được tính ở nhóm giám sát vì gateway phụ thuộc vào chúng. Script cron đồng bộ CVE vào KB (`~/Downloads/CVE-DB/run_sync.sh`) được tính ở nhóm secret vì log của nó được mount vào gateway.
+
+## Cách chạy
+
+```sh
+# Trạng thái thật, chỉ đọc. Mã thoát 1 khi có FAIL ở tiêu chí bắt buộc.
+python3 -I scripts/ops-check.py
+python3 -I scripts/ops-check.py --json > /tmp/ops.json
+python3 -I scripts/ops-check.py --group VER,SEC
+python3 -I scripts/ops-check.py --list            # danh mục, không đo
+SECAI_BACKUP_DIR=/mnt/backup/secai python3 -I scripts/ops-check.py --group BAK
+
+# Kiểm repo và hành vi release-prod.sh, offline (docker/git/curl giả).
+scripts/dev.sh test tests/test_ops_repo.py tests/test_ops_check.py tests/test_release_prod.py
+```
+
+`ops-check.py` chỉ gọi `docker ps/inspect/images/image inspect/system df`, `gh api` (GET), `df`, `systemctl [--user] show/list-*` và git chỉ đọc (luôn kèm `--no-optional-locks`, không `fetch`, nên `origin/main` là bản fetch gần nhất). Hàm `assert_read_only` chặn mọi lệnh khác trước khi gọi. Ngoài ra checker chỉ đọc file và `stat`. Với secret, output chỉ có tên biến, đường dẫn và quyền file; các giá trị đọc được trong bộ nhớ bị xoá khỏi output trước khi in.
+
+Trạng thái mỗi tiêu chí:
+
+- **PASS**: đạt ngưỡng.
+- **FAIL**: không đạt. FAIL ở tiêu chí *bắt buộc* làm mã thoát thành 1.
+- **WARN**: đạt một phần (ngưỡng ghi rõ ở từng dòng), hoặc checker gặp lỗi khi đo (bằng chứng ghi "lỗi checker").
+- **SKIP**: không đo được tự động (thiếu `gh`, thiếu quyền, tiêu chí kiểm tay).
+
+Điểm nhóm = (PASS + 0,5 × WARN) / (PASS + FAIL + WARN), bỏ SKIP.
+
+Trong pytest, hành vi hiện tại chưa đạt tiêu chí được đánh `xfail(strict=True)` kèm lý do, không sửa script. Khi có người sửa đúng, test chuyển XPASS và strict làm suite đỏ, nhắc gỡ marker.
+
+## Build tái lập được (BLD)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-BLD-1 | Image cài dependency đúng theo `uv.lock`, không resolve lại từ `pyproject.toml` | bắt buộc | `ops-check` đọc `Dockerfile`; pytest `test_ops_repo.py::test_dockerfile_installs_from_lock` (xfail) | Dockerfile `COPY` `uv.lock` và cài bằng `uv sync --frozen`/`--locked` hoặc `pip install --require-hashes` từ file xuất ra từ lock |
+| OPS-BLD-2 | Lần release gần nhất không trôi version package bên thứ ba khi `uv.lock` không đổi | bắt buộc | `ops-check` đọc `pip-freeze.diff` trong thư mục release của `LATEST-PROD`, so `uv.lock` giữa commit PREV và NEW bằng `git diff --quiet` | 0 package bên thứ ba đổi version (bỏ dòng của chính `secai-agent-gateway`). Build OVERLAY không có `pip-freeze.diff` thì đạt. `uv.lock` có đổi thì WARN, đối chiếu tay |
+| OPS-BLD-3 | Base image trong `Dockerfile` ghim digest | nên có | `ops-check`; pytest `test_dockerfile_base_pinned_by_digest` (xfail) | Mọi dòng `FROM` có `@sha256:` |
+| OPS-BLD-4 | Image prod build từ `git archive` của commit trên `origin/main`; không container nào mount `src/` sống | bắt buộc | `ops-check`: `release-prod.sh` còn `git -C "$REPO" archive` và `diff -rq` so `/app/src`; không mount nào có đích `/app/src`. Pytest `test_release_script_builds_from_git_archive` | Cả hai điều kiện đúng |
+| OPS-BLD-5 | `.dockerignore` loại secret và dữ liệu khỏi build context | bắt buộc | `ops-check`; pytest `test_dockerignore_excludes_secrets_and_data` | Có đủ các dòng `.env`, `.env.*`, `.venv/`, `data/`, `*.db` |
+| OPS-BLD-6 | Build lại image prod từ commit ghi trong tag cho ra cùng danh sách package | nên có | Kiểm tay: (1) `git archive <sha8>` giải nén vào thư mục tạm; (2) `docker build -t secai-agent-gateway:dev-repro-<sha8>` từ thư mục đó; (3) so `pip freeze` của image đó với image prod bằng `docker run --rm --entrypoint pip` cho từng image rồi `diff`; (4) xoá tag `dev-repro-*` | 0 dòng khác ngoài dòng của chính gói |
+
+## Release và rollback (REL)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-REL-1 | Lần release gần nhất có đủ hồ sơ | bắt buộc | `ops-check` đọc thư mục ghi trong `~/secai-releases/LATEST-PROD` | Có `state.env`, `RELEASE-NOTES.md`, `pytest.log`, `health-8131-before.json`, `health-8131-after.json` và file `COMPOSE_BAK` ghi trong `state.env` |
+| OPS-REL-2 | Rollback khả dụng ngay | bắt buộc | `ops-check`: `docker image inspect` tag `PREV_TAG`, `stat` `COMPOSE_BAK` và `TRANS_PREV_PROFILE` | Cả ba còn trên máy |
+| OPS-REL-3 | `release-prod.sh` có test hành vi offline | bắt buộc | pytest `tests/test_release_prod.py` (docker/git/curl giả); `ops-check` kiểm đủ 5 test bắt buộc | 5 test pass: `plan` không đổi gì; `run`/`rollback` thiếu `--yes` thì từ chối; 3 container lệch image thì dừng; prod không phải tổ tiên của main thì dừng; `gc` giữ image của lần release liền trước và image đang có container dùng |
+| OPS-REL-4 | Rollback tự kiểm tra trước và sau khi chuyển | bắt buộc | pytest `test_rollback_waits_for_health_after_switch`, `test_rollback_refuses_before_touching_compose_when_previous_image_is_gone` (xfail); `ops-check` đọc nhánh rollback của script | Trước khi chép compose: `docker image inspect` PREV_TAG. Sau `compose up`: chờ `/health` 8131 và 18185, xác nhận 3 container về PREV_TAG |
+| OPS-REL-5 | Mọi container trong phạm vi do compose quản lý, file cấu hình còn tồn tại | bắt buộc | `ops-check`: label `com.docker.compose.project` và `com.docker.compose.project.config_files` | 100% container có project, mọi file trong `config_files` còn |
+| OPS-REL-6 | Compose prod (`secai-docker/docker-compose.yml`) được quản lý phiên bản | bắt buộc | `ops-check`: `git -C <secai-docker> rev-parse --is-inside-work-tree` | Trả `true` (repo Git private; `.env` và secret nằm ngoài Git) |
+| OPS-REL-7 | Thư mục compose prod không tích file sao lưu | nên có | `ops-check` đếm `docker-compose.yml.bak*` | ≤ 3 file |
+| OPS-REL-8 | Không bind-mount sống từ Git checkout vào container prod | bắt buộc | `ops-check` so nguồn bind mount với `git worktree list` | FAIL: mount `src/`, mount từ worktree không phải checkout chính, hoặc checkout chính không ở `main`. WARN: mount từ checkout chính đang ở `main` (vẫn bỏ qua image bất biến). PASS: không mount nào từ checkout |
+
+## Quản lý phiên bản container (VER)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-VER-1 | Container được tạo từ tag, không từ image ID trần | bắt buộc | `ops-check`: `docker inspect` `Config.Image` | Không container nào có `Config.Image` dạng `sha256:…` hay chuỗi hex |
+| OPS-VER-2 | Tag image first-party (`secai-*`) bất biến, truy được về commit | bắt buộc | `ops-check` phân loại tag của container đang chạy | PASS: có token sha (7–40 hex, không phải ngày) và token ngày `YYYYMMDD`, ví dụ `main-2dcff27c-20261127`. WARN: chỉ có ngày hoặc semver `x.y.z`. FAIL: `latest`, không tag, số trần như `:1`, tên mô tả |
+| OPS-VER-3 | Image bên thứ ba ghim version đầy đủ | bắt buộc | `ops-check` cho container prod; pytest `test_stack_compose_pins_third_party_versions` (xfail) cho `stack/compose.yml` | PASS: `x.y.z` hoặc `@sha256`. WARN: `x.y`. FAIL: chỉ major (`redis:7-alpine`), `latest`, không tag |
+| OPS-VER-4 | Image first-party có label `org.opencontainers.image.revision` | bắt buộc | `ops-check` (label của image và container); pytest `test_full_build_labels_revision`, `test_dockerfile_labels_revision` (xfail) | Mọi container first-party có label, giá trị là sha commit |
+| OPS-VER-5 | Ba container gateway chạy cùng image | bắt buộc | `ops-check`: `Config.Image` và image ID của `secai-docker-gateway`, `secai-translation-gateway`, `secai-translation-worker` | Cùng tag và cùng image ID |
+| OPS-VER-6 | Tag prod gateway khớp main và hồ sơ release | bắt buộc | `ops-check`: regex tag, `git merge-base --is-ancestor <sha8> origin/main`, `NEW_TAG` trong `state.env`, biến `GIT_SHA` của 3 container | Tag dạng `main-<sha8>-<YYYYMMDD>`, sha8 nằm trên `origin/main`, bằng `NEW_TAG`, bằng `GIT_SHA` |
+| OPS-VER-7 | Service chạy code gateway không tụt quá xa prod | nên có | `ops-check`: `Created` của image `secai-agent-gateway:*` ngoài nhóm 3 so với image prod gateway | Chênh ≤ 30 ngày |
+| OPS-VER-8 | Sổ phiên bản dịch vụ khớp trạng thái thật | nên có | `ops-check` SKIP khi `scripts/versions.py` chưa có trên `origin/main`; khi đã có thì đối chiếu tay sổ với `docker inspect` | Mọi container trong phạm vi có dòng trong sổ, tag khớp `docker inspect` |
+
+## CI và chất lượng (CI)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-CI-1 | Có workflow CI chạy pytest cho mọi PR vào main | bắt buộc | `ops-check`: `.github/workflows/*.yml` có `pytest`, và `gh api repos/{repo}/actions/workflows`; pytest `test_ci_workflow_runs_pytest` (xfail) | ≥ 1 workflow chạy pytest trên `pull_request`, có trên GitHub |
+| OPS-CI-2 | `main` có branch protection hoặc ruleset | bắt buộc | `ops-check`: `gh api …/branches/main/protection` và `…/rules/branches/main` | Bắt PR, bắt status check CI, cấm force-push |
+| OPS-CI-3 | Repo tự xoá nhánh sau merge | nên có | `ops-check`: `gh api repos/{repo}` | `delete_branch_on_merge=true` |
+| OPS-CI-4 | Gate release chạy toàn bộ pytest và lần release gần nhất xanh | bắt buộc | `ops-check`: `release-prod.sh` còn `-m pytest`; dòng cuối `pytest.log` của release gần nhất; pytest `test_release_script_has_full_pytest_gate` | Dòng cuối có `passed`, không có `failed`/`error` |
+| OPS-CI-5 | Có cập nhật bảo mật dependency tự động | nên có | `ops-check`: `security_and_analysis.dependabot_security_updates` hoặc `.github/dependabot.yml` | `enabled` hoặc có file |
+| OPS-CI-6 | Script shell vận hành chạy ở chế độ chặt | nên có | `ops-check`; pytest `test_shell_scripts_parse`, `test_shell_scripts_strict_mode` | Mọi script có shebang trong `scripts/`, `stack/`, `stack/lib/`, `deploy/` (cấp 1) có `set -u` và `pipefail` (script `sh`: chỉ cần `-u`); script đổi prod (danh sách `MUTATING_SCRIPTS` trong checker) có thêm `-e`; `bash -n` không lỗi |
+
+## Backup và khôi phục dữ liệu (BAK)
+
+Quy ước đích backup: một thư mục khai báo qua `SECAI_BACKUP_DIR` (hoặc `--backup-dir`), mỗi kho một thư mục con `qdrant/`, `neo4j/`, `sqlite/` (DB gateway, session, review, report, translate).
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-BAK-1 | Có lịch backup định kỳ cho Qdrant, Neo4j và DB SQLite | bắt buộc | `ops-check`: `systemctl [--user] list-timers`, tên timer chứa backup/snapshot/dump và secai/qdrant/neo4j/sqlite/report/review. Cron: kiểm tay `crontab -l` | ≥ 1 timer (hoặc dòng cron) phủ cả ba loại kho |
+| OPS-BAK-2 | Backup mới nhất của từng kho còn trong hạn | bắt buộc | `ops-check`: mtime file mới nhất trong từng thư mục con của đích backup | `sqlite/` và `neo4j/` ≤ 26 giờ, `qdrant/` ≤ 7 ngày. Không khai báo đích backup thì FAIL |
+| OPS-BAK-3 | Bản backup nằm ngoài đĩa chứa dữ liệu prod | bắt buộc | `ops-check` so `st_dev` của đích backup với `secai-data`. Bản sao ngoài máy: kiểm tay nhật ký rsync/rclone | Khác thiết bị; có thêm một bản ngoài máy |
+| OPS-BAK-4 | Đã diễn tập khôi phục gần đây | bắt buộc | `ops-check` tìm `docs/archive/test-results/restore-drill-YYYYMMDD.md` | Biên bản mới nhất ≤ 92 ngày, ghi thời gian khôi phục và kết quả kiểm |
+| OPS-BAK-5 | DB SQLite của service gateway nằm trên volume/bind | bắt buộc | `ops-check`: với container chạy `uvicorn`/`secai_gateway`, các biến `*_DB_PATH` đang dùng (session khi backend `sqlite`, review khi `REVIEW_ENABLED=true`, report khi `REPORT_FEATURE_ENABLED=true`) nằm dưới một mount | 100% DB đang dùng nằm trên mount |
+
+## Giám sát và cảnh báo (MON)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-MON-1 | Mọi container trong phạm vi đang chạy và healthy | bắt buộc | `ops-check`: `State.Status`, `State.Health.Status` | Đủ 8 container app, 4 kho dữ liệu, pool 25; tất cả `running`; container có healthcheck ở `healthy` |
+| OPS-MON-2 | Mọi container có healthcheck | nên có | `ops-check`: `Config.Healthcheck` | 100% |
+| OPS-MON-3 | Container tự chạy lại khi máy khởi động lại | bắt buộc | `ops-check`: `HostConfig.RestartPolicy` | 100% `unless-stopped` hoặc `always` |
+| OPS-MON-4 | Có cảnh báo chủ động khi dịch vụ chết hoặc health xấu | bắt buộc | `ops-check` tìm unit/timer `secai-*` có alert/monitor/watchdog/healthcheck/uptime. Kênh nhận: kiểm tay bằng cách gửi thử một cảnh báo | ≥ 1 job giám sát; cảnh báo thử tới được người trực trong 5 phút |
+| OPS-MON-5 | Unit systemd `secai-*` không hỏng hay restart liên tục | bắt buộc | `ops-check`: `systemctl [--user] show` (`ActiveState`, `SubState`, `NRestarts`) | Không unit nào `failed`, `auto-restart` hoặc `NRestarts` > 100. Unit của instance đã huỷ phải được disable |
+| OPS-MON-6 | Log container có giới hạn dung lượng | nên có | `ops-check`: `HostConfig.LogConfig` | Driver `json-file` phải có `max-size` (hoặc dùng driver `local`/`journald`) |
+| OPS-MON-7 | `/health` của prod báo ổn | nên có | Kiểm tay: `curl -fsS http://127.0.0.1:8131/health` và `:18185/health` | `status` là `ok`, `problems` rỗng, `git_sha` khớp tag prod |
+
+## Bảo mật và secret (SEC)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-SEC-1 | Kho dữ liệu không publish cổng ra mọi interface | bắt buộc | `ops-check`: `HostConfig.PortBindings` của Qdrant, Neo4j, Redis, ES. Firewall (chain `DOCKER-USER`): kiểm tay | Không cổng nào có HostIp rỗng, `0.0.0.0` hay `::` |
+| OPS-SEC-2 | Chỉ gateway :8131 public | bắt buộc | `ops-check` cho container app và pool. Container `network=host`: kiểm tay `ss -ltnp` | Ngoài `secai-docker-gateway` cổng 8131, không cổng nào bind `0.0.0.0` |
+| OPS-SEC-3 | File chứa secret chỉ chủ sở hữu đọc được | bắt buộc | `ops-check` quét `~/secai-releases` và `secai-docker` sâu 3 cấp (bỏ `tree/`, `imgsrc/`). `.env*` (trừ `*.example`) không được có quyền group/other. File khác có gán biến dạng secret thì không được world-readable, tính cả quyền đi qua của thư mục cha | 0 file vi phạm |
+| OPS-SEC-4 | Compose prod không chứa secret dạng literal | bắt buộc | `ops-check` đọc `secai-docker/docker-compose.yml` | 0 biến tên dạng secret có giá trị literal; mọi giá trị qua `${VAR}` hoặc `env_file` |
+| OPS-SEC-5 | Script cron đồng bộ KB không chứa khoá plaintext | bắt buộc | `ops-check` quét `~/Downloads/CVE-DB/*` (đổi bằng `--cron-glob`), kể cả bản `.bak` | 0 khoá plaintext trong script; file khoá riêng có mode 600 |
+| OPS-SEC-6 | Không secret thật trong file tracked | bắt buộc | `ops-check` và pytest `test_ops_check.py::test_real_tracked_tree_has_no_secret_outside_fixtures` (mẫu khoá phổ biến, bỏ các file fixture giả trong `FAKE_SECRET_FIXTURES`). Lịch sử Git: kiểm tay bằng `gitleaks detect` | 0 match ngoài vùng fixture; gitleaks không thấy khoá thật |
+| OPS-SEC-7 | Không truyền secret qua argv | bắt buộc | `ops-check`: `Cmd`/`Entrypoint`/`Args` của container và `ExecStart` của unit `secai-*` | 0 cờ `--api-key`/`--token`/`--password` hay `key=…` có giá trị |
+| OPS-SEC-8 | Container chạy user không phải root | nên có | `ops-check`: `Config.User` | 100% (pool pentestcode xét riêng theo nhu cầu tool) |
+| OPS-SEC-9 | Image không bake secret vào ENV | nên có | `ops-check`: `Config.Env` của image | 0 biến dạng secret có giá trị (`GPG_KEY` của image python là fingerprint công khai, không tính) |
+| OPS-SEC-10 | Repo public phải bật quét secret | bắt buộc | `ops-check`: `gh api repos/{repo}`, trường `security_and_analysis` | Repo private, hoặc public với secret scanning và push protection đều bật |
+
+## Tài nguyên, đĩa, dọn dẹp (RES)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-RES-1 | Đĩa chứa Docker và `secai-data` còn chỗ | bắt buộc | `ops-check`: `df -P` cho `/`, `secai-data`, `secai-releases` | PASS ≤ 80%; WARN 80–90%; FAIL > 90% |
+| OPS-RES-2 | Số tag `secai-agent-gateway` vừa phải | nên có | `ops-check`: `docker images secai-agent-gateway` | ≤ 20 tag |
+| OPS-RES-3 | Mọi image gateway cũ đều thuộc diện `gc` dọn được hoặc đang dùng | bắt buộc | `ops-check`: tag không theo `main-`/`smoke-`/`dev-`, cũ hơn 14 ngày, không container nào dùng (so cả tag lẫn image ID) | 0 tag |
+| OPS-RES-4 | Dung lượng image thu hồi được thấp | nên có | `ops-check`: dòng `Images` của `docker system df` | ≤ 30 GB |
+| OPS-RES-5 | `gc` chạy đều | bắt buộc | `ops-check`: container `*-rollback-*`/`*-smoke-*` đã dừng; unit `secai-wt-prune.timer`/`.service` | 0 container dừng quá 3 ngày; timer `active`; service `Result=success` |
+| OPS-RES-6 | Container có giới hạn bộ nhớ | nên có | `ops-check`: `HostConfig.Memory` | 100% có `mem_limit` |
+| OPS-RES-7 | Không có stack dev mồ côi | nên có | `ops-check`: container compose project `secai-gw-dev-*` đang chạy, label `working_dir` còn tồn tại | 0 stack mồ côi |
+| OPS-RES-8 | Build cache Docker gọn | nên có | `ops-check`: dòng `Build Cache` của `docker system df` | ≤ 20 GB |
+
+## Git hygiene (GIT)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-GIT-1 | Checkout chính (nguồn mount của prod) sạch và đúng nhánh | bắt buộc | `ops-check`: `git branch --show-current`, `rev-list --count origin/main..HEAD`, `status --porcelain` | Ở `main`, không ahead `origin/main`, không file sửa dở nằm trong thư mục đang mount vào prod. Sửa dở ngoài mount: WARN |
+| OPS-GIT-2 | Không tích nhánh remote đã merge | nên có | `ops-check`: `git branch -r --merged origin/main` | ≤ 10 nhánh (squash merge không đếm được nên con số thật có thể cao hơn) |
+| OPS-GIT-3 | Không track `.env`, khoá, DB, log | bắt buộc | `ops-check`: `git ls-files`; pytest `test_no_forbidden_tracked_files` | 0 file `.env`/`.env.*` (trừ `*.example`), `*.pem`, `*.key`, `id_rsa*`, `*.db`, `*.sqlite*`, `*.log`. Log bằng chứng trong `docs/archive/` và `evidence/` được phép |
+| OPS-GIT-4 | Không có worktree đã merge bị bỏ quên | nên có | `ops-check`: worktree có HEAD nằm trong `origin/main`, tuổi thư mục | 0 worktree như vậy cũ hơn 24 giờ |
+| OPS-GIT-5 | `.gitignore` chặn file runtime | nên có | `ops-check`; pytest `test_gitignore_blocks_runtime_files` | Có đủ `.env`, `.env.*`, `data/`, `logs/`, `*.log`, `.venv/` |
+
+## Tài liệu và runbook (DOC)
+
+| ID | Tiêu chí | Mức | Cách đo | Ngưỡng đạt |
+| --- | --- | --- | --- | --- |
+| OPS-DOC-1 | Tài liệu tiêu chí này khớp với checker | bắt buộc | `ops-check`; pytest `test_criteria_doc_matches_checker` | Tập ID trong các bảng tiêu chí bằng tập ID của `ops-check.py --list`, không trùng |
+| OPS-DOC-2 | Có runbook release/rollback cho nhóm gateway | bắt buộc | `ops-check`; pytest `test_release_runbook_is_documented` | `CLAUDE.md` có lệnh `release-prod.sh rollback --yes`; `scripts/README.md` nhắc `release-prod.sh` |
+| OPS-DOC-3 | Mỗi service trong phạm vi có runbook release/rollback | bắt buộc | `ops-check` và pytest đọc bảng "Phạm vi" ở đầu tài liệu này | Mọi dòng có link tới file tồn tại; không dòng nào ghi "chưa có" |
+| OPS-DOC-4 | Có runbook khôi phục dữ liệu prod từ backup | bắt buộc | `ops-check`: `docs/ops/RESTORE.md`; pytest `test_restore_runbook_exists` (xfail) | File tồn tại, có lệnh cụ thể cho Qdrant snapshot, Neo4j dump/load, SQLite `.backup`/khôi phục và thứ tự dừng/chạy service |
+| OPS-DOC-5 | `scripts/README.md` liệt kê script vận hành | nên có | `ops-check`; pytest `test_scripts_readme_lists_ops_scripts` | Nhắc mọi `scripts/*.sh` và `ops-check.py` |
+| OPS-DOC-6 | Baseline ops được đo lại định kỳ | nên có | `ops-check` tìm `docs/archive/test-results/ops-baseline-YYYYMMDD.md` | Bản mới nhất ≤ 31 ngày; đo lại sau mỗi thay đổi hạ tầng lớn |
+
+## Những gì bộ kiểm chưa phủ
+
+- Firewall host (`DOCKER-USER`, ufw) và cổng của container `network=host`: checker không được gọi `iptables`/`ss`, nên OPS-SEC-1/2 chỉ thấy port publish của Docker.
+- Cron của user: `crontab -l` không nằm trong danh sách lệnh chỉ đọc của checker, OPS-BAK-1 cần kiểm tay phần cron.
+- Lịch sử Git (OPS-SEC-6) và bản backup ngoài máy (OPS-BAK-3) cần kiểm tay.
+- `origin/main` dùng bản fetch gần nhất của repo; chạy `git fetch` trước nếu cần số liệu mới nhất cho OPS-VER-6.
+
+Baseline đầu tiên: [ops-baseline-20261127.md](../archive/test-results/ops-baseline-20261127.md).

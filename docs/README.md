@@ -7,6 +7,7 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 | [api/](api/) | Contract và hướng dẫn gọi API: chat/session, PoC, exploit stream, dịch, report, expert review | Cần biết endpoint, request/response |
 | [design/](design/) | Kiến trúc và thiết kế: PoC-Verify, bộ phân loại/sanitize đầu vào | Cần hiểu vì sao hệ thống làm vậy |
 | [operations/](operations/) | Vận hành/triển khai: operator guide review, reward Qwen, dịch chuyên dụng, Docker | Cần chạy, deploy, xử lý sự cố |
+| [ops/](ops/) | Tiêu chí vận hành (build, release/rollback, phiên bản container, CI, backup, giám sát, secret, đĩa, Git, runbook) và cách chấm bằng `scripts/ops-check.py` | Cần biết phần ops đạt hay chưa, nên sửa gì trước |
 | [plans/](plans/) | Kế hoạch triển khai | Cần biết dự định/tiêu chí đã chốt |
 | [criteria/](criteria/) | Tiêu chí kiểm chứng và nghiệm thu từng tính năng | Cần biết thế nào là đạt |
 | [acceptance/](acceptance/), [nghiem-thu-showcase/](nghiem-thu-showcase/) | Hồ sơ nghiệm thu, validation review MVP, showcase | Cần bằng chứng nghiệm thu |
@@ -33,6 +34,8 @@ Toàn bộ tài liệu dự án nằm trong `docs/`, chia theo **loại tài li�
 - PoC: [API](api/poc-api-guide.md), [verify](design/poc-verify-architecture.md).
 
 ## Triển khai và kiểm chứng hiện tại
+
+- [Tiêu chí vận hành](ops/OPS-CRITERIA.md) và [baseline đo ngày 2026-11-27](archive/test-results/ops-baseline-20261127.md).
 
 - [Devspace: demo user/Admin và duyệt phản hồi A/B](archive/test-results/devspace-ab-two-roles-20261006.md).
 - [Devspace → Vast: job fine-tune Qwen3-1.7B thật, 1.000 cặp QA](archive/test-results/reward-vast-devspace-training-20261006.md).
