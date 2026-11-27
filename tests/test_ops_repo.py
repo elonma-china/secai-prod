@@ -14,9 +14,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.markers import Marker, default_environment
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("ops_check_repo", ROOT / "scripts" / "ops-check.py")
@@ -74,12 +79,116 @@ def tracked_files() -> list[str]:
 
 
 # ------------------------------------------------------------------ BLD
-@xfail_gap("OPS-BLD-1: Dockerfile chỉ COPY pyproject.toml rồi pip install theo [project].dependencies, "
-           "bỏ qua uv.lock nên deps trôi mỗi lần build FULL")
 def test_dockerfile_installs_from_lock() -> None:
     r = check(oc.bld_lock)
-    assert r.status in (oc.PASS, oc.FAIL), r
-    gap(r.status == oc.PASS, r.evidence)
+    assert r.status == oc.PASS, r
+    # --frozen cũng qua OPS-BLD-1 nhưng cài lock cũ mà không báo; repo dựa vào --locked để build từ chối lock lệch.
+    assert re.search(r"\buv\s+sync\b[^\n]*--locked\b", oc.dockerfile(repo_ctx())), \
+        "deps stage phải `uv sync --locked`, không `--frozen`"
+
+
+_PYS = ["3.9.18", "3.10.0", "3.10.14", "3.11.0", "3.11.9", "3.12.0", "3.12.3", "3.13.1", "3.14.0", "3.15.0"]
+_PLATS = [("linux", "Linux", "posix", "x86_64"), ("linux", "Linux", "posix", "aarch64"),
+          ("darwin", "Darwin", "posix", "arm64"), ("win32", "Windows", "nt", "AMD64")]
+
+
+def _marker_envs(extras: list[str]) -> list[dict]:
+    """Lưới môi trường để so marker theo nghĩa: uv viết lại marker khi lock (`python_version >= '3.10'`
+    thành `python_full_version >= '3.10'`), nên không so chuỗi. Lưới gồm cả Python ngoài requires-python
+    vì uv vẫn ghi vế luôn đúng trong khoảng đó, thêm/bớt nó là lock lệch."""
+    base = default_environment()
+    return [{**base, "python_full_version": v, "python_version": ".".join(v.split(".")[:2]), "implementation_version": v,
+             "sys_platform": sp, "platform_system": ps, "os_name": osn, "platform_machine": m, "extra": e}
+            for v in _PYS for sp, ps, osn, m in _PLATS for e in [""] + extras]
+
+
+def _req_key(name: str, extras, specifier: str, marker: str, envs: list[dict]) -> tuple:
+    mk = Marker(marker) if marker else None
+    return (canonicalize_name(name), tuple(sorted(canonicalize_name(e) for e in extras)), str(SpecifierSet(specifier)),
+            tuple(mk.evaluate(env) if mk else True for env in envs))
+
+
+def lock_drift(pyproject: dict, lock: dict) -> list[str]:
+    """Chỗ uv.lock lệch pyproject.toml, theo các trường `uv sync --locked` so: requires-dist (tên, extras,
+    specifier, marker kể cả `extra == '…'`), provides-extras, requires-python. Rỗng là khớp.
+
+    Thuần Python (không gọi uv, không mạng). Không xét [tool.uv] (sources/constraints) hay
+    [dependency-groups] — repo chưa dùng."""
+    proj = pyproject["project"]
+    optional = proj.get("optional-dependencies", {})
+    envs = _marker_envs(sorted(canonicalize_name(e) for e in optional))
+    want: dict[tuple, str] = {}
+    for extra, reqs in [(None, proj.get("dependencies", []))] + list(optional.items()):
+        for s in reqs:
+            r = Requirement(s)
+            marker = str(r.marker) if r.marker else ""
+            if extra:
+                em = f"extra == '{canonicalize_name(extra)}'"
+                marker = f"({marker}) and {em}" if marker else em
+            want[_req_key(r.name, r.extras, str(r.specifier), marker, envs)] = f"{s}" + (f" [extra {extra}]" if extra else "")
+    pkgs = [p for p in lock.get("package", []) if canonicalize_name(p["name"]) == canonicalize_name(proj["name"])]
+    if not pkgs:
+        return [f"uv.lock không có package {proj['name']}"]
+    meta = pkgs[0].get("metadata", {})
+    have: dict[tuple, str] = {}
+    for d in meta.get("requires-dist", []):
+        shown = d["name"] + (f"[{','.join(d['extras'])}]" if d.get("extras") else "") + d.get("specifier", "")
+        have[_req_key(d["name"], d.get("extras", []), d.get("specifier", ""), d.get("marker", ""), envs)] = \
+            shown + (f"; {d['marker']}" if d.get("marker") else "")
+    out = [f"thiếu trong uv.lock: {want[k]}" for k in want.keys() - have.keys()]
+    out += [f"thừa trong uv.lock: {have[k]}" for k in have.keys() - want.keys()]
+    out.sort()
+    extras_want = sorted(canonicalize_name(e) for e in optional)
+    extras_have = sorted(canonicalize_name(e) for e in meta.get("provides-extras", []))
+    if extras_want != extras_have:
+        out.append(f"provides-extras: pyproject {extras_want} != uv.lock {extras_have}")
+    rp_want, rp_have = str(SpecifierSet(proj.get("requires-python", ""))), str(SpecifierSet(lock.get("requires-python", "")))
+    if rp_want != rp_have:
+        out.append(f"requires-python: pyproject {rp_want!r} != uv.lock {rp_have!r}")
+    return out
+
+
+_PP = {"project": {"name": "Demo_Pkg", "requires-python": ">=3.10",
+                   "dependencies": ["a>=1,<2", "B[x]>=2", "tomli>=2; python_version < '3.11'"],
+                   "optional-dependencies": {"doc_agent": ["c<3; sys_platform == 'linux'"]}}}
+_DIST = [{"name": "a", "specifier": "<2,>=1"}, {"name": "b", "extras": ["x"], "specifier": ">=2"},
+         {"name": "tomli", "marker": "python_full_version < '3.11'", "specifier": ">=2"},  # uv viết lại python_version
+         {"name": "c", "marker": "sys_platform == 'linux' and extra == 'doc-agent'", "specifier": "<3"}]
+_LOCK_OK = {"requires-python": ">=3.10",
+            "package": [{"name": "demo-pkg", "metadata": {"requires-dist": _DIST, "provides-extras": ["doc-agent"]}}]}
+
+
+def _lock_with(**meta) -> dict:
+    return {**_LOCK_OK, "package": [{"name": "demo-pkg", "metadata": {**_LOCK_OK["package"][0]["metadata"], **meta}}]}
+
+
+@pytest.mark.parametrize("lock,needle", [
+    (_LOCK_OK, None),
+    (_lock_with(**{"requires-dist": _DIST[1:]}), "thiếu trong uv.lock: a>=1,<2"),
+    (_lock_with(**{"requires-dist": [{"name": "a", "specifier": ">=1"}] + _DIST[1:]}), "thừa trong uv.lock: a>=1"),
+    (_lock_with(**{"requires-dist": _DIST[:3] + [{"name": "c", "specifier": "<3", "marker": "sys_platform == 'linux'"}]}),
+     "thiếu trong uv.lock: c<3; sys_platform == 'linux' [extra doc_agent]"),
+    (_lock_with(**{"requires-dist": _DIST[:2] + [{"name": "tomli", "specifier": ">=2"}] + _DIST[3:]}),
+     "thừa trong uv.lock: tomli>=2"),
+    (_lock_with(**{"provides-extras": []}), "provides-extras"),
+    (_lock_with(**{"requires-dist": [{"name": "a", "specifier": "<2,>=1", "marker": "python_full_version >= '3.10'"}]
+                   + _DIST[1:]}), "thừa trong uv.lock: a<2,>=1; python_full_version >= '3.10'"),
+    ({**_LOCK_OK, "requires-python": ">=3.11"}, "requires-python"),
+    ({"package": []}, "không có package Demo_Pkg"),
+], ids=["match", "missing-dep", "specifier-changed", "extra-marker-lost", "env-marker-lost", "extras",
+        "marker-true-in-requires-python", "requires-python", "no-package"])
+def test_lock_drift_detects_each_kind(lock: dict, needle: str | None) -> None:
+    drift = lock_drift(_PP, lock)
+    if needle is None:
+        assert drift == []
+    else:
+        assert any(needle in d for d in drift), drift
+
+
+def test_uv_lock_matches_pyproject() -> None:
+    """Lock lệch thì build FULL (`uv sync --locked`) fail ở gate 2 của release-prod.sh, sau gate pytest ~17 phút."""
+    drift = lock_drift(tomllib.loads(read("pyproject.toml")), tomllib.loads(read("uv.lock")))
+    assert not drift, "uv.lock lệch pyproject.toml: chạy `uv lock` rồi commit uv.lock\n" + "\n".join(drift)
 
 
 @xfail_gap("OPS-BLD-3: FROM python:3.12-slim chưa ghim digest")
@@ -112,11 +221,10 @@ def test_final_stage_revision_label_follows_docker_scoping(snippet: str, want: b
     assert final_stage_revision_label(snippet) is want
 
 
-@xfail_gap("OPS-VER-4: Dockerfile không có LABEL org.opencontainers.image.revision (chỉ build OVERLAY gắn)")
 def test_dockerfile_labels_revision() -> None:
     ok = final_stage_revision_label(oc.dockerfile(repo_ctx()))
     assert ok is not None, "stage cuối của Dockerfile không còn `ARG GIT_SHA`"
-    gap(ok, "stage cuối không có LABEL revision lấy từ GIT_SHA sau dòng ARG GIT_SHA")
+    assert ok, "stage cuối không có LABEL revision lấy từ GIT_SHA sau dòng ARG GIT_SHA"
 
 
 def test_dockerignore_excludes_secrets_and_data() -> None:

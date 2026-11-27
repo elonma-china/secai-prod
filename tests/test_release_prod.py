@@ -1065,7 +1065,6 @@ def test_fake_docker_build_labels_follow_stage_and_arg_scope(sb: Sandbox, docker
     assert sb.load()["images"]["probe:x"]["labels"].get(REV) == want
 
 
-@xfail_gap("OPS-VER-4: build FULL (deps đổi) không gắn label org.opencontainers.image.revision; chỉ build OVERLAY có")
 def test_full_build_labels_revision(tmp_path: Path) -> None:
     sb = Sandbox(tmp_path, deps_change=True)
     res = sb.run("gates")
@@ -1075,5 +1074,5 @@ def test_full_build_labels_revision(tmp_path: Path) -> None:
     assert len(builds) == 1 and "-f" not in builds[0], builds  # FULL: Dockerfile của repo
     assert (sb.rel / "pip-freeze.diff").exists()
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), "gates không được chuyển prod"
-    gap(sb.load()["images"][sb.new_tag].get("labels", {}).get(REV) == sb.c2[:8],
-        "image FULL không có label revision bằng sha của commit")
+    assert sb.load()["images"][sb.new_tag].get("labels", {}).get(REV) == sb.c2[:8], \
+        "image FULL không có label revision bằng sha của commit"

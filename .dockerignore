@@ -1,5 +1,5 @@
 # Keep the build context small and secret-free.
-# The image only needs: pyproject.toml, src/, bin/.
+# The image only needs: pyproject.toml, uv.lock, src/, bin/, kpi_bench/ (the Dockerfile COPY lines are the source of truth).
 
 # Secrets — NEVER copy real config into the image/context.
 .env

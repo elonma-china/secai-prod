@@ -464,6 +464,16 @@ def test_revision_label_missing_inherited_or_unknown(w: World) -> None:
     assert r.status == oc.WARN and "không có trong repo" in r.evidence
 
 
+def test_revision_label_fix_is_generic(w: World) -> None:
+    # VER-4 xét mọi image secai-* (converter, review… không build bằng Dockerfile gateway hay release-prod.sh):
+    # gợi ý sửa phải đúng cho image bất kỳ, không khẳng định trạng thái Dockerfile của repo.
+    w.images[w.tag]["Config"]["Labels"] = None
+    r = one(w, "OPS-VER-4")
+    assert r.status == oc.FAIL
+    assert "đã có" not in r.fix and "đều gắn" not in r.fix, r.fix
+    assert "stage cuối" in r.fix and "--build-arg GIT_SHA" in r.fix and "release-prod.sh" in r.fix, r.fix
+
+
 def test_prod_tag_must_match_latest_release_and_git_sha(w: World) -> None:
     w.write_state(PREV_TAG="x", NEW_TAG=w.prev)
     r = one(w, "OPS-VER-6")

@@ -702,7 +702,7 @@ def bld_lock(ctx: Ctx) -> R:
     if installs_from_lock(df):
         return R(PASS, "Dockerfile COPY uv.lock và cài theo lock")
     return R(FAIL, "Dockerfile chỉ COPY pyproject.toml rồi pip install theo [project].dependencies; uv.lock bị bỏ qua",
-             "deps stage: COPY pyproject.toml uv.lock, cài uv ghim version rồi `uv sync --frozen --no-dev --extra redis --no-install-project`")
+             "deps stage: COPY pyproject.toml uv.lock, cài uv ghim version rồi `uv sync --locked --no-dev --extra redis --no-install-project`")
 
 
 @check("OPS-BLD-2", MUST, "Lần release gần nhất không trôi version package bên thứ ba khi uv.lock không đổi")
@@ -1038,8 +1038,9 @@ def ver_revision_label(ctx: Ctx) -> R:
         parts.append(f"label của base image: {len(foreign)} container: {short(group_pool(foreign), 3)}")
     if unknown:
         parts.append(f"không truy được: {short(unknown, 4)}")
-    fix = ("Dockerfile: ARG GIT_SHA + LABEL org.opencontainers.image.revision=$GIT_SHA và "
-           "org.opencontainers.image.source=<repo này> (build FULL của release-prod.sh hiện không gắn)")
+    fix = ("stage cuối của Dockerfile image đó: ARG GIT_SHA rồi LABEL org.opencontainers.image.revision=$GIT_SHA, "
+           "build với --build-arg GIT_SHA (image gateway: release lại bằng release-prod.sh); label kế thừa từ "
+           "base image của repo khác thì thêm org.opencontainers.image.source=<repo này>")
     if miss or foreign:
         return R(FAIL, "; ".join(parts), fix)
     if unknown:
