@@ -1038,8 +1038,9 @@ def ver_revision_label(ctx: Ctx) -> R:
         parts.append(f"label của base image: {len(foreign)} container: {short(group_pool(foreign), 3)}")
     if unknown:
         parts.append(f"không truy được: {short(unknown, 4)}")
-    fix = ("Dockerfile: ARG GIT_SHA + LABEL org.opencontainers.image.revision=$GIT_SHA và "
-           "org.opencontainers.image.source=<repo này> (build FULL của release-prod.sh hiện không gắn)")
+    fix = ("Dockerfile đã có ARG GIT_SHA + LABEL org.opencontainers.image.revision (build FULL và OVERLAY "
+           "của release-prod.sh đều gắn): release lại image thiếu label; base image của repo khác thì thêm "
+           "org.opencontainers.image.source=<repo này>")
     if miss or foreign:
         return R(FAIL, "; ".join(parts), fix)
     if unknown:

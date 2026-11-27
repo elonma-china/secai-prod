@@ -74,12 +74,9 @@ def tracked_files() -> list[str]:
 
 
 # ------------------------------------------------------------------ BLD
-@xfail_gap("OPS-BLD-1: Dockerfile chỉ COPY pyproject.toml rồi pip install theo [project].dependencies, "
-           "bỏ qua uv.lock nên deps trôi mỗi lần build FULL")
 def test_dockerfile_installs_from_lock() -> None:
     r = check(oc.bld_lock)
-    assert r.status in (oc.PASS, oc.FAIL), r
-    gap(r.status == oc.PASS, r.evidence)
+    assert r.status == oc.PASS, r
 
 
 @xfail_gap("OPS-BLD-3: FROM python:3.12-slim chưa ghim digest")
@@ -112,11 +109,10 @@ def test_final_stage_revision_label_follows_docker_scoping(snippet: str, want: b
     assert final_stage_revision_label(snippet) is want
 
 
-@xfail_gap("OPS-VER-4: Dockerfile không có LABEL org.opencontainers.image.revision (chỉ build OVERLAY gắn)")
 def test_dockerfile_labels_revision() -> None:
     ok = final_stage_revision_label(oc.dockerfile(repo_ctx()))
     assert ok is not None, "stage cuối của Dockerfile không còn `ARG GIT_SHA`"
-    gap(ok, "stage cuối không có LABEL revision lấy từ GIT_SHA sau dòng ARG GIT_SHA")
+    assert ok, "stage cuối không có LABEL revision lấy từ GIT_SHA sau dòng ARG GIT_SHA"
 
 
 def test_dockerignore_excludes_secrets_and_data() -> None:
