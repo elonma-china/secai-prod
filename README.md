@@ -221,6 +221,13 @@ this repo's `Dockerfile`, brings up the datastores on an internal `secai-net` ne
 points the gateway at the LLM/embedding/reranker endpoints over HTTP. See `deploy/README.md`
 for up/down/health commands.
 
+**Container versions.** `python3 -I scripts/versions.py status` shows which image, git sha and date each
+service in [`deploy/services.json`](deploy/services.json) runs, and flags unmanaged versions (bare image ID,
+floating or moved tag, missing revision, containers that should share an image but drift). `history` reads the
+append-only ledger `~/secai-releases/versions.jsonl` that `scripts/release-prod.sh` writes on release/rollback;
+`serve` is a read-only page on `127.0.0.1:18190` (view via `ssh -L`). Version changes still go only through
+gated release scripts. See [docs/ops/VERSIONS.md](docs/ops/VERSIONS.md).
+
 **Five-model serving.** `secai-serving-vast/` is a separate Git repository. The rental script
 defaults to `DuyTa/Cyber-F1-AWQ`, `DuyTa/sec-embedding`, `DuyTa/sec-rerank`,
 `Qwen/Qwen3-VL-2B-Instruct`, and specialist `tencent/Hy-MT2-7B` (Q4_K_M GGUF). Offline plans

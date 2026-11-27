@@ -62,6 +62,7 @@ CACHE_SECONDS = 10
 BACKFILL_MAX_BYTES = 1 << 20
 BACKFILL_SKIP_NAME = re.compile(r"credential|token|secret|passw|\.env|key", re.I)  # không mở các file này
 BACKFILL_BEFORE = re.compile(r"before|prev|old|rollback|backup|bak", re.I)  # profile trạng thái trước
+BACKFILL_MERGE = dt.timedelta(seconds=120)  # các container đổi cùng image trong khoảng này là một lần đổi
 NOTES_TS = re.compile(r"\((\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})?)\)")
 
 
@@ -736,10 +737,12 @@ def dir_observations(d: Path, services: list[dict]) -> list[dict]:
             if tags.get("NEW_TAG"):
                 found.append((nt, c, tags["NEW_TAG"], False, "state.env"))
     for p in profile_files(d):
-        pairs = [(c, img) for c, img in profile_images(p) if owner_of(services, c)]
+        before = bool(BACKFILL_BEFORE.search(p.stem))
+        # Profile "trước" chỉ dùng khi ref ghim được: tag trôi ở đây hay trỏ cùng image với một ID ở profile khác,
+        # so không được nên sinh ra các lần đổi qua lại giả.
+        pairs = [(c, img) for c, img in profile_images(p) if owner_of(services, c) and (not before or pinned(img))]
         if pairs:
             t = dt.datetime.fromtimestamp(p.stat().st_mtime, dt.timezone.utc)
-            before = bool(BACKFILL_BEFORE.search(p.stem))
             found += [(t, c, img, before, str(p.relative_to(d))) for c, img in pairs]
     # Profile "trước/rollback" được ghi cùng lúc với bản mới: xếp nó ngay trước bản mới của cùng container.
     first_new: dict[str, dt.datetime] = {}
@@ -777,6 +780,7 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
         images = None
     last: dict[str, dict] = {}
     merged: dict[tuple, dict] = {}
+    out = []
     for o in obs:
         to = ref_obj(o["ref"], images.by_ref(o["ref"]) if images and pinned(o["ref"]) else None)
         prev, last[o["container"]] = last.get(o["container"]), to
@@ -784,17 +788,21 @@ def backfill_entries(services: list[dict], roots: list[Path], existing: list[dic
             continue
         sid = owner_of(services, o["container"])
         key = (sid, o["release_dir"], json.dumps(prev, sort_keys=True), json.dumps(to, sort_keys=True))
-        if key in merged:
-            merged[key]["containers"] = sorted({*merged[key]["containers"], o["container"]})
-        else:
-            merged[key] = make_entry(sid, [o["container"]], "backfill", prev, to, release_dir=o["release_dir"],
-                                     note=f"backfill từ {o['source']}", ts=iso_utc(o["t"]))
+        e = merged.get(key)
+        if e and o["t"] - parse_ts(e["ts"]) <= BACKFILL_MERGE:
+            # Cùng một lần đổi của nhiều container: lấy mốc muộn nhất để replay theo ts không xếp nó trước
+            # quan sát "trước" của container vào sau.
+            e["containers"], e["ts"] = sorted({*e["containers"], o["container"]}), iso_utc(o["t"])
+            continue
+        merged[key] = make_entry(sid, [o["container"]], "backfill", prev, to, release_dir=o["release_dir"],
+                                 note=f"backfill từ {o['source']}", ts=iso_utc(o["t"]))
+        out.append(merged[key])
 
     def key(e: dict) -> tuple:
         return e["service"], Path(e["release_dir"] or "").name, norm_ref((e["to"] or {}).get("ref") or "")
 
     done = {key(e) for e in existing}
-    return [e for e in merged.values() if key(e) not in done]
+    return sorted((e for e in out if key(e) not in done), key=lambda e: e["ts"])
 
 
 def cmd_backfill(a, services) -> int:

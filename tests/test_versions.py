@@ -475,6 +475,21 @@ def test_backfill_dry_run_writes_nothing_and_second_run_adds_nothing(sb: Sandbox
     assert "main-17a3f886" not in refs and "should-not-be-read" not in refs and "tree-should-be-skipped" not in refs
     sb.run("backfill", "--yes")
     assert len(sb.entries()) == len(entries)
+    # Replay theo ts phải ra đúng image đang chạy: snapshot sau backfill không thấy gateway đổi.
+    sb.run("snapshot")
+    assert not [e for e in sb.entries()[len(entries):] if e["service"] in ("gateway", "translation-frontend")]
+
+
+def test_backfill_ignores_floating_tag_in_before_profiles(sb: Sandbox) -> None:
+    """`multilang-…` trong profile "before" có thể chính là image đang chạy theo ID: không sinh lần đổi giả."""
+    d = sb.releases / "vast-cutover-20261009"
+    d.mkdir()
+    (d / "translation-release-before.json").write_text(json.dumps({"services": {"g": {
+        "image": "secai-agent-gateway:multilang-20261004", "container_name": "secai-translation-gateway"}}}))
+    (d / "profile-new.json").write_text(json.dumps({"services": {"g": {
+        "image": hid("1"), "container_name": "secai-translation-gateway"}}}))
+    out = sb.run("backfill").stdout
+    assert "multilang-20261004" not in out and out.count("backfill ") == 1
 
 
 def test_backfill_skips_release_already_recorded(sb: Sandbox) -> None:
@@ -688,3 +703,38 @@ def test_release_script_ledger_calls_are_guarded() -> None:
     blocks = re.findall(r'versions\.py" record[^\n]*\\\n[^\n]*', src)
     assert len(blocks) == 2 and all('|| log "cảnh báo' in b for b in blocks)
     assert src.index("versions.py\" record --service gateway --action release") > src.index('cat > "$REL/RELEASE-NOTES.md"')
+
+
+# ---------------------------------------------------------------- install-versions-ui.sh (HOME tạm, systemctl giả)
+
+
+def test_installer_writes_loopback_units_and_removes_them(tmp_path: Path) -> None:
+    home, bin_, calls = tmp_path / "home", tmp_path / "bin", tmp_path / "calls.txt"
+    home.mkdir()
+    bin_.mkdir()
+    (bin_ / "systemctl").write_text(f"#!/bin/sh\necho systemctl \"$@\" >> '{calls}'\n")
+    (bin_ / "git").write_text(f"#!/bin/sh\necho git \"$@\" >> '{calls}'\ncase \"$*\" in\n"
+                              f"  *'worktree list'*) echo 'worktree {tmp_path}/main' ;;\n"
+                              "  *cat-file*) [ -z \"$NO_VERSIONS\" ] || exit 1 ;;\nesac\nexit 0\n")
+    for f in ("systemctl", "git"):
+        (bin_ / f).chmod(0o755)
+    env = {**os.environ, "HOME": str(home), "PATH": f"{bin_}:{os.environ['PATH']}"}
+    script = str(ROOT / "scripts" / "install-versions-ui.sh")
+    r = subprocess.run(["bash", script], env={**env, "NO_VERSIONS": "1"}, cwd=tmp_path, text=True, capture_output=True)
+    assert r.returncode == 2 and "chưa có scripts/versions.py" in r.stderr
+    r = subprocess.run(["bash", script], env=env, cwd=tmp_path, text=True, capture_output=True)
+    assert r.returncode == 0, r.stderr
+    units = home / ".config" / "systemd" / "user"
+    ui = (units / "secai-versions-ui.service").read_text()
+    assert "serve --port 18190" in ui and "--host" not in ui and "0.0.0.0" not in ui
+    assert "OnUnitActiveSec=1h" in (units / "secai-versions-snapshot.timer").read_text()
+    assert "snapshot" in (units / "secai-versions-snapshot.service").read_text()
+    runner = home / ".local" / "bin" / "secai-versions-run"
+    text = runner.read_text()
+    assert "git archive origin/main scripts/versions.py deploy/services.json" in text
+    assert f'SECAI_REPO="{tmp_path}/main"' in text and 'exec python3 -I "$dest/scripts/versions.py"' in text
+    assert subprocess.run(["bash", "-n", str(runner)]).returncode == 0
+    log = calls.read_text()
+    assert "systemctl --user enable --now secai-versions-ui.service secai-versions-snapshot.timer" in log
+    r = subprocess.run(["bash", script, "--remove"], env=env, cwd=tmp_path, text=True, capture_output=True)
+    assert r.returncode == 0 and not runner.exists() and not list(units.glob("secai-versions-*"))
