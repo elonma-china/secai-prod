@@ -344,6 +344,11 @@ Dùng `secai rollback` (bản) hoặc `secai data rollback` (dữ liệu). Làm 
 
 Những gì dưới đây **chưa kiểm**; không suy ra là đạt.
 
+- **Luồng `secai` với GHCR + Docker Hub**: đã chạy thật trên VM Vast sạch 2026-11-28 (install có tải dữ liệu bằng token chỉ đọc,
+  status, check, nghiệm thu API với model stub, upgrade, rollback, data update, tự rollback khi check trượt): đạt 19/19 bước
+  (`docs/archive/test-results/stack-ghcr-20261127.md`). Chưa kiểm: chất lượng model (chỉ có stub), `data rollback` và
+  `prune-data` trên Docker Hub thật, máy dùng Docker context không mặc định.
+
 - **RAG parity 100 câu**: cần Qdrant đầy đủ (~22 GB). Smoke chỉ có tập con 360 điểm nên so sánh với prod không có nghĩa;
   mới kiểm đường nhanh CVE chính xác và truy vấn CVE-2021-44228.
 - **Hy-MT2 và OCR thật**: UI-TR-2/TR-3 chỉ đạt với **stub** (`direct` và `ssh` tới sshd thử). Pipeline được chứng minh,

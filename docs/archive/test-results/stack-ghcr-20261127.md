@@ -1,99 +1,95 @@
-# Gói phát hành GHCR: dry-run trên máy dev, chưa push, chưa thử VM (2026-11-27)
+# Gói phát hành GHCR + Docker Hub: phát hành thật và thử trên VM Vast sạch (2026-11-27/28)
 
-Nhánh `feat/stack-ghcr`. Kế hoạch: `docs/superpowers/plans/2026-11-27-stack-ghcr.md`. Phần này ghi những gì đã chạy thật trên
-máy dev (máy prod) và những gì còn chờ.
+Nhánh `feat/stack-ghcr`. Kế hoạch: `docs/superpowers/plans/2026-11-27-stack-ghcr.md`. Image dự án ở GHCR public, dữ liệu ở
+repo Docker Hub private `docker.io/secai1999/secai-data` (gói miễn phí, quyết định của chủ dự án).
 
-## Tiến độ phát hành thật (2026-11-28)
+## Kết quả: ĐẠT
 
-- 3 package image GHCR đã public; dữ liệu chuyển sang Docker Hub private `docker.io/secai1999/secai-data` (gói miễn phí).
-- `secai-data:2026.11.27` đã push: digest đọc lại bằng token chỉ đọc `sha256:67508336e64c5692c4ee79c69e8e457ae2105fc6c903ef6c3a647a817f062179`.
-- Lần chạy V1 đầu (c33427b7) dừng trước mọi push ở bước kiểm tag (tôi thay `registry.py` giữa lúc chạy); đã sửa, chạy lại.
+Trên VM Vast sạch, chạy đúng như người vận hành (curl `stack/secai` từ raw GitHub ở commit `dee42670` → `./secai install` có tải
+dữ liệu thật bằng token Docker Hub chỉ đọc → `status` → `check` → nghiệm thu API với stub → `upgrade` → `rollback` →
+`data update` → bài thử tự rollback): **19/19 bước đạt, verdict `pass`**.
 
-## Trạng thái cũ (trước 2026-11-28): CHỜ chủ dự án bật Public 3 package image
+## Đã phát hành (digest đọc lại từ registry, không lấy từ máy local)
 
-Điều kiện push thật (chủ dự án, 2026-11-27): `secai-agent-gateway`, `secai-pentestcode-vm`, `secai-stack` phải **public**;
-`secai-data` phải **private**. Kiểm lần cuối (23:05 +07) bằng
-`gh api '/users/elonma-china/packages?package_type=container' --jq '.[] | [.name, .visibility] | @tsv'`: cả bốn package đều
-**private** (mới có placeholder `:init` 10 kB, push lúc 19:40 +07). Vì vậy **chưa push image/dữ liệu thật và chưa thuê VM**.
-`publish.sh` tự kiểm visibility ngay trước khi push và dừng (mã 5) nếu sai.
+Image GHCR, đọc lại **ẩn danh** (`stack/lib/registry.py digest`, như máy đích):
 
-## Dry-run `publish` (đủ gate, không login, không push)
+| Package | Tag | Digest |
+|---|---|---|
+| `ghcr.io/elonma-china/secai-agent-gateway` | `2026.11.28-11e95cc3` (V1) | `sha256:3b17e653239521dab74e55a8cbd190d648f213a3f1e51977205bf65ded2e5585` |
+| `ghcr.io/elonma-china/secai-pentestcode-vm` | `2026.11.28-11e95cc3` | `sha256:ed0d75c196a93b39d73264f608ed8b4db3b14a427175413043601ca4f17639fd` |
+| `ghcr.io/elonma-china/secai-stack` | `2026.11.28-11e95cc3` | `sha256:2752b527de1ea14eb30b6aa8c29881c2bf259cac65711aea7748c60c93d49a7b` |
+| `ghcr.io/elonma-china/secai-agent-gateway` | `2026.11.28-dee42670` (V2) | `sha256:91592514c76385f17889f50abcb53a5e9fb0aaf43da1fc12613d0ea894ab76f4` |
+| `ghcr.io/elonma-china/secai-pentestcode-vm` | `2026.11.28-dee42670` | `sha256:b9981bf6f57c0b93086f6e5d1ec9c0a1aa4da0ccd631cdd37a79f95eff07f347` |
+| `ghcr.io/elonma-china/secai-stack` | `2026.11.28-dee42670` | `sha256:ba48baebab8b438ae1a5a542cb0f1c1a3840c54671dba1150fe3184613e80986` |
+| `ghcr.io/elonma-china/secai-stack` | `stable` (→ V2) | `sha256:ba48baebab8b438ae1a5a542cb0f1c1a3840c54671dba1150fe3184613e80986` |
 
-`stack/publish.sh publish --ref origin/feat/stack-ghcr --dry-run`, commit `d7c6cc0e`, 37 phút.
+Dữ liệu Docker Hub (repo `is_private=true`; đọc lại bằng token chỉ đọc; ẩn danh trả 401):
 
-| Bước | Kết quả |
-|---|---|
-| Gate 1: pytest toàn bộ trên `git archive d7c6cc0e` | **3520 passed, 18 skipped, 7 xfailed** (19 phút 6 giây) |
-| Gate 2: build FULL gateway (`GIT_SHA`, nhãn OCI), import app, `/app/src` == `git archive d7c6cc0e src` | đạt; `secai-agent-gateway:2026.11.27-d7c6cc0e` = `sha256:8079dbe9…` |
-| Gate 3: smoke `secai-stack-gateway-smoke-20261127`, chỉ `127.0.0.1`, mạng prod chỉ đọc | đạt (`/health` đúng `git_sha`, không dep nào tệ hơn prod, `/ai/v3/translate/languages` 200); container đã xoá |
-| Image VM từ `git archive d7c6cc0e pentestcode stack/images/pentestcode-vm` | `secai-pentestcode-vm:2026.11.27-d7c6cc0e` = `sha256:f7cc337e…`, nhãn revision đúng, có bun/nuclei/httpx/python3 |
-| Digest image nền (registry gốc, ẩn danh) | qdrant `v1.10.1` `sha256:6a34a799…`, neo4j `5.20-community` `sha256:52d3dec8…`, redis `7-alpine` `sha256:7f7d30b7…`, elasticsearch `8.15.3` `sha256:01c17320…` |
-| Quét secret bundle (`stack/` của commit + manifest) | sạch: mọi luật + secret thật của máy, không allowlist |
-| Bundle `FROM scratch` | `secai-stack:2026.11.27-d7c6cc0e` = `sha256:cc88b279…` (1,9 MB) |
+| Tag | Digest | Ghi chú |
+|---|---|---|
+| `docker.io/secai1999/secai-data:2026.11.27` | `sha256:67508336e64c5692c4ee79c69e8e457ae2105fc6c903ef6c3a647a817f062179` | đóng gói 2026-11-27 15:21Z |
+| `docker.io/secai1999/secai-data:2026.11.27.2` | `sha256:9011a80d8e6af7f42d3350193e7f6220c36acc6bf3e9f897f3771d89890d7171` | **cùng nội dung** (chỉ khác nhãn version), để thử `data update` |
 
-Mã thoát cuối là 2 vì tôi sửa `publish.sh` trong lúc lần chạy đó đang ở bước cuối (bash đọc script dần dần); mọi bước ở
-trên đã in "đạt". Lần dry-run với commit cuối của PR được ghi ở mục "Dry-run cuối" bên dưới.
+Image nền ghim trong cả hai manifest: qdrant `v1.10.1` `sha256:6a34a799…`, neo4j `5.20-community` `sha256:52d3dec8…`,
+redis `7-alpine` `sha256:7f7d30b7…`, elasticsearch `8.15.3` `sha256:01c17320…`. Manifest V1/V2 ghi dữ liệu mặc định
+`2026.11.27` kèm digest đã kiểm.
 
-## Dry-run `publish-data` (đóng gói dữ liệu thật, quét, dựng image, không push)
+## Gate phát hành (trên máy dev, không chạm prod)
 
-Lần 1: `publish.sh publish-data --dry-run --neo4j-password-file <tệp 0600 tạm, đã shred>`, 9 phút 13 giây.
+| | V1 (`11e95cc3`) | V2 (`dee42670`) |
+|---|---|---|
+| pytest toàn bộ trên `git archive` | **3574 passed, 18 skipped, 7 xfailed** (22 phút) | **3574 passed, 18 skipped, 7 xfailed** (28 phút) |
+| build FULL, import app, `/app/src` == archive | đạt | đạt |
+| smoke `secai-stack-gateway-smoke-20261128` trên 127.0.0.1 | đạt (`git_sha` đúng, dep không tệ hơn prod, languages 200) | đạt |
+| quét secret bundle (luật + secret thật) | sạch | sạch |
+| đọc lại ẩn danh sau push (`published.json`) | khớp manifest | khớp manifest |
 
-- `pack.sh data`: Neo4j xuất chỉ đọc 587.393 nút / 5.414.825 quan hệ; snapshot Qdrant `cve_kb_hybrid` 842.928 điểm (tạo rồi
-  xoá trên Qdrant prod; hai snapshot cũ giữ nguyên); gói 5,2 GB, 32 tệp trong `SHA256SUMS`.
-- Quét: 1.357.236 nội dung, 7,44 GB (gồm payload Qdrant qua API chỉ đọc). Secret thật: **0 khớp**. Một phát hiện ngoài corpus:
-  `exploitdb-mcp-server/labs-cve2026/CVE-2026-65008-grav-cms-rce/exploit/exploit.py:48` (luật gán password). Dòng đó là
-  `self.password = password` (gán từ tham số cùng tên), dương tính giả. Script dừng đúng thiết kế, không dựng image.
-- Đã thu hẹp luật gán: giá trị là tham chiếu tới biến/thuộc tính **cùng tên** (`self.password = password`, `api_key=args.api_key`)
-  không tính là literal; `password=password123`, `password=x` vẫn bị bắt. Có test.
+`publish-data` (gói 5,2 GB đóng từ dữ liệu thật hôm 27): quét 1.357.237 nội dung / 7,44 GB gồm payload Qdrant 842.928 điểm qua
+API chỉ đọc; **0 phát hiện chặn, 0 khớp secret thật**; trong corpus công khai chỉ đếm (exploitdb 2.578 gán password…, chi tiết
+ở `data-release.json`). Kiểm `is_private` qua Docker Hub API trước push. Push 14 phút. Token ghi chỉ đi qua stdin của
+`docker login` vào `DOCKER_CONFIG` tạm.
 
-Lần 2: `publish-data --dry-run --from-pkg <gói lần 1>` + quét payload Qdrant, 9 phút 30 giây.
+Lần chạy V1 đầu (`c33427b7`) dừng trước mọi push ở bước kiểm tag: tôi thay `registry.py` (thêm mã 3 = tag chưa có) giữa lúc nó
+chạy. Không có gì được push; đã sửa và phát hành lại từ commit mới.
 
-- Quét sạch: 0 phát hiện chặn, 0 khớp secret thật. Đếm trong corpus công khai (không chặn, ghi vào hồ sơ phát hành):
+## VM thử
 
-| Cây corpus | Đếm theo luật |
-|---|---|
-| exploitdb | password 2.578, api_key 31, private key 40 |
-| poc-sources | password 2.280, api_key 153, private key 150, AKIA 64, sk- 35 |
-| poc/store | password 986, api_key 78, private key 17, AKIA 12, sk- 2 |
-| poc/catalog.db | password 160, api_key 38, private key 4, AKIA 8, sk- 8 |
-| exploitdb-mcp-server/node_modules | password 30, api_key 1, private key 2 |
-| payload Qdrant (API) | password 23, api_key 5 |
-| snapshot Qdrant (SST nén) | password 12, api_key 4 |
+Vast instance **62894822**, Spain, KVM Ubuntu 22.04, 62 GB RAM, đĩa 150 GB, **$0,203/giờ**, thuê 01:11:08, huỷ 01:38:38 +07
+(27,5 phút, khoảng **$0,09**). `vastai show instance 62894822 --raw` → `{"instances": null}`; tài khoản còn 0 instance, 0 timer.
 
-- Image `secai-data:2026.11.27` dựng cục bộ: `sha256:24978444…` (chỉ trên máy dev, không push). Gói ở
-  `~/secai-releases/data-2026.11.27/pkg` để dùng lại (`--from-pkg`) hoặc rsync lên VM.
+| Bước | Thời gian | Kết quả |
+|---|---|---|
+| fetch (curl `secai` + `model_stub.py` từ raw GitHub ở `dee42670`) | 1 s | sha256 ghi trong `fetch.log` |
+| install V1, dữ liệu `2026.11.27` từ Docker Hub bằng token chỉ đọc | 13 phút 46 giây | Qdrant 842.928/842.928 điểm khớp MANIFEST; Neo4j 587.393 nút / 5.414.825 quan hệ khớp; `check.sh all` đạt |
+| status1 | 1 s | `version=2026.11.28-11e95cc3`, `health_git_sha=11e95cc3` = manifest, `images_match=true` |
+| nghiệm thu API (`run-api.sh`, model stub) | 2 s | đạt UI-CHAT-1, UI-CHAT-2, UI-TR-1, UI-RPT-1; bỏ qua có lý do UI-POC-1..3 (cần LLM thật gọi tool + lab), UI-TR-2/3 (profile translation không thuộc bộ phát hành) |
+| upgrade → V2 | 33 s | `health_git_sha=dee42670`, `images_match=true` |
+| rollback → V1 | 26 s | đạt |
+| data update `2026.11.27.2` | 7 phút 5 giây | nạp bên cạnh bộ cũ, số đếm khớp, bộ cũ giữ ở `/opt/secai/data/2026.11.27` |
+| failtest: tắt stub rồi upgrade V2 | 54 s | mã 4 (đã tự quay về V1; check sau khi quay về trượt vì stub đang tắt, đúng như thiết kế); status5 = V1, `images_match=true` |
+| bật lại stub, chờ gateway thấy stub, check3 | 15 s | đạt |
 
-Nguồn secret thật đã nạp (chỉ đếm, giá trị không bao giờ in/ghi): `gh auth token` 1; `secai-docker/.env` 6; `.env` checkout
-chính 4; compose prod 0; `run_sync.sh` 1; hồ sơ `~/secai-releases/*/*.json` 15 (1 tệp không đọc được:
-`review-reward-fix-20261005/devspace-review-tokens.json`, chủ uid 10001, mode 0600); khoá Vast 1; token HF 1.
-**Lưu ý:** mật khẩu Neo4j prod dài 9 ký tự nên bị luật "bỏ giá trị dưới 12 ký tự" loại, tức là không được so khớp.
+Token chỉ đọc chép lên VM qua stdin (mode 0600), xoá ngay sau bài thử (kiểm lại: không còn tệp, không có `/root/.docker`).
+Token ghi không bao giờ rời máy dev. Kết quả đã gom và kiểm sha256 ở `local/stack-eval/results-20261128-013803` (không có
+token/khoá nào trong đó).
 
-## Review độc lập (5 góc nhìn, 28 phát hiện, 26 xác nhận, đã sửa hết)
+## Review độc lập
 
-Đáng kể nhất:
-- Bộ nạp secret thật coi `TOKENIZER`, `*_FILE` là tên secret, nên hash/đường dẫn tokenizer trong `stack/compose.yml` sẽ làm
-  bundle luôn dừng mã 6. Đã đổi sang so theo từng đoạn tên khoá, bỏ `_FILE/_PATH/_DIR/_SHA256/...`, `GPG_KEY`, giá trị đường dẫn.
-  Đã đọc thêm `Env` của docker inspect trong hồ sơ JSON.
-- `secai rollback`/`upgrade` có thể để `stack/` và `.env` lệch bản đang chạy khi kéo image lỗi: giờ kéo image trước, đổi tệp
-  trong subshell, khôi phục khi preflight trượt, và `upgrade` cùng bản tự sửa trạng thái lệch.
-- `--from-pkg` không quét payload Qdrant: giờ bắt buộc `--qdrant-url` và số điểm đã quét phải khớp MANIFEST.
-- `check3` của bài thử VM đọc cache `/health` 30 s: thêm bước chờ gateway thấy lại stub.
-- Khác: seed nhiều blob, regex quota không bắt nhầm timeout/hex, `git fetch` trước khi chọn ref, kiểm "bất biến" fail-closed và
-  kiểm lại trước push, `promote` kéo theo digest, khoá phát hành, bắt lỗi thiếu image nền, kiểm manifest, quét phần đuôi sau EOF
-  của tar, chặn `$ ' " \ \`` trong giá trị cấu hình, kiểm lỗi ghi `.env`, không in token review, README sudo không làm lộ khoá.
+Hai lượt review nhiều góc nhìn có kiểm chứng phản biện (38 phát hiện, 35 xác nhận, đã sửa hết; danh sách trong lịch sử commit
+`36462209`, `18bc1a35`, `11e95cc3`). Đáng kể: bộ nạp secret thật bắt nhầm `TOKENIZER`/`*_FILE`; rollback/upgrade có thể để
+trạng thái lẫn lộn; `--from-pkg` bỏ quét payload Qdrant; `registry.py` coi 429/5xx là "tag chưa có"; `prune-data` có thể xoá
+bản dữ liệu mà `stable` dùng; `DOCKER_CONFIG` tạm phải có `config.json` mồi và giữ Docker context.
 
-## Test
+## Chưa kiểm / giới hạn
 
-- `scripts/dev.sh test tests/ -k stack`: xem dòng tổng kết ở mục "Dry-run cuối".
-- `bash -n` các script, `git diff --check`: sạch.
-
-## Chưa làm / chưa kiểm
-
-- **Push thật** (gateway, VM, bundle, `stable`, `secai-data`): chờ 3 package image public. Dữ liệu private: mỗi lần cài kéo
-  ~5,5 GB tính vào lưu lượng GitHub Packages của chủ package (gói Free 1 GB/tháng cho package private) nên có thể bị chặn tới khi
-  gắn thanh toán; push dữ liệu cũng có thể bị chặn vì quota lưu trữ 500 MB. `publish.sh` dừng với mã 7, không lách.
-- **Thử trên VM Vast**: chưa thuê. Cần image public. Kế hoạch: `EVAL_MODE=ghcr stack/eval-vast.sh up`, rồi `ghcrtest` với
-  `GHCR_TEST_DATA_PKG=~/secai-releases/data-2026.11.27/pkg` (rsync gói, vì VM không được giữ token gh có quyền ghi và chưa có
-  token chỉ đọc), `collect`, `down`, chứng minh instance biến mất.
-- Model thật: chỉ có stub (`stack/acceptance/stubs/model_stub.py`); chứng minh đường ống, không chứng minh chất lượng.
-- Đường kéo `secai-data` bằng token chỉ đọc trên máy đích chỉ được kiểm bằng test giả (docker giả), chưa kiểm với GHCR thật.
+- **Chất lượng model**: chỉ có stub (`model_stub.py`). Đã chứng minh đường ống, khớp version/digest, dữ liệu nạp đúng số đếm,
+  truy vấn RAG chính xác CVE dùng dữ liệu thật; chưa chứng minh chất lượng LLM/embedding/rerank.
+- UI-POC-1..3 (exploit-v2 thật) cần LLM gọi tool và lab: chưa chạy.
+- `2026.11.27.2` cùng nội dung với `2026.11.27`: `data update` được kiểm về cơ chế (tải, nạp bộ mới bên cạnh, chuyển, giữ bộ cũ),
+  không phải về khác biệt dữ liệu.
+- `data rollback`, `prune-data` thật trên Docker Hub (cần token có quyền Delete), đăng nhập qua Docker context không mặc định:
+  chỉ kiểm bằng test giả.
+- Mật khẩu Neo4j prod dài 9 ký tự, dưới ngưỡng 12 ký tự của tầng "secret thật" nên không được so khớp.
+- Một hồ sơ JSON trong `~/secai-releases` (`devspace-review-tokens.json`, chủ uid 10001, 0600) không đọc được khi nạp secret thật.
+- Lưu lượng Docker Hub: mỗi lần cài kéo khoảng 5,2 GB dữ liệu từ repo private; chưa đo giới hạn băng thông của gói miễn phí.
+- Chuyển prod trên máy này sang gói: chưa làm (kế hoạch + rollback ở `stack/README.md`).
