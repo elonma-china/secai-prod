@@ -2,17 +2,22 @@
 
 Sandbox mỗi test: repo git tạm (origin bare + clone), thư mục release và secai-docker tạm, và các
 lệnh giả đứng đầu PATH:
-  docker  Python, giữ trạng thái container/image trong một file JSON, ghi lại mọi lệnh;
-          `compose up` đọc image từ compose YAML/profile JSON và đổi container tương ứng.
+  docker  Python, giữ trạng thái container/image trong một file JSON, ghi lại mọi lệnh. Mô phỏng phần
+          script dùng: inspect (-f/--format/--type, container rồi image), ps (filter status/name/
+          ancestor/label), rmi bị chặn khi còn container dùng, build đọc LABEL/--label, compose up đọc
+          image từ compose YAML/profile JSON và báo Conflict nếu tên đang thuộc project khác.
+          Cờ/định dạng không mô phỏng thì thoát 99 thay vì trả dữ liệu sai.
   curl    trả /health của container đang chạy (git_sha lấy từ tag main-<sha8>-...).
   git     ghi log rồi gọi git thật.
   sleep   không chờ (để vòng chờ health 45 lần chạy ngay).
-Script được chép vào sandbox (`$0 rollback --yes` khi tự rollback cũng gọi bản chép).
+  date    `date +%Y%m%d` trả ngày cố định của sandbox (không lệch khi test chạy qua nửa đêm).
+docker và curl cùng ghi một file trình tự để kiểm thứ tự gọi. Script được chép vào sandbox
+(`$0 rollback --yes` khi tự rollback cũng gọi bản chép).
 
 Không test nào phụ thuộc lời gọi ghi sổ phiên bản (scripts/versions.py, nhánh feat/svc-versions):
 sandbox không có versions.py nên nếu script gọi nó thì lời gọi đó hỏng, và theo thiết kế không được
-làm hỏng release. Test chỉ khẳng định các thay đổi lên prod (lệnh docker có tác dụng, compose,
-profile, LATEST-PROD), không khẳng định thứ tự hay số lượng lệnh chỉ đọc.
+làm hỏng release. Test chỉ khẳng định thay đổi lên prod (lệnh docker có tác dụng, compose, profile,
+LATEST-PROD), không khẳng định số lượng lệnh chỉ đọc.
 
 Hành vi hiện tại chưa đạt tiêu chí: xfail(strict=True, raises=OpsGap). Lỗi harness là AssertionError
 thường nên vẫn FAIL thật; khi script được sửa đúng, test XPASS và strict buộc gỡ marker.
@@ -34,14 +39,15 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "release-prod.sh"
 REAL_GIT = shutil.which("git")
+REAL_DATE = shutil.which("date")
 IMG = "secai-agent-gateway"
 TRIO = ("secai-docker-gateway", "secai-translation-gateway", "secai-translation-worker")
-TODAY = dt.date.today().strftime("%Y%m%d")
+REV = "org.opencontainers.image.revision"
 MUTATING = {"run", "rm", "rmi", "build", "create", "cp", "tag", "compose", "stop", "start", "restart",
             "rename", "kill", "pull", "push", "commit", "load", "import"}
 
-pytestmark = pytest.mark.skipif(not (REAL_GIT and shutil.which("flock") and shutil.which("bash")),
-                                reason="cần git, flock, bash")
+pytestmark = pytest.mark.skipif(not (REAL_GIT and REAL_DATE and shutil.which("flock") and shutil.which("bash")),
+                                reason="cần git, date, flock, bash")
 
 
 class OpsGap(AssertionError):
@@ -69,6 +75,8 @@ STATE = os.environ["FAKE_STATE"]
 argv = sys.argv[1:]
 with open(os.environ["FAKE_DOCKER_LOG"], "a") as fh:
     fh.write(json.dumps({"argv": argv, "cwd": os.getcwd()}) + "\n")
+with open(os.environ["FAKE_SEQ_LOG"], "a") as fh:
+    fh.write(json.dumps(["docker"] + argv) + "\n")
 s = json.load(open(STATE))
 C, I = s["containers"], s["images"]
 
@@ -86,6 +94,10 @@ def die(msg, rc=1):
     sys.exit(rc)
 
 
+def unsupported(what):
+    die(f"fake docker: unsupported {what}: {argv}", 99)
+
+
 def seq():
     s["seq"] = s.get("seq", 0) + 1
     return s["seq"]
@@ -94,9 +106,11 @@ def seq():
 def img_id(ref):
     if ref in I:
         return I[ref]["id"]
-    for v in I.values():
-        if v["id"] == ref or v["id"].replace("sha256:", "").startswith(ref.replace("sha256:", "")):
-            return v["id"]
+    bare = ref.replace("sha256:", "")
+    if len(bare) >= 12:
+        for v in I.values():
+            if v["id"].replace("sha256:", "").startswith(bare):
+                return v["id"]
     return None
 
 
@@ -104,34 +118,111 @@ def find_c(key):
     if key in C:
         return key
     for n, c in C.items():
-        if c["id"].startswith(key):
+        if len(key) >= 12 and c["id"].startswith(key):
             return n
     return None
 
 
-def split_fmt(args):
-    f, pos, i = None, [], 0
+def opts(args, with_value=("--format", "-f", "--type", "--filter")):
+    o, pos, i = {}, [], 0
     while i < len(args):
         a = args[i]
-        if a == "--format":
-            f = args[i + 1]; i += 2; continue
-        if a.startswith("--format="):
-            f = a.split("=", 1)[1]; i += 1; continue
-        if not a.startswith("-"):
-            pos.append(a)
-        i += 1
-    return f, pos
+        if "=" in a and a.split("=", 1)[0] in with_value:
+            o.setdefault(a.split("=", 1)[0], []).append(a.split("=", 1)[1]); i += 1; continue
+        if a in with_value:
+            o.setdefault(a, []).append(args[i + 1]); i += 2; continue
+        if a.startswith("-"):
+            o.setdefault(a, []).append(True); i += 1; continue
+        pos.append(a); i += 1
+    return o, pos
+
+
+def labels_of_image(iid):
+    return next((v.get("labels", {}) for v in I.values() if v["id"] == iid), {})
 
 
 def render_c(n, f):
     c = C[n]
+    labels = {**labels_of_image(c["image_id"]), **c.get("labels", {})}
     if f is None:
         return {"Name": "/" + n, "Id": c["id"], "Image": c["image_id"], "Created": c["created"],
                 "State": {"Status": c["status"]},
-                "Config": {"Image": c["image"], "Labels": c.get("labels", {}), "Env": ["OPENAI_API_KEY=sk-fake-not-real"]}}
-    return {"{{.Config.Image}}": c["image"], "{{.Created}}": c["created"], "{{.Image}}": c["image_id"],
-            "{{.State.Status}}": c["status"], "{{.Name}}": "/" + n}.get(
-        f, c.get("labels", {}).get("com.docker.compose.project.config_files", "") if "config_files" in f else "")
+                "Config": {"Image": c["image"], "Labels": labels, "Env": ["OPENAI_API_KEY=sk-fake-not-real"]}}
+    simple = {"{{.Config.Image}}": c["image"], "{{.Created}}": c["created"], "{{.Image}}": c["image_id"],
+              "{{.State.Status}}": c["status"], "{{.Name}}": "/" + n, "{{.Id}}": c["id"]}
+    if f in simple:
+        return simple[f]
+    m = re.fullmatch(r'\{\{index \.Config\.Labels "([^"]+)"\}\}', f)
+    if m:
+        return labels.get(m.group(1), "")
+    unsupported(f"format {f}")
+
+
+def render_i(ref, f):
+    iid = img_id(ref)
+    meta = next(v for v in I.values() if v["id"] == iid)
+    tags = [k for k, v in I.items() if v["id"] == iid]
+    if f is None:
+        return {"Id": iid, "Created": meta["created"], "RepoTags": tags, "Config": {"Labels": meta.get("labels", {})}}
+    simple = {"{{.Created}}": meta["created"], "{{.Id}}": iid}
+    if f in simple:
+        return simple[f]
+    m = re.fullmatch(r'\{\{index \.Config\.Labels "([^"]+)"\}\}', f)
+    if m:
+        return meta.get("labels", {}).get(m.group(1), "")
+    unsupported(f"format {f}")
+
+
+def do_inspect(args, kinds):
+    o, names = opts(args)
+    f = (o.get("--format") or o.get("-f") or [None])[0]
+    if o.get("--type"):
+        kinds = [o["--type"][0]]
+    out, missing = [], []
+    for n in names:
+        if "container" in kinds and find_c(n):
+            out.append(render_c(find_c(n), f))
+        elif "image" in kinds and img_id(n):
+            out.append(render_i(n, f))
+        else:
+            missing.append(n)
+    if f is None:
+        print(json.dumps(out))
+    else:
+        for x in out:
+            print(x)
+    if missing:
+        die("Error: No such object: " + ",".join(missing))
+
+
+def container_matches(n, c, flt):
+    k, _, v = flt.partition("=")
+    if k == "status":
+        return c["status"] == v
+    if k == "name":
+        return v in n
+    if k == "ancestor":
+        return c["image_id"] == img_id(v) or c["image"] == v
+    if k == "label":
+        lk, _, lv = v.partition("=")
+        lab = c.get("labels", {})
+        return lk in lab and (not lv or lab[lk] == lv)
+    unsupported(f"filter {flt}")
+
+
+def parse_labels(dockerfile, buildargs):
+    """LABEL k=v trong Dockerfile (gộp dòng nối), thay $ARG/${ARG} bằng --build-arg."""
+    text = re.sub(r"\\\n\s*", " ", open(dockerfile).read())
+    out = {}
+    m = re.match(r"\s*FROM\s+(\S+)", text)
+    if m and m.group(1) in I:
+        out.update(I[m.group(1)].get("labels", {}))
+    for line in re.findall(r"^\s*LABEL\s+(.+)$", text, re.M):
+        for k, v in re.findall(r'([\w.-]+)=("[^"]*"|\S+)', line):
+            v = v.strip('"')
+            v = re.sub(r"\$\{?(\w+)\}?", lambda mm: buildargs.get(mm.group(1), ""), v)
+            out[k] = v
+    return out
 
 
 def new_container(name, image, status, labels=None):
@@ -165,44 +256,38 @@ def compose_services(path):
 
 cmd = argv[0] if argv else ""
 if cmd == "inspect":
-    f, names = split_fmt(argv[1:])
-    found = [find_c(n) for n in names]
-    if f is None:
-        print(json.dumps([render_c(n, None) for n in found if n]))
-    else:
-        for n in found:
-            if n:
-                print(render_c(n, f))
-    if not all(found):
-        die("Error: No such object: " + ",".join(n for n, k in zip(names, found) if not k))
+    do_inspect(argv[1:], ["container", "image"])
+elif cmd == "container" and argv[1:2] == ["inspect"]:
+    do_inspect(argv[2:], ["container"])
 elif cmd == "image" and argv[1:2] == ["inspect"]:
-    f, refs = split_fmt(argv[2:])
-    for r in refs:
-        iid = img_id(r)
-        if not iid:
-            die(f"Error: No such image: {r}")
-        meta = next(v for v in I.values() if v["id"] == iid)
-        if f == "{{.Created}}":
-            print(meta["created"])
-        elif f == "{{.Id}}":
-            print(iid)
-        else:
-            print(json.dumps([{"Id": iid, "Created": meta["created"], "RepoTags": [k for k, v in I.items() if v["id"] == iid]}]))
+    do_inspect(argv[2:], ["image"])
 elif cmd == "images":
-    f, pos = split_fmt(argv[1:])
+    o, pos = opts(argv[1:])
+    f = (o.get("--format") or [None])[0]
+    if f not in (None, "{{.Repository}}:{{.Tag}}") and not o.get("-q"):
+        unsupported(f"format {f}")
     for ref, v in I.items():
         if pos and ref.rsplit(":", 1)[0] != pos[0]:
             continue
-        print(v["id"] if "-q" in argv else ref)
+        print(v["id"] if o.get("-q") else ref)
 elif cmd == "ps":
-    f, _ = split_fmt(argv[1:])
-    statuses = [argv[i + 1].split("=", 1)[1] for i, a in enumerate(argv) if a == "--filter" and argv[i + 1].startswith("status=")]
+    o, _ = opts(argv[1:])
+    show_all = bool(o.get("-a") or o.get("-aq") or o.get("--all"))
+    quiet = bool(o.get("-q") or o.get("-aq"))
+    f = (o.get("--format") or [None])[0]
+    fields = {None: None, "{{.Names}}": "name", "{{.ID}}": "id", "{{.Image}}": "image"}
+    if f not in fields:
+        unsupported(f"format {f}")
+    flts = o.get("--filter", [])
+    st = [x for x in flts if x.startswith("status=")]
     for n, c in C.items():
-        if statuses and c["status"] not in statuses:
+        if st and not any(container_matches(n, c, x) for x in st):
             continue
-        if not statuses and "-a" not in argv and "-aq" not in argv and c["status"] != "running":
+        if not all(container_matches(n, c, x) for x in flts if not x.startswith("status=")):
             continue
-        print(c["id"] if ("-q" in argv or "-aq" in argv) else n)
+        if not st and not show_all and c["status"] != "running":
+            continue
+        print(c["id"] if quiet or fields[f] == "id" else c["image"] if fields[f] == "image" else n)
 elif cmd == "rm":
     force = "-f" in argv
     for key in [a for a in argv[1:] if not a.startswith("-")]:
@@ -227,18 +312,24 @@ elif cmd == "rmi":
             del I[k]
     save()
 elif cmd == "build":
-    tag = argv[argv.index("-t") + 1]
-    I[tag] = {"id": "sha256:%064x" % (0xb1d000 + seq()), "created": now()}
+    o, pos = opts(argv[1:], with_value=("-t", "-f", "--build-arg", "--label"))
+    tag = o["-t"][0]
+    ctx = pos[-1]
+    dockerfile = o.get("-f", [os.path.join(ctx, "Dockerfile")])[0]
+    bargs = dict(x.split("=", 1) for x in o.get("--build-arg", []))
+    labels = parse_labels(dockerfile, bargs)
+    labels.update(dict(x.split("=", 1) for x in o.get("--label", [])))
+    I[tag] = {"id": "sha256:%064x" % (0xb1d000 + seq()), "created": now(), "labels": labels}
     save()
     print(I[tag]["id"])
     sys.exit(int(os.environ.get("FAKE_BUILD_RC", "0")))
 elif cmd == "run":
     val = {"--name", "--network", "--add-host", "--env-file", "-p", "-e", "-v", "--entrypoint", "-w", "-u", "--user", "--label", "-l", "--mount"}
-    opts, flags, i = {}, set(), 1
+    o, flags, i = {}, set(), 1
     while i < len(argv):
         a = argv[i]
         if a in val:
-            opts.setdefault(a, []).append(argv[i + 1]); i += 2; continue
+            o.setdefault(a, []).append(argv[i + 1]); i += 2; continue
         if a.startswith("-"):
             flags.add(a); i += 1; continue
         break
@@ -246,11 +337,11 @@ elif cmd == "run":
     if not img_id(image):
         die(f"Unable to find image '{image}' locally", 125)
     if "--rm" in flags:
-        ep = opts.get("--entrypoint", [""])[0]
+        ep = o.get("--entrypoint", [""])[0]
         if ep == "pip":
             print("fastapi==0.115.0\nredis==8.1.0\nsecai-agent-gateway @ file:///tmp/wheels/x.whl")
         sys.exit(int(os.environ.get("FAKE_IMPORT_RC", "0")) if ep == "python" else 0)
-    print(new_container(opts.get("--name", [f"anon-{seq()}"])[0], image, "running"))
+    print(new_container(o.get("--name", [f"anon-{seq()}"])[0], image, "running"))
     save()
 elif cmd == "create":
     image = [a for a in argv[1:] if not a.startswith("-")][0]
@@ -260,7 +351,12 @@ elif cmd == "create":
     save()
 elif cmd == "cp":
     src, dest = [a for a in argv[1:] if not a.startswith("-")][:2]
-    shutil.copytree(os.environ["FAKE_IMGSRC"], dest)
+    # release-prod.sh chép /app/src của image vào $REL/imgsrc; nội dung giả = cây git archive cạnh đó
+    shutil.copytree(os.path.join(os.path.dirname(dest), "tree", "src"), dest)
+    if os.environ.get("FAKE_IMGSRC_EXTRA"):
+        open(os.path.join(dest, "lạ.py"), "w").write("x = 1\n")
+elif cmd == "logs":
+    pass
 elif cmd == "compose":
     a, proj, files, i = argv[1:], None, [], 0
     while i < len(a) and a[i].startswith("-"):
@@ -277,15 +373,25 @@ elif cmd == "compose":
     path = os.path.abspath(files[0]) if files else os.path.join(os.getcwd(), "docker-compose.yml")
     proj = proj or os.path.basename(os.getcwd())
     svcs = compose_services(path)
+    skip = set(os.environ.get("FAKE_COMPOSE_SKIP", "").split(","))
     for svc in [x for x in rest if not x.startswith("-")]:
         spec = svcs[svc]
         if not img_id(spec["image"]):
             die(f"Error response from daemon: pull access denied for {spec['image']}")
         name = spec.get("container_name") or f"{proj}-{svc}-1"
+        if name in skip:
+            continue
+        old = C.get(name)
+        if old and old.get("labels", {}).get("com.docker.compose.project") != proj:
+            die(f"Error response from daemon: Conflict. The container name \"/{name}\" is already in use", 1)
         C.pop(name, None)
         new_container(name, spec["image"], "running",
                       {"com.docker.compose.project": proj, "com.docker.compose.project.config_files": path})
     save()
+elif cmd in ("tag", "stop", "start", "restart", "kill", "rename", "pull", "push"):
+    save()
+else:
+    unsupported("command")
 '''
 
 CURL_STUB = r'''
@@ -294,6 +400,8 @@ argv = sys.argv[1:]
 url = next((a for a in reversed(argv) if a.startswith("http")), "")
 with open(os.environ["FAKE_CURL_LOG"], "a") as fh:
     fh.write(json.dumps({"argv": argv}) + "\n")
+with open(os.environ["FAKE_SEQ_LOG"], "a") as fh:
+    fh.write(json.dumps(["curl", url]) + "\n")
 if any(d and d in url for d in os.environ.get("FAKE_CURL_DOWN", "").split(",")):
     sys.exit(7)
 C = json.load(open(os.environ["FAKE_STATE"]))["containers"]
@@ -336,21 +444,26 @@ class Sandbox:
 
     def __init__(self, root: Path, *, deps_change: bool = False) -> None:
         self.root = root
+        self.today = dt.date.today().strftime("%Y%m%d")  # cố định cho sandbox; `date +%Y%m%d` giả trả đúng giá trị này
         self.bin, self.home = root / "bin", root / "home"
         self.releases, self.docker_dir = root / "releases", root / "secai-docker"
         self.repo, self.origin = root / "repo", root / "origin.git"
         self.state_file, self.docker_log = root / "docker-state.json", root / "docker.log"
-        self.curl_log, self.git_log = root / "curl.log", root / "git.log"
+        self.curl_log, self.git_log, self.seq_log = root / "curl.log", root / "git.log", root / "seq.log"
+        self.env_mode_log = root / "env-mode.log"
         for d in (self.bin, self.home, self.releases, self.docker_dir, root / "scripts", root / "data"):
             d.mkdir(parents=True)
-        for f in (self.docker_log, self.curl_log, self.git_log):
+        for f in (self.docker_log, self.curl_log, self.git_log, self.seq_log, self.env_mode_log):
             f.write_text("")
         self._stub("docker", f"#!{sys.executable}\n" + DOCKER_STUB)
         self._stub("curl", f"#!{sys.executable}\n" + CURL_STUB)
         self._stub("sleep", "#!/bin/sh\nexit 0\n")
         self._stub("git", f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{self.git_log}"\nexec "{REAL_GIT}" "$@"\n')
+        self._stub("date", f'#!/bin/sh\n[ "$#" = 1 ] && [ "$1" = "+%Y%m%d" ] && [ -n "$FAKE_TODAY" ] && '
+                           f'{{ echo "$FAKE_TODAY"; exit 0; }}\nexec "{REAL_DATE}" "$@"\n')
         self.script = root / "scripts" / "release-prod.sh"
         shutil.copy(SCRIPT, self.script)
+        self.script.chmod(0o755)  # revert() gọi lại "$0" rollback --yes nên bản chép phải chạy được
 
         genv = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
                 "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
@@ -369,14 +482,16 @@ class Sandbox:
         self.c2 = self._commit("feat: tính năng mới trên main")
         sh(REAL_GIT, "remote", "add", "origin", str(self.origin), cwd=self.repo)
         sh(REAL_GIT, "push", "-q", "origin", "main", cwd=self.repo, env=genv)
-        py = self.repo / ".venv" / "bin" / "python"   # gate 1: "pytest" giả
+        (self.repo / ".env").write_text("DUMMY_SETTING=1\n")  # giá trị giả; gate 1 phải chép với mode 600 rồi xoá
+        py = self.repo / ".venv" / "bin" / "python"           # gate 1: "pytest" giả, ghi lại mode của ./.env
         py.parent.mkdir(parents=True)
-        py.write_text('#!/bin/sh\nif [ -n "$FAKE_PYTEST_OUT" ]; then printf "%s\\n" "$FAKE_PYTEST_OUT"; '
-                      'else echo "12 passed in 0.10s"; fi\n')
+        py.write_text(f'#!/bin/sh\n[ -f .env ] && stat -c %a .env >> "{self.env_mode_log}"\n'
+                      'if [ -n "$FAKE_PYTEST_OUT" ]; then printf "%s\\n" "$FAKE_PYTEST_OUT"; else echo "12 passed in 0.10s"; fi\n')
         py.chmod(0o755)
 
         self.prod_tag = f"{IMG}:main-{self.c1[:8]}-20261120"
-        self.new_tag = f"{IMG}:main-{self.c2[:8]}-{TODAY}"
+        self.new_tag = f"{IMG}:main-{self.c2[:8]}-{self.today}"
+        self.rel = self.releases / f"main-{self.c2[:8]}-{self.today}"
         self.compose = self.docker_dir / "docker-compose.yml"
         self.compose.write_text(
             "services:\n"
@@ -397,7 +512,7 @@ class Sandbox:
         self.prev_profile.chmod(0o600)
 
         self.state = {"seq": 0, "images": {}, "containers": {}}
-        self.add_image(self.prod_tag, days_ago=7)
+        self.add_image(self.prod_tag, days_ago=7, labels={REV: self.c1[:8]})
         self.add_image("qdrant/qdrant:v1.10.1", days_ago=90)
         self.add_container("secai-docker-gateway", self.prod_tag,
                            labels={"com.docker.compose.project": "secai-docker",
@@ -410,10 +525,10 @@ class Sandbox:
 
         self.env = {**genv, "PATH": f"{self.bin}:{os.environ['PATH']}", "HOME": str(self.home),
                     "SECAI_RELEASES_DIR": str(self.releases), "SECAI_DOCKER_DIR": str(self.docker_dir),
-                    "SECAI_REPO": str(self.repo), "SECAI_DATA_ROOT": str(root / "data"),
+                    "SECAI_REPO": str(self.repo), "SECAI_DATA_ROOT": str(root / "data"), "FAKE_TODAY": self.today,
                     "FAKE_STATE": str(self.state_file), "FAKE_DOCKER_LOG": str(self.docker_log),
                     "FAKE_CURL_LOG": str(self.curl_log), "FAKE_GIT_LOG": str(self.git_log),
-                    "FAKE_IMGSRC": str(self.releases / f"main-{self.c2[:8]}-{TODAY}" / "tree" / "src")}
+                    "FAKE_SEQ_LOG": str(self.seq_log)}
 
     # ---- dựng trạng thái
     def _stub(self, name: str, body: str) -> None:
@@ -426,10 +541,10 @@ class Sandbox:
         sh(REAL_GIT, "commit", "-q", "-m", msg, cwd=self.repo, env=self.genv)
         return sh(REAL_GIT, "rev-parse", "HEAD", cwd=self.repo)
 
-    def add_image(self, ref: str, days_ago: float = 0, iid: str | None = None) -> str:
+    def add_image(self, ref: str, days_ago: float = 0, iid: str | None = None, labels: dict | None = None) -> str:
         self.state["seq"] += 1
         iid = iid or "sha256:%064x" % (0xa000 + self.state["seq"])
-        self.state["images"][ref] = {"id": iid, "created": ts(days_ago)}
+        self.state["images"][ref] = {"id": iid, "created": ts(days_ago), "labels": labels or {}}
         return iid
 
     def add_container(self, name: str, image: str, status: str = "running", days_ago: float = 1,
@@ -452,9 +567,9 @@ class Sandbox:
 
     def released(self) -> Path:
         """Trạng thái ngay sau một release thành công prod_tag → new_tag (để thử rollback/gc)."""
-        rel = self.releases / f"main-{self.c2[:8]}-{TODAY}"
+        rel = self.rel
         rel.mkdir(mode=0o700)
-        bak = rel / f"docker-compose.yml.bak-before-img{self.c2[:8]}-{TODAY}"
+        bak = rel / f"docker-compose.yml.bak-before-img{self.c2[:8]}-{self.today}"
         shutil.copy2(self.compose, bak)
         self.compose.write_text(self.compose.read_text().replace(self.prod_tag, self.new_tag))
         new_profile = rel / "translation-main.json"
@@ -464,7 +579,7 @@ class Sandbox:
             f"PREV_TAG={self.prod_tag}\nNEW_TAG={self.new_tag}\nCOMPOSE_BAK={bak}\n"
             f"TRANS_PREV_PROFILE={self.prev_profile}\nTRANS_NEW_PROFILE={new_profile}\n")
         (self.releases / "LATEST-PROD").write_text(f"{rel}\n")
-        self.add_image(self.new_tag, days_ago=0)
+        self.add_image(self.new_tag, days_ago=0, labels={REV: self.c2[:8]})
         for n in TRIO:
             self.set_image(n, self.new_tag)
         self.state["containers"]["secai-docker-gateway"]["labels"]["com.docker.compose.project.config_files"] = str(self.compose)
@@ -475,8 +590,10 @@ class Sandbox:
 
     # ---- chạy + quan sát
     def run(self, *args: str, **extra_env: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(["bash", str(self.script), *args], cwd=self.root, env={**self.env, **extra_env},
-                              text=True, capture_output=True, timeout=180)
+        res = subprocess.run(["bash", str(self.script), *args], cwd=self.root, env={**self.env, **extra_env},
+                             text=True, capture_output=True, timeout=180)
+        assert "fake docker: unsupported" not in res.stderr, res.stderr[-2000:]  # stub chưa mô phỏng: lỗi harness
+        return res
 
     def docker_calls(self) -> list[list[str]]:
         return [json.loads(x)["argv"] for x in self.docker_log.read_text().splitlines() if x.strip()]
@@ -491,6 +608,9 @@ class Sandbox:
     def curl_urls(self) -> list[str]:
         return [next((a for a in reversed(json.loads(x)["argv"]) if a.startswith("http")), "")
                 for x in self.curl_log.read_text().splitlines() if x.strip()]
+
+    def sequence(self) -> list[list[str]]:
+        return [json.loads(x) for x in self.seq_log.read_text().splitlines() if x.strip()]
 
     def images_of(self) -> dict[str, str]:
         return {n: c["image"] for n, c in self.load()["containers"].items()}
@@ -512,10 +632,20 @@ def sb(tmp_path: Path) -> Sandbox:
 
 def assert_prod_untouched(sb: Sandbox, compose_before: str) -> None:
     assert sb.compose.read_text() == compose_before, "compose prod bị sửa"
-    assert not (sb.releases / "LATEST-PROD").exists(), "LATEST-PROD bị ghi"
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
     muts = [a for a in sb.mutating() if a[0] in ("compose", "rmi", "tag")]
     assert not muts, muts
+    assert not [a for a in sb.mutating() if a[:1] in (["run"], ["rm"]) and any(t in a for t in TRIO)]
+
+
+def assert_trio_managed_by_compose(sb: Sandbox) -> None:
+    """3 container prod chỉ được thay bằng compose (không docker run/rm tay đè tên prod)."""
+    bad = [a for a in sb.mutating() if a[:1] in (["run"], ["rm"], ["create"], ["rename"]) and any(t in a for t in TRIO)]
+    assert not bad, bad
+    cs = sb.load()["containers"]
+    assert cs["secai-docker-gateway"]["labels"].get("com.docker.compose.project") == "secai-docker"
+    for n in TRIO[1:]:
+        assert cs[n]["labels"].get("com.docker.compose.project") == "secai-translation-release", n
 
 
 # ------------------------------------------------------------------ plan / --yes
@@ -635,9 +765,13 @@ def test_run_switches_all_three_and_records_release(sb: Sandbox) -> None:
     assert f"RELEASE OK {sb.new_tag}" in res.stderr
     imgs = sb.images_of()
     assert all(imgs[n] == sb.new_tag for n in TRIO), imgs
+    assert_trio_managed_by_compose(sb)
+    cs = sb.load()["containers"]
+    rel = sb.rel
+    assert cs["secai-docker-gateway"]["labels"]["com.docker.compose.project.config_files"] == str(sb.compose)
+    assert all(cs[n]["labels"]["com.docker.compose.project.config_files"] == str(rel / "translation-main.json") for n in TRIO[1:])
     assert sb.compose.read_text() == compose_before.replace(sb.prod_tag, sb.new_tag)
     assert sb.prev_profile.read_text() == prev_profile_before
-    rel = sb.releases / f"main-{sb.c2[:8]}-{TODAY}"
     assert (sb.releases / "LATEST-PROD").read_text().strip() == str(rel)
     state = dict(ln.split("=", 1) for ln in (rel / "state.env").read_text().splitlines())
     assert state["PREV_TAG"] == sb.prod_tag and state["NEW_TAG"] == sb.new_tag
@@ -648,10 +782,13 @@ def test_run_switches_all_three_and_records_release(sb: Sandbox) -> None:
     assert (rel / "RELEASE-NOTES.md").is_file() and "12 passed" in (rel / "pytest.log").read_text()
     builds = [a for a in sb.docker_calls() if a[:1] == ["build"]]
     assert len(builds) == 1 and "-f" in builds[0], builds  # deps không đổi → build OVERLAY
-    overlay = (rel / "tree" / "Dockerfile.overlay").read_text()
-    assert f"FROM {sb.prod_tag}" in overlay and f"org.opencontainers.image.revision={sb.c2[:8]}" in overlay
+    assert sb.load()["images"][sb.new_tag]["labels"].get(REV) == sb.c2[:8], "image OVERLAY phải có label revision = sha mới"
+    smoke = [a for a in sb.docker_calls() if a[:2] == ["run", "-d"]]
+    assert len(smoke) == 1 and "-smoke-" in smoke[0][smoke[0].index("--name") + 1]
+    assert smoke[0][smoke[0].index("-p") + 1].startswith("127.0.0.1:"), "smoke chỉ được bind loopback"
     assert not [n for n in sb.load()["containers"] if "-smoke-" in n], "container smoke còn sót"
-    assert not (rel / "tree" / ".env").exists()
+    assert sb.env_mode_log.read_text().split() == ["600"], ".env chép vào cây test phải mode 600"
+    assert not (rel / "tree" / ".env").exists(), ".env của prod còn nằm trong release dir"
     assert sb.prod_tag in sb.load()["images"], "image prod cũ phải được giữ để rollback"
 
 
@@ -661,21 +798,51 @@ def test_run_blocks_release_when_pytest_gate_is_red(sb: Sandbox) -> None:
     assert res.returncode != 0 and "pytest không xanh" in res.stderr
     assert not [a for a in sb.docker_calls() if a[:1] in (["build"], ["run"])]
     assert_prod_untouched(sb, compose_before)
+    assert not (sb.releases / "LATEST-PROD").exists()
 
 
-def test_run_blocks_release_when_smoke_reports_wrong_sha(sb: Sandbox) -> None:
+@pytest.mark.parametrize("knob,message", [
+    ({"FAKE_IMPORT_RC": "1"}, "image mới import lỗi"),
+    ({"FAKE_IMGSRC_EXTRA": "1"}, "/app/src của image khác git archive"),
+    ({"FAKE_SMOKE_SHA": "deadbeef"}, "smoke: /health sai"),
+    ({"FAKE_CURL_DOWN": "/ai/v3/translate/languages"}, "smoke: /ai/v3/translate/languages không 200"),
+], ids=["import", "imgsrc", "smoke-sha", "smoke-languages"])
+def test_run_blocks_release_when_a_build_or_smoke_gate_fails(sb: Sandbox, knob: dict, message: str) -> None:
     compose_before = sb.compose.read_text()
-    res = sb.run("run", "--yes", FAKE_SMOKE_SHA="deadbeef")
-    assert res.returncode != 0 and "smoke: /health sai" in res.stderr
+    res = sb.run("run", "--yes", **knob)
+    assert res.returncode != 0 and message in res.stderr, res.stderr[-2000:]
     assert not [n for n in sb.load()["containers"] if "-smoke-" in n], "trap EXIT phải xoá container smoke"
+    assert_prod_untouched(sb, compose_before)
+    assert not (sb.releases / "LATEST-PROD").exists()
+
+
+def test_run_refuses_to_switch_while_release_lock_is_held(sb: Sandbox) -> None:
+    compose_before = sb.compose.read_text()
+    with open(sb.releases / "translation-deploy.lock", "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        res = sb.run("run", "--yes")
+    assert res.returncode != 0 and "giữ lock" in res.stderr
     assert_prod_untouched(sb, compose_before)
 
 
-def test_run_rolls_back_automatically_when_health_wrong_after_switch(sb: Sandbox) -> None:
+def test_run_rolls_back_automatically_when_gateway_health_wrong_after_switch(sb: Sandbox) -> None:
     compose_before = sb.compose.read_text()
     res = sb.run("run", "--yes", FAKE_GATEWAY_SHA="0badc0de")
     assert res.returncode != 0
     assert "HEALTH SAI" in res.stderr and "đã rollback" in res.stderr
+    assert sb.compose.read_text() == compose_before
+    assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
+    assert_trio_managed_by_compose(sb)
+
+
+@pytest.mark.parametrize("knob", [{"FAKE_CURL_DOWN": "127.0.0.1:18185/health"},
+                                  {"FAKE_COMPOSE_SKIP": "secai-translation-worker"}], ids=["18185-down", "worker-not-switched"])
+def test_run_rolls_back_both_groups_when_translation_step_fails(sb: Sandbox, knob: dict) -> None:
+    compose_before = sb.compose.read_text()
+    res = sb.run("run", "--yes", **knob)
+    assert res.returncode != 0 and "đã rollback" in res.stderr, res.stderr[-2000:]
+    assert any(c["argv"][:2] == ["compose", "-p"] and str(sb.rel / "translation-main.json") in c["argv"]
+               for c in sb.compose_calls()), "phải tới được bước chuyển translation"
     assert sb.compose.read_text() == compose_before
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
 
@@ -693,12 +860,14 @@ def test_rollback_restores_backup_compose_and_previous_profile(sb: Sandbox) -> N
     assert gw and tr, calls
     assert all("--no-build" in c["argv"] and "--no-deps" in c["argv"] for c in gw + tr)
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), sb.images_of()
+    assert_trio_managed_by_compose(sb)
 
 
-def test_rollback_refuses_while_release_lock_is_held(sb: Sandbox) -> None:
+@pytest.mark.parametrize("lock", ["gateway-deploy.lock", "translation-deploy.lock"])
+def test_rollback_refuses_while_release_lock_is_held(sb: Sandbox, lock: str) -> None:
     sb.released()
     compose_now = sb.compose.read_text()
-    with open(sb.releases / "gateway-deploy.lock", "w") as fh:
+    with open(sb.releases / lock, "w") as fh:
         fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
         res = sb.run("rollback", "--yes")
     assert res.returncode != 0 and "giữ lock" in res.stderr
@@ -706,15 +875,30 @@ def test_rollback_refuses_while_release_lock_is_held(sb: Sandbox) -> None:
     assert sb.mutating() == []
 
 
-@xfail_gap("OPS-REL-4: rollback chỉ cp compose + compose up rồi in 'rollback xong', không chờ /health")
+def _after_last_compose(seq: list[list[str]]) -> list[list[str]]:
+    last = max((i for i, x in enumerate(seq) if x[:2] == ["docker", "compose"]), default=-1)
+    return seq[last + 1:]
+
+
+@xfail_gap("OPS-REL-4: rollback chỉ cp compose + compose up rồi in 'rollback xong', không chờ /health, không kiểm tag")
 def test_rollback_waits_for_health_after_switch(sb: Sandbox) -> None:
     sb.released()
     res = sb.run("rollback", "--yes")
     assert res.returncode == 0, res.stderr
-    gap(any(u.startswith("http://127.0.0.1:8131/health") for u in sb.curl_urls()),
-        "rollback không kiểm /health 8131 sau khi chuyển")
-    gap(any(u.startswith("http://127.0.0.1:18185/health") for u in sb.curl_urls()),
-        "rollback không kiểm /health 18185 sau khi chuyển")
+    tail = _after_last_compose(sb.sequence())
+    urls = [x[1] for x in tail if x[0] == "curl"]
+    gap(any(u.startswith("http://127.0.0.1:8131/health") for u in urls), "không kiểm /health 8131 SAU khi chuyển")
+    gap(any(u.startswith("http://127.0.0.1:18185/health") for u in urls), "không kiểm /health 18185 SAU khi chuyển")
+    inspected = {a for x in tail if x[:2] == ["docker", "inspect"] for a in x[2:]}
+    gap(set(TRIO) <= inspected, "không xác nhận lại image của 3 container sau khi chuyển")
+
+
+@xfail_gap("OPS-REL-4: rollback báo 'rollback xong' (mã 0) dù /health sai sau khi chuyển")
+def test_rollback_fails_when_health_stays_wrong(sb: Sandbox) -> None:
+    sb.released()
+    res = sb.run("rollback", "--yes", FAKE_GATEWAY_SHA="0badc0de")
+    assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO)  # compose vẫn chạy
+    gap(res.returncode != 0, "rollback trả 0 dù /health 8131 báo sai git_sha")
 
 
 @xfail_gap("OPS-REL-4: rollback chép compose bak trước, image PREV_TAG mất thì compose lệch container đang chạy")
@@ -730,25 +914,29 @@ def test_rollback_refuses_before_touching_compose_when_previous_image_is_gone(sb
 
 
 # ------------------------------------------------------------------ gc
-def _gc_world(sb: Sandbox) -> dict[str, str]:
+def _gc_world(sb: Sandbox, first: tuple[str, float] | None = None) -> dict[str, str]:
+    """PREV_TAG chỉ được bảo vệ qua state.env (không container nào dùng); 'running'/'stopped' qua container."""
     rel = sb.releases / "main-prevxxxx-20261115"
     rel.mkdir(mode=0o700)
     t = {k: f"{IMG}:{v}" for k, v in {
         "old": "main-0ld0ld00-20261110", "prev": "main-9e590000-20261115", "running": "main-12345678-20261116",
         "stopped": "main-5709ed00-20261112", "fresh": "main-f2e50000-20261126", "smoke_old": "smoke-0ld-20261110",
-        "other": "review-mvp-20261001"}.items()}
+        "other": "review-mvp-20261001", "rb": "main-7b000000-20261124"}.items()}
     (rel / "state.env").write_text(f"PREV_TAG={t['prev']}\nNEW_TAG={t['running']}\n")
     (sb.releases / "LATEST-PROD").write_text(f"{rel}\n")
     sb.state["images"].clear()
     sb.state["containers"].clear()
+    if first:
+        sb.add_image(first[0], days_ago=first[1])
     for k in ("old", "prev", "running", "stopped", "smoke_old", "other"):
         sb.add_image(t[k], days_ago=10)
     sb.add_image(t["fresh"], days_ago=1)
+    sb.add_image(t["rb"], days_ago=2)
     sb.add_container("secai-docker-gateway", t["running"])
     sb.add_container("legacy-report", t["stopped"], status="exited", days_ago=10)
     sb.add_container("secai-docker-gateway-smoke-20261115", t["running"], status="exited", days_ago=10)
-    sb.add_container("secai-docker-gateway-rollback-20261126", t["prev"], status="exited", days_ago=1)
-    sb.add_container("secai-translation-gateway-rollback-20261101", t["prev"], status="running", days_ago=20)
+    sb.add_container("secai-docker-gateway-rollback-20261126", t["rb"], status="exited", days_ago=1)
+    sb.add_container("secai-translation-gateway-rollback-20261101", t["rb"], status="running", days_ago=20)
     sb.save()
     return t
 
@@ -764,7 +952,7 @@ def test_gc_keeps_previous_release_and_in_use_images(sb: Sandbox) -> None:
     assert _deleted(sb, "rmi") == {t["old"], t["smoke_old"]}
     assert _deleted(sb, "rm") == {"secai-docker-gateway-smoke-20261115"}
     left = sb.load()["images"]
-    for k in ("prev", "running", "stopped", "fresh", "other"):
+    for k in ("prev", "running", "stopped", "fresh", "other", "rb"):
         assert t[k] in left, k
 
 
@@ -774,26 +962,26 @@ def test_gc_without_yes_only_lists(sb: Sandbox) -> None:
     assert res.returncode == 0, res.stderr
     assert "gc dry-run: 3 mục" in res.stdout
     assert t["old"] in res.stdout and "secai-docker-gateway-smoke-20261115" in res.stdout
+    assert t["prev"] not in res.stdout
     assert not [a for a in sb.docker_calls() if a[:1] in (["rm"], ["rmi"])]
 
 
-@xfail_gap("gc so tag theo .Config.Image; container tạo từ image ID trần (như secai-report-backend) "
-           "không giữ được tag main-* của chính image đó")
+@xfail_gap("gc so tag với .Config.Image; container tạo từ image ID trần thì gc vẫn `docker rmi` tag của image đó, "
+           "docker từ chối (conflict), set -e làm gc --yes thoát 1 và bỏ dở các mục sau")
 def test_gc_keeps_image_of_container_created_from_bare_id(sb: Sandbox) -> None:
-    t = _gc_world(sb)
     bare = f"{IMG}:main-ba2e1d00-20261101"
-    iid = sb.add_image(bare, days_ago=20)
-    sb.add_container("secai-report-backend", iid)  # Config.Image = sha256:..., đúng như prod hiện tại
+    t = _gc_world(sb, first=(bare, 20))       # đứng đầu danh sách để thấy các mục sau có bị bỏ dở không
+    iid = sb.state["images"][bare]["id"]
+    sb.add_container("bare-id-service", iid)  # Config.Image = sha256:… như secai-report-backend trên prod
     sb.save()
     res = sb.run("gc", "--yes")
-    gap(bare not in _deleted(sb, "rmi"), f"gc gọi docker rmi {bare} dù secai-report-backend đang chạy image đó")
+    gap(bare not in _deleted(sb, "rmi"), f"gc gọi docker rmi {bare} dù có container đang chạy image đó")
     assert res.returncode == 0, res.stderr
-    assert t["prev"] in sb.load()["images"]
+    assert {t["old"], t["smoke_old"]} <= _deleted(sb, "rmi"), "các mục sau phải vẫn được dọn"
 
 
 # ------------------------------------------------------------------ build FULL
-@xfail_gap("OPS-VER-4: build FULL (deps đổi) không gắn label org.opencontainers.image.revision; "
-           "chỉ build OVERLAY có LABEL")
+@xfail_gap("OPS-VER-4: build FULL (deps đổi) không gắn label org.opencontainers.image.revision; chỉ build OVERLAY có")
 def test_full_build_labels_revision(tmp_path: Path) -> None:
     sb = Sandbox(tmp_path, deps_change=True)
     res = sb.run("gates")
@@ -801,10 +989,7 @@ def test_full_build_labels_revision(tmp_path: Path) -> None:
     assert "GATES OK" in res.stdout
     builds = [a for a in sb.docker_calls() if a[:1] == ["build"]]
     assert len(builds) == 1 and "-f" not in builds[0], builds  # FULL: Dockerfile của repo
-    rel = sb.releases / f"main-{sb.c2[:8]}-{TODAY}"
-    assert (rel / "pip-freeze.diff").exists()
+    assert (sb.rel / "pip-freeze.diff").exists()
     assert all(sb.images_of()[n] == sb.prod_tag for n in TRIO), "gates không được chuyển prod"
-    dockerfile = (rel / "tree" / "Dockerfile").read_text()
-    gap("org.opencontainers.image.revision" in " ".join(builds[0])
-        or "LABEL org.opencontainers.image.revision" in dockerfile,
-        "image FULL không có label revision")
+    gap(sb.load()["images"][sb.new_tag].get("labels", {}).get(REV) == sb.c2[:8],
+        "image FULL không có label revision bằng sha của commit")

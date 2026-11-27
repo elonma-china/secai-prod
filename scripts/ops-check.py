@@ -6,7 +6,8 @@
     python3 -I scripts/ops-check.py --group VER,SEC # chỉ vài nhóm
     python3 -I scripts/ops-check.py --list          # in danh mục tiêu chí, không đo gì
 
-Mã thoát: 0 khi không có FAIL ở tiêu chí bắt buộc; 1 khi có; 2 khi sai tham số.
+Mã thoát: 1 khi có FAIL ở tiêu chí bắt buộc; 3 khi không có FAIL nhưng có tiêu chí bắt buộc tự động
+không đo được (docker/systemctl lỗi, lỗi checker; thiếu GitHub không tính); 2 khi sai tham số; 0 còn lại.
 
 Checker không ghi, không restart, không đổi gì. Lệnh ngoài duy nhất được gọi (kiểm bằng
 `assert_read_only` trước MỌI lần gọi, sai là dừng hẳn):
@@ -80,13 +81,22 @@ REQUIRED_RELEASE_TESTS = (
     "test_gc_keeps_previous_release_and_in_use_images",
 )
 
-# File tracked chứa secret GIẢ có chủ đích (dữ liệu test/benchmark của bộ sanitize, demo redaction).
-# Chưa xác minh từng giá trị; lịch sử Git cần quét riêng bằng gitleaks (kiểm tay, OPS-SEC-6).
-FAKE_SECRET_FIXTURES = (
-    "evals/sanitize/", "tests/", "demo/kpi-studio/kpi-studio-standalone.html",
-    "demo/showcase/tabs/sanitize-demo.js", "evidence/dong-534.md", "evidence/dong-554.md",
-    "kpi_bench/sanitizer/detector.py", "pentestcode/packages/llm/test/", "scripts/nghiem-thu-rows-ai.json",
-)
+# File tracked chứa chuỗi giống secret GIẢ có chủ đích (dữ liệu test/benchmark của bộ sanitize, demo
+# redaction). Thư mục (giá trị None) được miễn cả thư mục; file thì chỉ miễn đúng số match đã khai báo
+# cho từng loại, thêm một match mới vào chính file đó vẫn bị báo. Chưa xác minh từng giá trị là giả;
+# lịch sử Git cần quét riêng bằng gitleaks (kiểm tay, OPS-SEC-6).
+FAKE_SECRET_FIXTURES: dict[str, dict[str, int] | None] = {
+    "evals/sanitize/": None,
+    "demo/kpi-studio/kpi-studio-standalone.html": {"github_token": 4, "openai_like": 2, "aws_access_key": 2,
+                                                   "slack_token": 10, "google_api_key": 6},
+    "demo/showcase/tabs/sanitize-demo.js": {"github_token": 1, "aws_access_key": 1},
+    "evidence/dong-534.md": {"aws_access_key": 2},
+    "evidence/dong-554.md": {"aws_access_key": 1},
+    "kpi_bench/sanitizer/detector.py": {"aws_access_key": 1},
+    "pentestcode/packages/llm/test/provider/bedrock-converse.test.ts": {"aws_access_key": 1},
+    "scripts/nghiem-thu-rows-ai.json": {"aws_access_key": 1},
+    "tests/test_stack_scripts.py": {"private_key": 1},
+}
 TRACKED_SECRET_PATTERNS = {
     "private_key": re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"),
     "github_token": re.compile(rb"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b|github_pat_[A-Za-z0-9_]{40,}"),
@@ -121,56 +131,98 @@ class ReadOnlyViolation(RuntimeError):
 
 
 class Unavailable(Exception):
-    """Không đo được (thiếu docker/gh/quyền...). Tiêu chí thành SKIP kèm lý do."""
+    """Không đo được (thiếu docker/gh/quyền...). Tiêu chí thành SKIP kèm lý do.
+
+    soft=True: chỉ thiếu dữ liệu GitHub (gh chưa login, --no-gh, không đủ quyền đọc). Không tính vào
+    mã thoát 3 vì đó là cài đặt repo, không phải trạng thái máy."""
+
+    def __init__(self, msg: str, soft: bool = False) -> None:
+        super().__init__(msg)
+        self.soft = soft
 
 
 # ------------------------------------------------------------------ chặn lệnh ghi
-_GIT_READONLY = {"rev-parse", "merge-base", "cat-file", "ls-files", "log", "diff", "status", "worktree",
-                 "branch", "remote", "rev-list", "show-ref", "for-each-ref", "config"}
-_GIT_BRANCH_OK = {"-r", "--remotes", "-a", "--all", "--show-current", "--list", "--no-color", "--merged", "--contains"}
-_GH_FORBIDDEN = ("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input")
+# Danh sách TRẮNG theo đúng dạng lệnh checker dùng, không phải danh sách đen theo cờ: getopt của
+# systemctl/gh/git nhận giá trị dính liền (-iXDELETE), giá trị tách rời (-p show restart) và
+# --output=<file>, nên mọi cờ không liệt kê ở đây đều bị từ chối.
+_REF = re.compile(r"^[A-Za-z0-9_./~^{}@:-]+$")      # sha, origin/main, a..b, <sha>^{commit}
+_HEX = re.compile(r"^[0-9a-f]{4,64}$")
+_UNIT = re.compile(r"^[A-Za-z0-9@._:*\\-]+$")
+_GH_PATH = re.compile(r"^repos/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_./-]*)?$")
+_SYSTEMCTL_FLAGS = {"--all", "--plain", "--no-legend", "--no-pager", "--value"}
+
+
+def _ref(x: str) -> bool:
+    return bool(_REF.match(x)) and not x.startswith("-")
+
+
+def _git_shape_ok(sub: str, r: list[str]) -> bool:
+    if sub == "rev-parse":
+        return r in (["--is-inside-work-tree"], ["HEAD"])
+    if sub == "merge-base":
+        return len(r) == 3 and r[0] == "--is-ancestor" and _ref(r[1]) and _ref(r[2])
+    if sub == "cat-file":
+        return len(r) == 2 and r[0] == "-e" and _ref(r[1])
+    if sub == "ls-files":
+        return r == ["-z"]
+    if sub == "diff":
+        if r[:3] != ["--quiet", "--no-ext-diff", "--no-textconv"] or "--" not in r:
+            return False
+        k = r.index("--")
+        return all(_ref(x) for x in r[3:k]) and all(not x.startswith("-") for x in r[k + 1:])
+    if sub == "status":
+        return r == ["--porcelain", "--untracked-files=no"]
+    if sub == "worktree":
+        return r == ["list", "--porcelain"]
+    if sub == "branch":
+        return r in (["--show-current"], ["-r"]) or (len(r) == 3 and r[:2] == ["-r", "--merged"] and _ref(r[2]))
+    if sub == "remote":
+        return r == ["get-url", "origin"]
+    if sub == "rev-list":
+        return len(r) == 2 and r[0] == "--count" and _ref(r[1])
+    return False
 
 
 def assert_read_only(argv: list[str]) -> None:
+    """Từ chối mọi lệnh không đúng dạng chỉ đọc checker dùng. Gọi trước MỌI subprocess."""
     if not argv:
         raise ReadOnlyViolation("lệnh rỗng")
     tool, a = os.path.basename(argv[0]), list(argv[1:])
     ok = False
     if tool == "docker":
-        ok = (a[:1] in (["ps"], ["inspect"], ["images"], ["version"], ["info"])
-              or a[:2] in (["image", "inspect"], ["image", "ls"], ["system", "df"],
-                           ["container", "inspect"], ["container", "ls"]))
+        if a[:1] == ["ps"]:
+            ok = a == ["ps", "-a", "--no-trunc", "--format", "{{json .}}"]
+        elif a[:1] == ["inspect"]:
+            ok = len(a) > 1 and all(_HEX.match(x) for x in a[1:])
+        elif a[:2] == ["image", "inspect"]:
+            ok = len(a) > 2 and all(_ref(x) for x in a[2:])
+        elif a[:1] == ["images"]:
+            ok = len(a) == 5 and a[1] == "--no-trunc" and _ref(a[2]) and a[3:] == ["--format", "{{json .}}"]
+        elif a[:2] == ["system", "df"]:
+            ok = a == ["system", "df", "--format", "{{json .}}"]
     elif tool == "gh":
-        ok = (a[:1] == ["api"] and len(a) >= 2 and "graphql" not in a[1]
-              and not any(x in _GH_FORBIDDEN or x.startswith(("--method=", "-X", "--field=", "--raw-field=", "--input="))
-                          for x in a[1:]))
-    elif tool in ("df", "stat"):
-        ok = True
+        ok = len(a) == 2 and a[0] == "api" and bool(_GH_PATH.match(a[1]))
+    elif tool == "df":
+        ok = len(a) == 2 and a[0] == "-P" and not a[1].startswith("-")
+    elif tool == "stat":
+        ok = bool(a) and all(not x.startswith("-") for x in a)
     elif tool == "systemctl":
-        verbs = [x for x in a if not x.startswith("-")]
-        ok = bool(verbs) and (verbs[0] == "show" or verbs[0].startswith("list-"))
-    elif tool == "git":
+        r = a[1:] if a[:1] == ["--user"] else a
+        verb, rest = (r[0] if r else ""), r[1:]
+        ok = verb == "show" or verb in ("list-units", "list-timers")
         i = 0
-        while i < len(a) and a[i].startswith("-"):
-            if a[i] == "-C":
+        while ok and i < len(rest):
+            x = rest[i]
+            if x == "-p" and i + 1 < len(rest) and re.fullmatch(r"[A-Za-z]+", rest[i + 1]):
                 i += 2
-            elif a[i] == "--no-optional-locks":
-                i += 1
-            else:
-                break
-        sub, rest = (a[i] if i < len(a) else ""), a[i + 1:]
-        ok = sub in _GIT_READONLY and "--no-optional-locks" in a[:i]
-        if sub == "worktree":
-            ok = ok and rest[:1] == ["list"]
-        elif sub == "remote":
-            ok = ok and rest[:1] == ["get-url"]
-        elif sub == "config":
-            ok = ok and rest[:1] == ["--get"]
-        elif sub == "branch":
-            flags = [x for x in rest if x.startswith("-")]
-            ok = ok and bool(flags) and all(f in _GIT_BRANCH_OK or f.startswith("--format=") for f in flags)
+                continue
+            ok = x in _SYSTEMCTL_FLAGS or (not x.startswith("-") and bool(_UNIT.match(x)))
+            i += 1
+    elif tool == "git":
+        ok = (len(a) >= 4 and a[0] == "--no-optional-locks" and a[1] == "-C" and not a[2].startswith("-")
+              and _git_shape_ok(a[3], a[4:]))
     if not ok:
-        raise ReadOnlyViolation(f"lệnh không thuộc danh sách chỉ đọc: {argv[:4]}")
+        raise ReadOnlyViolation(f"lệnh không thuộc danh sách chỉ đọc: {argv[:6]}")
 
 
 @dataclasses.dataclass
@@ -220,6 +272,14 @@ def size_gb(s: str) -> float:
         return 0.0
     mult = {"B": 1e-9, "kB": 1e-6, "KB": 1e-6, "MB": 1e-3, "GB": 1.0, "TB": 1e3}[m.group(2)]
     return float(m.group(1)) * mult
+
+
+def regular_file(p: Path) -> bool:
+    """File thường, không phải symlink/FIFO/socket/thiết bị (open() FIFO sẽ treo checker)."""
+    try:
+        return stat.S_ISREG(os.lstat(p).st_mode)
+    except OSError:
+        return False
 
 
 def world_readable(p: Path) -> bool:
@@ -323,6 +383,7 @@ class Config:
     gh_repo: str | None
     use_gh: bool
     cron_globs: list[str]
+    proc_net: Path = Path("/proc/net")
 
 
 class Ctx:
@@ -400,7 +461,9 @@ class Ctx:
     def image(self, ref: str) -> dict | None:
         p = self.docker("image", "inspect", ref, allow_fail=True)
         if p.rc != 0:
-            return None
+            if "no such image" in p.err.lower():
+                return None
+            raise Unavailable(f"docker image inspect: {p.err.strip()[:160] or p.rc}")
         lst = json.loads(p.out or "[]")
         return lst[0] if lst else None
 
@@ -454,18 +517,20 @@ class Ctx:
     # ---- gh
     def gh(self, path: str) -> tuple[int, object]:
         if not self.cfg.use_gh:
-            raise Unavailable("đã tắt gh (--no-gh)")
+            raise Unavailable("đã tắt gh (--no-gh)", soft=True)
         if not self.cfg.gh_repo:
-            raise Unavailable("không xác định được repo GitHub (origin không phải github.com)")
+            raise Unavailable("không xác định được repo GitHub (origin không phải github.com)", soft=True)
         key = "gh:" + path
 
         def f():
+            if path != "repos/{repo}":
+                self.gh("repos/{repo}")  # repo không đọc được thì mọi 404 phía sau là thiếu quyền, không phải "chưa cấu hình"
             p = self.r.run(["gh", "api", path.format(repo=self.cfg.gh_repo)])
             if p.rc == 0:
                 return 200, json.loads(p.out or "null")
-            if "HTTP 404" in p.err:
+            if "HTTP 404" in p.err and path != "repos/{repo}":
                 return 404, None
-            raise Unavailable(f"gh api lỗi: {p.err.strip()[:160] or p.rc}")
+            raise Unavailable(f"gh api {path.format(repo=self.cfg.gh_repo)}: {p.err.strip()[:160] or p.rc}", soft=True)
         return self._memo(key, f)
 
     # ---- systemd
@@ -477,19 +542,20 @@ class Ctx:
                 p = self.r.run(["systemctl", *scope, "list-units", "--all", "--plain", "--no-legend",
                                 "--no-pager", "secai-*"])
                 if p.rc != 0:
-                    continue
+                    raise Unavailable(f"systemctl {' '.join(scope) or '--system'} list-units lỗi: "
+                                      f"{p.err.strip()[:120] or p.rc} (thiếu XDG_RUNTIME_DIR/bus của user?)")
                 names = [ln.split()[0] for ln in p.out.splitlines() if ln.strip()]
                 if not names:
                     continue
                 q = self.r.run(["systemctl", *scope, "show", *names, "--no-pager", "-p", "Id", "-p", "ActiveState",
                                 "-p", "SubState", "-p", "NRestarts", "-p", "Result", "-p", "ExecStart"])
+                if q.rc != 0:
+                    raise Unavailable(f"systemctl show lỗi: {q.err.strip()[:120] or q.rc}")
                 for block in q.out.split("\n\n"):
                     props = dict(ln.split("=", 1) for ln in block.splitlines() if "=" in ln)
                     if props.get("Id"):
                         props["scope"] = "user" if scope else "system"
                         out.append(props)
-            if not out:
-                raise Unavailable("systemctl không trả unit secai-* nào")
             return out
         return self._memo("units", f)
 
@@ -498,6 +564,8 @@ class Ctx:
             names = []
             for scope in (["--user"], []):
                 p = self.r.run(["systemctl", *scope, "list-timers", "--all", "--plain", "--no-legend", "--no-pager"])
+                if p.rc != 0:
+                    raise Unavailable(f"systemctl {' '.join(scope) or '--system'} list-timers lỗi: {p.err.strip()[:120] or p.rc}")
                 names += re.findall(r"(\S+\.timer)", p.out)
             return names
         return self._memo("timers", f)
@@ -527,7 +595,7 @@ class Ctx:
 
     def read_repo(self, rel: str) -> str:
         p = self.cfg.repo / rel
-        return p.read_text(errors="replace") if p.is_file() else ""
+        return p.read_text(errors="replace") if regular_file(p) else ""
 
 
 def in_scope(name: str) -> bool:
@@ -560,6 +628,7 @@ class R:
     status: str
     evidence: str
     fix: str = ""
+    unmeasured: bool = False  # không đo được (hết phần) dù checker chạy được: tính vào mã thoát 3
 
 
 @dataclasses.dataclass
@@ -597,14 +666,27 @@ def worst(statuses: list[str]) -> str:
 
 
 # ================================================================== BLD
+
+def dockerfile(ctx: Ctx) -> str:
+    """Dockerfile với dòng nối bằng `\\` đã gộp, để regex thấy cả lệnh RUN nhiều dòng."""
+    return re.sub(r"\\\n\s*", " ", ctx.read_repo("Dockerfile"))
+
+
+def installs_from_lock(df: str) -> bool:
+    """Dạng được chấp nhận (khớp ngưỡng OPS-BLD-1 trong tài liệu)."""
+    if not re.search(r"^\s*COPY\b[^\n]*\buv\.lock\b", df, re.M):
+        return False
+    return bool(re.search(r"\buv\s+sync\b[^\n]*--(frozen|locked)\b", df)
+                or (re.search(r"\buv\s+export\b[^\n]*--(frozen|locked)\b", df)
+                    and re.search(r"\buv\s+pip\s+sync\b|\bpip\s+install\b[^\n]*--require-hashes", df)))
+
+
 @check("OPS-BLD-1", MUST, "Image cài dependency từ uv.lock, không resolve lại từ pyproject.toml")
 def bld_lock(ctx: Ctx) -> R:
-    df = ctx.read_repo("Dockerfile")
+    df = dockerfile(ctx)
     if not df:
         raise Unavailable("không có Dockerfile trong repo")
-    copies_lock = re.search(r"^\s*COPY\b[^\n]*\buv\.lock\b", df, re.M)
-    locked = re.search(r"uv\s+(sync|pip\s+sync)\b[^\n]*--(frozen|locked)|uv\s+sync\b[^\n]*--frozen|--require-hashes", df)
-    if copies_lock and locked:
+    if installs_from_lock(df):
         return R(PASS, "Dockerfile COPY uv.lock và cài theo lock")
     return R(FAIL, "Dockerfile chỉ COPY pyproject.toml rồi pip install theo [project].dependencies; uv.lock bị bỏ qua",
              "deps stage: COPY pyproject.toml uv.lock, cài uv ghim version rồi `uv sync --frozen --no-dev --extra redis --no-install-project`")
@@ -624,7 +706,7 @@ def bld_drift(ctx: Ctx) -> R:
     new = re.search(r":main-([0-9a-f]{8})-", st.get("NEW_TAG", ""))
     lock_changed = None
     if prev and new:
-        p = ctx.git("diff", "--quiet", prev.group(1), new.group(1), "--", "uv.lock", check=False)
+        p = ctx.git("diff", "--quiet", "--no-ext-diff", "--no-textconv", prev.group(1), new.group(1), "--", "uv.lock", check=False)
         lock_changed = {0: False, 1: True}.get(p.rc)
     ev = f"{rel.name}: {len(changed)} package đổi version ({short(changed)})"
     if lock_changed is False:
@@ -633,13 +715,14 @@ def bld_drift(ctx: Ctx) -> R:
     return R(WARN, ev + ("; uv.lock có đổi, đối chiếu tay" if lock_changed else "; không so được uv.lock"))
 
 
+
 @check("OPS-BLD-3", SHOULD, "Base image trong Dockerfile ghim digest")
 def bld_digest(ctx: Ctx) -> R:
-    df = ctx.read_repo("Dockerfile")
-    bases = re.findall(r"^\s*FROM\s+(\S+)", df, re.M | re.I)
-    loose = [b for b in bases if "@sha256:" not in b and b.lower() not in ("scratch",)]
+    bases = re.findall(r"^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)", dockerfile(ctx), re.M | re.I)
     if not bases:
         raise Unavailable("không có Dockerfile")
+    stages = {m.lower() for m in re.findall(r"^\s*FROM\s+\S+\s+AS\s+(\S+)", dockerfile(ctx), re.M | re.I)}
+    loose = [b for b in bases if "@sha256:" not in b and b.lower() not in stages | {"scratch"}]
     if loose:
         return R(FAIL, f"FROM chưa ghim digest: {short(sorted(set(loose)))}",
                  "FROM python:3.12-slim@sha256:<digest>; cập nhật digest có chủ đích (PR riêng)")
@@ -679,13 +762,26 @@ manual("OPS-BLD-6", SHOULD, "Build lại image prod từ commit trong tag ra cù
 
 
 # ================================================================== REL
+
+def rolled_back(ctx: Ctx, st: dict[str, str]) -> bool:
+    """Prod gateway đang chạy PREV_TAG của release gần nhất (đã rollback tay hoặc tự rollback)."""
+    try:
+        c = ctx.containers().get("secai-docker-gateway")
+    except Unavailable:
+        return False
+    return bool(c) and bool(st.get("PREV_TAG")) and c["Config"]["Image"] == st.get("PREV_TAG")
+
+
 @check("OPS-REL-1", MUST, "Release gần nhất có đủ hồ sơ (state.env, RELEASE-NOTES, pytest.log, health trước/sau, compose bak)")
 def rel_record(ctx: Ctx) -> R:
     rel, st = ctx.latest_release()
     need = ["state.env", "RELEASE-NOTES.md", "pytest.log", "health-8131-before.json", "health-8131-after.json"]
     miss = [n for n in need if not (rel / n).is_file()]
-    if st.get("COMPOSE_BAK") and not Path(st["COMPOSE_BAK"]).is_file():
+    if not st.get("COMPOSE_BAK") or not Path(st["COMPOSE_BAK"]).is_file():
         miss.append("COMPOSE_BAK")
+    if miss and rolled_back(ctx, st):
+        return R(WARN, f"{rel.name} thiếu {', '.join(miss)}; prod đang chạy PREV_TAG {st['PREV_TAG']} (release này đã bị rollback)",
+                 "ghi chú rollback vào release dir; release lại khi đã sửa")
     if miss:
         return R(FAIL, f"{rel.name} thiếu: {', '.join(miss)}")
     return R(PASS, f"{rel.name}: đủ {len(need)} file + compose bak")
@@ -707,6 +803,7 @@ def rel_rollback_ready(ctx: Ctx) -> R:
     return R(PASS, f"PREV_TAG {prev} còn; compose bak + profile trước còn")
 
 
+
 @check("OPS-REL-3", MUST, "release-prod.sh có test hành vi offline cho plan/--yes/invariant/tổ tiên/gc")
 def rel_tests(ctx: Ctx) -> R:
     txt = ctx.read_repo("tests/test_release_prod.py")
@@ -715,7 +812,8 @@ def rel_tests(ctx: Ctx) -> R:
     miss = [t for t in REQUIRED_RELEASE_TESTS if f"def {t}" not in txt]
     if miss:
         return R(FAIL, f"thiếu test: {', '.join(miss)}")
-    return R(PASS, f"có {len(REQUIRED_RELEASE_TESTS)} test bắt buộc; chạy: scripts/dev.sh test tests/test_release_prod.py")
+    return R(PASS, f"có đủ {len(REQUIRED_RELEASE_TESTS)} test bắt buộc (checker chỉ kiểm có test; "
+                   "kết quả: scripts/dev.sh test tests/test_release_prod.py)")
 
 
 @check("OPS-REL-4", MUST, "Rollback tự kiểm: từ chối khi image đích mất; chờ /health và xác nhận 3 container về PREV_TAG")
@@ -755,16 +853,21 @@ def rel_compose_managed(ctx: Ctx) -> R:
     return R(PASS, f"{len(ctx.containers())} container đều có compose project và file cấu hình còn")
 
 
+
 @check("OPS-REL-6", MUST, "Cấu hình deploy prod (compose secai-docker) được quản lý phiên bản (Git private)")
 def rel_compose_vcs(ctx: Ctx) -> R:
     d = ctx.cfg.docker_dir
     if not d.is_dir():
         raise Unavailable(f"không có {d}")
     p = ctx.git("rev-parse", "--is-inside-work-tree", repo=d, check=False)
-    if p.rc == 0 and p.out.strip() == "true":
-        return R(PASS, f"{d} nằm trong Git")
-    return R(FAIL, f"{d}/docker-compose.yml nằm ngoài Git (lịch sử chỉ là file .bak)",
-             "git init repo private cho secai-docker (bỏ .env/secret qua .gitignore), commit mỗi lần đổi compose")
+    if p.rc != 0 or p.out.strip() != "true":
+        return R(FAIL, f"{d}/docker-compose.yml nằm ngoài Git (lịch sử chỉ là file .bak)",
+                 "git init repo private cho secai-docker; .gitignore chặn .env* và *.bak* TRƯỚC lần add đầu; commit mỗi lần đổi compose")
+    tracked = [f for f in ctx.git("ls-files", "-z", repo=d).out.split("\0") if f]
+    leaked = [f for f in tracked if re.search(r"(^|/)\.env($|\.)", f) and not f.endswith(".example")]
+    if leaked:
+        return R(FAIL, f"{d} trong Git nhưng track file env: {short(leaked, 3)}", "git rm --cached; xoay secret đã commit")
+    return R(PASS, f"{d} nằm trong Git, không track .env*")
 
 
 @check("OPS-REL-7", SHOULD, "Thư mục compose prod không tích file sao lưu (≤ 3 file docker-compose.yml.bak*)")
@@ -778,36 +881,60 @@ def rel_bak_count(ctx: Ctx) -> R:
     return R(PASS, f"{len(baks)} file .bak")
 
 
-@check("OPS-REL-8", MUST, "Không bind-mount sống từ Git checkout vào container prod (trừ checkout chính ở main; không bao giờ src/)")
-def rel_live_mounts(ctx: Ctx) -> R:
-    roots = {}
-    for w in ctx.worktrees():
-        roots[str(Path(w["worktree"]).resolve())] = (w.get("branch") or "").replace("refs/heads/", "") or "(detached)"
-    main_root = str(ctx.main_checkout().resolve())
-    fails, warns = [], []
+
+def checkout_mounts(ctx: Ctx) -> list[tuple[str, Path, str]]:
+    """(container, gốc worktree, đường dẫn tương đối) của mọi bind mount lấy từ một worktree của repo này."""
+    roots = sorted((Path(w["worktree"]).resolve() for w in ctx.worktrees()), key=lambda p: -len(str(p)))
+    out = []
     for name, c in sorted(ctx.containers().items()):
         for m in c.get("Mounts") or []:
             if m.get("Type") != "bind":
                 continue
             src = str(Path(m["Source"]))
-            root = next((r for r in roots if src == r or src.startswith(r + "/")), None)
-            if not root:
-                continue
-            rel = src[len(root):].lstrip("/") or "."
-            if rel == "src" or rel.startswith("src/") or root != main_root or roots[root] != "main":
-                fails.append(f"{name}:{rel} (checkout {Path(root).name}@{roots[root]})")
-            else:
-                warns.append((rel, "pool pentestcode" if POOL_RE.match(name) else name))
+            root = next((r for r in roots if src == str(r) or src.startswith(str(r) + "/")), None)
+            if root:
+                out.append((name, root, src[len(str(root)):].lstrip("/") or "."))
+    return out
+
+
+def worktree_info(ctx: Ctx, root: Path) -> dict:
+    return next((w for w in ctx.worktrees() if Path(w["worktree"]).resolve() == root), {})
+
+
+def is_deploy_main(root: Path) -> bool:
+    """Worktree "main" cố định để mount cho prod (CLAUDE.md): tên kết thúc -deploy-main."""
+    return root.name.endswith("-deploy-main")
+
+
+@check("OPS-REL-8", MUST, "Không bind-mount sống từ Git checkout vào container prod (chỉ worktree *-deploy-main hoặc checkout chính ở main; không bao giờ src/)")
+def rel_live_mounts(ctx: Ctx) -> R:
+    main_root = ctx.main_checkout().resolve()
+    fails, warns, ok = [], [], []
+    for name, root, rel in checkout_mounts(ctx):
+        who = "pool pentestcode" if POOL_RE.match(name) else name
+        w = worktree_info(ctx, root)
+        branch = (w.get("branch") or "").replace("refs/heads/", "") or "(detached)"
+        if rel == "src" or rel.startswith("src/"):
+            fails.append(f"{who}:{rel} (mount src sống)")
+        elif is_deploy_main(root):
+            on_main = ctx.git("merge-base", "--is-ancestor", str(w.get("HEAD", "HEAD")), "origin/main",
+                              repo=main_root, check=False).rc == 0
+            (ok if on_main else fails).append(f"{who}:{rel} ({root.name}" + ("" if on_main else ", HEAD ngoài origin/main") + ")")
+        elif root == main_root and branch == "main":
+            warns.append((rel, who))
+        else:
+            fails.append(f"{who}:{rel} (checkout {root.name}@{branch})")
     if fails:
-        return R(FAIL, "mount từ checkout không phải main/có src: " + short(fails))
+        return R(FAIL, "mount từ checkout không được phép: " + short(sorted(set(fails))),
+                 "mount từ worktree *-deploy-main ở origin/main, hoặc đóng gói vào image")
     if warns:
         by_rel: dict[str, set[str]] = {}
         for rel, who in warns:
             by_rel.setdefault(rel, set()).add(who)
         desc = [f"{rel} → {', '.join(sorted(w))}" for rel, w in sorted(by_rel.items())]
-        return R(WARN, f"{len(warns)} mount sống từ checkout chính {main_root} (đang ở main), bỏ qua image bất biến: {short(desc, 6)}",
-                 "đóng gói demo/evidence/helm/pentestcode vào image hoặc copy sang thư mục release riêng")
-    return R(PASS, "không mount từ Git checkout")
+        return R(WARN, f"{len(warns)} mount sống từ checkout chính {main_root} (đang ở main, nơi agent có thể đổi nhánh): {short(desc, 6)}",
+                 "chuyển nguồn mount sang worktree *-deploy-main cố định, hoặc đóng gói demo/evidence/helm/pentestcode vào image")
+    return R(PASS, f"{len(ok)} mount từ worktree deploy-main ở origin/main" if ok else "không mount từ Git checkout")
 
 
 # ================================================================== VER
@@ -855,9 +982,19 @@ def ver_third_party_tags(ctx: Ctx) -> R:
     return R(st, ev, "" if st == PASS else "ghim redis:7.x.y-alpine, neo4j:5.20.z-community (hoặc @sha256) trong compose prod")
 
 
-@check("OPS-VER-4", MUST, "Image first-party có label org.opencontainers.image.revision")
+
+def commit_known(ctx: Ctx, sha: str) -> bool:
+    key = "commit:" + sha
+    if key not in ctx._c:
+        ok = bool(re.fullmatch(r"[0-9a-f]{7,40}", sha))
+        ctx._c[key] = ok and ctx.git("cat-file", "-e", f"{sha}^{{commit}}", check=False).rc == 0
+    return ctx._c[key]
+
+
+@check("OPS-VER-4", MUST, "Image first-party có label org.opencontainers.image.revision trỏ tới commit của repo này")
 def ver_revision_label(ctx: Ctx) -> R:
-    miss, ok = [], 0
+    miss, foreign, unknown, ok = [], [], [], 0
+    ours = ("secai",) + ((ctx.cfg.gh_repo.split("/")[-1],) if ctx.cfg.gh_repo else ())
     for name, c in sorted(ctx.containers().items()):
         ref = c["Config"]["Image"]
         im = ctx.images([c["Image"]]).get(c["Image"]) or {}
@@ -865,14 +1002,30 @@ def ver_revision_label(ctx: Ctx) -> R:
         if not (first_party(ref) or any(first_party(t) for t in tags)):
             continue
         labels = {**((im.get("Config") or {}).get("Labels") or {}), **((c.get("Config") or {}).get("Labels") or {})}
-        if labels.get("org.opencontainers.image.revision"):
+        rev = labels.get("org.opencontainers.image.revision", "")
+        src = labels.get("org.opencontainers.image.source", "")
+        if not rev:
+            miss.append(name)
+        elif src and not any(o in src for o in ours):
+            foreign.append(f"{name} (kế thừa từ {src})")
+        elif commit_known(ctx, rev):
             ok += 1
         else:
-            miss.append(name)
+            unknown.append(f"{name} ({rev[:12]} không có trong repo)")
+    parts = []
     if miss:
-        return R(FAIL, f"thiếu label revision: {short(group_pool(miss))}",
-                 "Dockerfile: ARG GIT_SHA + LABEL org.opencontainers.image.revision=$GIT_SHA (build FULL của release-prod.sh hiện không gắn)")
-    return R(PASS, f"{ok} container first-party có label revision")
+        parts.append(f"thiếu label: {short(group_pool(miss))}")
+    if foreign:
+        parts.append(f"label của base image: {short(group_pool(foreign), 3)}")
+    if unknown:
+        parts.append(f"không truy được: {short(unknown, 4)}")
+    fix = ("Dockerfile: ARG GIT_SHA + LABEL org.opencontainers.image.revision=$GIT_SHA và "
+           "org.opencontainers.image.source=<repo này> (build FULL của release-prod.sh hiện không gắn)")
+    if miss or foreign:
+        return R(FAIL, "; ".join(parts), fix)
+    if unknown:
+        return R(WARN, "; ".join(parts) + f"; {ok} đạt", "push commit đã build image, hoặc build lại từ commit trên origin/main")
+    return R(PASS, f"{ok} container first-party có label revision là commit của repo")
 
 
 @check("OPS-VER-5", MUST, "3 container gateway chạy cùng tag và cùng image ID")
@@ -889,31 +1042,37 @@ def ver_trio(ctx: Ctx) -> R:
              "release lại cả 3 bằng release-prod.sh; không đổi lẻ một container")
 
 
+
 @check("OPS-VER-6", MUST, "Tag prod gateway dạng main-<sha8>-<ngày>, sha8 nằm trên origin/main, khớp state.env và GIT_SHA")
 def ver_prod_tag(ctx: Ctx) -> R:
     cs = ctx.containers()
     if "secai-docker-gateway" not in cs:
         return R(FAIL, "không thấy secai-docker-gateway")
-    c = cs["secai-docker-gateway"]
-    tag = c["Config"]["Image"]
+    tag = cs["secai-docker-gateway"]["Config"]["Image"]
     m = re.fullmatch(rf"{GATEWAY_IMAGE}:main-([0-9a-f]{{8}})-(\d{{8}})", tag)
     if not m:
         return R(FAIL, f"tag prod {tag} không theo main-<sha8>-<ngày>")
-    sha, problems = m.group(1), []
-    anc = ctx.git("merge-base", "--is-ancestor", sha, "origin/main", check=False)
-    if anc.rc != 0:
-        problems.append(f"{sha} không phải tổ tiên origin/main (local, chưa fetch)")
+    sha, problems, note = m.group(1), [], ""
+    if ctx.git("merge-base", "--is-ancestor", sha, "origin/main", check=False).rc != 0:
+        problems.append(f"{sha} không phải tổ tiên origin/main (bản fetch local)")
     try:
         _, st = ctx.latest_release()
         if st.get("NEW_TAG") != tag:
-            problems.append(f"state.env NEW_TAG={st.get('NEW_TAG')}")
+            if rolled_back(ctx, st):
+                note = f"prod đã rollback về PREV_TAG; NEW_TAG trong state.env là {st.get('NEW_TAG')}"
+            else:
+                problems.append(f"state.env NEW_TAG={st.get('NEW_TAG')}")
     except Unavailable as e:
         problems.append(str(e))
     for n in GATEWAY_TRIO:
-        if n in cs and ctx.env(cs[n]).get("GIT_SHA") not in (sha, None):
-            problems.append(f"{n} GIT_SHA={ctx.env(cs[n]).get('GIT_SHA')}")
+        if n in cs:
+            g = ctx.env(cs[n]).get("GIT_SHA")
+            if g != sha:
+                problems.append(f"{n} GIT_SHA={g if g is not None else '(không có)'}")
     if problems:
         return R(FAIL, f"{tag}: " + "; ".join(problems))
+    if note:
+        return R(WARN, f"{tag}: {note}")
     return R(PASS, f"{tag}: trên origin/main, khớp LATEST-PROD và GIT_SHA")
 
 
@@ -951,36 +1110,51 @@ def ver_ledger(ctx: Ctx) -> R:
 
 
 # ================================================================== CI
+
 @check("OPS-CI-1", MUST, "Có workflow CI chạy pytest cho mọi PR vào main")
 def ci_workflow(ctx: Ctx) -> R:
-    wf = sorted(glob.glob(str(ctx.cfg.repo / ".github" / "workflows" / "*.y*ml")))
-    with_pytest = [w for w in wf if "pytest" in Path(w).read_text(errors="replace")]
-    remote = None
+    wf = [Path(w) for w in sorted(glob.glob(str(ctx.cfg.repo / ".github" / "workflows" / "*.y*ml"))) if regular_file(Path(w))]
+    good = [w for w in wf if re.search(r"\bpytest\b", w.read_text(errors="replace"))
+            and re.search(r"\bpull_request\b", w.read_text(errors="replace"))]
+    remote, note = None, ""
     try:
         code, data = ctx.gh("repos/{repo}/actions/workflows")
-        remote = (data or {}).get("total_count", 0) if code == 200 else 0
-    except Unavailable:
-        pass
-    ev = f"repo: {len(wf)} workflow ({len(with_pytest)} chạy pytest)" + (f"; GitHub: {remote} workflow" if remote is not None else "")
-    if with_pytest and (remote is None or remote > 0):
+        if code == 200:
+            remote = {Path(x.get("path", "")).name for x in (data or {}).get("workflows", []) if x.get("state") == "active"}
+    except Unavailable as e:
+        note = f"; GitHub: {e}"
+    ev = f"repo: {len(wf)} workflow, {len(good)} chạy pytest trên pull_request" + (
+        f"; GitHub: {len(remote)} workflow active" if remote is not None else note)
+    if good and (remote is None or any(w.name in remote for w in good)):
         return R(PASS, ev)
-    return R(FAIL, ev, "thêm .github/workflows/ci.yml: uv sync --frozen + pytest -q trên pull_request (job không cần secret)")
+    return R(FAIL, ev, "thêm .github/workflows/ci.yml: on pull_request, uv sync --frozen + pytest -q (job không cần secret)")
+
 
 
 @check("OPS-CI-2", MUST, "main có branch protection/ruleset: bắt PR, bắt check CI xanh, cấm force-push")
 def ci_protection(ctx: Ctx) -> R:
+    _, repo = ctx.gh("repos/{repo}")
     code, prot = ctx.gh("repos/{repo}/branches/main/protection")
-    rcode, rules = ctx.gh("repos/{repo}/rules/branches/main")
+    _, rules = ctx.gh("repos/{repo}/rules/branches/main")
     kinds = {r.get("type") for r in (rules or [])} if isinstance(rules, list) else set()
     if code == 200 and isinstance(prot, dict):
-        need = [k for k in ("required_status_checks", "required_pull_request_reviews") if not prot.get(k)]
+        rsc = prot.get("required_status_checks") or {}
+        need = []
+        if not (rsc.get("contexts") or rsc.get("checks")):
+            need.append("status check bắt buộc (contexts/checks rỗng)")
+        if not prot.get("required_pull_request_reviews"):
+            need.append("bắt PR")
         if (prot.get("allow_force_pushes") or {}).get("enabled"):
             need.append("cấm force-push")
         if not need:
-            return R(PASS, "branch protection bắt PR + status check")
+            return R(PASS, "branch protection bắt PR + status check + cấm force-push")
         return R(FAIL, f"branch protection thiếu: {', '.join(need)}")
     if {"pull_request", "required_status_checks", "non_fast_forward"} <= kinds:
         return R(PASS, "ruleset bắt PR + status check + cấm force-push")
+    if code == 404 and not ((repo or {}).get("permissions") or {}).get("admin"):
+        _, br = ctx.gh("repos/{repo}/branches/main")
+        if (br or {}).get("protected"):
+            raise Unavailable("main có protection nhưng tài khoản gh không đủ quyền admin để đọc chi tiết", soft=True)
     return R(FAIL, f"main không có branch protection; ruleset áp lên main: {sorted(kinds) or 'không'}",
              "Settings → Rules: bắt PR, bắt check CI, chặn force-push/xoá cho main (sau khi có CI)")
 
@@ -1046,14 +1220,22 @@ def ci_shell(ctx: Ctx) -> R:
 BACKUP_STORES = {"qdrant": 7 * 24, "neo4j": 26, "sqlite": 26}
 
 
-@check("OPS-BAK-1", MUST, "Có lịch backup định kỳ cho Qdrant, Neo4j và DB SQLite (report/review/session)")
+
+BACKUP_KEYWORDS = {"qdrant": r"qdrant", "neo4j": r"neo4j", "sqlite": r"sqlite|report|review|session|gateway-db"}
+
+
+@check("OPS-BAK-1", MUST, "Có lịch backup định kỳ phủ Qdrant, Neo4j và DB SQLite (report/review/session)")
 def bak_schedule(ctx: Ctx) -> R:
     timers = ctx.timers()
-    hit = [t for t in timers if re.search(r"backup|snapshot|dump", t, re.I)
-           and re.search(r"secai|qdrant|neo4j|sqlite|report|review", t, re.I)]
-    if hit:
-        return R(PASS, f"timer backup: {short(hit)}")
-    return R(FAIL, f"không có systemd timer backup/snapshot/dump ({len(timers)} timer); cron: kiểm tay `crontab -l`",
+    bk = [t for t in timers if re.search(r"backup|snapshot|dump", t, re.I)
+          and re.search(r"secai|qdrant|neo4j|sqlite|report|review", t, re.I)]
+    generic = [t for t in bk if re.fullmatch(r"secai-backup[\w.-]*\.timer", t)]
+    uncovered = [k for k, rx in BACKUP_KEYWORDS.items() if not any(re.search(rx, t, re.I) for t in bk)]
+    if bk and (generic or not uncovered):
+        return R(PASS, f"timer backup: {short(bk)}" + (" (timer chung; độ phủ từng kho đo ở OPS-BAK-2)" if generic else ""))
+    if bk:
+        return R(FAIL, f"timer backup {short(bk)} chưa phủ: {', '.join(uncovered)}")
+    return R(FAIL, f"không có systemd timer backup/snapshot/dump cho secai ({len(timers)} timer); cron: kiểm tay `crontab -l`",
              "timer hằng ngày: snapshot Qdrant qua API, neo4j-admin dump (container tạm), sqlite3 .backup cho DB report/review/session")
 
 
@@ -1126,12 +1308,17 @@ def bak_drill(ctx: Ctx) -> R:
              "khôi phục backup vào stack dev/máy tạm, đo thời gian, ghi biên bản")
 
 
-DB_VARS = {  # biến -> điều kiện bật (None = luôn kiểm nếu là app gateway)
-    "GATEWAY_DB_PATH": None, "TRANSLATE_V2_DB_PATH": None, "TRANSLATE_V2_WORKER_DB_PATH": None,
-    "SESSION_DB_PATH": ("SESSION_STORE_BACKEND", "sqlite"),
-    "REVIEW_DB_PATH": ("REVIEW_ENABLED", "true"),
-    "REPORT_DB_PATH": ("REPORT_FEATURE_ENABLED", "true"),
+# biến -> (mặc định trong src/secai_gateway/config.py, điều kiện bật: (biến, kiểu, mặc định))
+DB_VARS = {
+    "GATEWAY_DB_PATH": ("./data/gateway.db", None),
+    "SESSION_DB_PATH": ("./data/sessions.db", ("SESSION_STORE_BACKEND", "eq:sqlite", "sqlite")),
+    "REVIEW_DB_PATH": ("data/reviews.db", ("REVIEW_ENABLED", "bool", "false")),
+    "REPORT_DB_PATH": ("./data/reports.db", ("REPORT_FEATURE_ENABLED", "bool", "false")),
+    "TRANSLATE_V2_DB_PATH": (None, None),
+    "TRANSLATE_V2_WORKER_DB_PATH": (None, None),
 }
+TRUTHY = {"1", "true", "yes", "on", "y", "t"}
+
 
 
 @check("OPS-BAK-5", MUST, "DB SQLite của service gateway nằm trên volume/bind (giữ qua rollback, backup được)")
@@ -1141,34 +1328,50 @@ def bak_db_on_volume(ctx: Ctx) -> R:
         if not is_gateway_app(c):
             continue
         env = ctx.env(c)
-        for var, cond in DB_VARS.items():
-            path = env.get(var)
-            if not path or (cond and env.get(cond[0], "").lower() != cond[1]):
+        wd = (c.get("Config") or {}).get("WorkingDir") or "/"
+        for var, (default, cond) in DB_VARS.items():
+            if cond:
+                cvar, kind, cdef = cond
+                val = env.get(cvar, cdef).strip().lower()
+                on = val in TRUTHY if kind == "bool" else val == kind.split(":", 1)[1]
+                if not on:
+                    continue
+            path = env.get(var) or default
+            if not path:
                 continue
+            path = os.path.normpath(os.path.join(wd, path))
             n += 1
             if not mounted(c, path):
-                bad.append(f"{name}:{var}={path}")
+                bad.append(f"{name}:{var}={path}" + ("" if var in env else " (mặc định)"))
     if bad:
         return R(FAIL, "DB nằm trong lớp container: " + short(bad), "mount volume cho thư mục DB")
-    return R(PASS, f"{n} DB đang dùng đều nằm trên mount")
+    return R(PASS, f"{n} DB đang dùng (tính cả mặc định của config.py) đều nằm trên mount")
 
 
 # ================================================================== MON
+
 @check("OPS-MON-1", MUST, "Mọi container trong phạm vi đang chạy; container có healthcheck ở trạng thái healthy")
 def mon_running(ctx: Ctx) -> R:
-    cs = ctx.containers()
+    try:
+        cs = ctx.containers()
+    except Unavailable as e:
+        if "permission denied" in str(e).lower():
+            raise  # thiếu quyền đọc docker: không đo được, không phải prod chết
+        return R(FAIL, f"không đọc được trạng thái container ({e}); docker daemon có thể đã dừng",
+                 "systemctl status docker; kiểm prod ngay")
     bad = [f"{n} (thiếu)" for n in APP_CONTAINERS + DATASTORES if n not in cs]
     pool = [n for n in cs if POOL_RE.match(n)]
     for name, c in sorted(cs.items()):
-        s = c.get("State") or {}
-        h = (s.get("Health") or {}).get("Status")
-        if s.get("Status") != "running" or (h and h != "healthy"):
-            bad.append(f"{name} ({s.get('Status')}{'/' + h if h else ''})")
+        s_ = c.get("State") or {}
+        h = (s_.get("Health") or {}).get("Status")
+        if s_.get("Status") != "running" or (h and h != "healthy"):
+            bad.append(f"{name} ({s_.get('Status')}{'/' + h if h else ''})")
     if len(pool) < POOL_EXPECTED:
         bad.append(f"pool pentestcode {len(pool)}/{POOL_EXPECTED}")
     if bad:
         return R(FAIL, short(bad))
-    return R(PASS, f"{len(cs)} container chạy (pool {len(pool)}), có healthcheck thì healthy")
+    return R(PASS, f"{len(cs)} container chạy (pool {len(pool)}), có healthcheck thì healthy "
+                   "(healthcheck chỉ là liveness: /health trả 200 cả khi degraded, xem OPS-MON-7)")
 
 
 @check("OPS-MON-2", SHOULD, "Mọi container trong phạm vi có HEALTHCHECK")
@@ -1200,19 +1403,25 @@ def mon_alerting(ctx: Ctx) -> R:
              "timer 5 phút: docker health + /health 8131/18185 + unit failed → gửi cảnh báo (Telegram/email)")
 
 
-@check("OPS-MON-5", MUST, "Không unit systemd secai-* nào failed hoặc khởi động lại liên tục")
+
+@check("OPS-MON-5", MUST, "Không unit systemd secai-* nào failed hoặc đang khởi động lại liên tục")
 def mon_units(ctx: Ctx) -> R:
-    bad = []
-    for u in ctx.units():
+    bad, warn = [], []
+    units = ctx.units()
+    for u in units:
         nres = int(u.get("NRestarts") or 0)
-        if u.get("ActiveState") == "failed" or u.get("SubState") == "auto-restart" or nres > 100:
+        if u.get("ActiveState") == "failed" or u.get("SubState") == "auto-restart":
             bad.append(f"{u['Id']} ({u.get('ActiveState')}/{u.get('SubState')}, {nres} lần restart)")
+        elif nres > 100:
+            warn.append(f"{u['Id']} ({u.get('ActiveState')}/{u.get('SubState')}, {nres} lần restart kể từ lần start tay gần nhất)")
     if bad:
-        return R(FAIL, short(bad, 5), "sửa đích tunnel hoặc disable unit của instance đã huỷ; reset-failed sau khi xử lý")
-    return R(PASS, f"{len(ctx.units())} unit secai-* không failed/restart loop")
+        return R(FAIL, short(bad + warn, 6), "sửa đích tunnel, hoặc disable unit của instance đã huỷ; reset-failed sau khi xử lý")
+    if warn:
+        return R(WARN, "đang chạy nhưng từng restart nhiều: " + short(warn, 4), "xem journalctl --user -u <unit>; restart tay để reset bộ đếm")
+    return R(PASS, f"{len(units)} unit secai-* không failed/restart loop")
 
 
-@check("OPS-MON-6", SHOULD, "Log container có giới hạn dung lượng (max-size/max-file hoặc driver local/journald)")
+@check("OPS-MON-6", MUST, "Log container có giới hạn dung lượng (max-size/max-file hoặc driver local/journald)")
 def mon_logs(ctx: Ctx) -> R:
     bad = []
     for n, c in sorted(ctx.containers().items()):
@@ -1225,7 +1434,8 @@ def mon_logs(ctx: Ctx) -> R:
     return R(PASS, "log có giới hạn")
 
 
-manual("OPS-MON-7", SHOULD, "/health prod báo status ok và không có problems",
+
+manual("OPS-MON-7", MUST, "/health prod báo status ok và không có problems (readiness, không chỉ liveness)",
        "curl -fsS http://127.0.0.1:8131/health và :18185/health: status ok, problems rỗng, git_sha khớp tag")
 
 
@@ -1254,22 +1464,69 @@ def sec_datastore_ports(ctx: Ctx) -> R:
     return R(PASS, "kho dữ liệu chỉ bind loopback hoặc mạng nội bộ")
 
 
+
+# Cổng của container network=host (không có PortBindings để đọc): lấy từ bảng service trong tài liệu.
+HOST_NET_PORTS = {"secai-translation-gateway": (18185,), "secai-translation-frontend": (5179,)}
+
+
+def listening_any(proc_net: Path) -> dict[int, set[str]]:
+    """port -> {0.0.0.0, ::} của socket TCP LISTEN bind mọi interface, đọc /proc/net/tcp{,6} (file, không gọi lệnh)."""
+    out: dict[int, set[str]] = {}
+    for name, anyaddr in (("tcp", "0" * 8), ("tcp6", "0" * 32)):
+        try:
+            lines = (proc_net / name).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for ln in lines:
+            f = ln.split()
+            if len(f) < 4 or f[3] != "0A":
+                continue
+            addr, _, port = f[1].partition(":")
+            if addr == anyaddr:
+                out.setdefault(int(port, 16), set()).add("0.0.0.0" if name == "tcp" else "::")
+    return out
+
+
 @check("OPS-SEC-2", MUST, "Chỉ gateway :8131 publish công khai; service khác bind 127.0.0.1/LAN")
 def sec_app_ports(ctx: Ctx) -> R:
-    bad, host_net = [], []
+    bad, unknown = [], []
+    listen = listening_any(ctx.cfg.proc_net)
     for n in APP_CONTAINERS + tuple(sorted(x for x in ctx.containers() if POOL_RE.match(x))):
         c = ctx.containers().get(n)
         if not c:
             continue
         if (c.get("HostConfig") or {}).get("NetworkMode") == "host":
-            host_net.append(n)
+            ports = HOST_NET_PORTS.get(n)
+            if not ports:
+                unknown.append(n)
+            for port in ports or ():
+                if port in listen:
+                    bad.append(f"{n} :{port} ({'/'.join(sorted(listen[port]))}, network=host)")
         for ip, p in _published(c):
             if ip in ("0.0.0.0", "::", "") and not (n == "secai-docker-gateway" and p.startswith("8131->")):
                 bad.append(f"{n} {p}")
-    note = f"; network=host (kiểm tay `ss -ltnp`): {short(host_net, 4)}" if host_net else ""
+    note = f"; network=host chưa biết cổng (kiểm tay `ss -ltnp`): {short(unknown, 4)}" if unknown else ""
     if bad:
-        return R(FAIL, "publish 0.0.0.0: " + "; ".join(bad) + note, "bind 127.0.0.1 hoặc IP LAN; public chỉ :8131")
-    return R(PASS, "không service nào ngoài :8131 publish 0.0.0.0" + note)
+        return R(FAIL, "nghe trên mọi interface: " + "; ".join(bad) + note, "bind 127.0.0.1 hoặc IP LAN; public chỉ :8131")
+    return R(PASS, "không service nào ngoài :8131 nghe trên mọi interface" + note)
+
+
+
+DEFAULT_RE = re.compile(r"\$\{[A-Za-z0-9_]+:?-([^}]*)\}?")
+
+
+def literal_secret(v: str) -> str | None:
+    """Phần literal của giá trị gán cho biến secret: cả giá trị nếu không có ${...}; giá trị mặc định
+    của ${X:-lit} (mặc định nằm thẳng trong file nên cũng là secret lộ). None nếu chỉ tham chiếu."""
+    v = (v or "").strip().strip("'\"")
+    if not v or v.lower() in ("changeme", "required", "optional", "none", "null", "false", "true"):
+        return None
+    defaults = [d.strip("}") for d in DEFAULT_RE.findall(v) if d.strip("}")]
+    if defaults:
+        return defaults[0]
+    if "$" in v or v.startswith(("<", "{")):
+        return None
+    return v
 
 
 def _secret_names(text: str, ctx: Ctx) -> list[str]:
@@ -1277,10 +1534,11 @@ def _secret_names(text: str, ctx: Ctx) -> list[str]:
     for m in SECRET_ASSIGN_RE.finditer(text):
         if not is_secret_name(m.group(1)):
             continue
-        v = m.group(2)
-        if v.startswith(("$", "<", "{")) or len(v) < 8 or v.lower() in ("changeme", "required", "optional", "none", "null"):
+        lit = literal_secret(m.group(2))
+        if not lit or len(lit) < 8:
             continue
-        ctx.remember_secret(v)
+        ctx.remember_secret(lit)
+        ctx.remember_secret(m.group(2))
         names.append(m.group(1))
     return sorted(set(names))
 
@@ -1291,7 +1549,7 @@ def _walk_files(root: Path, depth: int, skip_dirs=("tree", "imgsrc", "node_modul
         dirs[:] = [x for x in dirs if x not in skip_dirs] if len(Path(d).parts) - base < depth else []
         for f in files:
             p = Path(d) / f
-            if not p.is_symlink():
+            if regular_file(p):
                 yield p
 
 
@@ -1332,26 +1590,28 @@ def sec_file_perms(ctx: Ctx) -> R:
     return R(PASS, f"đã quét {n} file trong releases + secai-docker: .env* đều 600, không file nào lộ secret")
 
 
-@check("OPS-SEC-4", MUST, "Compose prod không chứa secret dạng literal (chỉ ${VAR}/env_file)")
+
+@check("OPS-SEC-4", MUST, "Compose prod không chứa secret dạng literal (chỉ ${VAR} không mặc định, hoặc env_file)")
 def sec_compose_literal(ctx: Ctx) -> R:
     comp = ctx.cfg.docker_dir / "docker-compose.yml"
-    if not comp.is_file():
+    if not regular_file(comp):
         raise Unavailable(f"không có {comp}")
     names = []
     for line in comp.read_text(errors="replace").splitlines():
         m = re.match(r"""^\s*-?\s*["']?([A-Za-z0-9_]+)["']?\s*[:=]\s*(.*)$""", line)
         if not m or not is_secret_name(m.group(1)):
             continue
-        v = m.group(2).strip().strip("'\"")
-        if v and not v.startswith("$") and v.lower() not in ("none", "false", "true"):
-            ctx.remember_secret(v)
+        lit = literal_secret(m.group(2))
+        if lit:
+            ctx.remember_secret(lit)
+            ctx.remember_secret(m.group(2).strip().strip("'\""))
             names.append(m.group(1))
     mode = oct(comp.stat().st_mode & 0o777)[2:]
     if names:
         wr = "world-readable" if world_readable(comp) else "không world-readable"
-        return R(FAIL, f"{comp.name} (mode {mode}, {wr}) có literal: {', '.join(sorted(set(names)))}",
-                 "chuyển sang ${VAR} trong .env 600; đổi mật khẩu đã lộ")
-    return R(PASS, f"{comp.name}: biến secret đều qua ${{VAR}}/env_file")
+        return R(FAIL, f"{comp.name} (mode {mode}, {wr}) có literal (kể cả mặc định ${{X:-...}}): {', '.join(sorted(set(names)))}",
+                 "chuyển sang ${VAR} không mặc định, giá trị trong .env 600; đổi mật khẩu đã lộ")
+    return R(PASS, f"{comp.name}: biến secret đều qua ${{VAR}}/env_file, không có mặc định literal")
 
 
 @check("OPS-SEC-5", MUST, "Script cron/đồng bộ (CVE-DB) không chứa khoá API plaintext; file khoá mode 600")
@@ -1360,7 +1620,7 @@ def sec_cron_scripts(ctx: Ctx) -> R:
     for pat in ctx.cfg.cron_globs:
         for f in sorted(glob.glob(os.path.expanduser(pat))):
             p = Path(f)
-            if not p.is_file() or p.is_symlink():
+            if not regular_file(p):
                 continue
             mode = p.stat().st_mode & 0o777
             if is_secret_name(p.name) and mode & 0o077:
@@ -1381,26 +1641,36 @@ def sec_cron_scripts(ctx: Ctx) -> R:
     return R(PASS, f"đã quét {n} file: không có khoá plaintext")
 
 
+
 def scan_tracked_secrets(repo: Path, runner: Runner | None = None) -> list[tuple[str, int, str]]:
-    """(path, line, kind) của chuỗi giống secret trong file tracked, ngoài FAKE_SECRET_FIXTURES. Không trả giá trị."""
+    """(path, line, kind) của chuỗi giống secret trong file tracked; không trả giá trị.
+
+    File trong FAKE_SECRET_FIXTURES chỉ được miễn đúng số match đã khai báo cho từng loại; thêm một
+    match mới vào chính file đó vẫn bị báo (line=0, kind ghi số lượng)."""
     r = runner or Runner()
     p = r.run(["git", "--no-optional-locks", "-C", str(repo), "ls-files", "-z"])
+    dirs = tuple(k for k, v in FAKE_SECRET_FIXTURES.items() if v is None)
     out = []
     for f in p.out.split("\0"):
-        if not f or f.startswith(FAKE_SECRET_FIXTURES):
+        if not f or f.startswith(dirs):
             continue
         fp = repo / f
         try:
-            if fp.is_symlink() or fp.stat().st_size > 2_000_000:
+            if not regular_file(fp) or fp.stat().st_size > 2_000_000:
                 continue
             b = fp.read_bytes()
         except OSError:
             continue
         if b"\0" in b[:4096]:
             continue
+        allowed = FAKE_SECRET_FIXTURES.get(f) or {}
         for kind, rx in TRACKED_SECRET_PATTERNS.items():
-            for m in rx.finditer(b):
-                out.append((f, b.count(b"\n", 0, m.start()) + 1, kind))
+            ms = list(rx.finditer(b))
+            if f in FAKE_SECRET_FIXTURES:
+                if len(ms) > allowed.get(kind, 0):
+                    out.append((f, 0, f"{kind} x{len(ms)} > {allowed.get(kind, 0)} đã khai báo"))
+                continue
+            out += [(f, b.count(b"\n", 0, m.start()) + 1, kind) for m in ms]
     return out
 
 
@@ -1413,30 +1683,37 @@ def sec_tracked(ctx: Ctx) -> R:
     return R(PASS, f"không có ngoài {len(FAKE_SECRET_FIXTURES)} vùng fixture giả; lịch sử Git: kiểm tay bằng gitleaks")
 
 
+
 @check("OPS-SEC-7", MUST, "Không truyền secret qua argv (Cmd/Entrypoint container, ExecStart unit secai-*)")
 def sec_argv(ctx: Ctx) -> R:
-    hits = []
-    for n, c in sorted(ctx.containers().items()):
-        cfg = c.get("Config") or {}
-        argv = " ".join((cfg.get("Entrypoint") or []) + (cfg.get("Cmd") or []) + (c.get("Args") or []))
-        for m in ARGV_SECRET_RE.finditer(argv):
-            hits.append(f"{n} ({m.group(1) or m.group(2)})")
-            ctx.remember_secret(m.group(0).split("=", 1)[-1].split()[-1])
-        for m in URL_CRED_RE.finditer(argv):
-            hits.append(f"{n} (URL có mật khẩu)")
-            ctx.remember_secret(m.group(1))
+    hits, gaps, n_c, n_u = [], [], 0, 0
     try:
-        units = ctx.units()
-    except Unavailable:
-        units = []
-    for u in units:
-        ex = u.get("ExecStart", "")
-        for m in ARGV_SECRET_RE.finditer(ex):
-            hits.append(f"{u['Id']} ({m.group(1) or m.group(2)})")
-            ctx.remember_secret(m.group(0).split("=", 1)[-1].split()[-1])
+        for n, c in sorted(ctx.containers().items()):
+            n_c += 1
+            cfg = c.get("Config") or {}
+            argv = " ".join((cfg.get("Entrypoint") or []) + (cfg.get("Cmd") or []) + (c.get("Args") or []))
+            for m in ARGV_SECRET_RE.finditer(argv):
+                hits.append(f"{n} ({m.group(1) or m.group(2)})")
+                ctx.remember_secret(m.group(0).split("=", 1)[-1].split()[-1])
+            for m in URL_CRED_RE.finditer(argv):
+                hits.append(f"{n} (URL có mật khẩu)")
+                ctx.remember_secret(m.group(1))
+    except Unavailable as e:
+        gaps.append(f"container: {e}")
+    try:
+        for u in ctx.units():
+            n_u += 1
+            for m in ARGV_SECRET_RE.finditer(u.get("ExecStart", "")):
+                hits.append(f"{u['Id']} ({m.group(1) or m.group(2)})")
+                ctx.remember_secret(m.group(0).split("=", 1)[-1].split()[-1])
+    except Unavailable as e:
+        gaps.append(f"unit: {e}")
+    gap_note = ("; không đọc được " + "; ".join(gaps)) if gaps else ""
     if hits:
-        return R(FAIL, short(sorted(set(hits))), "truyền qua env_file/EnvironmentFile hoặc file 600")
-    return R(PASS, f"{len(ctx.containers())} container + {len(units)} unit: không thấy secret trong argv")
+        return R(FAIL, short(sorted(set(hits))) + gap_note, "truyền qua env_file/EnvironmentFile hoặc file 600")
+    if gaps:
+        return R(WARN, f"{n_c} container + {n_u} unit sạch" + gap_note, unmeasured=True)
+    return R(PASS, f"{n_c} container + {n_u} unit: không thấy secret trong argv")
 
 
 @check("OPS-SEC-8", SHOULD, "Container chạy user không phải root")
@@ -1478,6 +1755,11 @@ def sec_github_scanning(ctx: Ctx) -> R:
         return R(PASS, "public; secret scanning + push protection bật")
     return R(FAIL, "repo PUBLIC; " + ", ".join(f"{k}={v}" for k, v in st.items()),
              "bật Secret scanning + Push protection (miễn phí cho repo public) hoặc chuyển private")
+
+
+manual("OPS-SEC-11", MUST, "Cổng public :8131 có TLS hoặc chỉ mở cho nguồn tin cậy; endpoint ghi/quản trị từ chối request không khoá",
+       "từ máy ngoài LAN: curl -sI http://<IP public>:8131/health (phải bị chặn hoặc chỉ có qua https); "
+       "curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8131/ai/v2/reports và GET /review-api/... không kèm khoá: 401/403")
 
 
 # ================================================================== RES
@@ -1534,18 +1816,34 @@ def res_reclaimable(ctx: Ctx) -> R:
     return R(PASS, ev) if gb <= 30 else R(FAIL, ev, "docker image prune (dangling) + xoá tag cũ; không prune volume")
 
 
-@check("OPS-RES-5", MUST, "Không còn container *-rollback-*/*-smoke-* đã dừng quá 3 ngày; timer gc chạy tốt")
+
+@check("OPS-RES-5", MUST, "gc chạy tốt: không còn container *-rollback-*/*-smoke-* dừng > 3 ngày, image main-/smoke- quá hạn; timer active")
 def res_gc(ctx: Ctx) -> R:
     old = []
     for c in ctx.inspect_all():
         n = c["Name"].lstrip("/")
-        s = c.get("State") or {}
-        if not re.search(r"-(rollback|smoke)-", n) or s.get("Status") not in ("exited", "created", "dead"):
+        s_ = c.get("State") or {}
+        if not re.search(r"-(rollback|smoke)-", n) or s_.get("Status") not in ("exited", "created", "dead"):
             continue
-        t = parse_ts(s.get("FinishedAt", "")) or parse_ts(c.get("Created", ""))
+        t = parse_ts(s_.get("FinishedAt", "")) or parse_ts(c.get("Created", ""))
         if t and (ctx.now - t).days > 3:
             old.append(n)
     probs = [f"{len(old)} container quá hạn: {short(old, 3)}"] if old else []
+    try:
+        prev = ctx.latest_release()[1].get("PREV_TAG", "")
+    except Unavailable:
+        prev = ""
+    used = {c.get("Image") for c in ctx.inspect_all()} | {(c.get("Config") or {}).get("Image") for c in ctx.inspect_all()}
+    stale = []
+    for im in ctx.gateway_images():
+        tag = im.get("Tag", "")
+        t = parse_ts(im.get("CreatedAt", ""))
+        ref = f"{GATEWAY_IMAGE}:{tag}"
+        if (re.match(r"^(main|smoke)-", tag) and t and (ctx.now - t).days > 4 and ref != prev
+                and im.get("ID") not in used and ref not in used):
+            stale.append(tag)
+    if stale:
+        probs.append(f"{len(stale)} image main-/smoke- quá hạn mà gc chưa xoá: {short(stale, 3)}")
     try:
         units = {u["Id"]: u for u in ctx.units()}
         svc = units.get("secai-wt-prune.service")
@@ -1555,10 +1853,13 @@ def res_gc(ctx: Ctx) -> R:
         if svc and svc.get("Result") not in ("success", None):
             probs.append(f"secai-wt-prune.service Result={svc.get('Result')}")
     except Unavailable as e:
+        if not probs:
+            raise
         probs.append(str(e))
     if probs:
-        return R(FAIL, "; ".join(probs), "scripts/install-wt-prune-timer.sh; xem journalctl --user -u secai-wt-prune")
-    return R(PASS, "không container rollback/smoke quá hạn; secai-wt-prune.timer active")
+        return R(FAIL, "; ".join(probs), "scripts/install-wt-prune-timer.sh; journalctl --user -u secai-wt-prune "
+                                         "(runner gọi gc với `|| true` nên gc lỗi vẫn ra Result=success)")
+    return R(PASS, "không container rollback/smoke hay image main-/smoke- quá hạn; secai-wt-prune.timer active")
 
 
 @check("OPS-RES-6", SHOULD, "Container trong phạm vi có giới hạn bộ nhớ")
@@ -1596,33 +1897,42 @@ def res_build_cache(ctx: Ctx) -> R:
 
 
 # ================================================================== GIT
-@check("OPS-GIT-1", MUST, "Checkout chính (nguồn mount prod) ở main, không ahead origin/main, không sửa dở trong thư mục được mount")
+
+@check("OPS-GIT-1", MUST, "Checkout làm nguồn mount prod ở main/origin/main, không ahead, không sửa dở trong thư mục được mount")
 def git_main_checkout(ctx: Ctx) -> R:
-    root = ctx.main_checkout()
-    br = ctx.git("branch", "--show-current", repo=root).out.strip()
+    main_root = ctx.main_checkout().resolve()
     probs, warns = [], []
-    if br != "main":
-        probs.append(f"đang ở nhánh {br or '(detached)'}")
-    ahead = ctx.git("rev-list", "--count", "origin/main..HEAD", repo=root, check=False).out.strip()
-    if ahead not in ("", "0"):
-        probs.append(f"ahead origin/main {ahead} commit")
-    dirty = [ln[3:] for ln in ctx.git("status", "--porcelain", "--untracked-files=no", repo=root).out.splitlines() if ln.strip()]
-    if dirty:
-        sources = []
-        try:
-            for c in ctx.containers().values():
-                for m in c.get("Mounts") or []:
-                    if m.get("Type") == "bind" and m["Source"].startswith(str(root) + "/"):
-                        sources.append(m["Source"][len(str(root)) + 1:])
-        except Unavailable:
-            pass
-        hot = [d for d in dirty if any(d == s or d.startswith(s.rstrip("/") + "/") for s in sources)]
-        (probs if hot else warns).append(f"{len(dirty)} file sửa chưa commit ({short(hot or dirty, 3)})" + (" nằm trong mount prod" if hot else ""))
+    try:
+        mounts = checkout_mounts(ctx)
+        known = True
+    except Unavailable:
+        mounts, known = [], False
+    roots = sorted({r for _, r, _ in mounts} | {main_root})
+    for root in roots:
+        rels = [rel for _, r, rel in mounts if r == root]
+        w = worktree_info(ctx, root)
+        if is_deploy_main(root):
+            if ctx.git("merge-base", "--is-ancestor", str(w.get("HEAD", "HEAD")), "origin/main", repo=main_root, check=False).rc != 0:
+                probs.append(f"{root.name}: HEAD không nằm trên origin/main")
+        elif root == main_root:
+            br = ctx.git("branch", "--show-current", repo=root).out.strip()
+            if br != "main":
+                (probs if rels else warns).append(f"{root.name} đang ở nhánh {br or '(detached)'}")
+            ahead = ctx.git("rev-list", "--count", "origin/main..HEAD", repo=root, check=False).out.strip()
+            if ahead not in ("", "0"):
+                (probs if rels else warns).append(f"{root.name} ahead origin/main {ahead} commit")
+        dirty = [ln[3:] for ln in ctx.git("status", "--porcelain", "--untracked-files=no", repo=root).out.splitlines() if ln.strip()]
+        hot = [d for d in dirty if any(d == s_ or d.startswith(s_.rstrip("/") + "/") for s_ in rels)]
+        if hot:
+            probs.append(f"{root.name}: {len(hot)} file sửa chưa commit nằm trong mount prod ({short(hot, 3)})")
+        elif dirty:
+            warns.append(f"{root.name}: {len(dirty)} file sửa chưa commit ({short(dirty, 3)}) "
+                         + ("ngoài thư mục được mount" if known else "— không đọc được docker nên chưa biết có nằm trong mount không"))
     if probs:
-        return R(FAIL, f"{root}: " + "; ".join(probs + warns))
+        return R(FAIL, "; ".join(probs + warns))
     if warns:
-        return R(WARN, f"{root}@main: " + "; ".join(warns) + " (ngoài thư mục được mount)")
-    return R(PASS, f"{root}@main sạch, không ahead")
+        return R(WARN, "; ".join(warns))
+    return R(PASS, f"{', '.join(r.name for r in roots)}: đúng nhánh, sạch, không ahead")
 
 
 @check("OPS-GIT-2", SHOULD, "Nhánh remote đã merge vào main còn lại ≤ 10")
@@ -1735,12 +2045,26 @@ def doc_service_runbooks(ctx: Ctx) -> R:
     return R(PASS, f"{len(rows)} service đều có runbook")
 
 
-@check("OPS-DOC-4", MUST, "Có runbook khôi phục dữ liệu prod từ backup (docs/ops/RESTORE.md)")
+
+@check("OPS-DOC-4", MUST, "Có runbook khôi phục dữ liệu prod từ backup (docs/ops/RESTORE.md) cho Qdrant, Neo4j, SQLite")
 def doc_restore(ctx: Ctx) -> R:
-    if (ctx.cfg.repo / "docs/ops/RESTORE.md").is_file():
-        return R(PASS, "có docs/ops/RESTORE.md")
-    return R(FAIL, "chưa có docs/ops/RESTORE.md (stack/restore-data.sh chỉ dựng máy mới từ gói, không phải khôi phục backup)",
-             "viết RESTORE.md: Qdrant snapshot recover, neo4j-admin load, sqlite .restore, thứ tự dừng/khởi động")
+    txt = ctx.read_repo("docs/ops/RESTORE.md").lower()
+    if not txt:
+        return R(FAIL, "chưa có docs/ops/RESTORE.md (stack/restore-data.sh chỉ dựng máy mới từ gói, không phải khôi phục backup)",
+                 "viết RESTORE.md: Qdrant snapshot recover, neo4j-admin load, sqlite .restore, thứ tự dừng/khởi động")
+    miss = [w for w in ("qdrant", "neo4j", "sqlite") if w not in txt]
+    return R(FAIL, f"RESTORE.md chưa nói tới: {', '.join(miss)}") if miss else R(PASS, "RESTORE.md có Qdrant, Neo4j, SQLite (lệnh: kiểm tay)")
+
+
+@check("OPS-DOC-7", MUST, "Có runbook sự cố (docs/ops/INCIDENT.md): người nhận cảnh báo và cách xử lý các lỗi đã gặp")
+def doc_incident(ctx: Ctx) -> R:
+    txt = ctx.read_repo("docs/ops/INCIDENT.md").lower()
+    if not txt:
+        return R(FAIL, "chưa có docs/ops/INCIDENT.md",
+                 "ghi người trực/kênh nhận cảnh báo và bước xử lý: tunnel LLM/serving chết, đĩa > 90%, /health degraded, KB sync cũ, rollback")
+    need = {"người nhận": r"người (nhận|trực)", "tunnel": r"tunnel", "đĩa": r"đĩa|disk", "health": r"/health", "kb": r"kb[_ ]sync|kb"}
+    miss = [k for k, rx in need.items() if not re.search(rx, txt)]
+    return R(FAIL, f"INCIDENT.md thiếu: {', '.join(miss)}") if miss else R(PASS, "INCIDENT.md có người nhận và các tình huống chính")
 
 
 @check("OPS-DOC-5", SHOULD, "scripts/README.md nhắc mọi scripts/*.sh và ops-check.py")
@@ -1783,9 +2107,9 @@ def evaluate(ctx: Ctx, groups: set[str] | None = None) -> list[Result]:
         except ReadOnlyViolation:
             raise
         except Unavailable as e:
-            r = R(SKIP, f"không đo được: {e}")
+            r = R(SKIP, f"không đo được: {e}", unmeasured=not e.soft)
         except Exception as e:  # lỗi của checker: hiện ra, không giả là PASS/FAIL
-            r = R(WARN, f"lỗi checker khi đo: {type(e).__name__}: {e}")
+            r = R(WARN, f"lỗi checker khi đo: {type(e).__name__}: {e}", unmeasured=True)
         out.append(Result(ck, r))
     return out
 
@@ -1798,6 +2122,8 @@ def summarize(results: list[Result]) -> dict[str, dict]:
         g[res.r.status] += 1
         if res.r.status == FAIL and res.check.level == MUST:
             g["fail_must"] += 1
+        if res.r.unmeasured and res.check.level == MUST and res.check.fn is not None:
+            g["unmeasured_must"] = g.get("unmeasured_must", 0) + 1
     for g in s.values():
         n = g[PASS] + g[FAIL] + g[WARN]
         g["score"] = round(100 * (g[PASS] + 0.5 * g[WARN]) / n) if n else None
@@ -1805,7 +2131,13 @@ def summarize(results: list[Result]) -> dict[str, dict]:
 
 
 def exit_code(results: list[Result]) -> int:
-    return 1 if any(r.r.status == FAIL and r.check.level == MUST for r in results) else 0
+    """1: có FAIL bắt buộc. 3: không FAIL nhưng có tiêu chí bắt buộc tự động không đo được
+    (docker/systemctl/file lỗi, checker lỗi; thiếu GitHub không tính). 0: còn lại."""
+    if any(r.r.status == FAIL and r.check.level == MUST for r in results):
+        return 1
+    if any(r.r.unmeasured and r.check.level == MUST and r.check.fn is not None for r in results):
+        return 3
+    return 0
 
 
 def render_text(results: list[Result], summary: dict, ctx: Ctx) -> str:
@@ -1824,8 +2156,10 @@ def render_text(results: list[Result], summary: dict, ctx: Ctx) -> str:
         sc = "—" if v["score"] is None else f"{v['score']}%"
         lines.append(f"  {g:<4} {v['title']:<30} PASS {v[PASS]:>2}  FAIL {v[FAIL]:>2}  WARN {v[WARN]:>2}  SKIP {v[SKIP]:>2}  điểm {sc}")
     fm = sum(v["fail_must"] for v in summary.values())
+    um = sum(v.get("unmeasured_must", 0) for v in summary.values())
     lines.append("")
-    lines.append(f"Kết luận: {fm} FAIL ở tiêu chí bắt buộc → mã thoát {1 if fm else 0}")
+    lines.append(f"Kết luận: {fm} FAIL ở tiêu chí bắt buộc, {um} tiêu chí bắt buộc không đo được → mã thoát {exit_code(results)}"
+                 " (0 đạt, 1 có FAIL bắt buộc, 3 có tiêu chí bắt buộc không đo được)")
     return ctx.scrub("\n".join(lines))
 
 
@@ -1834,7 +2168,8 @@ def render_json(results: list[Result], summary: dict, ctx: Ctx) -> str:
         "generated_at": ctx.now.isoformat(timespec="seconds"),
         "repo": str(ctx.cfg.repo),
         "results": [{"id": r.check.id, "group": r.check.group, "level": r.check.level, "title": r.check.title,
-                     "status": r.r.status, "evidence": r.r.evidence, "fix": r.r.fix} for r in results],
+                     "status": r.r.status, "evidence": r.r.evidence, "fix": r.r.fix, "unmeasured": r.r.unmeasured}
+                    for r in results],
         "summary": summary,
         "exit_code": exit_code(results),
     }
@@ -1859,6 +2194,7 @@ def build_config(a: argparse.Namespace, runner: Runner) -> Config:
         gh_repo=a.gh_repo or (None if a.no_gh else gh_repo_from_remote(runner, repo)),
         use_gh=not a.no_gh,
         cron_globs=a.cron_glob or ["~/Downloads/CVE-DB/*"],
+        proc_net=Path(a.proc_net),
     )
 
 
@@ -1877,6 +2213,7 @@ def main(argv: list[str] | None = None, runner: Runner | None = None, now: dt.da
     ap.add_argument("--gh-repo", help="owner/repo trên GitHub (mặc định lấy từ origin)")
     ap.add_argument("--no-gh", action="store_true", help="không gọi gh (tiêu chí GitHub thành SKIP)")
     ap.add_argument("--cron-glob", action="append", help="file script cron cần quét khoá (lặp được)")
+    ap.add_argument("--proc-net", default="/proc/net", help=argparse.SUPPRESS)  # cho test: thư mục chứa tcp, tcp6
     try:
         a = ap.parse_args(argv)
     except SystemExit as e:

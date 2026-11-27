@@ -1,10 +1,14 @@
 """Kiểm tĩnh nội dung repo theo docs/ops/OPS-CRITERIA.md (offline, không cần docker).
 
+Các tiêu chí chỉ phụ thuộc file trong repo gọi thẳng hàm kiểm của scripts/ops-check.py (một quy tắc,
+một chỗ), với runner cấm mọi lệnh ngoài. Phần còn lại (bash -n, compose, release-prod.sh) kiểm độc lập.
+
 Tiêu chí chưa đạt ở thời điểm viết được đánh xfail(strict=True, raises=OpsGap): lỗi đọc file hay
 sai của chính test vẫn là FAIL thật; sửa đúng repo thì test XPASS và strict buộc gỡ marker.
 """
 from __future__ import annotations
 
+import datetime as dt
 import importlib.util
 import re
 import shutil
@@ -36,6 +40,21 @@ def xfail_gap(reason: str):
     return pytest.mark.xfail(strict=True, raises=OpsGap, reason=reason)
 
 
+class NoCommands(oc.Runner):
+    def run(self, argv, timeout=60):
+        raise AssertionError(f"kiểm tĩnh không được gọi lệnh ngoài: {argv[:3]}")
+
+
+def repo_ctx(runner: oc.Runner | None = None) -> oc.Ctx:
+    cfg = oc.Config(repo=ROOT, docker_dir=ROOT / "không-có", releases_dir=ROOT / "không-có", data_root=ROOT / "không-có",
+                    backup_dir=None, gh_repo=None, use_gh=False, cron_globs=[])
+    return oc.Ctx(cfg, runner or NoCommands(), dt.datetime.now().astimezone())
+
+
+def check(fn) -> oc.R:
+    return fn(repo_ctx())
+
+
 def read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8", errors="replace")
 
@@ -58,32 +77,29 @@ def tracked_files() -> list[str]:
 @xfail_gap("OPS-BLD-1: Dockerfile chỉ COPY pyproject.toml rồi pip install theo [project].dependencies, "
            "bỏ qua uv.lock nên deps trôi mỗi lần build FULL")
 def test_dockerfile_installs_from_lock() -> None:
-    df = read("Dockerfile")
-    assert "FROM " in df
-    gap(re.search(r"^\s*COPY\b[^\n]*\buv\.lock\b", df, re.M) is not None, "Dockerfile không COPY uv.lock")
-    gap(re.search(r"uv\s+sync\b[^\n]*--(frozen|locked)|uv\s+pip\s+sync\b|--require-hashes", df) is not None,
-        "Dockerfile không cài theo lock")
+    r = check(oc.bld_lock)
+    assert r.status in (oc.PASS, oc.FAIL), r
+    gap(r.status == oc.PASS, r.evidence)
 
 
 @xfail_gap("OPS-BLD-3: FROM python:3.12-slim chưa ghim digest")
 def test_dockerfile_base_pinned_by_digest() -> None:
-    bases = re.findall(r"^\s*FROM\s+(\S+)", read("Dockerfile"), re.M | re.I)
-    assert bases
-    loose = [b for b in bases if "@sha256:" not in b]
-    gap(not loose, f"FROM chưa ghim digest: {sorted(set(loose))}")
+    r = check(oc.bld_digest)
+    assert r.status in (oc.PASS, oc.FAIL), r
+    gap(r.status == oc.PASS, r.evidence)
 
 
 @xfail_gap("OPS-VER-4: Dockerfile không có LABEL org.opencontainers.image.revision (chỉ build OVERLAY gắn)")
 def test_dockerfile_labels_revision() -> None:
-    df = read("Dockerfile")
+    df = oc.dockerfile(repo_ctx())
     assert "ARG GIT_SHA" in df
-    gap(re.search(r"^\s*LABEL\b[^\n]*org\.opencontainers\.image\.revision", df, re.M) is not None,
-        "không có LABEL revision")
+    gap(re.search(r"^\s*LABEL\b[^\n]*org\.opencontainers\.image\.revision=\S*\$\{?GIT_SHA", df, re.M) is not None,
+        "không có LABEL revision lấy từ GIT_SHA")
 
 
 def test_dockerignore_excludes_secrets_and_data() -> None:
-    lines = {ln.strip() for ln in read(".dockerignore").splitlines()}
-    assert {".env", ".env.*", ".venv/", "data/", "*.db"} <= lines
+    r = check(oc.bld_dockerignore)
+    assert r.status == oc.PASS, r
 
 
 def test_release_script_builds_from_git_archive() -> None:
@@ -130,9 +146,9 @@ def test_stack_compose_pins_third_party_versions() -> None:
 # ------------------------------------------------------------------ CI
 @xfail_gap("OPS-CI-1: repo chưa có workflow GitHub Actions nào")
 def test_ci_workflow_runs_pytest() -> None:
-    wfs = sorted((ROOT / ".github" / "workflows").glob("*.y*ml")) if (ROOT / ".github").exists() else []
-    gap(any("pytest" in p.read_text() and "pull_request" in p.read_text() for p in wfs),
-        "không có workflow chạy pytest trên pull_request")
+    r = check(oc.ci_workflow)  # use_gh=False: chỉ xét file trong .github/workflows
+    assert r.status in (oc.PASS, oc.FAIL), r
+    gap(r.status == oc.PASS, r.evidence)
 
 
 def test_release_script_has_full_pytest_gate() -> None:
@@ -156,14 +172,9 @@ def test_shell_scripts_parse(path: Path) -> None:
     assert res.returncode == 0, res.stderr
 
 
-@pytest.mark.parametrize("path", shell_scripts(), ids=lambda p: str(p.relative_to(ROOT)))
-def test_shell_scripts_strict_mode(path: Path) -> None:
-    txt = path.read_text()
-    rel = str(path.relative_to(ROOT))
-    need = {"u"} | ({"pipefail"} if "bash" in txt.splitlines()[0] else set())
-    if rel in oc.MUTATING_SCRIPTS:
-        need.add("e")
-    assert need <= oc.parse_set_flags(txt), f"{rel} thiếu set -{'/'.join(sorted(need - oc.parse_set_flags(txt)))}"
+def test_shell_scripts_strict_mode() -> None:
+    r = check(oc.ci_shell)
+    assert r.status == oc.PASS, r
 
 
 def test_mutating_script_list_is_current() -> None:
@@ -173,37 +184,37 @@ def test_mutating_script_list_is_current() -> None:
 
 # ------------------------------------------------------------------ GIT / SEC
 def test_gitignore_blocks_runtime_files() -> None:
-    lines = {ln.strip() for ln in read(".gitignore").splitlines()}
-    assert {".env", ".env.*", "data/", "logs/", "*.log", ".venv/"} <= lines
+    assert check(oc.git_ignore).status == oc.PASS
 
 
 def test_no_forbidden_tracked_files() -> None:
-    bad = [f for f in tracked_files() if oc.FORBIDDEN_TRACKED.search(f)
-           and not (f.endswith(".log") and f.startswith(("docs/archive/", "evidence/")))]
-    assert not bad, bad
+    tracked_files()
+    r = oc.git_forbidden(repo_ctx(oc.Runner()))
+    assert r.status == oc.PASS, r
 
 
 def test_fake_secret_fixtures_still_exist() -> None:
     """Danh sách miễn trừ OPS-SEC-6 không được trỏ vào đường dẫn đã mất (miễn trừ treo)."""
     files = tracked_files()
-    stale = [p for p in oc.FAKE_SECRET_FIXTURES if not any(f == p or f.startswith(p) for f in files)]
+    stale = [p for p in oc.FAKE_SECRET_FIXTURES if not any(f == p or (p.endswith("/") and f.startswith(p)) for f in files)]
     assert not stale, stale
 
 
 # ------------------------------------------------------------------ DOC
 def test_criteria_doc_matches_checker() -> None:
-    ids = oc.doc_ids(DOC.read_text())
-    assert len(ids) == len(set(ids)), "ID trùng trong tài liệu"
-    assert set(ids) == {c.id for c in oc.CHECKS}
+    r = check(oc.doc_criteria)
+    assert r.status == oc.PASS, r
 
 
 def test_criteria_doc_rows_are_measurable() -> None:
     levels = {c.id: c.level for c in oc.CHECKS}
     manual = {c.id for c in oc.CHECKS if c.fn is None}
+    seen = 0
     for line in DOC.read_text().splitlines():
         m = re.match(r"^\|\s*(OPS-[A-Z]+-\d+)\s*\|", line)
         if not m:
             continue
+        seen += 1
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         assert len(cells) == 5, f"{m.group(1)}: cần 5 cột (ID, tiêu chí, mức, cách đo, ngưỡng): {cells}"
         cid, title, level, how, threshold = cells
@@ -213,12 +224,28 @@ def test_criteria_doc_rows_are_measurable() -> None:
             assert "kiểm tay" in how.lower(), f"{cid} là kiểm tay nhưng không ghi bước"
         else:
             assert "ops-check" in how or "pytest" in how, f"{cid}: cách đo không trỏ tới ops-check/pytest"
+    assert seen == len(oc.CHECKS)
 
 
 def test_criteria_doc_covers_every_group() -> None:
     txt = DOC.read_text()
     for g in oc.GROUPS:
         assert f"({g})" in txt, f"thiếu mục nhóm {g}"
+
+
+def _relative_links(md: Path) -> list[tuple[str, Path]]:
+    out = []
+    for target in re.findall(r"\]\(([^)#\s]+)(?:#[^)]*)?\)", md.read_text()):
+        if not re.match(r"^[a-z]+:", target):
+            out.append((target, (md.parent / target).resolve()))
+    return out
+
+
+@pytest.mark.parametrize("md", ["docs/ops/OPS-CRITERIA.md", "docs/README.md", "scripts/README.md",
+                                "docs/archive/test-results/ops-baseline-20261127.md"])
+def test_ops_docs_links_resolve(md: str) -> None:
+    broken = [t for t, p in _relative_links(ROOT / md) if not p.exists()]
+    assert not broken, f"{md}: link hỏng {broken}"
 
 
 def test_service_table_lists_scope_and_links_exist() -> None:
@@ -231,32 +258,31 @@ def test_service_table_lists_scope_and_links_exist() -> None:
             assert (DOC.parent / ln).resolve().exists(), f"{name}: link hỏng {ln}"
 
 
-@xfail_gap("OPS-DOC-3: secai-translation-converter chưa có runbook release/rollback")
+@xfail_gap("OPS-DOC-3: review, converter, pool pentestcode và 4 kho dữ liệu chưa có runbook release/rollback")
 def test_every_service_has_runbook() -> None:
-    rows = oc.service_runbooks(DOC.read_text())
-    assert rows
-    missing = [n for n, links, miss in rows if miss or not links]
-    gap(not missing, f"chưa có runbook: {missing}")
+    r = check(oc.doc_service_runbooks)
+    assert r.status in (oc.PASS, oc.FAIL), r
+    gap(r.status == oc.PASS, r.evidence)
 
 
 @xfail_gap("OPS-DOC-4: chưa có docs/ops/RESTORE.md (stack/restore-data.sh chỉ dựng máy mới từ gói)")
 def test_restore_runbook_exists() -> None:
-    p = ROOT / "docs" / "ops" / "RESTORE.md"
-    gap(p.is_file(), "chưa có docs/ops/RESTORE.md")
-    txt = p.read_text().lower()
-    for word in ("qdrant", "neo4j", "sqlite"):
-        assert word in txt, word
+    r = check(oc.doc_restore)
+    gap(r.status == oc.PASS, r.evidence)
+
+
+@xfail_gap("OPS-DOC-7: chưa có docs/ops/INCIDENT.md (người nhận cảnh báo, xử lý tunnel/đĩa/health/KB)")
+def test_incident_runbook_exists() -> None:
+    r = check(oc.doc_incident)
+    gap(r.status == oc.PASS, r.evidence)
 
 
 def test_release_runbook_is_documented() -> None:
-    assert "release-prod.sh rollback --yes" in read("CLAUDE.md")
-    assert "release-prod.sh" in read("scripts/README.md")
+    assert check(oc.doc_release_runbook).status == oc.PASS
 
 
 def test_scripts_readme_lists_ops_scripts() -> None:
-    txt = read("scripts/README.md")
-    names = sorted(p.name for p in (ROOT / "scripts").glob("*.sh")) + ["ops-check.py"]
-    assert not [n for n in names if n not in txt]
+    assert check(oc.doc_scripts_readme).status == oc.PASS
 
 
 def test_docs_index_links_ops_criteria() -> None:
