@@ -15,6 +15,8 @@ STACK = Path(__file__).resolve().parents[1] / "stack"
 PUBLISH = STACK / "publish.sh"
 TOKEN = "gho_FAKEpublishTOKEN0123456789abcdefghijklm"   # token gh giả: chỉ được đi qua stdin của docker login
 REALSECRET = "real-" + "SECRETvalue-77aa"   # "secret thật" giả của máy (nguồn ks.env)
+HUBTOKEN = "dckr_pat_" + "FAKEwriteToken0123456789"   # token Docker Hub giả: chỉ được đi qua stdin của docker login
+DATA = "docker.io/testns/secai-data"
 REG = "ghcr.io/elonma-china"
 
 
@@ -74,7 +76,8 @@ if c == "cp":
     sys.exit(0)
 if c in ("rm", "logs"): sys.exit(0)
 if c == "login":
-    open(os.path.join(F, "login.stdin"), "a").write(sys.stdin.read()); sys.exit(0)
+    open(os.path.join(F, "login.stdin"), "a").write(sys.stdin.read() + "\n")
+    open(os.path.join(F, "login.cfg"), "a").write(os.environ.get("DOCKER_CONFIG", "") + "\n"); sys.exit(0)
 if c == "logout": sys.exit(0)
 def by_digest(ref):
     d = ref.split("@", 1)[1]
@@ -120,19 +123,28 @@ FAKE_REG = r'''#!/usr/bin/env python3
 import hashlib, json, os, sys
 F = "@FAKE@"
 args = sys.argv[1:]
-auth = args[:1] == ["--gh-auth"]
-if auth: args = args[2:]
-open(os.path.join(F, "reg.log"), "a").write(json.dumps(sys.argv[1:]) + "\n")
+auth = None
+if args[:1] == ["--auth"]:
+    user, path = args[1].split(":", 1); auth = open(path).read().strip(); args = args[2:]
+open(os.path.join(F, "reg.log"), "a").write(json.dumps(["--auth"] if auth else []) + json.dumps(args) + "\n")
 cmd, ref = args[0], args[1]
-if "secai-data" in ref and not auth: sys.exit(1)   # package private: ẩn danh không đọc được
-if cmd == "tags":
-    print("\n".join(json.load(open(os.path.join(F, "data_tags.json"))))); sys.exit(0)
-remote = json.load(open(os.path.join(F, "remote.json"))) if os.path.exists(os.path.join(F, "remote.json")) else {}
-if ref.startswith("ghcr.io/"):
-    if ref in remote: print(remote[ref]); sys.exit(0)
-    if "secai-data:" in ref and ref.split(":")[-1] in json.load(open(os.path.join(F, "data_tags.json"))):
-        print("sha256:" + hashlib.sha256(ref.encode()).hexdigest()); sys.exit(0)
-    sys.exit(1)
+def st(n, d): p = os.path.join(F, n); return json.load(open(p)) if os.path.exists(p) else d
+hub = st("hub.json", {"visibility": "private", "tags": ["2026.11.20", "2026.11.27", "init"]})
+remote = st("remote.json", {})
+if "secai-data" in ref and auth != open(os.path.join(F, "hub_token")).read().strip(): sys.exit(1)   # private: cần token
+if cmd == "hub-repo":
+    if hub["visibility"] == "missing": sys.exit(1)
+    print(hub["visibility"]); sys.exit(0)
+if cmd == "hub-tags":
+    print("\n".join(hub["tags"] + [r.split(":")[-1] for r in remote if r.startswith("docker.io/")])); sys.exit(0)
+if cmd == "hub-delete-tag":
+    open(os.path.join(F, "deleted.log"), "a").write(args[2] + "\n"); sys.exit(0)
+if cmd == "tags": sys.exit(2)
+if os.path.exists(os.path.join(F, "reg_error")): sys.exit(2)
+if ref in remote: print(remote[ref]); sys.exit(0)
+if ref.startswith("docker.io/") and ref.split(":")[-1] in hub["tags"]:
+    print("sha256:" + hashlib.sha256(ref.encode()).hexdigest()); sys.exit(0)
+if ref.startswith(("ghcr.io/", "docker.io/")): sys.exit(1)
 print("sha256:" + hashlib.sha256(ref.encode()).hexdigest())
 '''
 
@@ -178,10 +190,12 @@ class Box:
         write_exec(self.bin / "curl", sub(FAKE_CURL))
         write_exec(tmp / "registry-fake", sub(FAKE_REG))
         write_exec(tmp / "fakepython", sub(FAKE_PY))
-        self.set_visibility("public", **{"secai-data": "private"})
+        self.set_visibility("public")
+        self.hubtok = tmp / "hub.token"
+        self.hubtok.write_text(HUBTOKEN + "\n"); self.hubtok.chmod(0o600)
+        (self.fake / "hub_token").write_text(HUBTOKEN)
         # nguồn secret thật giả (không bao giờ đọc secret thật của máy chạy test)
         (tmp / "ks.env").write_text(f"FAKE_API_KEY={REALSECRET}\nQDRANT_COLLECTION=cve_kb_hybrid\n")
-        (self.fake / "data_tags.json").write_text(json.dumps(["2026.11.20", "2026.11.27", "init"]))
         # repo git tạm: src/, Dockerfile, stack/ (compose thật để đọc image nền), pentestcode/
         self.repo = tmp / "repo"
         (self.repo / "src" / "secai_gateway").mkdir(parents=True)
@@ -203,7 +217,7 @@ class Box:
         self.work = tmp / "releases"
 
     def set_visibility(self, v, **over):
-        vis = {n: v for n in ("secai-agent-gateway", "secai-pentestcode-vm", "secai-stack", "secai-data")}
+        vis = {n: v for n in ("secai-agent-gateway", "secai-pentestcode-vm", "secai-stack")}
         vis.update(over)
         (self.fake / "visibility.json").write_text(json.dumps(vis))
 
@@ -212,7 +226,8 @@ class Box:
              "PUBLISH_PYTHON": str(self.tmp / "fakepython"), "PUBLISH_WORK_ROOT": str(self.work), "PUBLISH_MIN_FREE_GB": "0",
              "SECAI_DOCKER_DIR": str(self.dockerdir), "SECAI_DATA_ROOT": str(self.tmp / "data"),
              "SECAI_REGISTRY_HELPER": str(self.tmp / "registry-fake"), "SECAI_SEED_BLOB": str(self.tmp / "no-seed.py"),
-             "PUBLISH_KNOWN_SECRETS": f"env:{self.tmp / 'ks.env'}", "PUBLISH_NO_FETCH": "1", "LANG": "C.UTF-8"}
+             "PUBLISH_KNOWN_SECRETS": f"env:{self.tmp / 'ks.env'}", "PUBLISH_NO_FETCH": "1", "LANG": "C.UTF-8",
+             "SECAI_DATA_REPO": DATA, "SECAI_DOCKERHUB_TOKEN_FILE": str(self.hubtok)}
         e.update(kw)
         return e
 
@@ -234,6 +249,9 @@ class Box:
 
     def set(self, name, text="1"):
         (self.fake / name).write_text(text)
+
+    def hub(self, visibility="private", tags=("2026.11.20", "2026.11.27", "init")):
+        (self.fake / "hub.json").write_text(json.dumps({"visibility": visibility, "tags": list(tags)}))
 
 
 @pytest.fixture
@@ -284,6 +302,7 @@ def test_dry_run_builds_everything_pushes_nothing(box):
     assert m["images"]["QDRANT_IMAGE"] == {"ref": "qdrant/qdrant:v1.10.1", "digest": h("qdrant/qdrant:v1.10.1")}
     assert m["images"]["ES_IMAGE"]["ref"] == "docker.elastic.co/elasticsearch/elasticsearch:8.15.3"
     assert m["data"]["default_version"] == "2026.11.27"   # bản mới nhất theo tag, bỏ 'init'
+    assert m["data"]["image"] == DATA and m["data"]["digest"].startswith("sha256:")
     assert m["profiles"] == ["exploit"]
     builds = [c for c in calls if c[0] == "build"]
     tags = [c[c.index("-t") + 1] for c in builds]
@@ -320,7 +339,7 @@ def test_publish_real_order_and_token_only_on_stdin(box):
 
 
 def test_private_image_package_stops_before_gates(box):
-    box.set_visibility("public", **{"secai-pentestcode-vm": "private", "secai-data": "private"})
+    box.set_visibility("public", **{"secai-pentestcode-vm": "private"})
     r = box.run("publish")
     assert r.returncode == 5
     assert "secai-pentestcode-vm=private" in r.stderr and "secai-data" not in r.stderr
@@ -421,7 +440,7 @@ def test_publish_data_from_pkg(box, qurl):
     pkg = box.tmp / "pkg"; make_pkg(pkg)
     r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
     assert r.returncode == 0, r.stderr
-    assert box.pushes() == [f"{REG}/secai-data:2026.11.28"]
+    assert box.pushes() == [f"{DATA}:2026.11.28"]
     df = (box.work / "data-2026.11.28" / "Dockerfile.data").read_text()
     assert df.startswith("FROM scratch") and "COPY qdrant /secai-data/qdrant" in df
     assert pkg.exists()   # gói có sẵn không bị xoá
@@ -437,8 +456,13 @@ def test_publish_data_corpus_counted_not_blocking(box, qurl):
     assert rec["secret_scan"]["corpus_counts"] == {"poc-sources": {"password-assign": 1}, "qdrant payload": {"password-assign": 1}}
     assert rec["secret_scan"]["qdrant_points"] == 2
     assert "hunter2" not in json.dumps(rec) + r.stdout + r.stderr
-    # push dữ liệu được kiểm bằng token gh (private), không ẩn danh
-    assert any(json.loads(l)[:1] == ["--gh-auth"] for l in (box.fake / "reg.log").read_text().splitlines())
+    # repo private trên Docker Hub: kiểm visibility và digest bằng token, token chỉ trong stdin của docker login
+    reglog = (box.fake / "reg.log").read_text()
+    assert '["--auth"]["hub-repo", "testns/secai-data"]' in reglog
+    assert HUBTOKEN in (box.fake / "login.stdin").read_text() and HUBTOKEN not in reglog + (box.fake / "docker.log").read_text()
+    login = [c for c in box.docker_calls() if c[0] == "login"][-1]
+    assert login == ["login", "-u", "testns", "--password-stdin"]
+    assert all(not Path(x).exists() for x in (box.fake / "login.cfg").read_text().split())
 
 
 def test_publish_data_secret_outside_corpus_blocks(box, qurl):
@@ -474,11 +498,40 @@ def test_bundle_real_secret_stops_with_6(box):
     assert not box.pushes()
 
 
-def test_publish_data_must_stay_private(box, qurl):
-    box.set_visibility("public")   # secai-data public => từ chối
+@pytest.mark.parametrize("vis", ["public", "missing"])
+def test_publish_data_requires_existing_private_hub_repo(box, qurl, vis):
+    box.hub(visibility=vis)   # public, hoặc chưa có (push sẽ tự tạo repo, có thể public) => từ chối
     pkg = box.tmp / "pkg"; make_pkg(pkg)
     r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
-    assert r.returncode == 5 and "PRIVATE" in r.stderr and not box.pushes()
+    assert r.returncode == 5 and "KHÔNG push" in r.stderr and not box.pushes()
+    assert not any(c[0] == "login" for c in box.docker_calls())
+
+
+def test_publish_data_requires_data_repo_and_token(box, qurl):
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl, SECAI_DATA_REPO="docker.io/testns/other")
+    assert r.returncode == 1 and "SECAI_DATA_REPO" in r.stderr
+    e = box.env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
+    r = subprocess.run(["bash", str(PUBLISH), "publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl],
+                       text=True, capture_output=True, env=e, stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 5 and "SECAI_DOCKERHUB_TOKEN_FILE" in r.stderr and not box.pushes()
+    box.hubtok.chmod(0o644)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
+    assert r.returncode == 5 and "mode 600/400" in r.stderr
+
+
+def test_publish_data_warns_over_three_tags_and_prune(box, qurl):
+    box.hub(tags=["2026.11.01", "2026.11.10", "2026.11.20", "2026.11.27", "init"])
+    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    r = box.run("publish-data", "--version", "2026.11.28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
+    assert r.returncode == 0, r.stderr
+    assert "prune-data" in r.stderr
+    r = box.run("prune-data")
+    assert r.returncode == 0 and "2026.11.01" in r.stderr and not (box.fake / "deleted.log").exists()
+    r = box.run("prune-data", "--keep", "3", "--yes")
+    assert r.returncode == 0, r.stderr
+    # 5 bản (4 cũ + 2026.11.28 vừa push), giữ 3 mới nhất
+    assert (box.fake / "deleted.log").read_text().split() == ["2026.11.01", "2026.11.10"]
 
 
 def test_publish_data_quota_stops_with_7(box, qurl):
@@ -490,7 +543,7 @@ def test_publish_data_quota_stops_with_7(box, qurl):
 
 
 def test_publish_data_rejects_existing_and_bad_version(box, qurl):
-    pkg = box.tmp / "pkg"; make_pkg(pkg)
+    pkg = box.tmp / "pkg"; make_pkg(pkg)   # 2026.11.27 đã có trong repo Docker Hub giả
     r = box.run("publish-data", "--version", "2026.11.27", "--from-pkg", str(pkg), "--qdrant-url", qurl)
     assert r.returncode == 1 and "bất biến" in r.stderr
     r = box.run("publish-data", "--version", "2026-11-28", "--from-pkg", str(pkg), "--qdrant-url", qurl)
@@ -558,3 +611,31 @@ def test_existing_tag_check_fails_closed(box):
     r = box.run("publish", "--dry-run")
     assert r.returncode == 1 and "không kiểm được" in r.stderr
     assert not any(c[0] == "build" for c in box.docker_calls())
+
+
+
+def test_dry_run_without_data_repo_leaves_data_empty(box):
+    e = box.env(); del e["SECAI_DATA_REPO"]
+    r = subprocess.run(["bash", str(PUBLISH), "publish", "--dry-run"], text=True, capture_output=True, env=e,
+                       stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 0, r.stderr
+    assert manifest(box)["data"] == {"image": "", "default_version": "", "digest": ""}
+
+
+def test_real_publish_requires_data_repo(box):
+    e = box.env(); del e["SECAI_DATA_REPO"]
+    r = subprocess.run(["bash", str(PUBLISH), "publish"], text=True, capture_output=True, env=e, stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 1 and "SECAI_DATA_REPO" in r.stderr and not box.pushes()
+
+
+
+def test_real_publish_with_explicit_unverified_data_version(box):
+    # repo dữ liệu private, chưa có token đọc: chỉ nhận --data-version tường minh, digest để trống
+    e = box.env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
+    r = subprocess.run(["bash", str(PUBLISH), "publish"], text=True, capture_output=True, env=e, stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 1 and not box.pushes()
+    r = subprocess.run(["bash", str(PUBLISH), "publish", "--data-version", "2026.11.27"], text=True, capture_output=True, env=e,
+                       stdin=subprocess.DEVNULL, timeout=300)
+    assert r.returncode == 0, r.stderr
+    assert "chưa kiểm được" in r.stderr
+    assert manifest(box)["data"] == {"image": DATA, "default_version": "2026.11.27", "digest": ""}

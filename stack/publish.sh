@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# publish.sh - phát hành SecAI stack lên GHCR. Lệnh tay của NGƯỜI PHÁT HÀNH, chạy trên máy dev (không phải máy đích).
+# publish.sh - phát hành SecAI stack: image lên GHCR public, dữ liệu lên Docker Hub PRIVATE. Lệnh tay của NGƯỜI PHÁT HÀNH,
+# chạy trên máy dev (không phải máy đích).
 #
 #   publish [--ref REF] [--data-version V] [--stable] [--dry-run]
 #       gate (pytest toàn bộ trên git archive REF, build FULL, import app, /app/src == archive, smoke *-smoke-<ngày> trên
@@ -9,15 +10,20 @@
 #                [--neo4j-password-file F] [--keep] [--dry-run]
 #       (--from-pkg: gói có sẵn; bắt buộc --qdrant-url của collection nguồn để quét payload, số điểm phải khớp MANIFEST)
 #       pack.sh data (hoặc gói có sẵn) -> quét secret toàn bộ nội dung gói (+ payload Qdrant, chính sách corpus cố định
-#       trong lib/secret_scan.py, secret thật của máy này) -> image FROM scratch -> kiểm secai-data PRIVATE -> push.
+#       trong lib/secret_scan.py, secret thật của máy này) -> image FROM scratch -> kiểm repo Docker Hub ĐÃ CÓ và PRIVATE -> push
+#       $SECAI_DATA_REPO:<ngày>. Cảnh báo khi repo có hơn 3 tag dữ liệu.
+#   prune-data [--keep N] [--yes]   xoá tag dữ liệu cũ trên Docker Hub, giữ N bản mới nhất (mặc định 3; không --yes thì chỉ in)
 #   promote VERSION     dời tag stable của bundle sang VERSION (bản đó phải đã có trên GHCR).
 #   scan PATH...        chỉ quét secret (lib/secret_scan.py).
 #
-# Image (secai-agent-gateway, secai-pentestcode-vm, secai-stack) phải PUBLIC; dữ liệu (secai-data) phải PRIVATE.
+# Image (secai-agent-gateway, secai-pentestcode-vm, secai-stack) ở GHCR phải PUBLIC. Dữ liệu ở Docker Hub, một repo PRIVATE
+# duy nhất SECAI_DATA_REPO=docker.io/<namespace>/secai-data (gói miễn phí chỉ có 1 repo private; mỗi bản dữ liệu là một tag).
+# Token Docker Hub đọc từ SECAI_DOCKERHUB_TOKEN_FILE (tệp 0600/0400 của user này; Read & Write để push, thêm Delete để prune),
+# user SECAI_DOCKERHUB_USER (mặc định = namespace); chỉ đi vào stdin của `docker login` với DOCKER_CONFIG tạm.
 # Không push gì khi một gate trượt, khi quét secret có phát hiện, khi visibility sai, hoặc với --dry-run.
 # Mã thoát: 0 đạt; 1 lỗi/gate trượt/quét có phát hiện; 5 visibility sai; 6 khớp SECRET THẬT (dừng, báo người phụ trách);
-#   7 GHCR từ chối vì quota/billing (không thử lách).
-# Token gh chỉ đi qua stdin của `docker login` (DOCKER_CONFIG tạm, xoá khi thoát); không lên argv/log.
+#   7 registry từ chối vì quota/billing (không thử lách).
+# Token gh / Docker Hub chỉ đi qua stdin của `docker login` (DOCKER_CONFIG tạm, xoá khi thoát); không lên argv/log.
 # Biến (chủ yếu cho test/máy khác): PUBLISH_REPO_ROOT, PUBLISH_PYTHON (python có pytest), PUBLISH_WORK_ROOT (~/secai-releases),
 #   PUBLISH_MIN_FREE_GB (45), SECAI_GHCR_OWNER (elonma-china), SECAI_DOCKER_DIR (thư mục .env prod cho smoke),
 #   SECAI_DATA_ROOT (dữ liệu nguồn), SECAI_REGISTRY_HELPER (lib/registry.py), SECAI_SEED_BLOB (seed_blob.py của secai-serving),
@@ -30,7 +36,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${PUBLISH_REPO_ROOT:-$(cd "$HERE/.." && pwd)}"
 OWNER="${SECAI_GHCR_OWNER:-elonma-china}"
 REGISTRY="ghcr.io/$OWNER"
-PKG_GATEWAY=secai-agent-gateway; PKG_VM=secai-pentestcode-vm; PKG_STACK=secai-stack; PKG_DATA=secai-data
+PKG_GATEWAY=secai-agent-gateway; PKG_VM=secai-pentestcode-vm; PKG_STACK=secai-stack
+DATA_REPO="${SECAI_DATA_REPO:-}"                    # docker.io/<namespace>/secai-data (không ghi cứng namespace)
+DATA_REPO_RE='^docker\.io/[a-z0-9][a-z0-9_.-]*/secai-data$'
+HUB_USER="${SECAI_DOCKERHUB_USER:-}"
+HUB_TOKEN_FILE="${SECAI_DOCKERHUB_TOKEN_FILE:-}"
+DATA_KEEP=3                                          # Docker Hub có thể bóp băng thông khi dùng nhiều dung lượng
 SOURCE_URL="https://github.com/elonma-china/secai-prod"
 MAIN="$(git -C "$REPO" worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')" || MAIN=""
 MAIN="${MAIN:-$REPO}"
@@ -52,10 +63,35 @@ die() { echo "publish: $*" >&2; [ -z "$WORK" ] || printf '%s FAIL: %s\n' "$(date
 log() { echo "==> $*" >&2; [ -z "$WORK" ] || printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$WORK/publish.log" 2>/dev/null || true; }
 need_cmds() { local c; for c in "$@"; do command -v "$c" >/dev/null 2>&1 || die "thiếu lệnh '$c'"; done; }
 regq() { python3 -I "$REGHELP" "$@"; }
-regq_auth() { python3 -I "$REGHELP" --gh-auth "$OWNER" "$@"; }   # package private (secai-data): token gh chỉ trong tiến trình python
+regq_hub() { python3 -I "$REGHELP" --auth "$HUB_USER:$HUB_TOKEN_FILE" "$@"; }   # token Docker Hub chỉ đọc trong tiến trình python
+
+data_repo_ok() {   # kiểm SECAI_DATA_REPO, suy ra DATA_NS_REPO và user mặc định
+    [[ "$DATA_REPO" =~ $DATA_REPO_RE ]] || die "đặt SECAI_DATA_REPO=docker.io/<namespace>/secai-data (đang: '${DATA_REPO:-trống}')"
+    DATA_NS_REPO="${DATA_REPO#docker.io/}"
+    HUB_USER="${HUB_USER:-${DATA_NS_REPO%%/*}}"
+}
+hub_token_ok() {   # tệp token Docker Hub: có, thuộc user này, mode 600/400
+    local mode owner
+    [ -n "$HUB_TOKEN_FILE" ] && [ -f "$HUB_TOKEN_FILE" ] || { echo "publish: cần SECAI_DOCKERHUB_TOKEN_FILE (tệp 0600 chứa token Docker Hub)" >&2; return 1; }
+    read -r mode owner <<<"$(stat -L -c '%a %u' "$HUB_TOKEN_FILE")"
+    [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] \
+        || { echo "publish: SECAI_DOCKERHUB_TOKEN_FILE phải thuộc user này và mode 600/400 (đang $mode, uid $owner)" >&2; return 1; }
+}
+# Push vào repo chưa có thì Docker Hub tự tạo repo, có thể PUBLIC: phải thấy repo đã có và is_private=true mới push.
+require_hub_private() {
+    local v rc=0
+    v="$(regq_hub hub-repo "$DATA_NS_REPO" 2>/dev/null)" || rc=$?
+    case "$rc:$v" in
+        0:private) return 0 ;;
+        0:*) echo "publish: repo Docker Hub $DATA_NS_REPO đang '$v', phải PRIVATE; KHÔNG push" >&2; exit 5 ;;
+        1:*) echo "publish: repo Docker Hub $DATA_NS_REPO chưa có hoặc token không đọc được (push sẽ tự tạo repo, có thể public): tạo repo PRIVATE trên hub.docker.com trước; KHÔNG push" >&2; exit 5 ;;
+        *) die "không kiểm được visibility của $DATA_NS_REPO trên Docker Hub (rc=$rc); KHÔNG push" ;;
+    esac
+}
 
 # Nguồn secret THẬT của máy này (chủ dự án 2026-11-27). Thiếu nguồn bắt buộc thì quét lỗi (fail closed); '?' = tuỳ chọn.
 known_secret_specs() {
+    [ -z "$HUB_TOKEN_FILE" ] || printf '%s\n' "?raw:$HUB_TOKEN_FILE"   # token Docker Hub cũng không được lọt vào gói
     if [ -n "${PUBLISH_KNOWN_SECRETS+x}" ]; then printf '%s\n' "$PUBLISH_KNOWN_SECRETS"; return; fi
     printf '%s\n' gh "env:$DOCKER_DIR/.env" "env:$MAIN/.env" "?env:$REPO/stack/.env" "?env:$MAIN/stack/.env" \
         "compose:$DOCKER_DIR/docker-compose.yml" "shell:$HOME/Downloads/CVE-DB/run_sync.sh" "json:$HOME/secai-releases/*/*.json" \
@@ -92,18 +128,26 @@ require_visibility() {   # require_visibility public|private PKG...
     if [ "$want" = public ]; then
         echo "publish: bật Public tại https://github.com/users/$OWNER/packages/container/<tên>/settings rồi chạy lại; KHÔNG push gì" >&2
     else
-        echo "publish: dữ liệu phải giữ PRIVATE; KHÔNG push (đổi lại Private trên web GitHub trước)" >&2
+        echo "publish: package phải giữ PRIVATE; KHÔNG push" >&2
     fi
     exit 5
 }
 require_public() { require_visibility public "$@"; }
 
-ghcr_login() {
+tmp_docker_config() {   # một DOCKER_CONFIG tạm cho cả lần chạy; logout + xoá khi thoát
     [ -z "${DOCKER_CONFIG_TMP:-}" ] || return 0
+    DOCKER_CONFIG_TMP="$(mktemp -d)"; chmod 700 "$DOCKER_CONFIG_TMP"; export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
+    CLEANUPS+=("docker logout ghcr.io; docker logout; rm -rf '$DOCKER_CONFIG_TMP'")
+}
+ghcr_login() {
     need_cmds gh
-    DOCKER_CONFIG_TMP="$(mktemp -d)"; export DOCKER_CONFIG="$DOCKER_CONFIG_TMP"
-    CLEANUPS+=("docker logout ghcr.io; rm -rf '$DOCKER_CONFIG_TMP'")
+    tmp_docker_config
     gh auth token | docker login ghcr.io -u "$OWNER" --password-stdin >/dev/null 2>&1 || die "docker login ghcr.io thất bại"
+}
+hub_login() {   # token đi thẳng từ tệp vào stdin, không qua biến/argv
+    tmp_docker_config
+    docker login -u "$HUB_USER" --password-stdin <"$HUB_TOKEN_FILE" >/dev/null 2>&1 \
+        || die "docker login Docker Hub ($HUB_USER) thất bại: token sai/hết hạn/thiếu quyền ghi"
 }
 
 local_id() { docker image inspect --format '{{.Id}}' "$1" 2>/dev/null; }
@@ -114,14 +158,14 @@ take_lock() {   # một lần phát hành tại một thời điểm (cùng WORK
     flock -n 8 || die "một publish.sh khác đang chạy ($WORK_ROOT/publish.lock)"
 }
 
-# tag_absent REF [auth]: 0 nếu tag CHƯA có trên GHCR; tag đã có => die (phiên bản bất biến); không kiểm được => die (fail closed).
+# tag_absent REF [hub]: 0 nếu tag CHƯA có trên registry; tag đã có => die (phiên bản bất biến); không kiểm được => die.
 tag_absent() {
     local rc=0
-    if [ "${2:-}" = auth ]; then regq_auth digest "$1" >/dev/null 2>&1 || rc=$?; else regq digest "$1" >/dev/null 2>&1 || rc=$?; fi
+    if [ "${2:-}" = hub ]; then regq_hub digest "$1" >/dev/null 2>&1 || rc=$?; else regq digest "$1" >/dev/null 2>&1 || rc=$?; fi
     case "$rc" in
-        0) die "$1 đã có trên GHCR (phiên bản bất biến)" ;;
+        0) die "$1 đã có trên registry (phiên bản bất biến)" ;;
         1) return 0 ;;
-        *) die "không kiểm được $1 trên GHCR (rc=$rc); thử lại sau, KHÔNG push" ;;
+        *) die "không kiểm được $1 trên registry (rc=$rc); thử lại sau, KHÔNG push" ;;
     esac
 }
 
@@ -147,7 +191,7 @@ push_ref() {   # push_ref REF SEED_SRC_REPO [auth]
         # bỏ dòng tiến trình (12 hex:) và digest trước khi so, để mã hex không khớp nhầm
         msg="$(sed -E '/^[0-9a-f]{12}: /d; s/sha256:[0-9a-f]{64}//g' <<<"$out")"
         if grep -qiE 'quota|billing|payment required|spending limit|storage limit|\b402\b' <<<"$msg"; then
-            echo "publish: GHCR từ chối $ref vì quota/billing (package private tính vào quota GitHub Packages): cần chủ dự án gắn phương thức thanh toán/budget. KHÔNG thử lách." >&2
+            echo "publish: registry từ chối $ref vì quota/billing: cần chủ dự án xử lý (gói miễn phí). KHÔNG thử lách." >&2
             [ -z "$WORK" ] || printf '%s QUOTA: %s\n' "$(date '+%F %T')" "$ref" >>"$WORK/publish.log"
             exit 7
         fi
@@ -157,11 +201,11 @@ push_ref() {   # push_ref REF SEED_SRC_REPO [auth]
     [ "$d" = "$want" ] || die "push $ref: digest in ra '$d' khác .Id cục bộ '$want'"
     verify_remote "$ref" "$want" "$mode"
 }
-verify_remote() {   # verify_remote REF DIGEST [auth]: đọc ẩn danh (chứng minh máy đích kéo được) hoặc bằng token gh (private), so digest
+verify_remote() {   # verify_remote REF DIGEST [hub]: đọc ẩn danh (GHCR public: chứng minh máy đích kéo được) hoặc bằng token Docker Hub
     local got i q=regq
-    [ "${3:-}" != auth ] || q=regq_auth
+    [ "${3:-}" != hub ] || q=regq_hub
     for i in 1 2 3 4 5; do got="$($q digest "$1" 2>/dev/null)" && break; sleep 3; done
-    [ "$got" = "$2" ] || die "GHCR trả digest '$got' cho $1, mong đợi $2"
+    [ "$got" = "$2" ] || die "registry trả digest '$got' cho $1, mong đợi $2"
     log "đã push $1 ($2)"
 }
 
@@ -263,13 +307,13 @@ for k in sys.argv[2].split():
 PY
 }
 
-latest_data_version() {   # secai-data private: đọc bằng token gh
-    regq_auth tags "$REGISTRY/$PKG_DATA" 2>/dev/null | grep -E "$DATA_RE" | sort -V | tail -n1
+latest_data_version() {   # repo dữ liệu private: đọc bằng token Docker Hub
+    regq_hub hub-tags "$DATA_NS_REPO" 2>/dev/null | grep -E "$DATA_RE" | sort -V | tail -n1
 }
 
 write_manifest() {   # write_manifest OUT (đọc IMAGES_TSV, DATA_VERSION, DATA_DIGEST qua môi trường, không ghép vào mã)
     IMAGES_TSV="$IMAGES_TSV" M_VERSION="$VERSION" M_SHA="$SHA" M_SOURCE="$SOURCE_URL" M_REGISTRY="$REGISTRY" \
-    M_DATA_IMAGE="$REGISTRY/$PKG_DATA" M_DATA_VERSION="$DATA_VERSION" M_DATA_DIGEST="$DATA_DIGEST" python3 -I - "$1" <<'PY'
+    M_DATA_IMAGE="$DATA_REPO" M_DATA_VERSION="$DATA_VERSION" M_DATA_DIGEST="$DATA_DIGEST" python3 -I - "$1" <<'PY'
 import json, os, sys, time
 e = os.environ
 imgs = {}
@@ -295,8 +339,9 @@ for k in keys:
     e = m["images"][k]
     assert re.fullmatch(r"[a-z0-9][a-z0-9._/:-]*", e["ref"]) and "@" not in e["ref"] and ":latest" not in e["ref"], k
     assert re.fullmatch(r"sha256:[0-9a-f]{64}", e["digest"]), k
-dv = m["data"]["default_version"]
+dv, di = m["data"]["default_version"], m["data"]["image"]
 assert (dry and dv == "") or re.fullmatch(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]{1,2})?", dv), "data.default_version"
+assert (dry and di == "") or re.fullmatch(r"docker\.io/[a-z0-9][a-z0-9_.-]*/secai-data", di), "data.image"
 PY
 }
 
@@ -360,15 +405,25 @@ VM_IMAGE	$REGISTRY/$PKG_VM:$VERSION	$(local_id "$vm")"
         d="$(regq digest "$r")" || die "không lấy được digest của $r"
         IMAGES_TSV+=$'\n'"$k"$'\t'"$r"$'\t'"$d"
     done <<<"$bi"
-    [ -n "$data_version" ] || data_version="$(latest_data_version)" || data_version=""
-    DATA_VERSION="$data_version"; DATA_DIGEST=""
-    if [ -n "$DATA_VERSION" ]; then
-        [[ "$DATA_VERSION" =~ $DATA_RE ]] || die "--data-version '$DATA_VERSION' không hợp lệ"
-        DATA_DIGEST="$(regq_auth digest "$REGISTRY/$PKG_DATA:$DATA_VERSION")" || {
-            [ "$dry" = 1 ] || die "không thấy $REGISTRY/$PKG_DATA:$DATA_VERSION trên GHCR (publish-data trước)"; DATA_DIGEST=""; }
-    else
-        [ "$dry" = 1 ] || die "chưa có bản dữ liệu nào trên GHCR: chạy publish-data trước hoặc --data-version"
-        echo "publish: (dry-run) chưa xác định bản dữ liệu mặc định" >&2
+    DATA_VERSION=""; DATA_DIGEST=""
+    if [ -n "$DATA_REPO" ] && data_repo_ok && { [ -z "$HUB_TOKEN_FILE" ] || hub_token_ok; } && [ -n "$HUB_TOKEN_FILE" ]; then
+        [ -n "$data_version" ] || data_version="$(latest_data_version)" || data_version=""
+        DATA_VERSION="$data_version"
+        if [ -n "$DATA_VERSION" ]; then
+            [[ "$DATA_VERSION" =~ $DATA_RE ]] || die "--data-version '$DATA_VERSION' không hợp lệ"
+            DATA_DIGEST="$(regq_hub digest "$DATA_REPO:$DATA_VERSION")" || {
+                [ "$dry" = 1 ] || die "không thấy $DATA_REPO:$DATA_VERSION trên Docker Hub (publish-data trước)"; DATA_DIGEST=""; }
+        fi
+    fi
+    if [ -z "$DATA_DIGEST" ] && [ -n "$DATA_REPO" ] && [[ "$DATA_REPO" =~ $DATA_REPO_RE ]] && [[ "$data_version" =~ $DATA_RE ]] \
+        && [ -z "$HUB_TOKEN_FILE" ]; then
+        # Repo dữ liệu private mà chưa có token đọc: chỉ nhận khi người phát hành ghi rõ --data-version; digest để trống.
+        echo "publish: CẢNH BÁO: chưa kiểm được $DATA_REPO:$data_version (repo private, không có SECAI_DOCKERHUB_TOKEN_FILE); manifest ghi bản dữ liệu mặc định không kèm digest" >&2
+        DATA_VERSION="$data_version"
+    elif [ -z "$DATA_VERSION" ] || [ -z "$DATA_DIGEST" ]; then
+        [ "$dry" = 1 ] || die "cần SECAI_DATA_REPO, SECAI_DOCKERHUB_TOKEN_FILE và một bản dữ liệu đã có trên Docker Hub (publish-data trước hoặc --data-version)"
+        echo "publish: (dry-run) chưa xác định bản dữ liệu mặc định (SECAI_DATA_REPO/token/tag)" >&2
+        DATA_VERSION=""; DATA_DIGEST=""; [ -n "$DATA_REPO" ] && [[ "$DATA_REPO" =~ $DATA_REPO_RE ]] || DATA_REPO=""
     fi
 
     log "bundle $bundle"
@@ -441,12 +496,19 @@ cmd_publish_data() {
     take_lock
     version="${version:-$(date +%Y.%m.%d)}"
     [[ "$version" =~ $DATA_RE ]] || die "version dữ liệu '$version' không hợp lệ (YYYY.MM.DD hoặc YYYY.MM.DD.N)"
-    local ref="$REGISTRY/$PKG_DATA:$version"
+    data_repo_ok
+    local ref="$DATA_REPO:$version" hubok=1
+    hub_token_ok || hubok=0
+    [ "$dry" = 1 ] || [ "$hubok" = 1 ] || exit 5
     mkdir -p "$WORK_ROOT"; WORK="$WORK_ROOT/data-$version"; mkdir -p "$WORK"; chmod 700 "$WORK"
     log "phát hành dữ liệu $version$([ "$dry" = 0 ] || echo ' (dry-run)')"
     check_disk
-    tag_absent "$ref" auth
-    [ "$dry" = 1 ] || require_visibility private "$PKG_DATA"
+    if [ "$hubok" = 1 ]; then
+        [ "$dry" = 1 ] || require_hub_private
+        tag_absent "$ref" hub
+    else
+        echo "publish: (dry-run) không có token Docker Hub: bỏ kiểm repo private và tag đã có" >&2
+    fi
     local pkg qargs=()
     if [ -n "$frompkg" ]; then
         pkg="$(cd "$frompkg" && pwd)"
@@ -479,11 +541,11 @@ got = json.load(open(sys.argv[1])).get("qdrant_points")
 want = sum(int(n) for n in re.findall(r"- qdrant collection: \S+ \((\d+) points\)", open(sys.argv[2], encoding="utf-8").read()))
 sys.exit(0 if got == want and want > 0 else 1)
 PY
-    # GHCR giới hạn ~10 GB mỗi layer; mỗi nhóm COPY là một layer.
+    # Mỗi nhóm COPY là một layer; giữ dưới 9,5 GB mỗi layer (registry thường giới hạn khoảng 10 GB).
     local grp sz
     for grp in qdrant neo4j "exploitdb.tar.zst poc.tar.zst poc-sources.tar.zst exploitdb-mcp-server.tar.zst"; do
         sz=$(cd "$pkg" && du -scb $grp | tail -n1 | cut -f1)
-        (( sz < 9500000000 )) || die "layer '$grp' ${sz} byte > 9,5 GB (GHCR giới hạn ~10 GB mỗi layer)"
+        (( sz < 9500000000 )) || die "layer '$grp' ${sz} byte > 9,5 GB"
     done
     cat >"$WORK/Dockerfile.data" <<'EOF'
 FROM scratch
@@ -494,17 +556,17 @@ COPY MANIFEST.md SHA256SUMS /secai-data/
 EOF
     log "build $ref"
     docker build -q -f "$WORK/Dockerfile.data" --label org.opencontainers.image.source="$SOURCE_URL" \
-        --label org.opencontainers.image.version="$version" --label org.opencontainers.image.title="$PKG_DATA" \
+        --label org.opencontainers.image.version="$version" --label org.opencontainers.image.title=secai-data \
         -t "$ref" "$pkg" >/dev/null || die "build image dữ liệu lỗi"
     cp "$pkg/MANIFEST.md" "$WORK/MANIFEST.md"
     if [ "$dry" = 1 ]; then
         log "DRY-RUN xong: image $ref dựng cục bộ ($(local_id "$ref")), không push"
         return 0
     fi
-    require_visibility private "$PKG_DATA"
-    tag_absent "$ref" auth
-    ghcr_login
-    push_ref "$ref" "" auth
+    require_hub_private
+    tag_absent "$ref" hub
+    hub_login
+    push_ref "$ref" "" hub
     python3 -I - "$WORK/scan-data.json" "$version" "$(local_id "$ref")" "$WORK/data-release.json" <<'PY'
 import json, sys
 scan = json.load(open(sys.argv[1]))
@@ -519,12 +581,39 @@ PY
         docker image rm "$ref" >/dev/null 2>&1 || true
     fi
     log "XONG: $ref ($(cat "$WORK/data-release.json"))"
+    local n; n="$(regq_hub hub-tags "$DATA_NS_REPO" 2>/dev/null | grep -cE "$DATA_RE")" || n=0
+    if (( n > DATA_KEEP )); then
+        echo "publish: CẢNH BÁO: $DATA_NS_REPO có $n bản dữ liệu (> $DATA_KEEP); Docker Hub có thể bóp băng thông. Dọn: stack/publish.sh prune-data --keep $DATA_KEEP --yes (giữ bản mà bundle stable đang trỏ tới)" >&2
+    fi
+}
+
+cmd_prune_data() {
+    local keep="$DATA_KEEP" yes=0 tags del t
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --keep) keep="$2"; shift 2 ;;
+            --yes) yes=1; shift ;;
+            *) die "tham số lạ: $1" ;;
+        esac
+    done
+    [[ "$keep" =~ ^[1-9][0-9]*$ ]] || die "--keep phải là số >= 1"
+    need_cmds python3 flock
+    take_lock
+    data_repo_ok
+    hub_token_ok || exit 5
+    tags="$(regq_hub hub-tags "$DATA_NS_REPO")" || die "không đọc được tag của $DATA_NS_REPO"
+    del="$(grep -E "$DATA_RE" <<<"$tags" | sort -V | head -n -"$keep")" || del=""
+    if [ -z "$del" ]; then log "không có tag dữ liệu nào cần xoá (giữ $keep)"; return 0; fi
+    echo "Sẽ xoá khỏi $DATA_NS_REPO (giữ $keep bản mới nhất):" >&2; printf '  %s\n' $del >&2
+    if [ "$yes" != 1 ]; then echo "publish: chưa xoá gì; thêm --yes để xoá (token cần quyền Delete)" >&2; return 0; fi
+    for t in $del; do regq_hub hub-delete-tag "$DATA_NS_REPO" "$t" || die "xoá tag $t lỗi (token thiếu quyền Delete?)"; log "đã xoá $DATA_NS_REPO:$t"; done
 }
 
 case "${1:-}" in
     publish) shift; cmd_publish "$@" ;;
     publish-data) shift; cmd_publish_data "$@" ;;
+    prune-data) shift; cmd_prune_data "$@" ;;
     promote) shift; cmd_promote "$@" ;;
     scan) shift; [ $# -gt 0 ] || die "dùng: publish.sh scan PATH..."; python3 -I "$SCANNER" "$@" ;;
-    *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
+    *) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2 ;;
 esac

@@ -17,7 +17,8 @@ REG = "ghcr.io/elonma-china"
 V1, V2 = "2026.11.27-aaaaaaaa", "2026.11.28-bbbbbbbb"
 D1, D2 = "2026.11.27", "2026.11.28"
 KEY = "sk-FAKE-SECRET-secai-7731"   # khoá LLM giả: không được xuất hiện ở argv/stdout/stderr
-GTOKEN = "ghp_FAKEreadPackagesToken000000000000xx"   # token GHCR chỉ đọc giả: chỉ được đi qua stdin của docker login
+GTOKEN = "dckr_pat_FAKEreadOnlyToken000000000xx"   # token Docker Hub chỉ đọc giả: chỉ được đi qua stdin của docker login
+DATA = "docker.io/testns/secai-data"
 BASES = {"QDRANT_IMAGE": "qdrant/qdrant:v1.10.1", "NEO4J_IMAGE": "neo4j:5.20-community",
          "REDIS_IMAGE": "redis:7-alpine", "ES_IMAGE": "docker.elastic.co/elasticsearch/elasticsearch:8.15.3"}
 
@@ -93,6 +94,7 @@ if cmd == "logout":
     sys.exit(0)
 if cmd == "pull":
     ref = argv[-1]
+    open(os.path.join(F, "pull.log"), "a").write(json.dumps([ref, os.environ.get("DOCKER_CONFIG", "")]) + "\n")
     if "secai-data" in ref:   # package private: cần đăng nhập trong DOCKER_CONFIG tạm
         cfg = os.environ.get("DOCKER_CONFIG", "")
         if not (cfg and os.path.exists(os.path.join(cfg, "config.json"))): fail("unauthorized: authentication required")
@@ -213,7 +215,7 @@ class Box:
         write_exec(st / "check.sh", FAKE_CHECK.replace("@FAKE@", str(self.fake)))
         write_exec(st / "restore-data.sh", FAKE_RESTORE.replace("@FAKE@", str(self.fake)))
         man = {"schema": 1, "version": manifest_version or v, "git_sha": v[-8:] * 5, "images": self.pins(v),
-               "data": {"default_version": D1, "image": f"{REG}/secai-data"}}
+               "data": {"default_version": D1, "image": DATA}}
         (st / "secai-stack.json").write_text(json.dumps(man))
         self.reg[f"{REG}/secai-stack:{tag or v}"] = {"digest": dg("bundle" + (tag or v)), "fs": str(fs)}
         for k, e in self.pins(v).items():
@@ -228,7 +230,7 @@ class Box:
         (pkg / "MANIFEST.md").write_text("# SecAI data package\n\n- created: 2026-11-26T10:00:00Z\n- qdrant collection: cve_kb_hybrid (5 points)\n")
         sums = "".join(f"{hashlib.sha256((pkg / f).read_bytes()).hexdigest()}  {f}\n" for f in ("qdrant/cve_kb_hybrid.snapshot", "MANIFEST.md"))
         (pkg / "SHA256SUMS").write_text(sums)
-        self.reg[f"{REG}/secai-data:{d}"] = {"digest": dg("data" + d), "fs": str(fs)}
+        self.reg[f"{DATA}:{d}"] = {"digest": dg("data" + d), "fs": str(fs)}
 
     def save(self):
         (self.fake / "registry.json").write_text(json.dumps(self.reg))
@@ -236,7 +238,7 @@ class Box:
     def env(self, **kw):
         e = {"PATH": f"{self.bin}:/usr/bin:/bin", "HOME": str(self.tmp / "home"), "SECAI_HOME": str(self.home),
              "FAKE_DOCKER_DIR": str(self.fake), "MAX_MAP_COUNT_FILE": str(self.tmp / "mmc"), "SECAI_MIN_FREE_GB": "0",
-             "SECAI_UP_TIMEOUT": "5", "LANG": "C.UTF-8", "SECAI_GHCR_TOKEN_FILE": str(self.tokfile)}
+             "SECAI_UP_TIMEOUT": "5", "LANG": "C.UTF-8", "SECAI_DOCKERHUB_TOKEN_FILE": str(self.tokfile)}
         e.update(kw)
         return e
 
@@ -561,17 +563,17 @@ def test_data_pull_uses_temp_docker_config_and_cleans_up(box):
         if p.is_file():
             assert GTOKEN not in p.read_text(errors="replace"), p
     login = [c for c in box.calls() if c[0] == "login"][0]
-    assert login[:4] == ["login", "ghcr.io", "-u", "elonma-china"] and "--password-stdin" in login
+    assert login == ["login", "-u", "testns", "--password-stdin"]   # Docker Hub (không ghi server), user = namespace
 
 
 def test_secret_env_not_inherited_by_direct_children(box):
-    e = box.install_env(SECAI_GHCR_TOKEN=GTOKEN)
-    del e["SECAI_GHCR_TOKEN_FILE"]
+    e = box.install_env(SECAI_DOCKERHUB_TOKEN=GTOKEN)
+    del e["SECAI_DOCKERHUB_TOKEN_FILE"]
     r = box.run("install", V1, env=e)
     assert r.returncode == 0, r.stderr
     for line in (box.fake / "curl.env").read_text().splitlines():
         keys = json.loads(line)
-        assert "SECAI_GHCR_TOKEN" not in keys and "LLM_API_KEY" not in keys and "EMBEDDING_API_KEY" not in keys
+        assert "SECAI_DOCKERHUB_TOKEN" not in keys and "LLM_API_KEY" not in keys and "EMBEDDING_API_KEY" not in keys
 
 
 def test_token_file_must_be_private(box):
@@ -590,13 +592,13 @@ def test_wrong_token_fails_and_cleans(box):
 
 
 def test_no_token_non_interactive_points_to_data_dir(box):
-    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    e = box.install_env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
     r = box.run("install", V1, env=e)
     assert r.returncode == 1 and "--data-dir" in r.stderr and not box.ups()
 
 
 def test_install_with_data_dir_needs_no_token(box):
-    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    e = box.install_env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
     pkg = box.data_pkg(D1)
     r = box.run("install", V1, "--data-dir", str(pkg), env=e)
     assert r.returncode == 0, r.stderr
@@ -659,7 +661,7 @@ def test_upgrade_same_version_repairs_inconsistent_files(box):
 
 
 def test_data_load_same_label_different_content_refused(box):
-    e = box.install_env(); del e["SECAI_GHCR_TOKEN_FILE"]
+    e = box.install_env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
     assert box.run("install", V1, "--data-dir", str(box.data_pkg(D1)), env=e).returncode == 0
     # gói khác (D2) nhưng cùng nhãn ngày MANIFEST -> phải từ chối, không im lặng dùng bản cũ
     other = box.tmp / "other"
@@ -689,3 +691,36 @@ def test_optional_project_name(box):
     assert env["COMPOSE_PROJECT_NAME"] == "secai-next" and env["POC_LABS_EXTERNAL"] == "true"
     r = box.run("install", V1, env=box.install_env(COMPOSE_PROJECT_NAME="Bad Name"))
     assert r.returncode == 1
+
+
+
+# ───────────── dữ liệu trên Docker Hub private; image nền Docker Hub kéo bằng phiên đăng nhập nếu có token ─────────────
+def pulls(box):
+    return [json.loads(l) for l in (box.fake / "pull.log").read_text().splitlines()]
+
+
+def test_base_images_pulled_with_hub_session_when_token(box):
+    installed(box)
+    p = dict((ref, cfg) for ref, cfg in pulls(box))
+    for k in ("QDRANT_IMAGE", "NEO4J_IMAGE", "REDIS_IMAGE"):
+        e = box.pins(V1)[k]
+        assert p[f"{e['ref']}@{e['digest']}"], k              # kéo trong DOCKER_CONFIG tạm đã đăng nhập
+    assert p[f"{DATA}:{D1}"]
+    assert all(not Path(c).exists() for c in p.values() if c)   # mọi DOCKER_CONFIG tạm đã xoá
+
+
+def test_no_token_with_data_dir_warns_and_pulls_anonymously(box):
+    e = box.install_env(); del e["SECAI_DOCKERHUB_TOKEN_FILE"]
+    r = box.run("install", V1, "--data-dir", str(box.data_pkg(D1)), env=e)
+    assert r.returncode == 0, r.stderr
+    assert "ẩn danh" in r.stderr and not any(c[0] == "login" for c in box.calls())
+    assert all(cfg == "" for _, cfg in pulls(box))
+
+
+def test_data_repo_override(box):
+    other = "docker.io/otherns/secai-data"
+    box.reg[f"{other}:{D1}"] = dict(box.reg[f"{DATA}:{D1}"]); box.save()
+    r = box.run("install", V1, env=box.install_env(SECAI_DATA_REPO=other))
+    assert r.returncode == 0, r.stderr
+    assert any(ref == f"{other}:{D1}" for ref, _ in pulls(box))
+    assert [c for c in box.calls() if c[0] == "login"][0][2] == "otherns"

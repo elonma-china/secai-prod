@@ -39,6 +39,18 @@ Owner decisions later on 2026-11-27 (override the spec above where they differ):
   list (exploitdb, poc-sources, poc/store, catalog.db, mcp-server node_modules, Qdrant payload/snapshot); everywhere else they block.
 - VM test without a read-only token: load data with `secai install --data-dir` / `secai data load` from a package copied by rsync.
 
+Owner decision, later still on 2026-11-27 ("free tier only", overrides where data lives):
+- Images stay on GHCR public. Data moves to **Docker Hub, one private repo** `docker.io/<ns>/secai-data` (free plan: 1 private
+  repo; one tag per data version), namespace from `SECAI_DATA_REPO` (owner: `secai1999`). The GHCR `secai-data` package is unused.
+- `publish-data`: Docker Hub token from a 0600 file into a temporary `DOCKER_CONFIG` via `--password-stdin`; before pushing, the
+  Docker Hub API must show the repo exists and `is_private=true` (pushing to a missing repo auto-creates it, possibly public).
+  Keep about 3 data tags (`prune-data`). Two-tier secret scan unchanged.
+- Operator: data pull needs a Docker Hub **Read-only** token (hidden prompt / env / 0600 file), temporary `DOCKER_CONFIG`; base
+  images from Docker Hub are pulled with that session when a token exists (anonymous limit ~10 pulls/h/IP), else a warning.
+- Real push needs: the 3 GHCR image packages public, the Docker Hub repo private, and a write token file from the parent agent.
+  VM test uses only a read-only token, or `data load` from an rsync'd package.
+- 23:xx: the 3 GHCR packages were made public; Docker Hub token not yet available → publish images now, stop data at "ready to push".
+
 Facts measured on 2026-11-27:
 - Placeholders `:init` (10 kB, FROM scratch) pushed for the four packages at 12:40Z; all four are private (anonymous token endpoint → 401).
 - Secret scan dry measurement on the source trees (read-only): 7,198 soft-rule findings (exploitdb 2,913, poc-sources 2,829, poc/store 1,456; catalog.db 232; mcp node_modules 40), 0 hard-rule findings. The raw Qdrant snapshot is compressed SST, so payloads are scanned through the API scroll.

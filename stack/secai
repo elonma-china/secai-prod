@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# secai - cài và vận hành SecAI stack từ GHCR. Một tệp duy nhất, tải bằng curl; máy đích chỉ cần Docker (không cần git).
+# secai - cài và vận hành SecAI stack (image từ GHCR public, dữ liệu từ Docker Hub private). Một tệp duy nhất, tải bằng curl; máy đích chỉ cần Docker (không cần git).
 #
 #   secai install [VERSION]        kiểm máy, kéo bundle (mặc định tag stable), hỏi các biến bắt buộc, kéo image theo digest,
 #                                  tải + nạp dữ liệu, compose up, check.sh all
 #   secai status [--json]          phiên bản đang chạy, dữ liệu, service, /health, image có khớp manifest không
 #   secai upgrade [VERSION]        lên bản mới; check.sh all trượt thì tự quay về bản trước
 #   secai rollback                 quay về bản liền trước
-#   secai data update [DATA_VER]   nạp dữ liệu mới (GHCR) bên cạnh bản cũ rồi chuyển; trượt thì quay lại, bản cũ luôn giữ
+#   secai data update [DATA_VER]   nạp dữ liệu mới (Docker Hub) bên cạnh bản cũ rồi chuyển; trượt thì quay lại, bản cũ luôn giữ
 #   secai data load DIR [DATA_VER] như data update nhưng lấy gói dữ liệu từ thư mục có sẵn (pack.sh data, chép bằng rsync)
 #   secai data rollback            quay về bộ dữ liệu liền trước
 #   secai check | logs [service] | up | down | version
@@ -14,9 +14,11 @@
 # Biến môi trường: SECAI_HOME (mặc định /opt/secai khi chạy root, ~/secai nếu không), SECAI_REGISTRY (ghcr.io/elonma-china),
 #   SECAI_YES=1 hoặc --yes (không hỏi; thiếu biến bắt buộc thì dừng), SECAI_DATA_VERSION (bộ dữ liệu khi install),
 #   SECAI_MIN_FREE_GB (chỗ trống tối thiểu), SECAI_UP_TIMEOUT (giây chờ healthy, 900).
-#   Dữ liệu (ghcr.io/.../secai-data) là package PRIVATE: cần token GitHub (classic) chỉ có quyền read:packages, lấy từ
-#   SECAI_GHCR_TOKEN_FILE (tệp 0600/0400 của chính user), SECAI_GHCR_TOKEN (env) hoặc hỏi ẩn; user đăng nhập SECAI_GHCR_USER
-#   (mặc định elonma-china). Token chỉ đi qua stdin của `docker login` với DOCKER_CONFIG tạm, xoá ngay sau khi kéo.
+#   Dữ liệu nằm ở repo Docker Hub PRIVATE ghi trong manifest của bundle (data.image, vd docker.io/<ns>/secai-data; đè bằng
+#   SECAI_DATA_REPO): cần token Docker Hub loại Read-only, lấy từ SECAI_DOCKERHUB_TOKEN_FILE (tệp 0600/0400 của chính user),
+#   SECAI_DOCKERHUB_TOKEN (env) hoặc hỏi ẩn; user SECAI_DOCKERHUB_USER (mặc định = namespace của repo). Token chỉ đi qua stdin
+#   của `docker login` với DOCKER_CONFIG tạm, xoá ngay sau khi kéo. Có token thì image nền trên Docker Hub (qdrant, neo4j, redis)
+#   cũng kéo bằng phiên đó (tránh giới hạn kéo ẩn danh ~10 lần/giờ/IP); không có thì kéo ẩn danh và cảnh báo.
 #   Không có token: `secai install --data-dir DIR` / `secai data load DIR` dùng gói dữ liệu đã chép sẵn.
 #   Biến bắt buộc lần đầu có thể đặt sẵn trong môi trường (không bao giờ qua tham số dòng lệnh): LLM_BASE_URL LLM_MODEL
 #   LLM_API_KEY EMBEDDING_API_URL EMBEDDING_MODEL EMBEDDING_API_KEY RERANKER_API_URL RERANKER_MODEL RERANKER_API_KEY
@@ -31,7 +33,7 @@ set -euo pipefail
 CLI_SCHEMA=1
 REGISTRY="${SECAI_REGISTRY:-ghcr.io/elonma-china}"
 BUNDLE_REPO="$REGISTRY/secai-stack"
-DATA_REPO="$REGISTRY/secai-data"
+DATA_REPO_INPUT="${SECAI_DATA_REPO:-}"   # mặc định: data.image trong manifest của bản đang dùng
 if [ "$(id -u)" = 0 ]; then SECAI_HOME="${SECAI_HOME:-/opt/secai}"; else SECAI_HOME="${SECAI_HOME:-$HOME/secai}"; fi
 STACK="$SECAI_HOME/stack"
 STATE="$SECAI_HOME/state.json"
@@ -62,11 +64,11 @@ declare -A INPUT=()
 for _k in "${REQUIRED[@]}" "${OPTIONAL[@]}"; do [ -z "${!_k:-}" ] || INPUT[$_k]="${!_k}"; done
 INPUT_DATA_VERSION="${SECAI_DATA_VERSION:-}"
 ASSUME_YES="${SECAI_YES:-0}"
-GHCR_TOKEN="${SECAI_GHCR_TOKEN:-}"
-GHCR_TOKEN_FILE="${SECAI_GHCR_TOKEN_FILE:-}"
-GHCR_USER="${SECAI_GHCR_USER:-elonma-china}"
+HUB_TOKEN="${SECAI_DOCKERHUB_TOKEN:-}"
+HUB_TOKEN_FILE="${SECAI_DOCKERHUB_TOKEN_FILE:-}"
+HUB_USER_INPUT="${SECAI_DOCKERHUB_USER:-}"
 # Secret đã lấy vào biến; gỡ khỏi môi trường để không tiến trình con nào (curl, python...) thừa hưởng.
-unset SECAI_GHCR_TOKEN LLM_API_KEY EMBEDDING_API_KEY RERANKER_API_KEY
+unset SECAI_DOCKERHUB_TOKEN LLM_API_KEY EMBEDDING_API_KEY RERANKER_API_KEY
 
 die() { echo "secai: $*" >&2; logline "FAIL: $*"; exit 1; }
 say() { echo "secai: $*" >&2; }
@@ -129,13 +131,14 @@ take_lock() {
 }
 
 # ───────────────────────────── manifest ─────────────────────────────
-# man_field FILE KEY (version | git_sha | data_default | schema)
+# man_field FILE KEY (version | git_sha | data_default | data_image | schema)
 man_field() {
     python3 -I - "$1" "$2" <<'PY'
 import json, sys
 m = json.load(open(sys.argv[1]))
 k = sys.argv[2]
-v = (m.get("data") or {}).get("default_version", "") if k == "data_default" else m.get(k, "")
+d = m.get("data") or {}
+v = d.get("default_version", "") if k == "data_default" else d.get("image", "") if k == "data_image" else m.get(k, "")
 print(v)
 PY
 }
@@ -194,14 +197,16 @@ repo_digest() {
     dk image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$1" 2>/dev/null \
         | awk -v r="$2@" 'index($0, r) == 1 { print substr($0, length(r) + 1); exit }'
 }
-CLEAN_CIDS=(); CLEAN_DCFG=""
+CLEAN_CIDS=(); CLEAN_DCFG=""; CLEAN_DSRV=""
 cleanup_cids() { local c; for c in ${CLEAN_CIDS[@]+"${CLEAN_CIDS[@]}"}; do dk rm -f "$c" >/dev/null 2>&1 || true; done; CLEAN_CIDS=(); }
-drop_ghcr_login() {   # xoá credential tạm: logout (kể cả khi docker dùng credential helper) rồi xoá thư mục
+hub_logout() {   # xoá credential tạm: logout (kể cả khi docker dùng credential helper) rồi xoá thư mục
     [ -n "$CLEAN_DCFG" ] || return 0
-    "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker logout ghcr.io >/dev/null 2>&1 || true
-    rm -rf "$CLEAN_DCFG"; CLEAN_DCFG=""
+    "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker logout ${CLEAN_DSRV:+"$CLEAN_DSRV"} >/dev/null 2>&1 || true
+    rm -rf "$CLEAN_DCFG"; CLEAN_DCFG=""; CLEAN_DSRV=""
 }
-trap 'cleanup_cids; drop_ghcr_login' EXIT
+trap 'cleanup_cids; hub_logout' EXIT
+# dkp: docker pull, dùng phiên đăng nhập tạm nếu có
+dkp() { if [ -n "$CLEAN_DCFG" ]; then "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker pull -q "$1"; else dk pull -q "$1"; fi; }
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -271,7 +276,7 @@ pull_images() {   # kéo mọi image của bộ phát hành theo pin trong .env
         [[ "$p" == *@sha256:* ]] || die "$k trong .env không ghim digest: '$p'"
         dk image inspect "$p" >/dev/null 2>&1 && continue
         say "kéo $p"
-        dk pull -q "$p" >/dev/null || return 1
+        dkp "$p" >/dev/null || return 1
     done
 }
 
@@ -326,7 +331,7 @@ ask_required() {
 
 # ───────────────────────────── dữ liệu ─────────────────────────────
 data_root() { printf '%s/data/%s' "$SECAI_HOME" "$1"; }
-data_content() {   # sha256 của SHA256SUMS của gói đã nạp vào data/<ver> (giống nhau dù lấy từ GHCR hay thư mục)
+data_content() {   # sha256 của SHA256SUMS của gói đã nạp vào data/<ver> (giống nhau dù lấy từ registry hay thư mục)
     python3 -I -c 'import json,sys
 try: print(json.load(open(sys.argv[1])).get("content", ""))
 except Exception: print("")' "$(data_root "$1")/.secai-data-complete"
@@ -373,32 +378,48 @@ PY
     dk rm -f "$name" >/dev/null 2>&1 || true
 }
 
-# ghcr_data_token: token đọc dữ liệu (private) vào GHCR_TOKEN, không bao giờ qua argv.
-ghcr_data_token() {
-    [ -z "$GHCR_TOKEN" ] || return 0
-    if [ -n "$GHCR_TOKEN_FILE" ]; then
-        [ -f "$GHCR_TOKEN_FILE" ] || die "SECAI_GHCR_TOKEN_FILE không tồn tại"
-        local mode owner; read -r mode owner <<<"$(stat -L -c '%a %u' "$GHCR_TOKEN_FILE")"
-        [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] \
-            || die "SECAI_GHCR_TOKEN_FILE phải thuộc user này và mode 600/400 (đang $mode, uid $owner): chmod 600 <tệp>"
-        GHCR_TOKEN="$(tr -d '\r\n' <"$GHCR_TOKEN_FILE")"
-    elif interactive; then
-        read -r -s -p "  Token GitHub chỉ đọc (classic, quyền read:packages) để tải dữ liệu (nhập ẩn): " GHCR_TOKEN </dev/tty; echo >&2
-    fi
-    [ -n "$GHCR_TOKEN" ] || die "dữ liệu là package private: cần token read:packages qua SECAI_GHCR_TOKEN_FILE (0600) hoặc SECAI_GHCR_TOKEN; không có token thì chép gói dữ liệu rồi dùng --data-dir/'secai data load'"
+# data_repo: repo dữ liệu (SECAI_DATA_REPO hoặc data.image trong manifest của bản đang dùng)
+data_repo() {
+    local r="${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null)}"
+    [[ "$r" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]] \
+        || die "không biết repo dữ liệu (manifest không có data.image hợp lệ); đặt SECAI_DATA_REPO=docker.io/<ns>/secai-data hoặc dùng --data-dir"
+    printf '%s' "$r"
 }
-
-# ghcr_data_pull DATA_VERSION: đăng nhập bằng DOCKER_CONFIG tạm (chỉ cho lần kéo này), kéo, logout, xoá.
-ghcr_data_pull() {
-    ghcr_data_token
-    CLEAN_DCFG="$(mktemp -d)"; chmod 700 "$CLEAN_DCFG"
-    printf '%s' "$GHCR_TOKEN" | "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker login ghcr.io -u "$GHCR_USER" --password-stdin >/dev/null 2>&1 \
-        || { drop_ghcr_login; die "đăng nhập ghcr.io bằng token dữ liệu thất bại (token sai/hết hạn/thiếu read:packages, hoặc SECAI_GHCR_USER sai)"; }
-    if ! "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker pull -q "$DATA_REPO:$1" >/dev/null; then
-        drop_ghcr_login
-        die "không kéo được $DATA_REPO:$1 (sai phiên bản, token không có quyền, hoặc chủ package hết quota tải GitHub Packages)"
+# hub_token_get: token Docker Hub chỉ đọc vào HUB_TOKEN; PROMPT=1 thì được hỏi ẩn. Trả 1 nếu không có.
+hub_token_get() {
+    [ -z "$HUB_TOKEN" ] || return 0
+    if [ -n "$HUB_TOKEN_FILE" ]; then
+        [ -f "$HUB_TOKEN_FILE" ] || die "SECAI_DOCKERHUB_TOKEN_FILE không tồn tại"
+        local mode owner; read -r mode owner <<<"$(stat -L -c '%a %u' "$HUB_TOKEN_FILE")"
+        [[ "$mode" =~ ^[64]00$ ]] && [ "$owner" = "$(id -u)" ] \
+            || die "SECAI_DOCKERHUB_TOKEN_FILE phải thuộc user này và mode 600/400 (đang $mode, uid $owner): chmod 600 <tệp>"
+        HUB_TOKEN="$(tr -d '\r\n' <"$HUB_TOKEN_FILE")"
+    elif [ "${1:-0}" = 1 ] && interactive; then
+        read -r -s -p "  Token Docker Hub chỉ đọc (Read-only) để tải dữ liệu private (nhập ẩn): " HUB_TOKEN </dev/tty; echo >&2
     fi
-    drop_ghcr_login
+    [ -n "$HUB_TOKEN" ]
+}
+# hub_login REQUIRED: đăng nhập registry của repo dữ liệu vào DOCKER_CONFIG tạm (cả lần chạy dùng chung, xoá khi xong/thoát).
+# REQUIRED=1 (phải kéo dữ liệu private): không có token thì dừng. REQUIRED=0: không có token thì cảnh báo, kéo ẩn danh.
+hub_login() {
+    local need="$1" repo host user
+    [ -z "$CLEAN_DCFG" ] || return 0
+    if [ "$need" = 1 ]; then repo="$(data_repo)"
+    else repo="${DATA_REPO_INPUT:-$(man_field "$STACK/secai-stack.json" data_image 2>/dev/null || true)}"; fi
+    if [[ "$repo" =~ ^[a-z0-9.-]+(:[0-9]+)?/[a-z0-9][a-z0-9_.-]*/[a-z0-9][a-z0-9_.-]*$ ]]; then
+        host="${repo%%/*}"; user="${HUB_USER_INPUT:-$(cut -d/ -f2 <<<"$repo")}"
+    else
+        host=docker.io; user="$HUB_USER_INPUT"   # không rõ repo dữ liệu: chỉ đăng nhập Docker Hub khi biết user
+    fi
+    if [ -z "$user" ] || ! hub_token_get "$need"; then
+        [ "$need" = 1 ] && die "dữ liệu ở repo private $repo: cần token Docker Hub chỉ đọc qua SECAI_DOCKERHUB_TOKEN_FILE (0600) hoặc SECAI_DOCKERHUB_TOKEN; không có token thì chép gói dữ liệu rồi dùng --data-dir/'secai data load'"
+        say "CẢNH BÁO: không có token Docker Hub: kéo image nền ẩn danh (giới hạn khoảng 10 lần/giờ/IP; lỗi 'toomanyrequests' thì đặt SECAI_DOCKERHUB_TOKEN_FILE rồi chạy lại)"
+        return 0
+    fi
+    CLEAN_DCFG="$(mktemp -d)"; chmod 700 "$CLEAN_DCFG"
+    [ "$host" = docker.io ] || CLEAN_DSRV="$host"
+    printf '%s' "$HUB_TOKEN" | "${ENV_RUN[@]}" DOCKER_CONFIG="$CLEAN_DCFG" docker login ${CLEAN_DSRV:+"$CLEAN_DSRV"} -u "$user" --password-stdin >/dev/null 2>&1 \
+        || { hub_logout; die "đăng nhập ${CLEAN_DSRV:-Docker Hub} ($user) bằng token thất bại (token sai/hết hạn, hoặc SECAI_DOCKERHUB_USER sai)"; }
 }
 
 # manifest_date DIR: ngày tạo trong MANIFEST.md của gói -> YYYY.MM.DD (rỗng nếu không đọc được)
@@ -406,7 +427,7 @@ manifest_date() {
     sed -nE 's/^- created: ([0-9]{4})-([0-9]{2})-([0-9]{2})T.*/\1.\2.\3/p' "$1/MANIFEST.md" 2>/dev/null | head -n1
 }
 
-# data_prepare DATA_VERSION [DIR]: lấy gói dữ liệu (GHCR private, hoặc thư mục DIR có sẵn), kiểm SHA256SUMS, nạp vào
+# data_prepare DATA_VERSION [DIR]: lấy gói dữ liệu (repo Docker Hub private, hoặc thư mục DIR có sẵn), kiểm SHA256SUMS, nạp vào
 # data/<ver> (Neo4j + tệp qua restore-data.sh, Qdrant qua container tạm), sửa quyền poc, đánh dấu hoàn tất.
 # Đã hoàn tất thì bỏ qua. Không đụng stack đang chạy.
 data_prepare() {
@@ -424,13 +445,17 @@ data_prepare() {
         dg="dir:$(sha256sum "$pkg/SHA256SUMS" | cut -d' ' -f1)"
         say "dùng gói dữ liệu có sẵn $pkg"
     else
-        say "kéo dữ liệu $DATA_REPO:$dv (vài GB, package private)"
-        ghcr_data_pull "$dv"
-        dg="$(repo_digest "$DATA_REPO:$dv" "$DATA_REPO")"
-        [[ "$dg" =~ ^sha256:[0-9a-f]{64}$ ]] || die "không đọc được digest của $DATA_REPO:$dv"
+        local repo; repo="$(data_repo)"
+        say "kéo dữ liệu $repo:$dv (vài GB, repo private)"
+        hub_login 1
+        dkp "$repo:$dv" >/dev/null || { hub_logout; die "không kéo được $repo:$dv (sai phiên bản, hoặc token không có quyền đọc)"; }
+        hub_logout
+        # tên trong RepoDigests: Docker Hub bỏ tiền tố docker.io/
+        dg="$(repo_digest "$repo:$dv" "$repo")"; [ -n "$dg" ] || dg="$(repo_digest "$repo:$dv" "${repo#docker.io/}")"
+        [[ "$dg" =~ ^sha256:[0-9a-f]{64}$ ]] || die "không đọc được digest của $repo:$dv"
         pkg="$SECAI_HOME/downloads/data-$dv"
         rm -rf "$pkg"
-        image_extract "$DATA_REPO@$dg" /secai-data "$pkg"
+        image_extract "$repo@$dg" /secai-data "$pkg"
     fi
     [ -s "$pkg/SHA256SUMS" ] || die "gói dữ liệu $dv thiếu SHA256SUMS"
     (cd "$pkg" && sha256sum -c --strict --quiet SHA256SUMS) || die "SHA256SUMS của gói dữ liệu $dv không khớp"
@@ -443,7 +468,7 @@ data_prepare() {
         >"$root/.secai-data-complete"
     if [ -z "$src" ]; then
         rm -rf "$pkg"
-        dk image rm "$DATA_REPO:$dv" "$DATA_REPO@$dg" >/dev/null 2>&1 || true   # gỡ image dữ liệu (đã nạp) cho đỡ chỗ
+        dk image rm "$repo:$dv" "$repo@$dg" >/dev/null 2>&1 || true   # gỡ image dữ liệu (đã nạp) cho đỡ chỗ
     fi
 }
 
@@ -500,7 +525,7 @@ prefetch_release() {
     while IFS=$'\t' read -r k ref dg; do
         dk image inspect "$ref@$dg" >/dev/null 2>&1 && continue
         say "kéo $ref@$dg"
-        dk pull -q "$ref@$dg" >/dev/null || return 1
+        dkp "$ref@$dg" >/dev/null || return 1
     done <<<"$lines"
 }
 # switch_files VERSION: tệp bundle + init (secret mới nếu có) + pin trong .env; chạy trong subshell để mọi lỗi (die) chỉ trả
@@ -568,8 +593,10 @@ cmd_install() {
     write_pins "$ver"
     envset DATA_ROOT "$(data_root "$dv")"
     envset SECAI_DATA_VERSION "$dv"
+    hub_login 0   # có token thì kéo image nền Docker Hub bằng phiên đăng nhập; data_prepare dùng lại phiên này
     pull_images || die "kéo image lỗi"
     data_prepare "$dv" "$datadir"
+    hub_logout
     preflight || die "preflight trượt (xem các dòng ở trên, sửa $ENVF rồi chạy lại 'secai install')"
     up_stack || die "docker compose up lỗi"
     wait_healthy || die "stack chưa healthy; xem 'secai logs <service>'"
@@ -600,7 +627,9 @@ cmd_upgrade() {
         return 0
     fi
     logline "upgrade $cur -> $new"
+    hub_login 0
     prefetch_release "$new" || { say "kéo image của $new lỗi; KHÔNG đổi gì, vẫn $cur"; exit 1; }
+    hub_logout
     backup_env "$cur"
     if ! switch_files "$new" || ! preflight; then
         say "chuẩn bị/preflight của $new trượt; giữ nguyên $cur"
@@ -629,7 +658,9 @@ cmd_rollback() {
     [ -n "$prev" ] || die "không có bản trước để quay về"
     [ -f "$SECAI_HOME/releases/$prev/secai-stack.json" ] || die "không còn bản $prev trong $SECAI_HOME/releases"
     logline "rollback $cur -> $prev"
+    hub_login 0
     prefetch_release "$prev" || die "kéo image của $prev lỗi; KHÔNG đổi gì, vẫn $cur"
+    hub_logout
     backup_env "$cur"
     if ! switch_files "$prev" || ! preflight; then
         switch_files "$cur" || say "CẢNH BÁO: không khôi phục được tệp của $cur"
@@ -680,7 +711,7 @@ cmd_data() {
     esac
 }
 
-data_update() {   # data_update SRC_DIR(rỗng = GHCR) [DATA_VERSION]
+data_update() {   # data_update SRC_DIR(rỗng = registry) [DATA_VERSION]
     require_installed
     local src="$1" want="${2:-}" cur
     cur="$(st_get data_version)"

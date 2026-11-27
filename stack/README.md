@@ -3,26 +3,27 @@
 ## Người vận hành: 3 lệnh
 
 Máy đích cần Linux x86_64, Docker có `docker compose`, `curl`, `python3`, chạy bằng root (hoặc user trong nhóm docker),
-RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git. Image và bundle kéo không cần đăng nhập; riêng **dữ liệu là
-package private** nên cần một token GitHub chỉ đọc (xem dưới).
+RAM từ 32 GB, đĩa trống từ 100 GB và có internet. Không cần git. Image và bundle kéo từ GHCR public, không cần đăng nhập;
+riêng **dữ liệu nằm ở repo Docker Hub private** (`docker.io/secai1999/secai-data`, ghi sẵn trong bundle) nên cần một token
+Docker Hub chỉ đọc (xem dưới).
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/elonma-china/secai-prod/main/stack/secai -o secai && chmod +x secai
-sudo SECAI_GHCR_TOKEN_FILE=/root/ghcr-read.token ./secai install   # bản stable; bản cụ thể: ... install 2026.11.27-abcd1234
+sudo SECAI_DOCKERHUB_TOKEN_FILE=/root/dockerhub-read.token ./secai install   # bản stable; bản cụ thể: ... install 2026.11.27-abcd1234
 sudo ./secai status
 ```
 
 Biến trên dòng `sudo` ở đây chỉ là đường dẫn tệp, không phải secret. **Không bao giờ** viết `sudo LLM_API_KEY=... ./secai`:
 giá trị nằm trên argv (ai cũng thấy qua `ps`) và trong log của sudo.
 
-**Token đọc dữ liệu.** Chủ dự án (hoặc người có quyền đọc package `secai-data`) tạo trên GitHub: Settings → Developer settings →
-Personal access tokens → Tokens (classic) → Generate new token (classic), **chỉ** tick `read:packages`, đặt hạn dùng. Lưu vào
-tệp của root, mode 600 (`install -m 600 /dev/null /root/ghcr-read.token`, rồi dán token vào bằng trình soạn thảo, không qua
-`echo` trên dòng lệnh): `sudo install -m 600 /dev/null /root/ghcr-read.token && sudo nano /root/ghcr-read.token`. `secai` nhận token từ `SECAI_GHCR_TOKEN_FILE` (tệp 0600/0400), biến `SECAI_GHCR_TOKEN`, hoặc hỏi ẩn khi
-chạy tay; không bao giờ qua tham số dòng lệnh. Token chỉ dùng để `docker login` vào một `DOCKER_CONFIG` tạm cho đúng lần kéo
-dữ liệu, xoá ngay sau đó; không còn credential nào trong `~/.docker`. User đăng nhập mặc định `elonma-china` (`SECAI_GHCR_USER`).
-Lưu ý quota: mỗi lần kéo dữ liệu (~5,5 GB) tính vào lưu lượng GitHub Packages của chủ package (gói Free chỉ 1 GB/tháng cho
-package private); chưa gắn phương thức thanh toán thì GitHub chặn tải.
+**Token đọc dữ liệu (Docker Hub).** Chủ repo `secai1999/secai-data` tạo trên hub.docker.com: Account settings → Personal access
+tokens → Generate new token, **Access permissions: Read-only**, đặt hạn dùng. Lưu vào tệp của root, mode 600, dán token bằng trình
+soạn thảo (không `echo` trên dòng lệnh): `sudo install -m 600 /dev/null /root/dockerhub-read.token && sudo nano /root/dockerhub-read.token`.
+`secai` nhận token từ `SECAI_DOCKERHUB_TOKEN_FILE` (tệp 0600/0400), biến `SECAI_DOCKERHUB_TOKEN`, hoặc hỏi ẩn khi chạy tay; không
+bao giờ qua tham số dòng lệnh. User đăng nhập mặc định là namespace của repo (`secai1999`; đổi bằng `SECAI_DOCKERHUB_USER`). Token
+chỉ dùng để `docker login` vào một `DOCKER_CONFIG` tạm cho lần kéo, xoá ngay sau đó; không còn credential nào trong `~/.docker`.
+Có token thì image nền trên Docker Hub (qdrant, neo4j, redis) cũng kéo bằng phiên đó, tránh giới hạn kéo ẩn danh (khoảng 10 lần
+mỗi giờ mỗi IP); không có token thì vẫn chạy, chỉ cảnh báo.
 
 Không có token: chép thư mục gói dữ liệu (đầu ra `pack.sh data`) sang máy đích rồi `sudo ./secai install --data-dir <thư mục>`;
 cập nhật dữ liệu sau này bằng `sudo ./secai data load <thư mục> [NGÀY]`.
@@ -34,7 +35,7 @@ mọi image theo digest, tải và nạp dữ liệu, bật stack rồi chạy `
 
 Cài không hỏi (sudo xoá môi trường, nên làm trong shell root): `sudo -i`, rồi `read -rs LLM_API_KEY` (gõ ẩn) cho từng khoá,
 `export LLM_API_KEY EMBEDDING_API_KEY RERANKER_API_KEY LLM_BASE_URL=... LLM_MODEL=...` (đủ các biến bắt buộc), sau đó
-`SECAI_GHCR_TOKEN_FILE=/root/ghcr-read.token ./secai install --yes`. Từ shell user thường thì dùng
+`SECAI_DOCKERHUB_TOKEN_FILE=/root/dockerhub-read.token ./secai install --yes`. Từ shell user thường thì dùng
 `sudo --preserve-env=LLM_BASE_URL,LLM_MODEL,LLM_API_KEY,...` (liệt kê tường minh, không dùng `sudo -E`).
 
 | Lệnh | Việc |
@@ -54,16 +55,21 @@ Bộ phát hành gồm core (gateway, Qdrant, Neo4j, Redis, Elasticsearch) và p
 embedding, rerank) là endpoint ngoài. Profile translation/report/review vẫn có trong compose nhưng không thuộc bộ phát hành,
 `secai` không bật chúng. Phiên bản bộ stack có dạng `YYYY.MM.DD-<sha8>`: gateway, VM và bundle cùng tag, mọi image (kể cả
 qdrant/neo4j/redis/elasticsearch kéo từ registry gốc) ghim theo digest trong `secai-stack.json` của bundle. Dữ liệu có phiên bản
-riêng theo ngày (`secai-data:YYYY.MM.DD`, package private).
+riêng theo ngày: mỗi bản là một tag `YYYY.MM.DD` trong repo Docker Hub private `secai-data`.
 
 ## Người phát hành: `publish.sh` (máy dev, lệnh tay)
 
 Chỉ chạy trên máy dev có repo, Docker và `gh` đã đăng nhập (quyền `write:packages`). Ba package image
 `ghcr.io/elonma-china/{secai-agent-gateway,secai-pentestcode-vm,secai-stack}` phải **Public** (package mới luôn private, chỉ đổi
-được trên web GitHub); `secai-data` phải **Private**. Script kiểm visibility ngay trước khi push và không push gì nếu sai (mã 5).
+được trên web GitHub). Dữ liệu ở **Docker Hub, một repo private duy nhất** (gói miễn phí chỉ có 1 repo private):
+`SECAI_DATA_REPO=docker.io/secai1999/secai-data`, token Docker Hub (Read & Write; thêm Delete nếu dùng `prune-data`) trong tệp
+0600 `SECAI_DOCKERHUB_TOKEN_FILE`. Trước khi push dữ liệu script đọc Docker Hub API: repo phải **đã có** và `is_private=true`
+(push vào repo chưa có thì Docker Hub tự tạo, có thể public). Sai visibility thì không push gì (mã 5). Hai repo public
+`secai1999/secai-gateway`, `secai1999/secai-agent-gateway` không liên quan, không dùng.
 
 ```sh
-stack/publish.sh publish-data [--version 2026.11.27]     # pack.sh data, quét secret toàn bộ gói, push secai-data:<ngày>
+stack/publish.sh publish-data [--version 2026.11.27]     # pack.sh data, quét secret toàn bộ gói, push $SECAI_DATA_REPO:<ngày>
+stack/publish.sh prune-data --keep 3 [--yes]             # giữ tối đa 3 bản dữ liệu (Docker Hub có thể bóp băng thông khi dùng nhiều)
 stack/publish.sh publish [--ref origin/main] [--stable]  # gate, build, manifest, bundle, push bản YYYY.MM.DD-<sha8>
 stack/publish.sh promote 2026.11.27-abcd1234             # dời tag stable (bản người vận hành cài mặc định)
 stack/publish.sh publish --dry-run                       # chạy hết trừ login/push, in manifest
@@ -84,9 +90,12 @@ stack/publish.sh publish --dry-run                       # chạy hết trừ lo
     mã (`DATA_CORPUS`: exploitdb, poc-sources, poc/store, catalog.db, node_modules của exploitdb-mcp-server, payload và snapshot
     Qdrant `cve_kb_hybrid`), nơi chúng chỉ được đếm theo luật và theo cây vào hồ sơ phát hành `data-release.json`.
 - **Dữ liệu**: từ chối trong 03:00-05:00 và khi còn dưới 45 GB đĩa. Quét mọi tệp của gói, kể cả bên trong `.tar.zst`, tar lồng
-  nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc. Mỗi nhóm COPY là một layer dưới 9,5 GB (GHCR giới hạn khoảng
-  10 GB mỗi layer). Package private tính vào quota GitHub Packages: GHCR từ chối vì quota/billing thì dừng (mã 7), không lách.
-- Phiên bản bất biến: tag đã có trên GHCR thì từ chối. Dữ liệu phát hành lại trong ngày dùng `YYYY.MM.DD.2`.
+  nhau, snapshot Qdrant, cộng payload Qdrant qua API chỉ đọc (`--from-pkg` thì bắt buộc `--qdrant-url`, số điểm phải khớp
+  MANIFEST). Mỗi nhóm COPY là một layer dưới 9,5 GB. Registry từ chối vì quota/billing thì dừng (mã 7), không lách. Sau mỗi
+  lần push, quá 3 tag dữ liệu thì cảnh báo; dọn bằng `prune-data` (đừng xoá bản mà bundle `stable` đang trỏ tới).
+- Chưa có token Docker Hub: `publish --data-version YYYY.MM.DD` vẫn phát hành image, manifest ghi bản dữ liệu mặc định không kèm
+  digest (có cảnh báo).
+- Phiên bản bất biến: tag đã có trên registry thì từ chối. Dữ liệu phát hành lại trong ngày dùng `YYYY.MM.DD.2`.
 
 ## Chuyển prod trên máy này sang gói (kế hoạch, chưa làm)
 
