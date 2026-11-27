@@ -70,6 +70,8 @@ if [ "$MODE" = rollback ]; then
     cp -p "$COMPOSE_BAK" "$COMPOSE"
     (cd "$DOCKER_DIR" && docker compose up -d --no-deps --no-build gateway)
     docker compose -p "$TRANS_PROJECT" -f "$TRANS_PREV_PROFILE" up -d --no-deps --no-build gateway worker
+    SECAI_RELEASES_DIR="$RELEASES" timeout 60 python3 -I "$(dirname "$0")/versions.py" record --service gateway --action rollback \
+        --from "$NEW_TAG" --to "$PREV_TAG" --release-dir "$REL" || log "cảnh báo: không ghi được sổ phiên bản (versions.py record); rollback vẫn xong"
     echo "rollback xong → $PREV_TAG (kiểm /health 8131 và 18185)"; exit 0
 fi
 
@@ -217,5 +219,7 @@ cat > "$REL/RELEASE-NOTES.md" <<EOF
 - Rollback: \`scripts/release-prod.sh rollback --yes\` (compose bak: $COMPOSE_BAK; profile cũ: $TRANS_PREV)
 - Image cũ giữ ≥ ${KEEP_DAYS} ngày rồi \`release-prod.sh gc --yes\` xoá.
 EOF
+SECAI_RELEASES_DIR="$RELEASES" timeout 60 python3 -I "$(dirname "$0")/versions.py" record --service gateway --action release \
+    --from "$CUR_TAG" --to "$NEW_TAG" --release-dir "$REL" || log "cảnh báo: không ghi được sổ phiên bản (versions.py record); release vẫn thành công"
 log "RELEASE OK $NEW_TAG — ghi chú: $REL/RELEASE-NOTES.md"
 gc || true
